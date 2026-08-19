@@ -1827,21 +1827,36 @@ function initThree() {
   }, { passive: false });
   window.addEventListener('resize', () => { drawMap(); render(); });
 }
+/* The one place the model axes are mapped to the scene: model (x, y, z) becomes
+   (x, z, -y), so model z is up and model y runs into the screen. The parts beside the
+   bin go through this too -- a second copy of the mapping that drifted would put a lid
+   on its side and look like a geometry bug rather than a transcription one. */
+function polysToGeo(polys) {
+  const tris = G.polysToTriangles(polys);
+  const pos = new Float32Array(tris.length * 9);
+  let i = 0;
+  for (const t of tris) for (const v of t) { pos[i++] = v[0]; pos[i++] = v[2]; pos[i++] = -v[1]; }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
 function geoOf(b) {
   const gm = geomFor(b);
-  if (!gm.three) {
-    const tris = G.polysToTriangles(gm.polys);
-    const pos = new Float32Array(tris.length * 9);
-    let i = 0;
-    for (const t of tris) for (const v of t) { pos[i++] = v[0]; pos[i++] = v[2]; pos[i++] = -v[1]; }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.computeVertexNormals();
-    gm.three = geo;
-  }
+  if (!gm.three) gm.three = polysToGeo(gm.polys);
   return gm.three;
 }
+/* Divider and lid geometry, cached by the part rather than by the bin: two bins wanting
+   the same lid want the same buffer. Cleared wherever geoCache is, because both are
+   invalidated by the same thing -- a change to the bin the parts are cut from. */
+const partGeoCache = new Map();
+function partGeoOf(key, polys) {
+  let g = partGeoCache.get(key);
+  if (!g) { g = polysToGeo(polys); partGeoCache.set(key, g); }
+  return g;
+}
 const MATS = [0x6fd0e0, 0x8fdc9a, 0xe0c46f, 0xd08fd0, 0xe08f8f];
+let partMat = null;
 let matCache = [];
 
 /* ---------- the drawer around the bins ------------------------------------
@@ -1973,6 +1988,63 @@ function showScene() {
   $('three').setAttribute('aria-label', sceneLabel(empty, shell, g));
   if (empty && !shell) { syncDrawer(); render(); return; }
 
+/* The pieces that come off the printer ALONGSIDE the bin, drawn where you can see them.
+   Dividers and a lid are separate prints, and until now the first look at either was in
+   the slicer or off the bed -- which is late to find out a divider is not the height you
+   pictured, or that a lid you asked for could not attach at all.
+
+   dividerParts() and lidParts() read types(), which focus already narrows to this one
+   bin, so what comes back is this bin's parts and nothing else. Both are the SAME calls
+   the piece table, the plan and the export make, so what is drawn here is what you get
+   rather than a second opinion about it.
+
+   Nothing here touches the export. These offsets exist to separate the pieces on screen;
+   renderExport and the plate packer keep asking dividerParts()/lidParts() for their own
+   coordinates and never see these. */
+const PART_GAP = 8;
+function addLooseParts(b) {
+  if (!partMat) {
+    /* A colour of their own, so a divider lying beside the bin does not read as part of
+       it. Lambert like the bin, not wireframe: the point is to judge a real shape. */
+    partMat = new THREE.MeshLambertMaterial({ color: 0xb9c6d4, side: THREE.DoubleSide,
+                                              flatShading: true });
+  }
+  const binD = b.v * SPEC.pitch, binTop = b.hUnits * SPEC.unitH + LIP_H;
+
+  /* Laid flat, the way they print and the way they would sit on a bench. dividerPart
+     builds them lying down already -- span x tall on the bed, t thick -- so no rotation
+     is wanted, only somewhere to put them. In a row in front of the bin, nearest the
+     camera at the angle the preview opens on. */
+  let z = binD / 2 + PART_GAP;
+  for (const d of dividerParts()) {
+    const geo = partGeoOf('div:' + d.key, B_DIV(d.b, d.axis).polys);
+    for (let i = 0; i < d.qty; i++) {
+      const m = new THREE.Mesh(geo, partMat);
+      m.position.set(0, 0, z + d.meta.tall / 2);
+      group.add(m);
+      z += d.meta.tall + PART_GAP;
+    }
+  }
+
+  /* The lid, floating above the bin with its skirt pointing down at the lip it seats in.
+     lidPart is built in PRINT orientation -- upside down, plate first, skirt descending
+     as z grows -- because that is how it goes on the bed. Showing it that way here would
+     answer the wrong question: what is being asked is whether it FITS, so it is turned
+     over exactly as you would turn it over in your hand.
+
+     Turning it over is a rotation, not a mirror, so one horizontal axis reverses with it.
+     That is what the real part does too. It only matters for a lid whose sides differ --
+     with all four skirts, which is what you get by ticking the box and changing nothing,
+     the two flips are indistinguishable. */
+  for (const d of lidParts()) {
+    const L = L_LID(d.b);
+    const m = new THREE.Mesh(partGeoOf('lid:' + d.key, L.polys), partMat);
+    m.rotation.x = Math.PI;
+    m.position.set(0, binTop + PART_GAP + L.meta.totalH, 0);
+    group.add(m);
+  }
+}
+
   /* One bin, centred, on a baseplate of exactly its own footprint. The drawer's plate
      is drawn from the grid, so reusing it would put a 1×1 bin in the corner of a 7×9
      slab — and the other sixty-two cells are precisely what focus exists to stop
@@ -1995,6 +2067,7 @@ function showScene() {
     const one = new THREE.Mesh(geoOf(b), mat);
     one.userData.bin = b; one.userData.layer = cur;
     group.add(one);
+    addLooseParts(b);
     syncDrawer();
     render();
     return;
@@ -2525,7 +2598,7 @@ for (const id of ['toPlates', 'navPlates'])
 /* ---------- boot ---------------------------------------------------------- */
 let timer = null;
 const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
-  readControls(); geoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
+  readControls(); geoCache.clear(); partGeoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
@@ -2539,7 +2612,7 @@ for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable',
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
   $('solid').checked = false;
-  readControls(); geoCache.clear(); drawMap(); refresh();
+  readControls(); geoCache.clear(); partGeoCache.clear(); drawMap(); refresh();
 });
 $('solid').addEventListener('change', schedule);
 $('arcSegs').addEventListener('change', schedule);
