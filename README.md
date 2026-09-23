@@ -67,6 +67,10 @@ The shipped app is a handful of static HTML files with no runtime build step.
 2. Enable **GitHub Pages** (deploy from branch, root).
 3. Done — Baseplates at the root, Bins at `/bins/`, the guide at `/guide/`.
 
+Hosting it unmodified needs nothing further. If you **change** it and put it in front of
+other people, the licence asks you to offer your users the source of your version — a link
+to your own fork in the footer covers it. Keep the name off it (see [License](#license)).
+
 three.js and JSZip are vendored in [`vendor/`](vendor/) and served from your own origin, so
 a page makes no third-party request at all and works offline once loaded. Copy that
 directory along with the HTML. The build refuses to emit a page that references an external
@@ -139,4 +143,17 @@ If the tool saved you some time, there's a tip jar at **[ko-fi.com/oliver_johnso
 
 ## License
 
-[MIT](LICENSE) — use it, fork it, embed it, sell prints made with it. A link back is appreciated but not required.
+**[AGPL-3.0-or-later](LICENSE)** — free software, and it stays free software. Use it, fork it,
+self-host it, build on it. If you distribute it or run a modified version as a public
+service, you have to offer that version's source under the same terms.
+
+**The models you make with it are yours.** Everything the tool generates — STL, 3MF, the
+ZIP, and the geometry in them — is explicitly excluded from the licence. Sell the files,
+sell the prints, sell them on Etsy at a markup. No attribution, no obligation, no share of
+anything. That exception is written into [LICENSE](LICENSE) rather than left to be argued
+about.
+
+The name is reserved: call your fork something else, so visitors can tell whose work they
+are looking at. A link back is appreciated but not required.
+
+Versions published before 2026-08-20 were MIT, and that grant is not withdrawn.
