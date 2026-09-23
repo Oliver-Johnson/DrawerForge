@@ -487,7 +487,8 @@ function discardScratch() {
   readControls(); drawLayerTabs(); drawMap(); refresh();
 }
 $('focusBin').addEventListener('click', enterFocus);
-for (const id of ['scratchBin', 'scratchBinMap']) $(id).addEventListener('click', startScratch);
+for (const id of ['scratchBin', 'scratchBinMap', 'scratchBinTop'])
+  $(id).addEventListener('click', startScratch);
 $('scratchAdd').addEventListener('click', addScratchToDrawer);
 $('scratchDrop').addEventListener('click', discardScratch);
 $('focusExit').addEventListener('click', () => leaveFocus());

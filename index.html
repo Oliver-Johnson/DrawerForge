@@ -314,6 +314,11 @@ footer .mono{font-family:var(--mono);font-size:11px}
 
 /* ---- cross-tool navigation ---- */
 header nav{display:flex;gap:6px;margin-top:14px}
+header .quickstart{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+header .quickstart span{font-size:11.5px;color:var(--dim);max-width:52ch}
+/* Already designing one bin, so the way in is noise -- the way OUT is what the focus bar
+   is for. Hidden by the same class that hides everything else focus takes away. */
+body.binfocus header .quickstart{display:none}
 header nav a{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
   padding:7px 15px;border:1px solid var(--line);border-radius:6px;color:var(--dim);
   text-decoration:none;background:var(--panel2);transition:color .12s,border-color .12s}
@@ -479,6 +484,11 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
    where the layout is already one column, so the desktop rail keeps its density. */
 @media(max-width:980px){
   header .privacy{font-size:12px}
+  /* The button says what it does; the sentence beside it is a desktop luxury. On a phone
+     it wrapped to three lines of 11.5px text, which failed the 12px floor this block
+     exists to enforce AND pushed the drawer map below the fold -- the exact regression
+     on-screen.spec.js was written to catch. The way in stays; only the gloss goes. */
+  header .quickstart span{display:none}
   header nav a{font-size:12px;padding:0 16px;min-height:40px;display:flex;align-items:center}
   section.p>h2{font-size:12px;padding:13px}
   /* the padding is the button's when there is one, or the tap target is the text only.
