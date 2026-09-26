@@ -91,6 +91,14 @@
     <button type="button" class="act" id="scratchAdd">Add to the drawer</button>
     <button type="button" class="ghost" id="scratchDrop">Discard</button>
   </div>
+  <!-- Where the loose bin will land. The refusal below names two remedies -- pick a
+       different layer, or add one -- and both of them used to live on the drawer page
+       this mode hides, so taking either meant discarding the bin first. -->
+  <div id="scratchTarget">
+    <label for="scratchLayer">Land on</label>
+    <select id="scratchLayer"></select>
+    <button type="button" class="ghost" id="scratchAddLayer">Add a layer on top</button>
+  </div>
   <div id="scratchWhy" class="mono"></div>
 </div>
 <div class="rail">

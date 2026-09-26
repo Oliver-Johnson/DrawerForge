@@ -565,7 +565,9 @@ body.binfocus #focusbar .fbacts{display:flex;gap:8px;margin-left:auto;flex-wrap:
 
 /* A loose bin has no place in a drawer, so the controls that talk about one go: where
    it sits, whether it has been printed, and the way "back" to somewhere it never was. */
-#scratchAdd,#scratchDrop,#scratchWhy{display:none}
+#scratchAdd,#scratchDrop,#scratchWhy,#scratchTarget{display:none}
+body.binscratch #scratchTarget{display:flex;gap:8px;align-items:center;flex-basis:100%;flex-wrap:wrap}
+body.binscratch #scratchTarget label{font-size:11px;color:var(--dim)}
 body.binscratch #focusExit{display:none}
 body.binscratch #scratchAdd,body.binscratch #scratchDrop{display:inline-block}
 body.binscratch #scratchWhy{display:block;flex-basis:100%;font-size:11px;color:var(--dim)}

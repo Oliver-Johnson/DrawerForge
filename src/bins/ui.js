@@ -358,6 +358,7 @@ function applyFocus() {
      than in a message after. A bin that cannot land says why, and the reason changes
      as you change the size — which is the thing that would fix it. */
   if (scratch) {
+    drawScratchLayers();
     const spot = scratchLanding();
     $('scratchAdd').disabled = !!spot.why;
     $('scratchWhy').classList.toggle('no', !!spot.why);
@@ -668,6 +669,43 @@ function drawLayerTabs() {
     bar.appendChild(b);
   });
 }
+/* The drawer's layer tabs live inside #s-layout, which focus hides wholesale, so a loose
+   bin had no way to answer the refusal that told it to pick another layer. This is the
+   same choice in the shape that fits a one-line bar. Rebuilt only when the layers or the
+   selection actually change: it is written on every refresh, and replacing the options
+   under a select the keyboard is inside would drop focus mid-choice. */
+let scratchLayerKey = '';
+function drawScratchLayers() {
+  const sel = $('scratchLayer'), key = layers.length + '/' + cur;
+  if (key === scratchLayerKey) return;
+  scratchLayerKey = key;
+  sel.innerHTML = '';
+  layers.forEach((L, i) => {
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = `Layer ${i + 1}` + (L.bins.length ? ` · ${L.bins.length}` : ' · empty');
+    if (i === cur) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+/* Switching the target layer is not an edit -- it changes where the bin WOULD go, and the
+   drawer's own layer tabs do not bank an undo entry for the same choice either. refresh()
+   re-runs scratchLanding, so the reason under the button answers the new layer straight
+   away rather than keeping the old one's. */
+$('scratchLayer').addEventListener('change', (e) => {
+  const i = parseInt(e.target.value, 10);
+  if (!(i >= 0 && i < layers.length)) return;
+  cur = i;
+  scratchLayerKey = '';
+  readControls(); drawLayerTabs(); drawMap(); refresh();
+});
+$('scratchAddLayer').addEventListener('click', () => {
+  pushDrawerUndo();
+  layers.push({ bins: [] });
+  cur = layers.length - 1;
+  scratchLayerKey = '';
+  readControls(); drawLayerTabs(); drawMap(); refresh();
+});
 $('addLayer').addEventListener('click', () => {
   pushUndo();
   layers.push({ bins: [] });
@@ -1188,14 +1226,20 @@ const rStack = () => (scratch ? sRedoStack : redoStack);
 const UNDO_MAX = 60;
 const snapshot = () => (scratch ? JSON.stringify({ scratch })
                                 : JSON.stringify({ layers, cur }));
-function pushUndo() {
-  const snap = snapshot(), U = uStack(), R = rStack();
+function pushOn(U, R, snap) {
   if (U.length && U[U.length - 1] === snap) return;
   U.push(snap);
   if (U.length > UNDO_MAX) U.shift();
   R.length = 0;
   updateUndoButtons();
 }
+function pushUndo() { pushOn(uStack(), rStack(), snapshot()); }
+/* Adding a layer while a loose bin is on screen edits the DRAWER, and the loose bin has
+   its own history that captures only itself. Routing this through pushUndo would file the
+   entry on the scratch stack, where undoing it restores the bin and leaves the new layer
+   standing -- and spends an Undo that appears to do nothing. It belongs on the drawer,
+   which is where it will be seen when you go back. Same push, named target. */
+function pushDrawerUndo() { pushOn(undoStack, redoStack, JSON.stringify({ layers, cur })); }
 function applySnap(snap) {
   const o = JSON.parse(snap);
   /* A loose bin's history holds only the bin. Nothing about the drawer is restored,
