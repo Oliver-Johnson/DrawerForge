@@ -356,8 +356,7 @@ function drawMap() {
   const top = document.querySelector('.stagetop');
   top.classList.toggle('wide', Wmm / Math.max(1, Dmm) > 1.15);
   const row = DF.stageRow(top, $('stage'));
-  const availW = Math.min(680 * row.big,
-                          row.two ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30);
+  const roomW = row.two ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30;
   /* The height is also held to the stage you can see, as the bins map's is. Paired, the
      preview is as tall as this card, so with the Undo row under the map a 768 px window
      put the bottom of both 15 px under the window. The heading above the map and the
@@ -367,23 +366,34 @@ function drawMap() {
      not to the bottom of the card: paired, the card is stretched to the row, so its
      bottom is wherever the last draw left the preview. Never under 300 px: a short
      window scrolls a little rather than shrinking the thing you click cut lines on. The
-     82 is the map's own margin, oy above the drawer and 56 below it, and the 1 the
-     card's bottom border.
+     1 is the card's bottom border.
      It is sized twice when paired. stageRow has just taken the columns away to ask how
      many there are, so the first measure is of a card the whole row wide; paired, the
      card is half that, and its heading wraps onto a second line that the first measure
-     never saw. */
+     never saw.
+     The room, across and down, is an edge, so each is solved against the size the map
+     is actually drawn at: its margins and then the drawer at sc pixels a millimetre. The
+     width was not. It was the room over the drawer plus 90, as the caps are, when the
+     margins across come to 92 — so whenever the drawer was drawn at under a pixel per
+     millimetre the map came out wider than its room, and since the map's column is
+     sized from the map, the preview beside it was pushed off the side of the stage: 56
+     px of it with a 1150 × 1000 drawer at 1300 × 800, Fit and Expand with it. The caps
+     keep the drawer-plus-90 form they were tuned in, which is what stops a small drawer
+     being blown up to fill them; they are a ceiling on how big the map looks, not a
+     wall that anything else is pushed against. */
   const chrome = () => {
     const sr = svg.getBoundingClientRect();
     return (sr.top - top.getBoundingClientRect().top)
          + ($('warnings').getBoundingClientRect().top - sr.bottom) + 1;
   };
-  const ox = 58, oy = 26;
+  // the map's margins: ox left of the drawer and 34 right of it, oy above and 56 below
+  const ox = 58, oy = 26, padW = ox + 34, padD = oy + 56;
   let sc, w, h;
   const size = (fixed) => {
-    sc = Math.max(0.05, Math.min(availW / (Wmm + 90), 460 * row.big / (Dmm + 90),
-                                 (Math.max(300, row.room - fixed) - 82) / Math.max(1, Dmm)));
-    w = ox + Wmm * sc + 34; h = oy + Dmm * sc + 56;
+    sc = Math.max(0.05, Math.min(680 * row.big / (Wmm + 90), 460 * row.big / (Dmm + 90),
+                                 (roomW - padW) / Math.max(1, Wmm),
+                                 (Math.max(300, row.room - fixed) - padD) / Math.max(1, Dmm)));
+    w = padW + Wmm * sc; h = padD + Dmm * sc;
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     svg.setAttribute('width', w); svg.setAttribute('height', h);
     if (row.two) DF.pairColumns(top, w + 30, PREVIEW_MIN);

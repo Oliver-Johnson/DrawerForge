@@ -186,6 +186,45 @@ test.describe('baseplates at 1366×768', () => {
     });
 });
 
+/* Beside the map, the map's column is sized from the map, so a map wider than the room
+   it was given takes the difference out of the preview, and past the preview's minimum
+   that pushes it off the side of the stage. The width was bounded as if the map's side
+   margins came to 90 px when they come to 92, and the map comes out wider than its room
+   whenever the drawer is drawn at under about a pixel per millimetre: a 1150 × 1000
+   drawer at 1300 × 800 put the preview card 56 px past the stage, Fit and Expand with
+   it, under a sideways scrollbar. 1150 × 1000 is also the widest shape of drawer that still sits
+   beside the preview rather than above it (see drawMap). */
+test.describe('baseplates at 1300×800', () => {
+  test.use({ viewport: { width: 1300, height: 800 } });
+
+  test('a big drawer beside the preview leaves all of the preview on the stage',
+    async ({ page }) => {
+      /* Not openPlatesAt: this is twenty pieces of CSG, and none of them moves the row.
+         The map is sized as the page loads, so the layout is settled once it is drawn. */
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(String(e)));
+      await page.goto(H.PLATES_URL + '#w=1150&d=1000');
+      await page.waitForFunction(() => !!document.querySelector('#cutmap rect'));
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      expect(await stageTop(page), 'fixture: the map and the preview are side by side')
+        .toMatchObject({ tracks: 2, paired: true });
+      const m = await page.evaluate(() => {
+        const st = document.querySelector('.stage');
+        const right = st.getBoundingClientRect().left + st.clientLeft + st.clientWidth
+                    - parseFloat(getComputedStyle(st).paddingRight);
+        const ends = (sel) => Math.max(...[...document.querySelectorAll(sel)]
+          .map((e) => e.getBoundingClientRect().right));
+        return { right, card: ends('.stagetop > .stagecard'),
+                 buttons: ends('#threewrap .fitbtn, #threewrap .previewbtn'),
+                 sideways: st.scrollWidth - st.clientWidth };
+      });
+      expect(m.card, 'the preview card ends inside the stage').toBeLessThanOrEqual(m.right + 0.5);
+      expect(m.buttons, 'Fit and Expand are on the stage').toBeLessThanOrEqual(m.right + 0.5);
+      expect(m.sideways, 'and the stage has nothing to scroll sideways to').toBeLessThanOrEqual(0);
+      expect(errors).toEqual([]);
+    });
+});
+
 /* Under the map, the preview's height is the stage you can see, so scrolling to it
    shows all of it — rather than 380 px whatever the window. Checked across two very
    different windows, because one size can match a fixed number by coincidence. */
