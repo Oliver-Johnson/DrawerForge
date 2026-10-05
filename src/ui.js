@@ -343,14 +343,20 @@ function drawMap() {
      The map used to measure #mapwrap, its own card. That card is now the column being
      sized from the map, so it is the row that gets measured: its width less the
      preview's minimum and the gap when paired, less the card's 30 px of chrome
-     (#mapwrap's 14 px padding each side and the border) either way. The 680 and 460
-     caps are unchanged — room is a ceiling, not a target. */
+     (#mapwrap's 14 px padding each side and the border) either way.
+     The 680 × 460 caps are a ceiling, not a target, and they were fixed pixels: from
+     2560 to 5120 px wide the map stayed 391 × 454 while the screen round it doubled.
+     They now grow with a window taller than the 1080 lines they were set on (row.big
+     — see DF.stageRow), so a 1440 screen gets a map a third bigger and a 1080 one is
+     unchanged. The labels are drawn at a fixed size whatever the scale, so a bigger map
+     is more room to click a cut line, not bigger type. */
   const PREVIEW_MIN = 320;
   const top = document.querySelector('.stagetop');
   top.classList.toggle('wide', Wmm / Math.max(1, Dmm) > 1.15);
   const row = DF.stageRow(top, $('stage'));
-  const availW = Math.min(680, row.two ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30);
-  const sc = Math.max(0.05, Math.min(availW / (Wmm + 90), 460 / (Dmm + 90)));
+  const availW = Math.min(680 * row.big,
+                          row.two ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30);
+  const sc = Math.max(0.05, Math.min(availW / (Wmm + 90), 460 * row.big / (Dmm + 90)));
   const ox = 58, oy = 26;
   const X = (mm) => ox + mm * sc;
   const Y = (mm) => oy + (Dmm - mm) * sc;     // front of drawer at the bottom

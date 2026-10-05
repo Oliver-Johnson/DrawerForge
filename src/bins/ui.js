@@ -925,10 +925,13 @@ function drawMap() {
      the window is the room — see DF.stageRow.
      Fitting the height never takes a cell under 40 px, the size the phone pass set as
      the smallest thing a finger can hit: on a short window with the "picked up your
-     layout" banner showing, a map that scrolls a little beats one too fine to use. */
+     layout" banner showing, a map that scrolls a little beats one too fine to use.
+     The 52 px cell and 720 px caps are for a 1080-line window and grow with a taller
+     one (row.big): at 1440 a cell may be 69 px rather than staying 52 while the screen
+     round it got a third bigger. The labels scale with the cells, so they stay legible. */
   const above = svg.getBoundingClientRect().top - top.getBoundingClientRect().top;
-  const availH = Math.max(H * 40 / S, Math.min(720, row.room - above - 41));
-  const sc = Math.min(availW / W, availH / H, CELL_PX / S);
+  const availH = Math.max(H * 40 / S, Math.min(720 * row.big, row.room - above - 41));
+  const sc = Math.min(availW / W, availH / H, Math.round(CELL_PX * row.big) / S);
   svg.setAttribute('width', Math.round(W * sc));
   svg.setAttribute('height', Math.round(H * sc));
   if (twoCol) DF.pairColumns(top, Math.round(W * sc) + 30, PREVIEW_MIN);

@@ -233,3 +233,76 @@ test('stacked, the page scrolls as a whole and the stage is not a scroller of it
     expect(m.stage).toBe(0);
     expect(errors).toEqual([]);
   });
+
+/* ---- 4. a very wide screen ----------------------------------------------- */
+
+/* Measured from 2560 to 5120 px, nothing on the stage grew except the things that
+   should not have: the cut map stayed 391 × 454 and a bins cell 52 px, while the
+   print plan's inputs stretched to ~1000 px each, the bins parts table across 3000 px
+   and the preview into a 4678 × 380 strip. 3440 × 1440 is a common ultrawide. */
+const wideScreen = (page) => page.evaluate(() => {
+  const r = (e) => e.getBoundingClientRect();
+  const map = document.getElementById('cutmap') || document.getElementById('fillmap');
+  const three = r(document.getElementById('threewrap'));
+  const plan = document.getElementById('platesRow') || document.getElementById('plateWrap');
+  return {
+    map: { w: r(map).width, h: r(map).height },
+    three: { w: three.width, h: three.height, right: three.right, bottom: three.bottom },
+    plan: r(plan.closest('.stagecard')),
+    table: r(document.querySelector('table.pieces')).width,
+    widest: Math.max(0, ...[...document.querySelectorAll(
+      '.stage input:not([type=checkbox]), .stage select')].map((e) => r(e).width)),
+  };
+});
+
+for (const tool of [{ name: 'baseplates', open: H.openPlates },
+                    { name: 'bins', open: H.openBins }]) {
+  test(`${tool.name}: a 3440×1440 screen gets a bigger map, a sane preview and no stretched form`,
+    async ({ page }) => {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await H.forgetSaved(page);
+      const errors = await tool.open(page);
+      const small = await wideScreen(page);
+
+      // both tools redraw their map on a window resize, so this is the same page grown
+      await page.setViewportSize({ width: 3440, height: 1440 });
+      await page.waitForTimeout(400);
+      const big = await wideScreen(page);
+
+      expect(big.map.w, 'the map grows with the screen').toBeGreaterThan(small.map.w * 1.15);
+      expect(big.map.h).toBeGreaterThan(small.map.h * 1.15);
+      expect(big.widest, 'no form control stretched across the stage').toBeLessThanOrEqual(480);
+      expect(big.three.w / big.three.h, 'a preview, not a letterbox').toBeLessThanOrEqual(3);
+      // the print plan comes up beside the preview, not a screen further down the stage
+      expect(big.plan.x).toBeGreaterThanOrEqual(big.three.right);
+      expect(big.plan.y).toBeLessThan(big.three.bottom);
+      expect(big.table, 'the parts table at a readable width').toBeLessThanOrEqual(760);
+      expect(errors).toEqual([]);
+    });
+}
+
+/* The aspect ratio is the number that runs away as the window widens, so it is checked
+   at 5120 too — and with a wide drawer, where the preview is alone under the map
+   rather than beside it, which is the other way it can end up a strip. 2300 × 1000 is
+   short of the side column and at the 1080-line map size, so beside the cut map the
+   preview there is held in shape by its --pmin floor alone (2.5 with it, 2.94 without,
+   and rising with every pixel wider). */
+for (const [w, h] of [[2300, 1000], [3440, 1440], [5120, 1440]]) {
+  test(`the preview keeps a sane shape at ${w}×${h}, beside a map or under a wide one`,
+    async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await H.forgetSaved(page);
+      for (const hash of ['', '#w=900&d=420']) {
+        await page.goto('about:blank');
+        const errors = await openPlatesAt(page, hash);
+        const s = await wideScreen(page);
+        expect(s.three.w / s.three.h, `baseplates, drawer ${hash || 'default'}`)
+          .toBeLessThanOrEqual(3);
+        expect(errors).toEqual([]);
+      }
+      const errors = await H.openBins(page);
+      const s = await wideScreen(page);
+      expect(s.three.w / s.three.h, 'bins').toBeLessThanOrEqual(3);
+      expect(errors).toEqual([]);
+    });
+}

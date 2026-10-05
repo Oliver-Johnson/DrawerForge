@@ -157,7 +157,14 @@ const DF = {
      you can see, for when it is not beside it: the stage is exactly the window under the
      header and is the thing that scrolls, so that is the space a preview below the map
      has to fit in. Stacked on a phone the stage is as tall as its content and it is
-     the window that scrolls, which is why the window caps it. */
+     the window that scrolls, which is why the window caps it.
+
+     `big` is how much taller the window is than the 1080 lines both maps' size caps
+     were tuned on, and never less than 1. The caps were fixed pixels, so from 2560 to
+     5120 px wide the cut map stayed 391 × 454 and a bins cell 52 px while everything
+     round them grew; each tool multiplies its caps by this, which keeps a 1080 screen
+     exactly as it was and grows a 1440 one by a third. Height rather than width,
+     because height is what the maps are short of — an ultrawide is not a bigger map. */
   stageRow(top, stage) {
     top.style.gridTemplateColumns = '';
     top.classList.remove('paired');
@@ -166,10 +173,20 @@ const DF = {
     const room = Math.min(stage ? stage.clientHeight : Infinity, window.innerHeight || 900) - pad;
     top.style.setProperty('--room', Math.round(room) + 'px');
     return { two: cs.gridTemplateColumns.trim().split(/\s+/).length > 1,
-             width: top.clientWidth, gap: parseFloat(cs.columnGap) || 0, room };
+             width: top.clientWidth, gap: parseFloat(cs.columnGap) || 0, room,
+             big: Math.max(1, (window.innerHeight || 900) / 1080) };
   },
+  /* Beside the map the preview takes the row's height, which is the map card's — and
+     a short map card next to a very wide column is a letterbox: the cut map's default
+     drawer left a 4243 × 484 px strip at 5120 wide, which nobody can usefully turn a
+     model in (under the map it had been 4678 × 380). --pmin keeps it no more than two
+     and a half times as wide as it is tall, whatever the map leaves it; the
+     stylesheet makes it a floor under the preview's height. */
   pairColumns(top, mapCol, previewMin) {
     top.style.gridTemplateColumns = `${Math.round(mapCol)}px minmax(${previewMin}px, 1fr)`;
     top.classList.add('paired');
+    const gap = parseFloat(getComputedStyle(top).columnGap) || 0;
+    const previewW = Math.max(previewMin, top.clientWidth - mapCol - gap);
+    top.style.setProperty('--pmin', Math.round(previewW / 2.5) + 'px');
   },
 };

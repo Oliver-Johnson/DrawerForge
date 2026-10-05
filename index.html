@@ -466,9 +466,44 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
    specific rule earlier in the sheet, and these would otherwise win it back. */
 .stagetop #threewrap{flex:1 1 auto;min-height:420px}
 .stagetop #threewrap:not(.expanded){height:clamp(420px,calc(var(--room,520px) - 58px),1400px)}
-.stagetop.paired #threewrap:not(.expanded){flex-basis:0;height:auto}
+/* --pmin (DF.pairColumns) is the floor that stops a wide column and a short map card
+   making the preview a letterbox: never more than 2.5 times as wide as it is tall. */
+.stagetop.paired #threewrap:not(.expanded){flex-basis:0;height:auto;
+  min-height:max(420px,var(--pmin,0px))}
 /* A wide drawer's map needs the whole stage; the 3D view drops beneath it. */
 .stagetop.wide{grid-template-columns:1fr}
+
+/* Form controls in a stage card. The stage is as wide as the window less the rail,
+   and a .row or .row3 shares all of it out: at 3440 px the print plan's three number
+   fields were about a thousand pixels each, for values like "4". A row stops at a
+   width that still reads as one line of settings, and a field on its own stops well
+   short of the stage, wherever the next one put it. */
+.stagecard .row,.stagecard .row3{max-width:720px}
+.stagecard input:not([type=checkbox]),.stagecard select{max-width:480px}
+
+/* ---- very wide stages -----------------------------------------------------
+   Past 2400 px the stage has room for a third column, and it was spending it on
+   width nothing could use: tables and forms stretched three thousand pixels and the
+   print plan sat a screen below a preview you could not see it beside. So everything
+   after the map-and-preview row — print plan, pieces and export on Baseplates; the
+   bins to print, print plan and export on Bins — moves into a column beside it, all
+   in view at once, and the row keeps the main column, capped at 2400 px and centred,
+   so a 5120 window gets a margin rather than a preview the width of a room.
+   The row spans every grid row and the last of them is 1fr: an item spanning a
+   flexible track gives its height to that track alone, so the tall row cannot push
+   the cards beside it apart. Eight auto rows is room for eight cards; there are three.
+   With nothing left below the row, a preview beside the map may also take the whole
+   visible height of the stage instead of matching the map card. DF.stageRow measures
+   the row itself, which is the main column here, so the maps size to it unchanged. */
+@media(min-width:2400px){
+  .stage{display:grid;grid-template-columns:minmax(0,2400px) clamp(440px,24vw,720px);
+    grid-template-rows:repeat(8,auto) 1fr;column-gap:14px;justify-content:center;
+    align-items:start}
+  .stage > .stagetop{grid-column:1;grid-row:1 / -1;margin-bottom:0}
+  .stage > .stagecard{grid-column:2}
+  .stagetop.paired #threewrap:not(.expanded){
+    min-height:max(420px,var(--pmin,0px),calc(var(--room,520px) - 58px))}
+}
 
 /* Hover tooltip for the 3D view, and stop the map's labels being text-selected
    mid-drag — dragging a bin should move it, not highlight its caption. */
@@ -3618,7 +3653,14 @@ const DF = {
      you can see, for when it is not beside it: the stage is exactly the window under the
      header and is the thing that scrolls, so that is the space a preview below the map
      has to fit in. Stacked on a phone the stage is as tall as its content and it is
-     the window that scrolls, which is why the window caps it. */
+     the window that scrolls, which is why the window caps it.
+
+     `big` is how much taller the window is than the 1080 lines both maps' size caps
+     were tuned on, and never less than 1. The caps were fixed pixels, so from 2560 to
+     5120 px wide the cut map stayed 391 × 454 and a bins cell 52 px while everything
+     round them grew; each tool multiplies its caps by this, which keeps a 1080 screen
+     exactly as it was and grows a 1440 one by a third. Height rather than width,
+     because height is what the maps are short of — an ultrawide is not a bigger map. */
   stageRow(top, stage) {
     top.style.gridTemplateColumns = '';
     top.classList.remove('paired');
@@ -3627,11 +3669,21 @@ const DF = {
     const room = Math.min(stage ? stage.clientHeight : Infinity, window.innerHeight || 900) - pad;
     top.style.setProperty('--room', Math.round(room) + 'px');
     return { two: cs.gridTemplateColumns.trim().split(/\s+/).length > 1,
-             width: top.clientWidth, gap: parseFloat(cs.columnGap) || 0, room };
+             width: top.clientWidth, gap: parseFloat(cs.columnGap) || 0, room,
+             big: Math.max(1, (window.innerHeight || 900) / 1080) };
   },
+  /* Beside the map the preview takes the row's height, which is the map card's — and
+     a short map card next to a very wide column is a letterbox: the cut map's default
+     drawer left a 4243 × 484 px strip at 5120 wide, which nobody can usefully turn a
+     model in (under the map it had been 4678 × 380). --pmin keeps it no more than two
+     and a half times as wide as it is tall, whatever the map leaves it; the
+     stylesheet makes it a floor under the preview's height. */
   pairColumns(top, mapCol, previewMin) {
     top.style.gridTemplateColumns = `${Math.round(mapCol)}px minmax(${previewMin}px, 1fr)`;
     top.classList.add('paired');
+    const gap = parseFloat(getComputedStyle(top).columnGap) || 0;
+    const previewW = Math.max(previewMin, top.clientWidth - mapCol - gap);
+    top.style.setProperty('--pmin', Math.round(previewW / 2.5) + 'px');
   },
 };
 </script>
@@ -4700,14 +4752,20 @@ function drawMap() {
      The map used to measure #mapwrap, its own card. That card is now the column being
      sized from the map, so it is the row that gets measured: its width less the
      preview's minimum and the gap when paired, less the card's 30 px of chrome
-     (#mapwrap's 14 px padding each side and the border) either way. The 680 and 460
-     caps are unchanged — room is a ceiling, not a target. */
+     (#mapwrap's 14 px padding each side and the border) either way.
+     The 680 × 460 caps are a ceiling, not a target, and they were fixed pixels: from
+     2560 to 5120 px wide the map stayed 391 × 454 while the screen round it doubled.
+     They now grow with a window taller than the 1080 lines they were set on (row.big
+     — see DF.stageRow), so a 1440 screen gets a map a third bigger and a 1080 one is
+     unchanged. The labels are drawn at a fixed size whatever the scale, so a bigger map
+     is more room to click a cut line, not bigger type. */
   const PREVIEW_MIN = 320;
   const top = document.querySelector('.stagetop');
   top.classList.toggle('wide', Wmm / Math.max(1, Dmm) > 1.15);
   const row = DF.stageRow(top, $('stage'));
-  const availW = Math.min(680, row.two ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30);
-  const sc = Math.max(0.05, Math.min(availW / (Wmm + 90), 460 / (Dmm + 90)));
+  const availW = Math.min(680 * row.big,
+                          row.two ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30);
+  const sc = Math.max(0.05, Math.min(availW / (Wmm + 90), 460 * row.big / (Dmm + 90)));
   const ox = 58, oy = 26;
   const X = (mm) => ox + mm * sc;
   const Y = (mm) => oy + (Dmm - mm) * sc;     // front of drawer at the bottom
