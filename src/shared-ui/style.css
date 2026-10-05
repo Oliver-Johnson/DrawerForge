@@ -150,12 +150,48 @@ header h1 .tm{color:var(--cyan)}
 header p{color:var(--dim);margin-top:5px;max-width:640px}
 header .privacy{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:7px}
 header .privacy::before{content:"● ";color:var(--cyan)}
-.app{display:grid;grid-template-columns:400px 1fr;gap:0;min-height:calc(100vh - 96px)}
-@media(max-width:980px){.app{grid-template-columns:1fr}}
-.rail{border-right:1px solid var(--line);padding:14px 16px 40px;overflow-y:auto;max-height:calc(100vh - 96px)}
-@media(max-width:980px){.rail{max-height:none;border-right:none}}
-.stage{padding:16px 20px 60px;overflow-y:auto;max-height:calc(100vh - 96px)}
-@media(max-width:980px){.stage{max-height:none}}
+/* The working area is exactly the window below the header.
+   It was `calc(100vh - 96px)` on .app, the rail and the stage, and 96 was nobody's
+   header: the real one is 164 px on Baseplates, 207 px on Bins (the quickstart row),
+   and another 40 or so whenever the "picked up your layout" banner is showing. So the
+   page scrolled 70-110 px plus the footer on top of the rail and the stage scrolling
+   inside it — three scrollbars, and the bottom of both columns parked below the fold.
+
+   No number replaces it. On a tool page the body becomes a grid exactly one window
+   tall: header and banner take what they need, .app takes the rest, and the footer
+   sits in a zero-height last row with align-self:start, so it overflows the body
+   rather than claiming any of the window — the page still scrolls down to it, by its
+   own height and no more. Whatever changes the header (the banner coming and going,
+   focus mode dropping the quickstart, a narrow window wrapping the nav) re-solves
+   with no script watching it, and it is right on the first frame, before either
+   tool's first drawMap measures the stage.
+   minmax(420px) is the floor for a short window: past it the page scrolls instead of
+   the work area collapsing to a sliver. minmax(0,1fr) on the column stops a wide
+   table's min-content stretching the whole page sideways, which a plain auto track
+   would allow. :has() scopes it to the tools — the guide pages share this sheet and
+   keep their ordinary flow; a browser without :has() gets that flow too, the page
+   scrolling as a whole, which is the stacked layout's behaviour and not a broken one.
+
+   Inside .app, row 1 is the bins focus bar (display:none, so zero, everywhere else)
+   and row 2 the rail and the stage. They are placed there explicitly so the bar can
+   take row 1 without pushing them into an implicit, unsized row; each is a scroll
+   container, so its automatic minimum height is zero and it fits the row and scrolls
+   rather than stretching it. */
+body:has(> .app){display:grid;grid-template-columns:minmax(0,1fr);
+  grid-template-rows:auto auto minmax(420px,1fr) 0;height:100vh;height:100dvh}
+body:has(> .app) > header{grid-row:1}
+body:has(> .app) > .restored{grid-row:2}
+body:has(> .app) > .app{grid-row:3}
+body:has(> .app) > footer{grid-row:4;align-self:start}
+.app{display:grid;grid-template-columns:400px 1fr;grid-template-rows:auto minmax(0,1fr);gap:0}
+.app > .rail,.app > .stage{grid-row:2}
+.rail{border-right:1px solid var(--line);padding:14px 16px 40px;overflow-y:auto}
+.stage{padding:16px 20px 60px;overflow-y:auto}
+/* Stacked, the page is the one scroller again, as it always was on a phone. */
+@media(max-width:980px){
+  body:has(> .app){display:block;height:auto}
+  .rail{border-right:none}
+}
 
 /* Stacked layout.
    The rail comes before the stage in the document, which is right side by side and

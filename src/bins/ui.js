@@ -915,7 +915,27 @@ function drawMap() {
   const rowW = top ? top.clientWidth : (stage ? stage.clientWidth : 900) - 40;
   const gap = top ? parseFloat(getComputedStyle(top).columnGap) || 0 : 0;
   const availW = Math.max(180, twoCol ? rowW - gap - PREVIEW_MIN - 30 : rowW - 30);
-  const availH = Math.min(720, (window.innerHeight || 900) * 0.66);
+  /* The height ceiling is the part of the stage you can see. Two thirds of the window
+     stood in for that while the stage ran off the bottom of the page anyway; now the
+     stage is exactly the window under the header and is the thing that scrolls, so at
+     1280×720 that guess was a 468 px map in 513 px of stage — the front row, the
+     coverage bar and the errors about the layout (#mapChecks) always just out of view,
+     at the very moment they were the point. The map, its front marker and the
+     coverage bar now fit together with the stage scrolled to the top.
+     Above the map is measured rather than assumed, because the layer tabs wrap as
+     layers are added: the card's heading and tabs, plus the stage's own top padding.
+     Below it the marker and the bar are a fixed 41 px. Stacked, the stage is as tall
+     as its content and it is the window that scrolls, so the window is the room.
+     Fitting the height never takes a cell under 40 px, the size the phone pass set as
+     the smallest thing a finger can hit: on a short window with the "picked up your
+     layout" banner showing, a map that scrolls a little beats one too fine to use. */
+  let availH = Math.min(720, (window.innerHeight || 900) * 0.66);
+  if (top && stage) {
+    const room = Math.min(stage.clientHeight, window.innerHeight || 900);
+    const above = svg.getBoundingClientRect().top - top.getBoundingClientRect().top +
+                  (parseFloat(getComputedStyle(stage).paddingTop) || 0);
+    availH = Math.max(H * 40 / S, Math.min(720, room - above - 41));
+  }
   const sc = Math.min(availW / W, availH / H, CELL_PX / S);
   svg.setAttribute('width', Math.round(W * sc));
   svg.setAttribute('height', Math.round(H * sc));
