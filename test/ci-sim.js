@@ -9,7 +9,6 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const generated = require('../tools/generated.js');
 const g = (p) => execSync(`git show HEAD:${p}`, { encoding: 'utf8', maxBuffer: 1e8 });
 
 /* The joint diagrams are drawn from core.js's DEFAULTS, so the committed page can only
@@ -17,9 +16,18 @@ const g = (p) => execSync(`git show HEAD:${p}`, { encoding: 'utf8', maxBuffer: 1
    uncommitted change to a joint dimension slip past the one check whose whole purpose
    is to read git's bytes rather than the disk's. Node can only require a path, so the
    blob goes to a temp file. */
-const coreTmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cisim-')), 'core.js');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cisim-'));
+const coreTmp = path.join(tmp, 'core.js');
 fs.writeFileSync(coreTmp, g('src/core.js'));
 const CORE = require(coreTmp);
+/* The same goes for the code that writes the generated parts of a page: the printer
+   table, the joint figures and the share tags. Requiring the working tree's let an
+   uncommitted change to tools/printers.js pass here and fail in CI. They require only
+   each other, so the committed copies go side by side in one temp folder. */
+fs.mkdirSync(path.join(tmp, 'tools'));
+for (const f of ['generated.js', 'seo.js', 'joints.js', 'printers.js'])
+  fs.writeFileSync(path.join(tmp, 'tools', f), g(`tools/${f}`));
+const generated = require(path.join(tmp, 'tools', 'generated.js'));
 const MARK = (name) => new RegExp(`[ \\t]*\\r?\\n?/\\*__${name}__\\*/[ \\t]*\\r?\\n?`);
 
 /* The same manifest build.js splices from. This used to be a hand-kept copy that
