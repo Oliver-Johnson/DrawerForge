@@ -117,6 +117,29 @@ console.log('\nworked examples');
   }
 }
 
+/* The printer table on the split page: a bed, and the largest piece it takes. The cell
+   counts are floor(bed / pitch) and nothing else, so every row can be recomputed. What
+   this cannot check is whether the bed is the printer's — the row that said the Bambu
+   A1 had a 220 mm bed was arithmetically perfect and wrong about the printer. */
+console.log('\nthe printer table');
+{
+  const html = read('guide/split/index.html');
+  const rows = [...html.matchAll(/<tr><td>([^<]+)<\/td><td>(\d+) × (\d+)<\/td><td>(\d+) × (\d+)<\/td><td>(\d+) × (\d+) mm<\/td><\/tr>/g)];
+  for (const m of rows) {
+    const [w, d, nx, ny, sw, sd] = m.slice(2).map(Number);
+    const want = [Math.floor(w / SPEC.pitch), Math.floor(d / SPEC.pitch)];
+    const ok = nx === want[0] && ny === want[1] &&
+               sw === want[0] * SPEC.pitch && sd === want[1] * SPEC.pitch;
+    if (!ok) {
+      console.log(`  ${m[1]}: says ${nx} × ${ny} (${sw} × ${sd} mm) on ${w} × ${d} — ` +
+                  `should be ${want[0]} × ${want[1]} (${want[0] * SPEC.pitch} × ${want[1] * SPEC.pitch} mm)`);
+      bad++;
+    }
+  }
+  console.log(`  ${rows.length} rows checked`);
+  if (rows.length < 5) { console.log('  TOO FEW ROWS MATCHED — the parser has drifted'); bad++; }
+}
+
 /* Claims the prose makes outright, each of which was wrong once and shipped that way.
    A sentence that states its own rule has to produce its own number: an example that
    contradicts the rule beside it is worse than no example, because the reader trusts

@@ -101,13 +101,17 @@
 <section class="p" id="s-printer">
   <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-printer"><span class="n">02</span> Printer <span class="caret">▾</span></button></h2>
   <div class="body" id="b-printer">
+    <!-- The A1 mini is a 180 mm printer. It was listed under the 220 mm preset, so an
+         A1 mini owner who picked their own printer got five-cell, 210 mm pieces that
+         their bed cannot take — and nothing on the page would have told them, because
+         the plate checks trust the bed they were given. -->
     <label class="f"><b>Preset</b>
       <select id="bedPreset">
-        <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu X1/P1)</option>
-        <option value="220,220,250">220 × 220 × 250 (Ender 3, A1 mini class)</option>
+        <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu A1/X1/P1)</option>
+        <option value="220,220,250">220 × 220 × 250 (Ender 3 class)</option>
         <option value="250,210,220">250 × 210 × 220 (Prusa MK4 class)</option>
         <option value="300,300,300">300 × 300 × 300 (large format)</option>
-        <option value="180,180,180">180 × 180 × 180 (compact)</option>
+        <option value="180,180,180">180 × 180 × 180 (Bambu A1 mini, Prusa MINI)</option>
         <option value="custom">Custom…</option>
       </select></label>
     <div class="row3">
