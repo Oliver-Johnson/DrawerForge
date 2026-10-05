@@ -49,6 +49,14 @@
     <a id="navBins" href="./" class="on">Bins</a>
     <a id="navGuide" href="../guide/">Guide</a>
   </nav>
+  <!-- Which saved drawer this is, and the way to the others. Under the nav rather than in
+       it, for the same reason as the quickstart below: the nav is a row of pages. The name
+       is the button, so the bar is one control wide, and on a phone it shares the
+       quickstart's row: a row of its own pushed the drawer map below the fold. -->
+  <div class="drawerbar">
+    <span>Drawer</span>
+    <button type="button" class="ghost" id="drawersBtn" aria-haspopup="dialog"><b id="drawerName" class="none">not saved</b> <span aria-hidden="true">▾</span></button>
+  </div>
   <!-- Under the nav rather than in it. The nav is a row of page links and carries the
        layout across them; this is a mode switch, and an action sitting in that row reads
        like a fourth page. Plenty of people arrive wanting one bin that fits one thing,
@@ -427,6 +435,33 @@
   </div>
 </dialog>
 
+<!-- Saved drawers. The same markup on both tools, because the same module drives it:
+     src/shared-ui/drawers.js fills in the list and the messages each time it opens. -->
+<dialog id="drawersDlg" class="sheet" aria-labelledby="drawersTitle">
+  <div class="sheethead">
+    <h2 id="drawersTitle">Your drawers</h2>
+    <button type="button" id="drawersClose" title="Close" aria-label="Close">×</button>
+  </div>
+  <div class="sheetbody">
+    <div class="exnote">Each saved drawer keeps its baseplate and its bins together, on this device only. The one that is open saves itself as you work, and opening another brings back both halves of it, on either page.</div>
+    <div class="exsum" id="drawersNow">—</div>
+    <form class="dwsave" id="drawersSaveForm">
+      <label class="f"><b>Save the design on screen as a new drawer</b>
+        <input id="drawersNewName" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Workbench, top drawer"></label>
+      <button type="submit" class="act">Save</button>
+    </form>
+    <div class="exfit" id="drawersMsg" role="status" hidden></div>
+    <div class="exfiles" id="drawersList" hidden></div>
+    <div class="exportrow">
+      <button type="button" class="ghost" id="drawersExport">Export this drawer</button>
+      <button type="button" class="ghost" id="drawersExportAll">Export every drawer</button>
+      <button type="button" class="ghost" id="drawersImportBtn">Import a design file…</button>
+      <input type="file" id="drawersImport" accept=".json,application/json" hidden>
+    </div>
+    <div class="exnote">A design file is a small JSON file of settings — no 3D models, which are rebuilt from the settings. Use one to move drawers to another device, to keep a backup, or to attach to a bug report.</div>
+  </div>
+</dialog>
+
 <script src="../vendor/three.min.js"></script>
 <script src="../vendor/jszip.min.js"></script>
 <script>
@@ -437,6 +472,9 @@
 </script>
 <script>
 /*__FIELDS__*/
+</script>
+<script>
+/*__DRAWERS__*/
 </script>
 <script>
 /*__BIN__*/

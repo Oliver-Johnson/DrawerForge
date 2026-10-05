@@ -2774,6 +2774,7 @@ function rememberState() {
     catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                      worth an exception that stops the rest of the page working */ }
     saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
+    drawers.wrote(h);   // and into the saved drawer this is, if it is one
   }, 400);
 }
 function shareLink() {
@@ -2815,10 +2816,33 @@ function loadFromHash(src) {
   // the list follows the bed: a link with a 180 mm bed must not reopen naming a 256 one
   $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
 }
+/* Saved drawers live in src/shared-ui/drawers.js, shared with the baseplates page. What
+   this page tells it is which keys of the design string are its own to write: exactly the
+   ones loadFromHash above takes for itself rather than parking in hashExtras, so if one is
+   added there it belongs here too. */
+const BINS_OWN = new Set(['v', ...Object.keys(KEYS), 'pr', 'dv', 'bl', 'bseg', 'bdt', 'bdc',
+                          'bnotes', 'bf', 'bs']);
+const drawers = DRAWERS.create({
+  tool: 'bins',
+  owns: (k) => BINS_OWN.has(k),
+  design: () => encodeDesc(descriptor()),
+  stop: () => { clearTimeout(hashSaveT); hashReady = false; },
+  els: {
+    name: $('drawerName'), button: $('drawersBtn'), dialog: $('drawersDlg'),
+    close: $('drawersClose'), form: $('drawersSaveForm'), input: $('drawersNewName'),
+    list: $('drawersList'), now: $('drawersNow'), msg: $('drawersMsg'),
+    exportOne: $('drawersExport'), exportAll: $('drawersExportAll'),
+    importBtn: $('drawersImportBtn'), importInput: $('drawersImport'),
+  },
+});
+/* Each hand-over is told to the saved drawer first, so the page at the other end
+   recognises the design it arrives with as that drawer — see attach in drawers.js. */
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  location.href = '../guide/#' + encodeDesc(descriptor());
+  const h = encodeDesc(descriptor());
+  drawers.handoff(h);
+  location.href = '../guide/#' + h;
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
@@ -2829,7 +2853,12 @@ $('shareBtn').addEventListener('click', () => {
 // the whole bins descriptor travels; baseplates re-emits what it doesn't own
 function platesHref() { return '../#' + encodeDesc(descriptor()); }
 for (const id of ['toPlates', 'navPlates'])
-  $(id).addEventListener('click', (e) => { e.preventDefault(); location.href = platesHref(); });
+  $(id).addEventListener('click', (e) => {
+    e.preventDefault();
+    const href = platesHref();
+    drawers.handoff(href.slice(href.indexOf('#') + 1));
+    location.href = href;
+  });
 
 /* ---------- boot ---------------------------------------------------------- */
 let timer = null;
@@ -2942,10 +2971,11 @@ if (FIELDS.savedUnit() !== unit) {
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
-if (incomingHash.length > 2) loadFromHash();
+let arrivedWith = '';                     // the design string this page was opened with
+if (incomingHash.length > 2) { loadFromHash(); arrivedWith = incomingHash; }
 else {
   const saved = readLocal();
-  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; }
+  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; arrivedWith = saved; }
 }
 if (pendingNotes) {                       // applied after the layout so indices line up
   try {
@@ -2986,6 +3016,8 @@ if (pendingScratch) {
     enterFocus();
   }
 }
+// after focus is restored too, so the design it compares against is the one on screen
+drawers.attach(arrivedWith);
 
 /* Applied straight to the selection rather than through readControls, for the reason
    given where doneRow is hidden: readControls also writes `state`, the template for the

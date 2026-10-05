@@ -135,6 +135,37 @@ a{color:var(--cyan)}
 .restored button{background:none;border:1px solid var(--line);color:var(--cyan);
   border-radius:6px;padding:3px 11px;font:inherit;cursor:pointer}
 .restored button:hover{border-color:var(--cyan)}
+/* ---- saved drawers (src/shared-ui/drawers.js) ----
+   One control in the header on both tools: the open drawer's name, which opens the list.
+   Small on a desktop, and a full 40 px target on a phone, where the blanket control rule
+   further down applies to it like everything else. */
+header .drawerbar{display:flex;gap:8px;align-items:center;margin-top:10px;
+  font-size:12px;color:var(--dim)}
+header .drawerbar button{display:inline-flex;gap:6px;align-items:center;padding:4px 11px;max-width:100%}
+header .drawerbar b{font-family:var(--mono);font-weight:500;font-size:12.5px;
+  max-width:32ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header .drawerbar b.none{color:var(--dim);font-family:var(--sans);font-weight:400}
+/* On a phone the bar and the bins page's quickstart share one row. As two rows they cost
+   the first screen 50 px, and that was the difference between the drawer map showing
+   and not (on-screen.spec.js measures it). The word "Drawer" goes to make the room; the
+   button still says it to a screen reader. The sibling selector is for specificity: the
+   quickstart's own display rule comes later in this file, and a media query adds none. */
+@media(max-width:980px){
+  header .drawerbar,header .drawerbar~.quickstart{display:inline-flex;vertical-align:middle}
+  header .drawerbar{margin-right:8px}
+  header .drawerbar>span{display:none}
+  header .drawerbar b{max-width:13ch}
+}
+.dwsave{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
+/* Flex rather than the file rows' two-column grid: a long name beside three buttons
+   squeezed to a letter a line on a phone, so here the buttons wrap under the name instead. */
+.exrow.dwrow{display:flex;flex-wrap:wrap;gap:8px 12px}
+.dwrow>div:first-child{flex:1 1 200px;min-width:0}
+.dwrow.on{box-shadow:inset 3px 0 0 var(--cyan)}
+.dwrow .nm{overflow-wrap:anywhere}
+.dwacts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
+.dwacts button{padding:5px 10px;font-size:12px}
+.dwrename input{width:100%}
 .j-plate{fill:#2b3947}
 .jointfig svg.joint>.j-plate:first-of-type{fill:#334353}
 .j-seam{stroke:var(--bg);stroke-width:.5}

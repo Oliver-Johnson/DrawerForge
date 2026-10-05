@@ -1493,11 +1493,31 @@ function rememberState() {
     catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                      worth an exception that stops the rest of the page working */ }
     saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
+    drawers.wrote(h);   // and into the saved drawer this is, if it is one
   }, 400);
 }
 function shareLink() {
   return location.origin + location.pathname + '#' + encodeDesc(descriptor());
 }
+/* Saved drawers — the list, the design file, and which one this page is working on —
+   are shared with the bins page and live in src/shared-ui/drawers.js. What this page
+   tells it is which keys of the design string are its own to write. Every key in OWNED
+   except 'ph': that one is listed so a plate height carried in from bins is not echoed
+   back out, but it is the bins page's setting, and a save from here must not wipe the
+   value bins stored. */
+const drawers = DRAWERS.create({
+  tool: 'plates',
+  owns: (k) => OWNED.has(k) && k !== 'ph',
+  design: () => encodeDesc(descriptor()),
+  stop: () => { clearTimeout(hashSaveT); hashReady = false; },
+  els: {
+    name: $('drawerName'), button: $('drawersBtn'), dialog: $('drawersDlg'),
+    close: $('drawersClose'), form: $('drawersSaveForm'), input: $('drawersNewName'),
+    list: $('drawersList'), now: $('drawersNow'), msg: $('drawersMsg'),
+    exportOne: $('drawersExport'), exportAll: $('drawersExportAll'),
+    importBtn: $('drawersImportBtn'), importInput: $('drawersImport'),
+  },
+});
 // Hand the drawer across to the bins tool. Only the shared keys travel; the bins
 // tool re-emits anything it doesn't recognise, so a round trip is lossless.
 function binsHref() {
@@ -1506,12 +1526,21 @@ function binsHref() {
   // full baseplate state plus the plate height bins needs; extras ride along
   return 'bins/#' + encodeDesc(Object.assign(descriptor(), { ph: (+H).toFixed(2) }));
 }
+/* Each hand-over is told to the saved drawer first, so the page at the other end
+   recognises the design it arrives with as that drawer — see attach in drawers.js. */
 for (const id of ['toBins', 'navBins'])
-  $(id).addEventListener('click', (e) => { e.preventDefault(); location.href = binsHref(); });
+  $(id).addEventListener('click', (e) => {
+    e.preventDefault();
+    const href = binsHref();
+    drawers.handoff(href.slice(href.indexOf('#') + 1));
+    location.href = href;
+  });
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  location.href = 'guide/#' + encodeDesc(descriptor());
+  const h = encodeDesc(descriptor());
+  drawers.handoff(h);
+  location.href = 'guide/#' + h;
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
@@ -1748,14 +1777,16 @@ if (FIELDS.savedUnit() !== unit) {
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
-if (incomingHash.length > 2) loadFromHash();
+let arrivedWith = '';                     // the design string this page was opened with
+if (incomingHash.length > 2) { loadFromHash(); arrivedWith = incomingHash; }
 else {
   const saved = readLocal();
-  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; }
+  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; arrivedWith = saved; }
 }
 hashReady = true;                         // loadFromHash has had its say; ours may start
 recomputeLayout();
 autoFrame();
+drawers.attach(arrivedWith);              // is that a saved drawer this browser wrote?
 
 
 if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);

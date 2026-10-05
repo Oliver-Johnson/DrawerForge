@@ -12,6 +12,9 @@ Everything runs in your browser. Nothing is uploaded, there's no account, and th
 **[▶ Baseplates — drawerforge.co.uk](https://drawerforge.co.uk/)** · **[▶ Bins — drawerforge.co.uk/bins](https://drawerforge.co.uk/bins/)** · **[Guide](https://drawerforge.co.uk/guide/)**
 
 Your drawer dimensions carry between the two, in both directions, without losing your work.
+Kitting out a whole chest? Save each drawer by name — its baseplate and its bins together —
+switch between them on either page, and export them as a small design file to move them to
+another device.
 
 ---
 

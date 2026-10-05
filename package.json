@@ -6,7 +6,7 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "build": "node build.js",
-    "test": "node build.js --check && node test/bin-audit.js && node test/plate-audit.js && node test/fit-check.js && node test/stack-check.js && node test/hash-roundtrip.js && node test/seo-check.js && node test/guide-facts.js && node test/indexnow-check.js",
+    "test": "node build.js --check && node test/bin-audit.js && node test/plate-audit.js && node test/fit-check.js && node test/stack-check.js && node test/hash-roundtrip.js && node test/drawers-file.js && node test/seo-check.js && node test/guide-facts.js && node test/indexnow-check.js",
     "test:ui": "playwright test",
     "test:all": "npm test && npm run test:ui"
   },
