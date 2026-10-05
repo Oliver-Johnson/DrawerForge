@@ -669,6 +669,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <span>Picked up the layout you left here last time.</span>
   <button type="button" id="startFresh">Start fresh</button>
 </div>
+<!-- Shown when a layout of yours was set aside instead of lost: a link replaced it, or
+     the last visit never finished loading one and this visit declined to try again. -->
+<div id="setAside" class="restored" style="display:none" role="status">
+  <span id="setAsideMsg"></span>
+  <button type="button" id="putBack" style="display:none">Put my layout back</button>
+  <button type="button" id="tryAnyway" style="display:none">Try it anyway</button>
+</div>
 <!-- Right-click menu for a bin, on the map and in the preview. Built fresh each time
      it opens, because half its entries depend on the bin under the cursor — which layer
      it can move to, and whether it is already marked printed. -->
@@ -4484,7 +4491,7 @@ function buildBin(G, cfg) {
  * survive the values it carries: the original separator was '.', and wall
  * thickness 1.2 split into "1" and "2", shifting every later field so a bin came
  * back with dividers it never had. Separators are now characters that cannot
- * occur in a non-negative number, and packBin refuses to emit one that could.
+ * occur in a plain non-negative decimal, and packBin writes every number as one.
  *
  * Field positions are the format. A bin is 17 fields and everything after a change
  * shifts, so adding or removing one invalidates every link already in circulation.
@@ -4514,6 +4521,18 @@ function bitsToCells(bits, u, v) {
     if (bits[i] === '1') out.push([x, y]);
   return out.length ? out : null;
 }
+/* Every number goes out as a plain non-negative decimal. packBin used to throw on any
+   value with a '-' in it, and two ordinary ones have one: a negative wall or floor, and
+   a tiny value, which String() writes in exponent form (1e-7). The throw landed in the
+   save, the share link, the hand-over to baseplates and the README, so saving stopped
+   without a word and those buttons died with it. No field can be negative, so a
+   negative is written as 0, and an exponent is spelled out in full instead. */
+const plainNum = (v) => {
+  if (typeof v !== 'number') return v;     // the carve mask: already 0s and 1s
+  if (!(v > 0)) return 0;                  // negative, -0 and NaN alike
+  const s = String(v);
+  return s.includes('e') ? v.toFixed(20).replace(/\.?0+$/, '') : s;
+};
 function packBin(b) {
   const f = [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY,
              b.solid ? 1 : 0]
@@ -4526,29 +4545,64 @@ function packBin(b) {
                 field rather than four: the sides are only meaningful when there is a
                 lid, and the format is positional so every field costs every link. */
              b.lid ? 1 : 0, lidSideBits(b.lidSides)]);
-  for (const v of f)
-    if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
-      throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
-  return f.join(SEP.field);
+  /* Still checked, but answered with a 0 rather than a throw: a bad field then costs
+     that one field, where a separator inside it would shift every field after it. */
+  const seps = Object.values(SEP);
+  return f.map((v) => {
+    const s = String(plainNum(v));
+    return seps.some((c) => s.includes(c)) ? '0' : s;
+  }).join(SEP.field);
 }
+/* The most a link can ask for. Nothing here was bounded and the geometry does what it
+   is told: a million dividers froze the tab for half a minute and were then saved, so
+   every visit froze it again; a footprint of 1e9 cells crashed it; a height of 1e308
+   came out as "Infinity mm". Each limit is past anything that can be printed or put in
+   a drawer — 2000 mm is the largest drawer or bed the baseplates page accepts — so
+   clamping to it loses nothing a person could have meant. */
+const LINK_MAX = {
+  cells: 50,                               // 2100 mm, for a footprint or a position
+  hUnits: Math.floor(2000 / SPEC.unitH),   // as tall as the tallest bed
+  wall: 10,                                // already half the inside of a 1x1 bin
+};
+/* The wall heights the edge menus offer. One that is not in the list put the menu on a
+   blank entry, the next edit read that back as NaN, and the bin was built from NaN. */
+const EDGE_STEPS = [0, 0.25, 0.5, 0.66, 1];
+const snapEdge = (x) => (!isFinite(x) ? 1
+  : EDGE_STEPS.reduce((a, s) => (Math.abs(s - x) < Math.abs(a - x) ? s : a)));
+/* How many dividers fit across `inside` mm. Each is one wall thick, and closer together
+   than that they only overlap into solid plastic: more cannot change the part, only how
+   long it takes to build. Never counted thinner than a rail, two lines of a 0.4 mm
+   nozzle, so a zero wall cannot make the limit infinite. */
+const maxDividers = (inside, wall) =>
+  Math.max(0, Math.floor(inside / Math.max(wall, RAIL_T)) - 1);
 /* Anything can arrive here: the hash is in the address bar, so it gets hand-edited,
    truncated by a chat client and pasted back a field short. Every field therefore
    falls back to its default rather than passing NaN through to the geometry — a bin
    with a NaN footprint builds no polygons at all, so the page comes up blank, which
-   looks exactly like losing the layout rather than like a typo. */
-const numAt = (p, i, d) => (isFinite(p[i]) ? p[i] : d);
-const countAt = (p, i, d) => (isFinite(p[i]) ? Math.max(1, Math.round(p[i])) : d);
+   looks exactly like losing the layout rather than like a typo. Every field is also
+   held to the range it can really take: none is negative, and counts are whole —
+   a y of 0.5 threw in the map, and 2.5 dividers were reported as 3.5 compartments. */
+const numAt = (p, i, d, hi) => (isFinite(p[i]) ? Math.min(hi, Math.max(0, p[i])) : d);
+const countAt = (p, i, d, lo, hi) =>
+  (isFinite(p[i]) ? Math.min(hi, Math.max(lo, Math.round(p[i]))) : d);
 function unpackBin(t) {
   const raw = String(t).split(SEP.field);
   const p = raw.map(Number);
   const edges = {};
-  PACK_EDGES.forEach((k, i) => { edges[k] = isFinite(p[10 + i]) ? p[10 + i] : 1; });
-  const u = countAt(p, 2, BIN_DEFAULTS.u), v = countAt(p, 3, BIN_DEFAULTS.v);
-  return { x: numAt(p, 0, 0), y: numAt(p, 1, 0), u, v,
-           hUnits: countAt(p, 4, BIN_DEFAULTS.hUnits),
-           wall: numAt(p, 5, BIN_DEFAULTS.wall), floorT: numAt(p, 6, BIN_DEFAULTS.floorT),
-           divX: numAt(p, 7, 0), divY: numAt(p, 8, 0), solid: !!p[9],
-           edges, scoop: numAt(p, 14, 0), label: numAt(p, 15, 0),
+  PACK_EDGES.forEach((k, i) => { edges[k] = snapEdge(p[10 + i]); });
+  const u = countAt(p, 2, BIN_DEFAULTS.u, 1, LINK_MAX.cells);
+  const v = countAt(p, 3, BIN_DEFAULTS.v, 1, LINK_MAX.cells);
+  const hUnits = countAt(p, 4, BIN_DEFAULTS.hUnits, 1, LINK_MAX.hUnits);
+  const H = hUnits * SPEC.unitH;
+  const wall = numAt(p, 5, BIN_DEFAULTS.wall, LINK_MAX.wall);
+  const inside = (n) => (n - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall;
+  /* A floor or scoop past the bin's height, or a label shelf past its depth, builds
+     the same part as one at it: the geometry already stops them there. */
+  return { x: countAt(p, 0, 0, 0, LINK_MAX.cells), y: countAt(p, 1, 0, 0, LINK_MAX.cells),
+           u, v, hUnits, wall, floorT: numAt(p, 6, BIN_DEFAULTS.floorT, H),
+           divX: countAt(p, 7, 0, 0, maxDividers(inside(u), wall)),
+           divY: countAt(p, 8, 0, 0, maxDividers(inside(v), wall)), solid: !!p[9],
+           edges, scoop: numAt(p, 14, 0, H), label: numAt(p, 15, 0, v * SPEC.pitch),
            cells: bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v),
            done: !!p[17], divRemovable: !!p[18],
            lid: !!p[19], lidSides: lidSidesFrom(p[20]) };
@@ -4562,7 +4616,7 @@ if (typeof module !== 'undefined') {
   module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
-    packBin, unpackBin, packLayers, unpackLayers };
+    packBin, unpackBin, packLayers, unpackLayers, LINK_MAX };
 }
 </script>
 <script>/* SPDX-License-Identifier: AGPL-3.0-or-later
@@ -7063,8 +7117,19 @@ $('exportDlg').addEventListener('click', (e) => {
 });
 
 /* ---------- shared project descriptor -------------------------------------- */
+/* The bed, infill and gap were missing, so a reload put them back to 256 mm, 15 % and
+   3 mm, and the bed set on the baseplates page — which sends bw, bd and bh — never
+   arrived. They use that page's own names, so the two tools share one bed and one
+   infill whichever way a link goes; the gap is ours, and baseplates carries it back. */
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH',
-               dfh: 'drawerFrontH' };
+               dfh: 'drawerFrontH', bw: 'bedW', bd: 'bedD', bh: 'bedH', if: 'infill',
+               bgap: 'gap' };
+/* What each may be when it arrives in a link: never negative, and never past the
+   largest drawer or bed the baseplates page accepts — a 100 m drawer froze this page
+   laying out its grid. A drawer or bed of no size is not one ("1 × 1 grid in a
+   -500 × -500 mm drawer" is what accepting it said), so that keeps the default. */
+const KEY_MAX = { if: 100 };
+const NEEDS_SIZE = new Set(['w', 'd', 'dh', 'bw', 'bd', 'bh']);
 /* Keys that describe how the design is being LOOKED at rather than what it is. They
    travel in a shared link, because a link that does not reproduce what the sender saw
    is not much of a share — but they are struck out of the link the README carries.
@@ -7096,7 +7161,44 @@ function descriptor() {
   if (notes.some((L) => L.some((n) => n))) o.bnotes = JSON.stringify(notes);
   return o;
 }
-const encodeDesc = (o) => Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+/* Names are encoded as well as values. Keys from the other tool ride through here as
+   they came, and the baseplates page decodes them, so one written raw ("%=1") made
+   every later visit there throw URIError; a raw line break would have reached the
+   README. */
+const encodeDesc = (o) => Object.entries(o)
+  .map(([k, x]) => `${encodeURIComponent(k)}=${encodeURIComponent(x)}`).join('&');
+/* packBin no longer throws, but if packing ever fails again it must cost one save,
+   not every save after it with the share, hand-over and README links. Those all build
+   from here, and the last string that did pack stands in. `strip` names keys to leave
+   out, for the README's link. */
+let lastDesc = '';
+function descString(strip) {
+  try {
+    const o = descriptor();
+    for (const k of strip || []) delete o[k];
+    const s = encodeDesc(o);
+    if (!strip) lastDesc = s;
+    return s;
+  } catch (err) { return lastDesc; }
+}
+/* One bad pair costs that pair. A malformed escape (%E0%A4%A) used to throw out of the
+   whole load, which took the page with it. */
+function parseHash(h) {
+  const q = Object.create(null);
+  for (const kv of h.split('&')) {
+    const i = kv.indexOf('=');
+    if (i < 1) continue;
+    try { q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1)); }
+    catch (err) { /* not valid percent-encoding: drop it, keep the rest */ }
+  }
+  return q;
+}
+/* A note from a link is one short line of text, as the field would have made it. Notes
+   reach the README, which is plain text read at the printer: a number in their place
+   threw ".trim is not a function" on every refresh, and a line break let a link write
+   lines of its own into the file. Cut by code point, so an emoji is never halved. */
+const cleanNote = (n) => [...String(n == null ? '' : n)
+  .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ')].slice(0, 28).join('');
 /* Keep the address bar holding the current design, so a reload does not throw it away.
  *
  * The tool has no accounts and no server, which is the point of it — but it also meant
@@ -7155,12 +7257,67 @@ function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
   location.href = location.origin + location.pathname;   // drop the hash and reload clean
 }
+/* Wired here, before the boot below reads any link: a link that throws there must not
+   also take away the button that gets you out of it, or stop the next link working. */
+$('startFresh').addEventListener('click', startFresh);
+/* A hash this page did not write means someone navigated to a link — pasted a share URL
+   into the address bar, or picked a bookmark — and changing only the fragment is a
+   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
+   Before local saving that was merely confusing; now it means a shared layout loses to
+   whatever this browser had stored, which is the one case that must never happen.
+   Reloading applies the link. replaceState does not fire this event, so the saves this
+   page makes every few seconds cannot trigger it. A fragment with no settings in it is
+   an anchor, not a link to a drawer, and reloading for one threw the drawer away. */
+addEventListener('hashchange', () => {
+  if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
+});
+
+/* Two more slots beside the save, so a layout is set aside rather than lost.
+ *
+ * PREV_KEY: following a link overwrote the save within 400 ms with no way back, so
+ * whatever is about to replace it — a link, or the defaults standing in for a layout
+ * that would not load — copies it here first, and the page offers to put it back.
+ *
+ * LOADING_KEY: names the layout being loaded, and is cleared once the page has drawn
+ * it. Still there at the next visit, for the same layout, means the last attempt hung or
+ * crashed the tab; loading it again would only do that again, on every visit. */
+const PREV_KEY = SAVE_KEY + ':prev', LOADING_KEY = SAVE_KEY + ':loading';
+const readKey = (k) => { try { return localStorage.getItem(k) || ''; } catch (err) { return ''; } };
+const writeKey = (k, v) => {
+  try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); }
+  catch (err) { /* private mode: the guard and the backup go, the page does not */ }
+};
+let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+function leaveFor(url) {
+  hashReady = false; clearTimeout(hashSaveT);   // no save of this page's may land after
+  location.href = url;
+}
+function putBack() {
+  const prev = readKey(PREV_KEY);
+  if (!prev) return;
+  saveLocal(prev);
+  leaveFor(location.href.split('#')[0]);   // a bare visit restores it, and says so
+}
+function tryAnyway() {
+  writeKey(LOADING_KEY, '');
+  leaveFor(location.href.split('#')[0] + '#' + stalled);
+  location.reload();   // a change of fragment alone reloads nothing
+}
+function showSetAside(msg, canPutBack, canTry) {
+  $('setAsideMsg').textContent = msg;
+  $('putBack').style.display = canPutBack ? '' : 'none';
+  $('tryAnyway').style.display = canTry ? '' : 'none';
+  $('setAside').style.display = '';
+}
+$('putBack').addEventListener('click', putBack);
+$('tryAnyway').addEventListener('click', tryAnyway);
 
 function rememberState() {
   if (!hashReady) return;
   clearTimeout(hashSaveT);
   hashSaveT = setTimeout(() => {
-    const h = encodeDesc(descriptor());
+    const h = descString();
+    if (!h) return;
     try { history.replaceState(null, '', '#' + h); }
     catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                      worth an exception that stops the rest of the page working */ }
@@ -7168,26 +7325,24 @@ function rememberState() {
   }, 400);
 }
 function shareLink() {
-  return location.origin + location.pathname + '#' + encodeDesc(descriptor());
+  return location.origin + location.pathname + '#' + descString();
 }
 // the same layout with the view stripped, so the README's bytes depend on the design
 function designLink() {
-  const o = descriptor();
-  for (const k of VIEW_KEYS) delete o[k];
-  return location.origin + location.pathname + '#' + encodeDesc(o);
+  return location.origin + location.pathname + '#' + descString(VIEW_KEYS);
 }
 function loadFromHash(src) {
   const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
   if (!h) return;
-  const q = {};
-  for (const kv of h.split('&')) {
-    const i = kv.indexOf('=');
-    if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1));
-  }
+  const q = parseHash(h);
   for (const [k, val] of Object.entries(q)) {
     if (k === 'v') continue;
     if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
-    if (k === 'bseg') { $('arcSegs').value = val; continue; }
+    // a menu takes only a value it offers; anything else leaves it blank and reads NaN
+    if (k === 'bseg') {
+      if ([...$('arcSegs').options].some((o) => o.value === val)) $('arcSegs').value = val;
+      continue;
+    }
     if (k === 'bdt') { $('divT').value = val; continue; }
     if (k === 'bdc') { $('divClr').value = val; continue; }
     // a checkbox, so it cannot ride the generic .value path below
@@ -7195,15 +7350,17 @@ function loadFromHash(src) {
     if (k === 'bnotes') { pendingNotes = val; continue; }
     if (k === 'bf') { pendingFocus = val; continue; }
     if (k === 'bs') { pendingScratch = val; continue; }
-    const id = KEYS[k];
+    const id = Object.hasOwn(KEYS, k) ? KEYS[k] : '';
     if (!id) { hashExtras[k] = val; continue; }
-    if ($(id)) $(id).value = val;
+    const x = Number(val);
+    if (val === '' || !isFinite(x) || x < 0 || (x === 0 && NEEDS_SIZE.has(k))) continue;
+    if ($(id)) $(id).value = String(Math.min(x, KEY_MAX[k] || 2000));
   }
 }
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  location.href = '../guide/#' + encodeDesc(descriptor());
+  location.href = '../guide/#' + descString();
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
@@ -7212,7 +7369,7 @@ $('shareBtn').addEventListener('click', () => {
     () => prompt('Copy this link:', link));
 });
 // the whole bins descriptor travels; baseplates re-emits what it doesn't own
-function platesHref() { return '../#' + encodeDesc(descriptor()); }
+function platesHref() { return '../#' + descString(); }
 for (const id of ['toPlates', 'navPlates'])
   $(id).addEventListener('click', (e) => { e.preventDefault(); location.href = platesHref(); });
 
@@ -7318,15 +7475,36 @@ document.addEventListener('keydown', (e) => {
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
-if (isLayoutHash(incomingHash)) loadFromHash();
-else {
+{
+  const fromLink = isLayoutHash(incomingHash);
   const saved = readLocal();
-  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; }
+  const src = fromLink ? incomingHash : saved.length > 2 ? saved : '';
+  /* What this page saves when nobody has touched it. A save that is only that is no
+     one's work, so replacing it sets nothing aside — or every link would offer the
+     defaults back. */
+  readControls();
+  const pristine = descString();
+  stalled = src && readKey(LOADING_KEY) === src ? src : '';
+  // set aside whatever is about to replace the save: a different link, or the defaults
+  const aside = saved.length > 2 && saved !== pristine &&
+    (saved !== src || (!!stalled && !fromLink));
+  if (aside) writeKey(PREV_KEY, saved);
+  if (stalled) {
+    showSetAside('This layout did not finish loading last time, so the page has started ' +
+      'from its defaults rather than try it again.', aside && saved !== src, true);
+  } else if (src) {
+    writeKey(LOADING_KEY, src);
+    loadFromHash(src);
+    if (!fromLink) $('restored').style.display = '';
+    else if (aside) showSetAside('This link replaced the layout you had here.', true, false);
+  }
 }
 if (pendingNotes) {                       // applied after the layout so indices line up
   try {
-    JSON.parse(pendingNotes).forEach((ns, k) =>
-      ns.forEach((n, i) => { if (layers[k] && layers[k].bins[i]) layers[k].bins[i].note = n; }));
+    const all = JSON.parse(pendingNotes);
+    (Array.isArray(all) ? all : []).forEach((ns, k) => (Array.isArray(ns) ? ns : []).forEach((n, i) => {
+      if (layers[k] && layers[k].bins[i]) layers[k].bins[i].note = cleanNote(n);
+    }));
   } catch (err) { /* a mangled link should not stop the tool loading */ }
 }
 readControls();
@@ -7362,6 +7540,9 @@ if (pendingScratch) {
     enterFocus();
   }
 }
+/* Laid out and drawn, so the marker has done its job. A stalled layout keeps its marker:
+   reloading the same link must be declined again, not tried again. */
+if (!stalled) writeKey(LOADING_KEY, '');
 
 /* Applied straight to the selection rather than through readControls, for the reason
    given where doneRow is hidden: readControls also writes `state`, the template for the
@@ -7498,20 +7679,6 @@ $('ctxmenu').addEventListener('keydown', (e) => {
 addEventListener('pointerdown', (e) => { if (!$('ctxmenu').contains(e.target)) closeMenu(); }, true);
 addEventListener('blur', closeMenu);
 addEventListener('resize', closeMenu);
-
-if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);
-
-/* A hash this page did not write means someone navigated to a link — pasted a share URL
-   into the address bar, or picked a bookmark — and changing only the fragment is a
-   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
-   Before local saving that was merely confusing; now it means a shared layout loses to
-   whatever this browser had stored, which is the one case that must never happen.
-   Reloading applies the link. replaceState does not fire this event, so the saves this
-   page makes every few seconds cannot trigger it. A fragment with no settings in it is
-   an anchor, not a link to a drawer, and reloading for one threw the drawer away. */
-addEventListener('hashchange', () => {
-  if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
-});
 
 </script>
 <div id="tip"></div>
