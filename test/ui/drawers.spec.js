@@ -86,6 +86,22 @@ async function openDrawer(page, name, ready) {
   await expect(page.locator('#drawerName')).toHaveText(name);
 }
 
+/* The page records which drawer it is at its first save, 400 ms after it loads. A reload
+   inside that used to find no record of the hand-over and came back unsaved. */
+test('a reload straight after the hand-over is still the drawer that was handed over',
+  async ({ page }) => {
+    const errors = await openPlates(page);
+    await H.setField(page, 'drawerW', '400');
+    await saveAs(page, 'Kitchen');
+    await toBins(page);
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    await page.reload();
+    await binsReady(page);
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    expect(await page.inputValue('#drawerW')).toBe('400');
+    expect(errors).toEqual([]);
+  });
+
 test('two drawers, switched on either page, bring both halves back and survive a reload',
   async ({ page }) => {
     const errors = await openPlates(page);
