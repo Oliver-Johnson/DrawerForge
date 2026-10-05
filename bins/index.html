@@ -315,6 +315,11 @@ footer .mono{font-family:var(--mono);font-size:11px}
 
 /* ---- cross-tool navigation ---- */
 header nav{display:flex;gap:6px;margin-top:14px}
+header .quickstart{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+header .quickstart span{font-size:11.5px;color:var(--dim);max-width:52ch}
+/* Already designing one bin, so the way in is noise -- the way OUT is what the focus bar
+   is for. Hidden by the same class that hides everything else focus takes away. */
+body.binfocus header .quickstart{display:none}
 header nav a{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
   padding:7px 15px;border:1px solid var(--line);border-radius:6px;color:var(--dim);
   text-decoration:none;background:var(--panel2);transition:color .12s,border-color .12s}
@@ -480,6 +485,11 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
    where the layout is already one column, so the desktop rail keeps its density. */
 @media(max-width:980px){
   header .privacy{font-size:12px}
+  /* The button says what it does; the sentence beside it is a desktop luxury. On a phone
+     it wrapped to three lines of 11.5px text, which failed the 12px floor this block
+     exists to enforce AND pushed the drawer map below the fold -- the exact regression
+     on-screen.spec.js was written to catch. The way in stays; only the gloss goes. */
+  header .quickstart span{display:none}
   header nav a{font-size:12px;padding:0 16px;min-height:40px;display:flex;align-items:center}
   section.p>h2{font-size:12px;padding:13px}
   /* the padding is the button's when there is one, or the tap target is the text only.
@@ -631,6 +641,14 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <a id="navBins" href="./" class="on">Bins</a>
     <a id="navGuide" href="../guide/">Guide</a>
   </nav>
+  <!-- Under the nav rather than in it. The nav is a row of page links and carries the
+       layout across them; this is a mode switch, and an action sitting in that row reads
+       like a fourth page. Plenty of people arrive wanting one bin that fits one thing,
+       and the way in was the bottom of a panel about laying out a whole drawer. -->
+  <div class="quickstart" id="quickstart">
+    <button type="button" class="act" id="scratchBinTop">Design one bin on its own</button>
+    <span>No drawer and no layout — just a bin, sized, previewed and exported on its own.</span>
+  </div>
 </header>
 <!-- Only shown when the layout came back from this browser rather than from a link.
      Restoring in silence leaves you unsure whether you are looking at what you left or
@@ -5001,7 +5019,8 @@ function discardScratch() {
   readControls(); drawLayerTabs(); drawMap(); refresh();
 }
 $('focusBin').addEventListener('click', enterFocus);
-for (const id of ['scratchBin', 'scratchBinMap']) $(id).addEventListener('click', startScratch);
+for (const id of ['scratchBin', 'scratchBinMap', 'scratchBinTop'])
+  $(id).addEventListener('click', startScratch);
 $('scratchAdd').addEventListener('click', addScratchToDrawer);
 $('scratchDrop').addEventListener('click', discardScratch);
 $('focusExit').addEventListener('click', () => leaveFocus());
