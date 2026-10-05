@@ -87,6 +87,7 @@ console.log('\nrefused, with a reason, and nothing else thrown');
     ['a value that is null', one({ name: 'Box', design: { w: '300', d: '200', bl: null } })],
     ['a value that is true', one({ name: 'Box', design: { w: '300', d: '200', mg: true } })],
     ['a value far too long', one({ name: 'Box', design: { w: '300', d: '200', bl: 'x'.repeat(D.CAP.value + 1) } })],
+    ['a value with half an emoji in it', one({ name: 'Box', design: { w: '300', d: '200', cn: 'a' + ch(0xd83d) } })],
     ['a drawer 0 wide', one({ name: 'Box', design: { w: '0', d: '200' } })],
     ['more settings than any design', one({ name: 'Box', design: Object.assign({ w: '300', d: '200' },
       Object.fromEntries(Array.from({ length: D.CAP.keys }, (_, i) => ['k' + i, '1']))) })],
@@ -136,6 +137,15 @@ console.log('\nnames');
   check('long names are cut to the cap', D.cleanName('x'.repeat(500)).length === D.CAP.name);
   check('markup is left as the characters it is', D.cleanName('<b>x</b>') === '<b>x</b>');
   check('a non-string is no name', D.cleanName({ toString: () => 'x' }) === '');
+  // invisible, so two names that differ only by them look the same in the list
+  check('soft hyphens and word joiners are removed',
+    D.cleanName('Kit' + ch(0xad) + 'chen') === 'Kitchen' && D.cleanName('a' + ch(0x2060) + 'b' + ch(0x2063) + 'c') === 'abc');
+  const face = ch(0xd83d) + ch(0xde00);
+  const cut = D.cleanName('x'.repeat(D.CAP.name - 1) + face + 'tail');
+  check('the cap does not cut an emoji in half', cut === 'x'.repeat(D.CAP.name - 1), JSON.stringify(cut));
+  check('half an emoji on its own is removed', D.cleanName('Box ' + ch(0xd83d)) === 'Box' &&
+    D.cleanName(ch(0xde00) + 'Box') === 'Box');
+  check('a whole emoji is kept', D.cleanName('Box ' + face) === 'Box ' + face);
 }
 
 console.log('\nmerging one page\'s save into a drawer');

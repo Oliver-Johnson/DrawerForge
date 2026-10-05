@@ -3868,13 +3868,28 @@ const DRAWERS = (function () {
 
   const isPlain = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 
+  /* A character outside the basic plane, which is most emoji, is two UTF-16 units, and
+     half of one is not text: encodeURIComponent throws on it, and a name shows it as a
+     box. So a lone half is dropped, and a cut that would fall between the two halves
+     falls before them instead. The cut counts units rather than characters because that
+     is what the name box's maxlength counts. No lookbehind in the pattern, because older
+     Safari cannot parse one and would refuse the whole script. */
+  const wellFormed = (s) => s.replace(/[\ud800-\udbff][\udc00-\udfff]|[\ud800-\udfff]/g,
+    (m) => (m.length === 2 ? m : ''));
+  const cut = (s, n) => s.slice(0, s.length > n && /[\ud800-\udbff]/.test(s[n - 1]) ? n - 1 : n);
+
   /* A name is shown on the page and nowhere else, always as text. Control characters go
      because they have no business in a label, and the bidirectional overrides because
-     they can make one name display as another — the list is how you tell drawers apart. */
+     they can make one name display as another — the list is how you tell drawers apart.
+     The characters that draw nothing at all go for the same reason: the soft hyphen, the
+     word joiner and the invisible operators would let two names that look identical be
+     different names. Those are removed rather than turned into spaces, because they sit
+     inside a word, and Kitchen with a soft hyphen in it reads as Kitchen. */
   function cleanName(v) {
     if (typeof v !== 'string') return '';
-    return v.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, ' ')
-      .replace(/\s+/g, ' ').trim().slice(0, CAP.name).trim();
+    return cut(wellFormed(v).replace(/[\u00ad\u2060-\u2065\u206a-\u206f]/g, '')
+      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, ' ')
+      .replace(/\s+/g, ' ').trim(), CAP.name).trim();
   }
   const sameName = (a, b) => a.toLowerCase() === b.toLowerCase();
   // the list and an export of it in one order, "Drawer 2" before "Drawer 10"
@@ -4023,6 +4038,8 @@ const DRAWERS = (function () {
       else if (typeof v === 'number' && isFinite(v)) s = String(v);
       else throw nope(`${it} has a setting (${k}) that is not a plain value.`);
       if (s.length > CAP.value) throw nope(`${it} has a setting (${k}) far too long to be real.`);
+      // half an emoji, which no page writes, and which would throw when encoded for the link
+      if (wellFormed(s) !== s) throw nope(`${it} has a setting (${k}) that is not whole text.`);
       pairs.push([k, s]);
     }
     if (pairs.length > CAP.keys) throw nope(`${it} has more settings than any design has.`);
@@ -4088,7 +4105,7 @@ const DRAWERS = (function () {
     if (!s.drawers.some((d) => sameName(d.name, name))) return name;
     for (let n = 2; ; n++) {
       const tail = ` (${n})`;
-      const c = name.slice(0, CAP.name - tail.length).trim() + tail;
+      const c = cut(name, CAP.name - tail.length).trim() + tail;
       if (!s.drawers.some((d) => sameName(d.name, c))) return c;
     }
   }
