@@ -1102,7 +1102,7 @@ function readmeText() {
   lines.push('Free and open source (MIT). Runs entirely in your browser.');
   lines.push('');
   lines.push('Bugs & feature requests:');
-  lines.push('  https://github.com/Oliver-Johnson/Baseplate-Studio/issues');
+  lines.push('  https://github.com/Oliver-Johnson/DrawerForge/issues');
   lines.push('  (attaching the settings link above makes reports much easier to act on)');
   lines.push('');
   lines.push('If it saved you some time, there is a tip jar:');
