@@ -503,6 +503,36 @@ test('opening a drawer saves into that drawer, even when another holds the same 
     expect(errors).toEqual([]);
   });
 
+/* The dialog says changes save into the open drawer as you work, so a save the browser
+   refuses (a full quota, say) is said on the bar and in the dialog, not swallowed. */
+test('a save into the open drawer that the browser refuses is said, until one goes through',
+  async ({ page }) => {
+    const errors = await openPlates(page);
+    await saveAs(page, 'Kitchen');
+    await page.evaluate(() => {
+      const real = Storage.prototype.setItem;
+      window.__realSetItem = real;
+      Storage.prototype.setItem = function (k, v) {
+        if (k === 'drawerforge:drawers:v1') throw new DOMException('full', 'QuotaExceededError');
+        return real.call(this, k, v);
+      };
+    });
+    await H.setField(page, 'drawerD', '390');
+    await settle(page);
+    await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+    await expect(page.locator('#drawersBtn')).toHaveAttribute('aria-label', /could not be saved/);
+    await openDialog(page);
+    await expect(page.locator('#drawersNow')).toContainText('could not be saved into it');
+    await closeDialog(page);
+
+    await page.evaluate(() => { Storage.prototype.setItem = window.__realSetItem; });
+    await H.setField(page, 'drawerD', '395');
+    await settle(page);
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    expect((await stored(page)).Kitchen.d).toBe('395');
+    expect(errors).toEqual([]);
+  });
+
 test('rename and delete, each from the list', async ({ page }) => {
   const errors = await openPlates(page);
   await saveAs(page, 'Top');

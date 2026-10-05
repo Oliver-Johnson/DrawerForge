@@ -282,6 +282,7 @@ const DRAWERS = (function () {
     const other = o.tool === 'plates' ? 'Bins' : 'Baseplates';
     let attached = null;     // the drawer this page saves into, or null for an unsaved design
     let base = null;         // its shared keys as this page arrived with or last saved them
+    let failing = false;     // the browser refused the last save into it
     let fresh = false;       // arrived with nothing to restore
     let bootDesign = '';
     let armed = '';          // 'open:id' or 'del:id' — the first press of a two-press action
@@ -351,13 +352,18 @@ const DRAWERS = (function () {
     }
     function paintBar() {
       const d = attached && find(loadAll(), attached);
-      if (attached && !d) attached = null;     // deleted on another tab
-      el.name.textContent = d ? d.name : 'not saved';
+      if (attached && !d) { attached = null; failing = false; }     // deleted on another tab
+      /* A refused save leads, ahead of the name: on a phone the bar shows about a dozen
+         characters, and the warning is the part that has to survive the cut. */
+      const shown = d ? (failing ? `not saving · ${d.name}` : d.name) : 'not saved';
+      el.name.textContent = shown;
       el.name.classList.toggle('none', !d);
+      el.name.classList.toggle('fail', !!d && failing);
       /* The visible text is just the name, which says nothing about what pressing it does,
          so the accessible name says both — starting with the words on screen. */
-      el.button.setAttribute('aria-label', d ? `${d.name}: the drawer that is open. Your drawers`
-                                             : 'Not saved as a drawer. Your drawers');
+      el.button.setAttribute('aria-label', !d ? 'Not saved as a drawer. Your drawers'
+        : failing ? `${shown}: your last change could not be saved into the drawer that is open. Your drawers`
+        : `${d.name}: the drawer that is open. Your drawers`);
     }
 
     function button(label, act, id, aria, onClick) {
@@ -393,10 +399,14 @@ const DRAWERS = (function () {
       const had = document.activeElement && el.list.contains(document.activeElement)
         ? { act: document.activeElement.dataset.act, id: document.activeElement.dataset.id } : null;
 
-      el.now.textContent = cur
-        ? `Open now: “${cur.name}”. Changes save into it as you work, here and on ${other}.`
-        : 'The design on screen is not saved as a drawer. Give it a name below to keep it, ' +
-          'baseplate and bins together.';
+      el.now.textContent = !cur
+        ? 'The design on screen is not saved as a drawer. Give it a name below to keep it, ' +
+          'baseplate and bins together.'
+        : failing
+          ? `Open now: “${cur.name}”, but your last change could not be saved into it. This ` +
+            'browser’s storage for this site is full, or it is a private window that keeps ' +
+            'nothing. Export this drawer to keep what is on screen.'
+          : `Open now: “${cur.name}”. Changes save into it as you work, here and on ${other}.`;
       el.exportOne.textContent = cur ? 'Export this drawer' : 'Export the design on screen';
       el.exportAll.disabled = !s.drawers.length;
 
@@ -479,7 +489,7 @@ const DRAWERS = (function () {
         return;
       }
       attached = d.id; armed = ''; renaming = '';
-      base = sharedOf(h);
+      base = sharedOf(h); failing = false;
       savedInto(d.id);
       el.input.value = '';
       render();
@@ -533,7 +543,7 @@ const DRAWERS = (function () {
       s.drawers = s.drawers.filter((x) => x.id !== id);
       if (!saveAll(s)) { say('This browser would not store the change.', 'bad'); return; }
       const wasOpen = attached === id;
-      if (wasOpen) attached = null;
+      if (wasOpen) { attached = null; failing = false; }
       armed = '';
       render();
       say(`Deleted “${d.name}”.` + (wasOpen
@@ -712,13 +722,22 @@ const DRAWERS = (function () {
         if (!attached) { savedInto(''); return; }
         const s = loadAll();
         const d = find(s, attached);
-        if (!d) { attached = null; savedInto(''); paintBar(); return; }
+        if (!d) { attached = null; failing = false; savedInto(''); paintBar(); return; }
         d.hash = mergeDesign(d.hash, h, o.owns, base);
         d.marks[o.tool] = fingerprint(h);
         d.saved = Date.now();
-        // a failure here loses no more than the page's own save already does
-        if (saveAll(s)) base = sharedOf(h);
+        const ok = saveAll(s);
+        if (ok) base = sharedOf(h);
         savedInto(d.id);
+        /* The page's own save shares this storage and fails without a word, but this one is
+           promised in so many words — the dialog says changes save into the drawer as you
+           work — so a refused save is said, on the bar and in the dialog, until one goes
+           through. */
+        if (failing !== !ok) {
+          failing = !ok;
+          paintBar();
+          if (el.dialog.open) render();
+        }
       },
       /* Before the page navigates to the other tool or the guide with `h` in the address.
          Also saves: the debounced save may not have run yet, and this is the last chance.
