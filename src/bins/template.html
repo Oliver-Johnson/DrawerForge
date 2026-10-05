@@ -112,8 +112,8 @@
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-drawer"><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></button></h2>
   <div class="body" id="b-drawer">
     <div class="row">
-      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
-      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
+      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" min="1" max="2000" value="306"></label>
+      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" min="1" max="2000" value="380"></label>
     </div>
     <!-- The same grid, counted rather than measured. Someone who already owns baseplates
          knows the cells and not the millimetres, and was left doing 4 × 42 in their head
@@ -125,7 +125,7 @@
     </div>
     <div class="hint">Count the cells of the baseplate you already have and these fill the millimetres in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
     <div class="row">
-      <label class="f"><b>Usable height (mm)</b><input id="drawerH" type="number" step="0.5" value="84"></label>
+      <label class="f"><b>Usable height (mm)</b><input id="drawerH" type="number" step="0.5" min="1" max="2000" value="84"></label>
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
     <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
@@ -151,9 +151,9 @@
         <option value="custom">Custom…</option>
       </select></label>
     <div class="row3">
-      <label class="f"><b>Bed width (mm)</b><input id="bedW" type="number" value="256"></label>
-      <label class="f"><b>Bed depth (mm)</b><input id="bedD" type="number" value="256"></label>
-      <label class="f"><b>Height (Z)</b><input id="bedH" type="number" value="256"></label>
+      <label class="f"><b>Bed width (mm)</b><input id="bedW" type="number" min="1" max="2000" value="256"></label>
+      <label class="f"><b>Bed depth (mm)</b><input id="bedD" type="number" min="1" max="2000" value="256"></label>
+      <label class="f"><b>Height (Z)</b><input id="bedH" type="number" min="1" max="2000" value="256"></label>
     </div>
     <label class="f"><b>Gap between parts (mm)</b><input id="gap" type="number" step="0.5" value="3"></label>
     <div class="hint">Bins print upright, so a bin's own height has to clear your Z. A tall drawer will happily let you ask for a bin taller than the printer can make.</div>
@@ -169,16 +169,16 @@
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-bin"><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></button></h2>
   <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
-      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" value="1"></label>
-      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" value="1"></label>
+      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" max="50" value="1"></label>
+      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" max="50" value="1"></label>
     </div>
-    <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" value="3"></label>
+    <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
     <div class="hint" id="binSizeHint">—</div>
     <label class="f" id="noteRow"><b>What goes in it (optional)</b><input id="note" type="text" maxlength="28" placeholder="M3 screws, drill bits…"></label>
     <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
     <div class="row" id="thickRow">
-      <label class="f"><b>Wall thickness (mm)</b><input id="wall" type="number" step="0.1" min="0.4" max="10" value="1.2"></label>
-      <label class="f"><b>Floor thickness (mm)</b><input id="floorT" type="number" step="0.1" min="0.4" max="20" value="1.2"></label>
+      <label class="f"><b>Wall thickness (mm)</b><input id="wall" type="number" step="0.1" min="0" max="10" value="1.2"></label>
+      <label class="f"><b>Floor thickness (mm)</b><input id="floorT" type="number" step="0.1" min="0" value="1.2"></label>
     </div>
     <div class="row" id="divRow">
       <label class="f"><b>Dividers across</b><input id="divX" type="number" step="1" min="0" value="0"></label>
@@ -241,6 +241,7 @@
       </div>
     </div>
     <div class="hint" id="lidNoLip" style="display:none;color:var(--red)">This bin has a lowered wall, so it has no stacking lip for a lid to grip. Set every wall to full height to give it one.</div>
+    <div class="hint" id="lidCarved" style="display:none;color:var(--red)">A lid is a plain rectangle, so on a carved bin it would hang out over the cells you cut away. It is left off the downloads; lids are made for rectangular bins.</div>
     <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. Corner posts stay full height and a lowered wall ramps up to meet them, so the side walls keep their ends — a wall that stopped square against the post snapped off there. The ramp is 8.5 mm at each end whatever the bin&rsquo;s footprint, so a wider bin keeps the same corner and gains a longer flat opening. Lowering any wall removes the stacking lip — nothing can sit on it.</div>
     <button class="ghost" id="presetTray" style="margin-top:8px">Make this a flat tray</button>
     <label class="f"><b>Corner smoothness</b>
