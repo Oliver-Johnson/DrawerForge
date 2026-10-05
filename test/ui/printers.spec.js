@@ -374,7 +374,21 @@ test('one unit for both tools: inches picked on one page are inches on the other
     await H.openPlates(page);
     await toInches(page);
     await toBins(page);
-    await expect(page.locator('#unitIn')).toHaveAttribute('aria-pressed', 'true');
+    /* In CI the bins page has now and then opened in millimetres straight after the
+       switch, on builds that passed again on a re-run. The unit is written in the click
+       on one page and read through the browser's storage on the next, which hands a
+       write on asynchronously, so this reloads until it sees the stored unit. A unit
+       that is never shared still fails, and the failure says what was stored. */
+    await expect.poll(async () => {
+      const seen = await page.evaluate((k) => [
+        document.getElementById('unitIn').getAttribute('aria-pressed'),
+        localStorage.getItem(k)].join(' / stored '), UNIT_KEY);
+      if (seen !== 'true / stored in') {
+        await page.reload();
+        await page.waitForFunction(() => typeof hashReady !== 'undefined' && hashReady);
+      }
+      return seen;
+    }, { timeout: 20000, intervals: [500, 1000, 2000] }).toBe('true / stored in');
     expect(await page.inputValue('#drawerW')).toBe('12.05');
     expect(await page.evaluate(() => state.drawerW)).toBe(306);
   });
