@@ -161,6 +161,16 @@ const CASES = [
     baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
   { name: '3x3 bosses+screws', drawerW: 126, drawerD: 126, screws: true,
     baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
+  /* Found by the pocket-floor section further down, and older than it: one cell, with
+     magnets opened from below, leaves a sliver hole in the bottom face at the rim of the
+     two left-hand pockets — six edges used once, at every arc smoothness. It needs the
+     4 mm rounded corners and the 6 mm magnet together (no corner radius, a 1 mm one, a
+     5 or 6.5 mm magnet, or a second cell in either direction all come out watertight),
+     so it is two near-coincident outlines in the bottom cap's triangulation, a few
+     microns apart and past healCsgSeams' tolerance. It matters because this is the
+     shape of the bin fit test tile, which is built the same way. */
+  { name: '1x1 magnets', drawerW: 42, drawerD: 42, magnets: true,
+    quarantine: 'bottom-face sliver at the pocket rim' },
 ];
 
 let bad = 0;
@@ -857,7 +867,9 @@ console.log('\nmagnet and screw pockets keep a floor:');
       cfg: { screws: true, screwHeadDepth: 3 } },
   ];
   for (const pk of POCKETS) {
-    const r = buildAll(Object.assign({ drawerW: 42, drawerD: 42, arcSegs: 12 }, pk.cfg));
+    // 2 × 2 rather than one cell: a single cell with magnets from below has a leak of
+    // its own, quarantined at the top of this file, and this is not about that
+    const r = buildAll(Object.assign({ drawerW: 84, drawerD: 84, arcSegs: 12 }, pk.cfg));
     const polys = r.pieces[0];
     const c = r.cfg.pitch / 2;
     const px = c - r.cfg.holeOffset + (pk.off || 0), py = c - r.cfg.holeOffset;
