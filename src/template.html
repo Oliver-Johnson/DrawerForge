@@ -63,12 +63,24 @@
   <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-drawer"><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></button></h2>
   <div class="body" id="b-drawer">
     <div class="row">
-      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" min="1" max="2000" value="306" aria-describedby="errDrawerW">
+      <label class="f"><b>Drawer width (<span data-unit>mm</span>)</b><input id="drawerW" type="number" step="0.5" min="1" max="2000" value="306" aria-describedby="errDrawerW">
         <span class="hint" id="errDrawerW" style="color:var(--red)" hidden></span></label>
-      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" min="1" max="2000" value="380" aria-describedby="errDrawerD">
+      <label class="f"><b>Drawer depth (<span data-unit>mm</span>)</b><input id="drawerD" type="number" step="0.5" min="1" max="2000" value="380" aria-describedby="errDrawerD">
         <span class="hint" id="errDrawerD" style="color:var(--red)" hidden></span></label>
     </div>
-    <div class="hint">Internal dimensions. Measure at the tightest point and subtract 1–2&nbsp;mm so the assembly slides in.</div>
+    <!-- Inches are a way of typing the drawer and nothing more: the fields show the unit
+         picked here and the model, the link and every export stay in millimetres. After
+         the size fields rather than before them, so Tab still reaches the drawer width
+         first, and beside them, because they are what it changes. The bins page has the
+         same switch and the same remembered choice. -->
+    <div class="row" style="align-items:center">
+      <span class="hint" id="unitLabel">Measure the drawer in</span>
+      <div class="seg" role="group" aria-labelledby="unitLabel">
+        <button type="button" id="unitMm" class="on" aria-pressed="true">mm</button>
+        <button type="button" id="unitIn" aria-pressed="false">inches</button>
+      </div>
+    </div>
+    <div class="hint">Internal dimensions. Measure at the tightest point and subtract 1–2&nbsp;mm (about 1/16&nbsp;in) so the assembly slides in.</div>
     <label class="f"><b>Leftover space (margins)</b>
       <select id="marginMode">
         <option value="auto">Fill with solid margin (alignment below)</option>
@@ -83,8 +95,8 @@
         <select id="alignY"><option value="center">Centre</option><option value="start">Back (margin front)</option><option value="end">Front (margin back)</option></select></label>
     </div>
     <div class="row" id="customMargins" style="display:none">
-      <label class="f"><b>Left / Right (mm)</b><div class="row"><input id="mLeft" type="number" step="0.5" value="0"><input id="mRight" type="number" step="0.5" value="0"></div></label>
-      <label class="f"><b>Front / Back (mm)</b><div class="row"><input id="mFront" type="number" step="0.5" value="0"><input id="mBack" type="number" step="0.5" value="0"></div></label>
+      <label class="f"><b>Left / Right (<span data-unit>mm</span>)</b><div class="row"><input id="mLeft" type="number" step="0.5" value="0"><input id="mRight" type="number" step="0.5" value="0"></div></label>
+      <label class="f"><b>Front / Back (<span data-unit>mm</span>)</b><div class="row"><input id="mFront" type="number" step="0.5" value="0"><input id="mBack" type="number" step="0.5" value="0"></div></label>
     </div>
     <div class="hint" id="gridSummary"></div>
     <label class="f"><b>Plate style</b>
@@ -101,24 +113,21 @@
 <section class="p" id="s-printer">
   <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-printer"><span class="n">02</span> Printer <span class="caret">▾</span></button></h2>
   <div class="body" id="b-printer">
-    <!-- The A1 mini is a 180 mm printer. It was listed under the 220 mm preset, so an
-         A1 mini owner who picked their own printer got five-cell, 210 mm pieces that
-         their bed cannot take — and nothing on the page would have told them, because
-         the plate checks trust the bed they were given. -->
-    <label class="f"><b>Preset</b>
+    <!-- Printers by name, generated from tools/printers.js — the same list the bins page
+         and the split guide print, so the three cannot disagree. They did: this list
+         filed the 180 mm A1 mini under 220 mm while the guide said 180, and an A1 mini
+         owner who picked their own printer got pieces their bed could not take, with
+         every check on the page passing because the checks trust the bed. -->
+    <label class="f"><b>Printer</b>
       <select id="bedPreset">
-        <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu A1/X1/P1)</option>
-        <option value="220,220,250">220 × 220 × 250 (Ender 3 class)</option>
-        <option value="250,210,220">250 × 210 × 220 (Prusa MK4 class)</option>
-        <option value="300,300,300">300 × 300 × 300 (large format)</option>
-        <option value="180,180,180">180 × 180 × 180 (Bambu A1 mini, Prusa MINI)</option>
-        <option value="custom">Custom…</option>
+<!--__PRINTERS__-->
       </select></label>
     <div class="row3">
-      <label class="f"><b>Bed width</b><input id="bedW" type="number" min="20" max="2000" value="256" aria-describedby="errBedW"></label>
-      <label class="f"><b>Bed depth</b><input id="bedD" type="number" min="20" max="2000" value="256" aria-describedby="errBedD"></label>
+      <label class="f"><b>Bed width (mm)</b><input id="bedW" type="number" min="20" max="2000" value="256" aria-describedby="errBedW"></label>
+      <label class="f"><b>Bed depth (mm)</b><input id="bedD" type="number" min="20" max="2000" value="256" aria-describedby="errBedD"></label>
       <label class="f"><b>Height (Z)</b><input id="bedH" type="number" min="20" max="2000" value="256" aria-describedby="errBedH"></label>
     </div>
+    <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
     <div class="hint">Only affects the material estimate, not the geometry. A baseplate is nearly all shell — the socket walls are a couple of perimeters wide and print solid whatever you set — so this moves the figure much less than it does for bins. It is the slab under a solid plate that the infill actually reaches.</div>
     <span class="hint" id="errBedW" style="color:var(--red)" hidden></span>
@@ -311,6 +320,9 @@
 </script>
 <script>
 /*__WIDGETS__*/
+</script>
+<script>
+/*__FIELDS__*/
 </script>
 <script>
 /*__UI__*/

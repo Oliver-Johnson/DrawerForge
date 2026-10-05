@@ -112,8 +112,21 @@
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-drawer"><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></button></h2>
   <div class="body" id="b-drawer">
     <div class="row">
-      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
-      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
+      <label class="f"><b>Drawer width (<span data-unit>mm</span>)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
+      <label class="f"><b>Drawer depth (<span data-unit>mm</span>)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
+    </div>
+    <!-- Inches are a way of typing the drawer and nothing more: the four drawer
+         measurements show the unit picked here, and the model, the link and every export
+         stay in millimetres. After the size fields so Tab still reaches the drawer width
+         first. The baseplates page has the same switch and the same remembered choice;
+         the baseplate height stays in millimetres, because it is a spec figure and not a
+         measurement anyone takes. -->
+    <div class="row" style="align-items:center">
+      <span class="hint" id="unitLabel">Measure the drawer in</span>
+      <div class="seg" role="group" aria-labelledby="unitLabel">
+        <button type="button" id="unitMm" class="on" aria-pressed="true">mm</button>
+        <button type="button" id="unitIn" aria-pressed="false">inches</button>
+      </div>
     </div>
     <!-- The same grid, counted rather than measured. Someone who already owns baseplates
          knows the cells and not the millimetres, and was left doing 4 × 42 in their head
@@ -123,13 +136,13 @@
       <label class="f"><b>or grid width (cells)</b><input id="gridX" type="number" step="1" min="1" value="7"></label>
       <label class="f"><b>or grid depth (cells)</b><input id="gridY" type="number" step="1" min="1" value="9"></label>
     </div>
-    <div class="hint">Count the cells of the baseplate you already have and these fill the millimetres in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
+    <div class="hint">Count the cells of the baseplate you already have and these fill the drawer size in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
     <div class="row">
-      <label class="f"><b>Usable height (mm)</b><input id="drawerH" type="number" step="0.5" value="84"></label>
+      <label class="f"><b>Usable height (<span data-unit>mm</span>)</b><input id="drawerH" type="number" step="0.5" value="84"></label>
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
     <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
-    <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (mm)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
+    <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (<span data-unit>mm</span>)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
     <div class="hint" id="drawerViewHint" style="display:none">Draws the real drawer in the preview — floor and four walls, translucent so the bins still show through. The sides stand at the usable height you gave above, because that is the number the fit check already uses and a second side measurement could only disagree with it. The front panel is often taller or lower than the sides, so it gets its own figure; leave it at 0 to match them. The walls sit at the drawer's inside dimensions, so the gap between them and the baseplate is the space the grid cannot reach. It is a view only — nothing you download changes.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
     <div class="hint">Only affects the material estimate, not the geometry. Thin parts — walls, floor, dividers, lip — print solid whatever you set; the feet are thick enough to be infilled, and they dominate. Assumes 2 perimeters and 4 solid top/bottom layers.</div>
@@ -141,23 +154,20 @@
 <section class="p closed" id="s-printer">
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-printer"><span class="n">02</span> Printer <span class="caret">▾</span></button></h2>
   <div class="body" id="b-printer">
-    <!-- The A1 mini is a 180 mm printer. It was listed under the 220 mm preset, so an
-         A1 mini owner who picked their own printer was told bins would fit a bed that
-         cannot take them. -->
-    <label class="f"><b>Preset</b>
+    <!-- Printers by name, generated from tools/printers.js — the same list the
+         baseplates page and the split guide print, so the three cannot disagree. They
+         did: this list filed the 180 mm A1 mini under 220 mm, and an A1 mini owner who
+         picked their own printer was told bins would fit a bed that cannot take them. -->
+    <label class="f"><b>Printer</b>
       <select id="bedPreset">
-        <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu A1/X1/P1)</option>
-        <option value="220,220,250">220 × 220 × 250 (Ender 3 class)</option>
-        <option value="250,210,220">250 × 210 × 220 (Prusa MK4 class)</option>
-        <option value="300,300,300">300 × 300 × 300 (large format)</option>
-        <option value="180,180,180">180 × 180 × 180 (Bambu A1 mini, Prusa MINI)</option>
-        <option value="custom">Custom…</option>
+<!--__PRINTERS__-->
       </select></label>
     <div class="row3">
       <label class="f"><b>Bed width (mm)</b><input id="bedW" type="number" value="256"></label>
       <label class="f"><b>Bed depth (mm)</b><input id="bedD" type="number" value="256"></label>
       <label class="f"><b>Height (Z)</b><input id="bedH" type="number" value="256"></label>
     </div>
+    <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Gap between parts (mm)</b><input id="gap" type="number" step="0.5" value="3"></label>
     <div class="hint">Bins print upright, so a bin's own height has to clear your Z. A tall drawer will happily let you ask for a bin taller than the printer can make.</div>
   </div>
@@ -421,6 +431,9 @@
 </script>
 <script>
 /*__WIDGETS__*/
+</script>
+<script>
+/*__FIELDS__*/
 </script>
 <script>
 /*__BIN__*/

@@ -51,8 +51,8 @@ tool:
 
 ## How to use it
 
-1. **Measure your drawer** internally at its tightest point and subtract 1–2 mm so the finished assembly slides in. Enter width × depth in Baseplates.
-2. **Pick your printer** and a split mode. *Fewest plates* is usually the best start.
+1. **Measure your drawer** internally at its tightest point and subtract 1–2 mm so the finished assembly slides in. Enter width × depth in Baseplates — in millimetres or inches; everything it makes is millimetres either way.
+2. **Pick your printer** — common ones are listed by name — and a split mode. *Fewest plates* is usually the best start.
 3. **Choose a joint.** Whatever you pick, **print the joint fit sample first** — four tile pairs at graduated clearances tell you in one five-minute print which fit your printer produces.
 4. **Export and print the baseplate.**
 5. **Switch to Bins** using the header nav. Your drawer comes with you; add its usable height.

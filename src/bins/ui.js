@@ -501,15 +501,25 @@ $('focusExit').addEventListener('click', () => leaveFocus());
 $('focusUndo').addEventListener('click', () => undo());
 $('focusRedo').addEventListener('click', () => redo());
 
+/* The drawer's own measurements: the fields the unit switch in panel 01 converts. The
+   baseplate height is not one — it is a spec figure the baseplates page hands across,
+   not something anyone measures — and neither is anything about the printer or a bin,
+   all of which are quoted in millimetres whatever the drawer was measured in.
+   FIELDS.lengthOf hands back millimetres from either unit, so `state` and everything
+   downstream of it never learn which one was typed. */
+const LENGTH_IDS = ['drawerW', 'drawerD', 'drawerH', 'drawerFrontH'];
+let unit = 'mm';   // what the length fields are showing; the saved choice is applied at boot
+
 function readControls() {
   const num = (id, d) => { const x = parseFloat($(id).value); return isFinite(x) ? x : d; };
   const int = (id, d) => { const x = parseInt($(id).value, 10); return isFinite(x) ? x : d; };
-  state.drawerW = num('drawerW', 306);
-  state.drawerD = num('drawerD', 380);
-  state.drawerH = num('drawerH', 84);
+  const len = (id, d) => { const x = FIELDS.lengthOf($(id), unit); return isFinite(x) ? x : d; };
+  state.drawerW = len('drawerW', 306);
+  state.drawerD = len('drawerD', 380);
+  state.drawerH = len('drawerH', 84);
   state.plateH = num('plateH', 4.25);
   state.showDrawer = $('showDrawer').checked;
-  state.drawerFrontH = num('drawerFrontH', 0);
+  state.drawerFrontH = len('drawerFrontH', 0);
   state.arcSegs = int('arcSegs', 12);
   state.infill = num('infill', 15);
   /* Page-level, not per bin: how thick a divider plate is and how much slack its slot
@@ -1600,9 +1610,17 @@ function refresh() {
   const zUnits = Math.max(1, Math.floor((state.bedH - LIP_H) / SPEC.unitH));
   const capUnits = Math.min(g.maxUnits, zUnits);
   const capBy = zUnits < g.maxUnits ? 'your printer' : 'the drawer';
+  /* With inches on, the lengths here are given in both: the millimetres are what the
+     grid and every download are made of, the inches are what the drawer was measured
+     in and what a tape measure will be held against. */
+  const inch = unit === 'in';
+  const also = (mm) => inch ? ` / ${FIELDS.inchText(mm)} in` : '';
+  const gw = g.nx * SPEC.pitch, gd = g.ny * SPEC.pitch;
   $('gridSummary').textContent =
-    `Grid: ${g.nx} × ${g.ny} cells · ${g.avail.toFixed(1)} mm above the baseplate · ` +
-    `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm + lip), limited by ${capBy}`;
+    `Grid: ${g.nx} × ${g.ny} cells` +
+    (inch ? ` (${gw} × ${gd} mm, ${FIELDS.inchText(gw)} × ${FIELDS.inchText(gd)} in)` : '') +
+    ` · ${g.avail.toFixed(1)} mm${also(g.avail)} above the baseplate · ` +
+    `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`;
   const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
@@ -2367,16 +2385,46 @@ for (const [id, field] of [['gridX', 'drawerW'], ['gridY', 'drawerD']])
   $(id).addEventListener('input', () => {
     const n = parseInt($(id).value, 10);
     if (!isFinite(n) || n < 1) return;      // mid-edit: an empty box is not a request
-    $(field).value = (n * SPEC.pitch).toFixed(1).replace(/\.0$/, '');
+    FIELDS.setLength($(field), n * SPEC.pitch, unit);   // in whatever unit it is showing
     schedule();
   });
 $('bedPreset').addEventListener('change', () => {
-  const v = $('bedPreset').value;
-  if (v === 'custom') return;
-  const [w, d, h] = v.split(',');
-  $('bedW').value = w; $('bedD').value = d; if (h) $('bedH').value = h;
+  const bed = FIELDS.bedOf($('bedPreset').selectedOptions[0]);   // null for Custom
+  if (!bed) return;
+  [$('bedW').value, $('bedD').value, $('bedH').value] = bed;
   schedule();
 });
+const bedNow = () => [+$('bedW').value, +$('bedD').value, +$('bedH').value];
+for (const id of ['bedW', 'bedD', 'bedH'])
+  $(id).addEventListener('input', () => FIELDS.followBed($('bedPreset'), bedNow()));
+
+/* ---------- the drawer's unit ----------
+   Converts what the length fields show and nothing else, so it goes through refresh()
+   and not schedule(): schedule throws away every cached bin mesh, and a unit switch
+   changes no measurement. The comparison is a guard, not an expected path: FIELDS keeps
+   the exact millimetres behind each field, so nothing should move — but if a conversion
+   ever did move a value, the page has to recompute as for any edit rather than go on
+   showing bins sized from the old number. */
+function applyUnit(to) {
+  if (to === unit) return;
+  FIELDS.convert(LENGTH_IDS.map((id) => $(id)), unit, to, $('b-drawer'));
+  unit = to;
+  $('unitMm').classList.toggle('on', to === 'mm');
+  $('unitMm').setAttribute('aria-pressed', String(to === 'mm'));
+  $('unitIn').classList.toggle('on', to === 'in');
+  $('unitIn').setAttribute('aria-pressed', String(to === 'in'));
+}
+function chooseUnit(to) {
+  if (to === unit) return;
+  const before = LENGTH_IDS.map((id) => state[id]);
+  applyUnit(to);
+  FIELDS.saveUnit(to);
+  readControls();
+  if (LENGTH_IDS.some((id, i) => state[id] !== before[i])) schedule();
+  else refresh();
+}
+$('unitMm').addEventListener('click', () => chooseUnit('mm'));
+$('unitIn').addEventListener('click', () => chooseUnit('in'));
 
 /* ---------- the download dialog -------------------------------------------
    Built fresh every time it opens. A column of buttons tells you nothing about what
@@ -2496,8 +2544,13 @@ $('exportDlg').addEventListener('click', (e) => {
 });
 
 /* ---------- shared project descriptor -------------------------------------- */
+/* The bed rides in the link as well. It used to be carried through untouched and never
+   read, so the printer picked on the baseplates page arrived here as the 256 mm default,
+   and a bed set on this page was gone on the next reload. The keys are the ones the
+   baseplates page already writes, so the printer now crosses in both directions, like
+   the drawer. */
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH',
-               dfh: 'drawerFrontH' };
+               dfh: 'drawerFrontH', bw: 'bedW', bd: 'bedD', bh: 'bedH' };
 /* Keys that describe how the design is being LOOKED at rather than what it is. They
    travel in a shared link, because a link that does not reproduce what the sender saw
    is not much of a share — but they are struck out of the link the README carries.
@@ -2514,6 +2567,8 @@ const VIEW_KEYS = ['dv', 'dfh', 'bf'];
 function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
+  // which printer, as well as its bed: several share one — see FIELDS.presetFor
+  o.pr = $('bedPreset').value;
   o.dv = state.showDrawer ? 1 : 0;
   /* Not a VIEW key, unlike bf beside it: a loose bin is not a way of looking at the
      design, it IS the design while it is open, and it is what the download contains.
@@ -2624,10 +2679,16 @@ function loadFromHash(src) {
     if (k === 'bnotes') { pendingNotes = val; continue; }
     if (k === 'bf') { pendingFocus = val; continue; }
     if (k === 'bs') { pendingScratch = val; continue; }
+    if (k === 'pr') continue;             // applied below, once the bed is in
     const id = KEYS[k];
     if (!id) { hashExtras[k] = val; continue; }
-    if ($(id)) $(id).value = val;
+    /* The link is millimetres, always; a drawer length is written into its field in
+       whatever unit the field is showing. */
+    if (LENGTH_IDS.includes(id) && val !== '' && isFinite(+val)) FIELDS.setLength($(id), +val, unit);
+    else if ($(id)) $(id).value = val;
   }
+  // the list follows the bed: a link with a 180 mm bed must not reopen naming a 256 one
+  $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
 }
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
@@ -2744,6 +2805,15 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+/* The remembered unit goes on before anything is loaded, so a drawer from a link or a
+   save lands in the unit the fields show. It converts the markup's own millimetres, not
+   whatever is in the fields: a browser that refills a form on reload refills it in the
+   unit it was showing, and converting those figures as millimetres would turn a 12 in
+   drawer into 0.47 in. The link or the save then writes the real values. */
+if (FIELDS.savedUnit() !== unit) {
+  for (const id of LENGTH_IDS) $(id).value = $(id).defaultValue;
+  applyUnit(FIELDS.savedUnit());
+}
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');

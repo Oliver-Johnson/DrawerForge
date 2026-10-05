@@ -28,6 +28,7 @@
 'use strict';
 const seo = require('./seo.js');
 const joints = require('./joints.js');
+const printers = require('./printers.js');
 
 module.exports = function generated(html, G) {
   html = seo.inject(html);              // FAQ markup, from the page's own questions
@@ -35,5 +36,10 @@ module.exports = function generated(html, G) {
     html = html.replace('<!--__JOINTS__-->', joints.gallery(G));
   if (html.includes('<!--__JOINTFIGS__-->'))
     html = html.replace('<!--__JOINTFIGS__-->', joints.pickerFigures(G));
+  if (html.includes('<!--__PRINTERS__-->'))
+    html = html.replace('<!--__PRINTERS__-->', () => printers.options());
+  // the pitch comes from core.js for the same reason the joints do: it decides the counts
+  if (html.includes('<!--__PRINTERTABLE__-->'))
+    html = html.replace('<!--__PRINTERTABLE__-->', () => printers.guideRows(G.DEFAULTS.pitch));
   return html;
 };

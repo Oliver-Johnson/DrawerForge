@@ -716,8 +716,21 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-drawer"><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></button></h2>
   <div class="body" id="b-drawer">
     <div class="row">
-      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
-      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
+      <label class="f"><b>Drawer width (<span data-unit>mm</span>)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
+      <label class="f"><b>Drawer depth (<span data-unit>mm</span>)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
+    </div>
+    <!-- Inches are a way of typing the drawer and nothing more: the four drawer
+         measurements show the unit picked here, and the model, the link and every export
+         stay in millimetres. After the size fields so Tab still reaches the drawer width
+         first. The baseplates page has the same switch and the same remembered choice;
+         the baseplate height stays in millimetres, because it is a spec figure and not a
+         measurement anyone takes. -->
+    <div class="row" style="align-items:center">
+      <span class="hint" id="unitLabel">Measure the drawer in</span>
+      <div class="seg" role="group" aria-labelledby="unitLabel">
+        <button type="button" id="unitMm" class="on" aria-pressed="true">mm</button>
+        <button type="button" id="unitIn" aria-pressed="false">inches</button>
+      </div>
     </div>
     <!-- The same grid, counted rather than measured. Someone who already owns baseplates
          knows the cells and not the millimetres, and was left doing 4 × 42 in their head
@@ -727,13 +740,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       <label class="f"><b>or grid width (cells)</b><input id="gridX" type="number" step="1" min="1" value="7"></label>
       <label class="f"><b>or grid depth (cells)</b><input id="gridY" type="number" step="1" min="1" value="9"></label>
     </div>
-    <div class="hint">Count the cells of the baseplate you already have and these fill the millimetres in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
+    <div class="hint">Count the cells of the baseplate you already have and these fill the drawer size in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
     <div class="row">
-      <label class="f"><b>Usable height (mm)</b><input id="drawerH" type="number" step="0.5" value="84"></label>
+      <label class="f"><b>Usable height (<span data-unit>mm</span>)</b><input id="drawerH" type="number" step="0.5" value="84"></label>
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
     <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
-    <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (mm)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
+    <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (<span data-unit>mm</span>)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
     <div class="hint" id="drawerViewHint" style="display:none">Draws the real drawer in the preview — floor and four walls, translucent so the bins still show through. The sides stand at the usable height you gave above, because that is the number the fit check already uses and a second side measurement could only disagree with it. The front panel is often taller or lower than the sides, so it gets its own figure; leave it at 0 to match them. The walls sit at the drawer's inside dimensions, so the gap between them and the baseplate is the space the grid cannot reach. It is a view only — nothing you download changes.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
     <div class="hint">Only affects the material estimate, not the geometry. Thin parts — walls, floor, dividers, lip — print solid whatever you set; the feet are thick enough to be infilled, and they dominate. Assumes 2 perimeters and 4 solid top/bottom layers.</div>
@@ -745,23 +758,28 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
 <section class="p closed" id="s-printer">
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-printer"><span class="n">02</span> Printer <span class="caret">▾</span></button></h2>
   <div class="body" id="b-printer">
-    <!-- The A1 mini is a 180 mm printer. It was listed under the 220 mm preset, so an
-         A1 mini owner who picked their own printer was told bins would fit a bed that
-         cannot take them. -->
-    <label class="f"><b>Preset</b>
+    <!-- Printers by name, generated from tools/printers.js — the same list the
+         baseplates page and the split guide print, so the three cannot disagree. They
+         did: this list filed the 180 mm A1 mini under 220 mm, and an A1 mini owner who
+         picked their own printer was told bins would fit a bed that cannot take them. -->
+    <label class="f"><b>Printer</b>
       <select id="bedPreset">
-        <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu A1/X1/P1)</option>
-        <option value="220,220,250">220 × 220 × 250 (Ender 3 class)</option>
-        <option value="250,210,220">250 × 210 × 220 (Prusa MK4 class)</option>
-        <option value="300,300,300">300 × 300 × 300 (large format)</option>
-        <option value="180,180,180">180 × 180 × 180 (Bambu A1 mini, Prusa MINI)</option>
-        <option value="custom">Custom…</option>
+<optgroup label="Anycubic"><option value="anycubic-kobra-3" data-bed="250,250,260">Anycubic Kobra 3 — 250 × 250 × 260</option></optgroup>
+<optgroup label="Bambu Lab"><option value="bambu-a1-mini" data-bed="180,180,180">Bambu Lab A1 mini — 180 × 180 × 180</option><option value="bambu-a1" data-bed="256,256,256">Bambu Lab A1 — 256 × 256 × 256</option><option value="bambu-p1" data-bed="256,256,256">Bambu Lab P1S / P1P — 256 × 256 × 256</option><option value="bambu-x1c" data-bed="256,256,256">Bambu Lab X1 Carbon — 256 × 256 × 256</option><option value="bambu-h2d" data-bed="325,320,325">Bambu Lab H2D, one nozzle — 325 × 320 × 325</option></optgroup>
+<optgroup label="Creality"><option value="creality-ender-3-v3" data-bed="220,220,250">Creality Ender-3 V3 / V3 SE — 220 × 220 × 250</option><option value="creality-ender-3-v3-ke" data-bed="220,220,240">Creality Ender-3 V3 KE — 220 × 220 × 240</option><option value="creality-k1" data-bed="220,220,250">Creality K1 / K1C — 220 × 220 × 250</option><option value="creality-k1-max" data-bed="300,300,300">Creality K1 Max — 300 × 300 × 300</option><option value="creality-k2-plus" data-bed="350,350,350">Creality K2 Plus — 350 × 350 × 350</option></optgroup>
+<optgroup label="Elegoo"><option value="elegoo-neptune-4" data-bed="225,225,265">Elegoo Neptune 4 / 4 Pro — 225 × 225 × 265</option><option value="elegoo-centauri-carbon" data-bed="256,256,256">Elegoo Centauri Carbon / Carbon 2 — 256 × 256 × 256</option></optgroup>
+<optgroup label="Prusa"><option value="prusa-mini" data-bed="180,180,180">Prusa MINI / MINI+ — 180 × 180 × 180</option><option value="prusa-mk4" data-bed="250,210,220">Prusa MK4 / MK4S — 250 × 210 × 220</option><option value="prusa-core-one" data-bed="250,220,270">Prusa CORE One — 250 × 220 × 270</option><option value="prusa-xl" data-bed="360,360,360">Prusa XL — 360 × 360 × 360</option></optgroup>
+<optgroup label="Sovol"><option value="sovol-sv06" data-bed="220,220,250">Sovol SV06 — 220 × 220 × 250</option></optgroup>
+<optgroup label="Voron"><option value="voron-2.4-250" data-bed="250,250,210">Voron 2.4, 250 mm — 250 × 250 × 210</option><option value="voron-2.4-300" data-bed="300,300,260">Voron 2.4, 300 mm — 300 × 300 × 260</option><option value="voron-2.4-350" data-bed="350,350,310">Voron 2.4, 350 mm — 350 × 350 × 310</option></optgroup>
+<optgroup label="Any printer, by bed size"><option value="bed-180" data-bed="180,180,180" data-generic>180 × 180 × 180 mm</option><option value="bed-220" data-bed="220,220,250" data-generic>220 × 220 × 250 mm</option><option value="bed-250x210" data-bed="250,210,220" data-generic>250 × 210 × 220 mm</option><option value="bed-256" data-bed="256,256,256" data-generic selected>256 × 256 × 256 mm</option><option value="bed-300" data-bed="300,300,300" data-generic>300 × 300 × 300 mm</option></optgroup>
+<option value="custom">Custom…</option>
       </select></label>
     <div class="row3">
       <label class="f"><b>Bed width (mm)</b><input id="bedW" type="number" value="256"></label>
       <label class="f"><b>Bed depth (mm)</b><input id="bedD" type="number" value="256"></label>
       <label class="f"><b>Height (Z)</b><input id="bedH" type="number" value="256"></label>
     </div>
+    <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Gap between parts (mm)</b><input id="gap" type="number" step="0.5" value="3"></label>
     <div class="hint">Bins print upright, so a bin's own height has to clear your Z. A tall drawer will happily let you ask for a bin taller than the printer can make.</div>
   </div>
@@ -3471,6 +3489,147 @@ const DF = {
  * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
  * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
  * covered by this licence. The models you make with it are yours. */
+/* The two things panels 01 and 02 do the same way in both tools: the unit the drawer is
+ * measured in, and the printer list. Here rather than in each ui.js because they have to
+ * behave identically on both pages — a drawer typed in inches on one page and read as
+ * millimetres on the other is 25 times the wrong size — and two copies of the same
+ * thirty lines is how this project has ended up with two answers to one question
+ * before.
+ *
+ * Same discipline as widgets.js: everything takes its elements as arguments and knows
+ * no ids, so every getElementById stays in a tool's ui.js where the build's id audit
+ * can see it.
+ */
+'use strict';
+
+const FIELDS = (() => {
+  /* ---- the length unit ----------------------------------------------------------
+   * The grid is metric and so is everything the tools write — the model, the link, every
+   * STL and 3MF. Inches are a way of TYPING a drawer, nothing more: a field shows its
+   * length in the chosen unit and hands back millimetres, and nothing past the field
+   * ever sees an inch. That is what keeps a link made in inches identical to one made in
+   * millimetres, and an export the same bytes whichever unit you typed in.
+   *
+   * The unit is a preference of the person, not a property of the drawer, so it lives
+   * on the device rather than in the link: someone who measures in inches should get
+   * inches on a link a metric friend sent them, and the friend's drawer should be
+   * exactly as big as the friend made it. One key for both tools, because a person who
+   * measures in inches does so on both pages. */
+  const KEY = 'drawerforge:units:v1';
+  const MM_PER_IN = 25.4;
+
+  const savedUnit = () => {
+    try { return localStorage.getItem(KEY) === 'in' ? 'in' : 'mm'; }
+    catch (err) { return 'mm'; }          // private mode: millimetres, as before
+  };
+  const saveUnit = (u) => {
+    try { localStorage.setItem(KEY, u); }
+    catch (err) { /* private mode, or the quota is full — the switch still works for
+                     this visit, it just will not be remembered */ }
+  };
+
+  /* An inch figure as a person would write it. Sixteenths are how inch tapes are
+     marked, so a value that IS a sixteenth — 12, 12.5, 12.125, 12.0625 — is shown
+     exactly; anything else is a conversion from millimetres and gets two decimals,
+     which is a quarter of a millimetre and finer than anyone measures a drawer. */
+  const inchText = (mm) => {
+    const v = mm / MM_PER_IN;
+    const s = Math.round(v * 16);
+    if (Math.abs(v - s / 16) < 5e-4) return String(s / 16);
+    return String(Math.round(v * 100) / 100);
+  };
+  const mmText = (mm) => String(Math.round(mm * 1000) / 1000);
+  const show = (mm, unit) => unit === 'in' ? inchText(mm) : mmText(mm);
+
+  /* The field remembers the exact millimetres behind what it shows. Switching to inches
+     and back would otherwise round a 306 mm drawer to 12.05 in and bring it back as
+     306.07 mm — a drawer changed by looking at it in a different unit. So the exact
+     value rides on the element, and is used for as long as the text is still the text
+     that was written; the moment someone types, what they typed is the value. */
+  function setLength(el, mm, unit) {
+    el.value = show(mm, unit);
+    el.dataset.mm = String(mm);
+    el.dataset.shown = el.value;
+  }
+  /* Millimetres, or NaN for a blank or unreadable field — the caller decides what a
+     missing value means, the way it already did. Converted values are rounded to the
+     micrometre so 12 in is 304.8 mm and not 304.79999999999995, which is the number a
+     shared link would otherwise carry. */
+  function lengthOf(el, unit) {
+    const raw = el.value.trim();
+    if (el.dataset.mm !== undefined && raw === el.dataset.shown) return +el.dataset.mm;
+    const v = parseFloat(raw);
+    if (!isFinite(v)) return NaN;
+    return unit === 'in' ? Math.round(v * MM_PER_IN * 1000) / 1000 : v;
+  }
+
+  /* Re-express each field in the new unit, and move its constraints with it. min and max
+     are kept as exact conversions rather than tidy ones, so the browser's own validity
+     and the tool's range check (which works in millimetres) accept exactly the same
+     values. step goes to "any" in inches: a figure converted from millimetres is almost
+     never on a tidy step, and a value the tool wrote itself must not be one the browser
+     calls invalid. Labels marked data-unit say which unit the field is in now. */
+  function convert(els, from, to, root) {
+    for (const el of els) {
+      if (!('stepMm' in el.dataset)) {
+        el.dataset.stepMm = el.getAttribute('step') || '';
+        el.dataset.minMm = el.getAttribute('min') || '';
+        el.dataset.maxMm = el.getAttribute('max') || '';
+      }
+      const mm = lengthOf(el, from);
+      if (isFinite(mm)) setLength(el, mm, to);
+      const lim = (v) => v === '' ? null : to === 'in' ? String(+v / MM_PER_IN) : v;
+      const attr = (name, v) => v === null || v === '' ? el.removeAttribute(name)
+                                                     : el.setAttribute(name, v);
+      attr('step', to === 'in' ? 'any' : el.dataset.stepMm);
+      attr('min', lim(el.dataset.minMm));
+      attr('max', lim(el.dataset.maxMm));
+    }
+    for (const s of root.querySelectorAll('[data-unit]')) s.textContent = to;
+  }
+
+  /* ---- the printer list ---------------------------------------------------------
+   * The options are generated from tools/printers.js at build time. Each carries its bed
+   * in data-bed; the value is the printer's id, because several printers share a bed
+   * and the value has to say which one you picked. */
+  const bedOf = (opt) => opt && opt.dataset.bed ? opt.dataset.bed.split(',').map(Number) : null;
+  const sameBed = (opt, bed) => {
+    const b = bedOf(opt);
+    return !!b && b.every((v, i) => v === bed[i]);
+  };
+
+  /* Which entry a bed should show as, when it arrives from a link or a saved layout.
+     The id wins when it still describes the bed: a link says which printer, not just
+     which size. Without one — a link made before printers had names — only the
+     size-only entries are matched, because they are exactly the sizes the old list
+     offered, so an old link reopens on the entry it was made with. Matching a named
+     printer instead would be a guess: a 256 mm bed is half a dozen printers here.
+     Anything else is Custom, which shows the numbers and claims nothing. */
+  function presetFor(select, bed, id) {
+    const opts = [...select.options];
+    if (id === 'custom') return 'custom';
+    const named = opts.find((o) => o.value === id);
+    if (named && sameBed(named, bed)) return named.value;
+    const generic = opts.find((o) => o.hasAttribute('data-generic') && sameBed(o, bed));
+    return generic ? generic.value : 'custom';
+  }
+  /* A bed edited by hand is no longer the printer the list names, so the list stops
+     naming it. It used to go on saying "Prusa MK4 class" over a bed someone had typed
+     300 into. */
+  function followBed(select, bed) {
+    if (select.value !== 'custom' && !sameBed(select.selectedOptions[0], bed))
+      select.value = 'custom';
+  }
+
+  return { MM_PER_IN, savedUnit, saveUnit, inchText, show, setLength, lengthOf, convert,
+           bedOf, presetFor, followBed };
+})();
+</script>
+<script>/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+ * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+ * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+ * covered by this licence. The models you make with it are yours. */
 /* Drawerforge — Gridfinity bin geometry.
  *
  * Built entirely by direct mesh construction and overlapping closed shells.
@@ -5071,15 +5230,25 @@ $('focusExit').addEventListener('click', () => leaveFocus());
 $('focusUndo').addEventListener('click', () => undo());
 $('focusRedo').addEventListener('click', () => redo());
 
+/* The drawer's own measurements: the fields the unit switch in panel 01 converts. The
+   baseplate height is not one — it is a spec figure the baseplates page hands across,
+   not something anyone measures — and neither is anything about the printer or a bin,
+   all of which are quoted in millimetres whatever the drawer was measured in.
+   FIELDS.lengthOf hands back millimetres from either unit, so `state` and everything
+   downstream of it never learn which one was typed. */
+const LENGTH_IDS = ['drawerW', 'drawerD', 'drawerH', 'drawerFrontH'];
+let unit = 'mm';   // what the length fields are showing; the saved choice is applied at boot
+
 function readControls() {
   const num = (id, d) => { const x = parseFloat($(id).value); return isFinite(x) ? x : d; };
   const int = (id, d) => { const x = parseInt($(id).value, 10); return isFinite(x) ? x : d; };
-  state.drawerW = num('drawerW', 306);
-  state.drawerD = num('drawerD', 380);
-  state.drawerH = num('drawerH', 84);
+  const len = (id, d) => { const x = FIELDS.lengthOf($(id), unit); return isFinite(x) ? x : d; };
+  state.drawerW = len('drawerW', 306);
+  state.drawerD = len('drawerD', 380);
+  state.drawerH = len('drawerH', 84);
   state.plateH = num('plateH', 4.25);
   state.showDrawer = $('showDrawer').checked;
-  state.drawerFrontH = num('drawerFrontH', 0);
+  state.drawerFrontH = len('drawerFrontH', 0);
   state.arcSegs = int('arcSegs', 12);
   state.infill = num('infill', 15);
   /* Page-level, not per bin: how thick a divider plate is and how much slack its slot
@@ -6170,9 +6339,17 @@ function refresh() {
   const zUnits = Math.max(1, Math.floor((state.bedH - LIP_H) / SPEC.unitH));
   const capUnits = Math.min(g.maxUnits, zUnits);
   const capBy = zUnits < g.maxUnits ? 'your printer' : 'the drawer';
+  /* With inches on, the lengths here are given in both: the millimetres are what the
+     grid and every download are made of, the inches are what the drawer was measured
+     in and what a tape measure will be held against. */
+  const inch = unit === 'in';
+  const also = (mm) => inch ? ` / ${FIELDS.inchText(mm)} in` : '';
+  const gw = g.nx * SPEC.pitch, gd = g.ny * SPEC.pitch;
   $('gridSummary').textContent =
-    `Grid: ${g.nx} × ${g.ny} cells · ${g.avail.toFixed(1)} mm above the baseplate · ` +
-    `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm + lip), limited by ${capBy}`;
+    `Grid: ${g.nx} × ${g.ny} cells` +
+    (inch ? ` (${gw} × ${gd} mm, ${FIELDS.inchText(gw)} × ${FIELDS.inchText(gd)} in)` : '') +
+    ` · ${g.avail.toFixed(1)} mm${also(g.avail)} above the baseplate · ` +
+    `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`;
   const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
@@ -6937,16 +7114,46 @@ for (const [id, field] of [['gridX', 'drawerW'], ['gridY', 'drawerD']])
   $(id).addEventListener('input', () => {
     const n = parseInt($(id).value, 10);
     if (!isFinite(n) || n < 1) return;      // mid-edit: an empty box is not a request
-    $(field).value = (n * SPEC.pitch).toFixed(1).replace(/\.0$/, '');
+    FIELDS.setLength($(field), n * SPEC.pitch, unit);   // in whatever unit it is showing
     schedule();
   });
 $('bedPreset').addEventListener('change', () => {
-  const v = $('bedPreset').value;
-  if (v === 'custom') return;
-  const [w, d, h] = v.split(',');
-  $('bedW').value = w; $('bedD').value = d; if (h) $('bedH').value = h;
+  const bed = FIELDS.bedOf($('bedPreset').selectedOptions[0]);   // null for Custom
+  if (!bed) return;
+  [$('bedW').value, $('bedD').value, $('bedH').value] = bed;
   schedule();
 });
+const bedNow = () => [+$('bedW').value, +$('bedD').value, +$('bedH').value];
+for (const id of ['bedW', 'bedD', 'bedH'])
+  $(id).addEventListener('input', () => FIELDS.followBed($('bedPreset'), bedNow()));
+
+/* ---------- the drawer's unit ----------
+   Converts what the length fields show and nothing else, so it goes through refresh()
+   and not schedule(): schedule throws away every cached bin mesh, and a unit switch
+   changes no measurement. The comparison is a guard, not an expected path: FIELDS keeps
+   the exact millimetres behind each field, so nothing should move — but if a conversion
+   ever did move a value, the page has to recompute as for any edit rather than go on
+   showing bins sized from the old number. */
+function applyUnit(to) {
+  if (to === unit) return;
+  FIELDS.convert(LENGTH_IDS.map((id) => $(id)), unit, to, $('b-drawer'));
+  unit = to;
+  $('unitMm').classList.toggle('on', to === 'mm');
+  $('unitMm').setAttribute('aria-pressed', String(to === 'mm'));
+  $('unitIn').classList.toggle('on', to === 'in');
+  $('unitIn').setAttribute('aria-pressed', String(to === 'in'));
+}
+function chooseUnit(to) {
+  if (to === unit) return;
+  const before = LENGTH_IDS.map((id) => state[id]);
+  applyUnit(to);
+  FIELDS.saveUnit(to);
+  readControls();
+  if (LENGTH_IDS.some((id, i) => state[id] !== before[i])) schedule();
+  else refresh();
+}
+$('unitMm').addEventListener('click', () => chooseUnit('mm'));
+$('unitIn').addEventListener('click', () => chooseUnit('in'));
 
 /* ---------- the download dialog -------------------------------------------
    Built fresh every time it opens. A column of buttons tells you nothing about what
@@ -7066,8 +7273,13 @@ $('exportDlg').addEventListener('click', (e) => {
 });
 
 /* ---------- shared project descriptor -------------------------------------- */
+/* The bed rides in the link as well. It used to be carried through untouched and never
+   read, so the printer picked on the baseplates page arrived here as the 256 mm default,
+   and a bed set on this page was gone on the next reload. The keys are the ones the
+   baseplates page already writes, so the printer now crosses in both directions, like
+   the drawer. */
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH',
-               dfh: 'drawerFrontH' };
+               dfh: 'drawerFrontH', bw: 'bedW', bd: 'bedD', bh: 'bedH' };
 /* Keys that describe how the design is being LOOKED at rather than what it is. They
    travel in a shared link, because a link that does not reproduce what the sender saw
    is not much of a share — but they are struck out of the link the README carries.
@@ -7084,6 +7296,8 @@ const VIEW_KEYS = ['dv', 'dfh', 'bf'];
 function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
+  // which printer, as well as its bed: several share one — see FIELDS.presetFor
+  o.pr = $('bedPreset').value;
   o.dv = state.showDrawer ? 1 : 0;
   /* Not a VIEW key, unlike bf beside it: a loose bin is not a way of looking at the
      design, it IS the design while it is open, and it is what the download contains.
@@ -7194,10 +7408,16 @@ function loadFromHash(src) {
     if (k === 'bnotes') { pendingNotes = val; continue; }
     if (k === 'bf') { pendingFocus = val; continue; }
     if (k === 'bs') { pendingScratch = val; continue; }
+    if (k === 'pr') continue;             // applied below, once the bed is in
     const id = KEYS[k];
     if (!id) { hashExtras[k] = val; continue; }
-    if ($(id)) $(id).value = val;
+    /* The link is millimetres, always; a drawer length is written into its field in
+       whatever unit the field is showing. */
+    if (LENGTH_IDS.includes(id) && val !== '' && isFinite(+val)) FIELDS.setLength($(id), +val, unit);
+    else if ($(id)) $(id).value = val;
   }
+  // the list follows the bed: a link with a 180 mm bed must not reopen naming a 256 one
+  $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
 }
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
@@ -7314,6 +7534,15 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+/* The remembered unit goes on before anything is loaded, so a drawer from a link or a
+   save lands in the unit the fields show. It converts the markup's own millimetres, not
+   whatever is in the fields: a browser that refills a form on reload refills it in the
+   unit it was showing, and converting those figures as millimetres would turn a 12 in
+   drawer into 0.47 in. The link or the save then writes the real values. */
+if (FIELDS.savedUnit() !== unit) {
+  for (const id of LENGTH_IDS) $(id).value = $(id).defaultValue;
+  applyUnit(FIELDS.savedUnit());
+}
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');

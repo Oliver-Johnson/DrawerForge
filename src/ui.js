@@ -76,21 +76,37 @@ const ERR_EL = { errDrawerW: () => $('errDrawerW'), errDrawerD: () => $('errDraw
   errBedW: () => $('errBedW'), errBedD: () => $('errBedD'), errBedH: () => $('errBedH'),
   errPitch: () => $('errPitch') };
 
+/* The drawer's own measurements: the fields the unit switch in panel 01 converts. Every
+   other number on the page — the bed, the pitch, magnet and screw sizes — stays in
+   millimetres whatever the drawer was measured in, because millimetres are how every
+   one of them is quoted. FIELDS.lengthOf hands back millimetres from either unit, so
+   `state` and everything downstream of it never learn which one was typed. */
+const LENGTH_IDS = ['drawerW', 'drawerD', 'mLeft', 'mRight', 'mFront', 'mBack'];
+let unit = 'mm';   // what the length fields are showing; the saved choice is applied at boot
+
 function readNumber(id) {
   const lim = LIMITS[id];
-  const raw = $(id).value.trim();
-  const v = parseFloat(raw);
+  const len = LENGTH_IDS.includes(id);
+  const v = len ? FIELDS.lengthOf($(id), unit) : parseFloat($(id).value.trim());
   if (!lim) return isFinite(v) ? v : 0;
+  /* The range is millimetres because the model is; in inches it is quoted in both, since
+     "at least 1 mm" means nothing to the field you are typing inches into, and the
+     millimetre figure is the one the tool actually holds you to. The advice for a huge
+     number follows the unit too: typing millimetres into an inch field is the likeliest
+     way to get one. */
+  const inch = len && unit === 'in';
+  const both = (mm) => inch ? `${mm} mm (${FIELDS.inchText(mm)} in)` : `${mm} mm`;
+  const unitName = inch ? 'inches' : 'millimetres';
   if (!isFinite(v)) {
-    fieldErrors.set(id, `${lim.label} is blank — enter a measurement in millimetres.`);
+    fieldErrors.set(id, `${lim.label} is blank — enter a measurement in ${unitName}.`);
     return lim.min;
   }
   if (v < lim.min) {
-    fieldErrors.set(id, `${lim.label} must be at least ${lim.min} mm.`);
+    fieldErrors.set(id, `${lim.label} must be at least ${both(lim.min)}.`);
     return lim.min;
   }
   if (v > lim.max) {
-    fieldErrors.set(id, `${lim.label} must be ${lim.max} mm or less — check the figure is in millimetres.`);
+    fieldErrors.set(id, `${lim.label} must be ${both(lim.max)} or less — check the figure is in ${unitName}.`);
     return lim.max;
   }
   return v;
@@ -400,7 +416,16 @@ function drawMap() {
   s += `<text x="${X(Wmm/2)}" y="${h-6}" text-anchor="middle" font-size="10">▾ front of drawer</text>`;
   svg.innerHTML = s;
   $('mapTail').textContent = `${layout.nx} × ${layout.ny} cells · ${layout.pieces.length} piece${layout.pieces.length>1?'s':''}`;
-  $('gridSummary').innerHTML = `Grid: <span class="klabel">${layout.nx} × ${layout.ny}</span> cells (${(layout.nx*state.pitch).toFixed(0)} × ${(layout.ny*state.pitch).toFixed(0)} mm) · margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm`;
+  /* Both units with inches on, millimetres first. The grid is millimetres by nature —
+     42 mm cells — and that is the number the rest of the page and every download quote,
+     so it stays; the inches are there to hold against the tape measure the drawer was
+     measured with. */
+  const gw = layout.nx * state.pitch, gd = layout.ny * state.pitch;
+  const inch = unit === 'in';
+  $('gridSummary').innerHTML = `Grid: <span class="klabel">${layout.nx} × ${layout.ny}</span> cells (${gw.toFixed(0)} × ${gd.toFixed(0)} mm` +
+    (inch ? `, ${FIELDS.inchText(gw)} × ${FIELDS.inchText(gd)} in` : '') +
+    `) · margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm` +
+    (inch ? ` (${[layout.mL, layout.mR, layout.mF, layout.mB].map(FIELDS.inchText).join(' / ')} in)` : '');
 
   /* To anything that cannot see it the cut map is one image with no alt text — and it
      is the whole answer to "what did that setting just do". The label is rebuilt here
@@ -1302,7 +1327,7 @@ $('exportDlg').addEventListener('click', (e) => {
 // Descriptor keys owned by the bins tool (or any future tool). We never interpret
 // them, but we carry them so a round trip through here is lossless.
 let hashExtras = {};
-const OWNED = new Set(['w','d','mm','ax','ay','ml','mr','mf','mb','bw','bd','bh','sp','km','ki',
+const OWNED = new Set(['w','d','mm','ax','ay','ml','mr','mf','mb','bw','bd','bh','pr','sp','km','ki',
   'rc','cc','cn','cl','to','mg','md','mh','ms','sc','sh','sd','se','pi','or','bp','tc','bm','pc',
   'r1','r2','r3','r4','v','ph','ps','if']);
 
@@ -1312,6 +1337,10 @@ function descriptor() {
     ax: state.alignX, ay: state.alignY,
     ml: state.mLeft, mr: state.mRight, mf: state.mFront, mb: state.mBack,
     bw: state.bedW, bd: state.bedD, bh: state.bedH, sp: state.splitMode, km: state.keyMount, ki: state.keyInsert,
+    /* Which printer, as well as its bed: several entries share a 256 mm bed, and a link
+       that reopened on whichever came first in the list would name a printer the sender
+       never picked. The bed numbers stay the authority — see FIELDS.presetFor. */
+    pr: $('bedPreset').value,
     rc: state.rowCuts || '', cc: state.colCuts ? state.colCuts.map(c => c.join('.')).join('_') : '',
     cn: state.connector, cl: state.tab.clr, to: state.tolerance,
     mg: state.magnets ? 1 : 0, md: state.magnetD, mh: state.magnetH, ms: state.magnetSide,
@@ -1419,7 +1448,14 @@ function loadFromHash(src) {
   if (h.length < 2) return;
   const q = Object.fromEntries(h.split('&').map(kv => kv.split('=').map(decodeURIComponent)));
   for (const [k, v] of Object.entries(q)) if (!OWNED.has(k)) hashExtras[k] = v;
-  const set = (id, v) => { if (v !== undefined && $(id)) $(id).value = v; };
+  /* The link is millimetres, always; a drawer length is written into its field in
+     whatever unit the field is showing. Anything that is not a number goes in as it
+     came, so the field's own check can say what is wrong with it. */
+  const set = (id, v) => {
+    if (v === undefined || !$(id)) return;
+    if (LENGTH_IDS.includes(id) && v !== '' && isFinite(+v)) FIELDS.setLength($(id), +v, unit);
+    else $(id).value = v;
+  };
   set('drawerW', q.w); set('drawerD', q.d); set('marginMode', q.mm);
   set('alignX', q.ax); set('alignY', q.ay);
   set('mLeft', q.ml); set('mRight', q.mr); set('mFront', q.mf); set('mBack', q.mb);
@@ -1440,7 +1476,12 @@ function loadFromHash(src) {
       state.colCuts = q.cc ? q.cc.split('_').map(s => s ? s.split('.').map(Number) : []) : [];
     }
   }
+  /* The list follows the bed, not the other way round. It did not follow it at all: a
+     link with a 180 mm bed reopened with the fields at 180 and the list still showing
+     the 256 mm entry above them. */
+  $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
 }
+const bedNow = () => [+$('bedW').value, +$('bedD').value, +$('bedH').value];
 
 // ---------- wiring ----------
 /* The handler is on the <button> inside the header, not on the <h2>.
@@ -1463,10 +1504,41 @@ document.querySelectorAll('#splitSeg button').forEach(b => b.addEventListener('c
   recomputeLayout();
 }));
 $('bedPreset').addEventListener('change', () => {
-  const v = $('bedPreset').value;
-  if (v !== 'custom') { const [w, d, h] = v.split(','); $('bedW').value = w; $('bedD').value = d; $('bedH').value = h; }
+  const bed = FIELDS.bedOf($('bedPreset').selectedOptions[0]);   // null for Custom
+  if (bed) [$('bedW').value, $('bedD').value, $('bedH').value] = bed;
   recomputeLayout();
 });
+for (const id of ['bedW', 'bedD', 'bedH'])
+  $(id).addEventListener('input', () => FIELDS.followBed($('bedPreset'), bedNow()));
+
+/* ---------- the drawer's unit ----------
+   Converts what the length fields show and nothing else. A unit switch changes no
+   measurement, so it does not rebuild: the pieces are seconds of CSG, and redoing them
+   to arrive at the same plate would read as the switch having changed something. The
+   comparison is a guard, not an expected path: FIELDS keeps the exact millimetres behind
+   each field, so nothing should move — but if a conversion ever did move a value, the
+   page has to recompute as for any edit rather than go on showing a plate built from
+   the old number. */
+function applyUnit(to) {
+  if (to === unit) return;
+  FIELDS.convert(LENGTH_IDS.map((id) => $(id)), unit, to, $('b-drawer'));
+  unit = to;
+  $('unitMm').classList.toggle('on', to === 'mm');
+  $('unitMm').setAttribute('aria-pressed', String(to === 'mm'));
+  $('unitIn').classList.toggle('on', to === 'in');
+  $('unitIn').setAttribute('aria-pressed', String(to === 'in'));
+}
+function chooseUnit(to) {
+  if (to === unit) return;
+  const before = LENGTH_IDS.map((id) => state[id]);
+  applyUnit(to);
+  FIELDS.saveUnit(to);
+  readControls();
+  if (LENGTH_IDS.some((id, i) => state[id] !== before[i])) recomputeLayout();
+  else { drawMap(); drawWarnings(); }
+}
+$('unitMm').addEventListener('click', () => chooseUnit('mm'));
+$('unitIn').addEventListener('click', () => chooseUnit('in'));
 for (const id of [...numIds, 'alignX', 'alignY', 'marginMode', 'connector', 'connClr',
   'tolerance', 'magnetSide', 'magnets', 'screws', 'baseMode', 'perCorner', 'rFL', 'rFR', 'rBL', 'rBR', 'keyMount', 'keyInsert', 'plateStyle']) {
   $(id).addEventListener('input', recomputeLayout);
@@ -1475,6 +1547,15 @@ for (const id of [...numIds, 'alignX', 'alignY', 'marginMode', 'connector', 'con
 window.addEventListener('resize', () => { if (layout) drawMap(); });
 
 initThree();
+/* The remembered unit goes on before anything is loaded, so a drawer from a link or a
+   save lands in the unit the fields show. It converts the markup's own millimetres, not
+   whatever is in the fields: a browser that refills a form on reload refills it in the
+   unit it was showing, and converting those figures as millimetres would turn a 12 in
+   drawer into 0.47 in. The link or the save then writes the real values. */
+if (FIELDS.savedUnit() !== unit) {
+  for (const id of LENGTH_IDS) $(id).value = $(id).defaultValue;
+  applyUnit(FIELDS.savedUnit());
+}
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
