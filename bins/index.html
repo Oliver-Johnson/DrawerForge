@@ -6347,27 +6347,41 @@ function drawMap() {
      Cells get a comfortable fixed size rather than filling whatever room exists;
      available space is a ceiling, not a target. */
   const CELL_PX = 52, PREVIEW_MIN = 320;
-  const stage = document.querySelector('.stage');
-  const stageW = (stage ? stage.clientWidth : 900) - 44;
-  const availW = Math.max(180, wide ? stageW : stageW - PREVIEW_MIN - 44);
-  const availH = Math.min(720, (window.innerHeight || 900) * 0.66);
-  const sc = Math.min(availW / W, availH / H, CELL_PX / S);
-  svg.setAttribute('width', Math.round(W * sc));
-  svg.setAttribute('height', Math.round(H * sc));
   /* Sizing the two columns from the map is only meaningful where there ARE two
      columns. The stylesheet collapses .stagetop to one column below 1280 px, and an
      inline style beats a media query — so on a phone this pinned a 320 px preview
      beside the map and hung the whole card off the right edge of the screen.
      Clearing the inline style and asking the element how many tracks it ended up with
      keeps that breakpoint in one place, the stylesheet, instead of repeating the
-     number here where the two could drift apart. */
+     number here where the two could drift apart.
+
+     It is asked FIRST, because the answer decides how wide the map may be. It used to
+     be asked after the size was settled, and the size always took the preview's 320 px
+     share out of the stage — including in one column, where the preview is underneath
+     and takes no width at all. A phone got a 180 px map of 26 px cells in a card with
+     room for 45, and a 1024 px tablet a 216 px one. */
+  let twoCol = false;
   if (top) {
     top.style.gridTemplateColumns = '';
-    const twoCol = !wide &&
+    twoCol = !wide &&
       getComputedStyle(top).gridTemplateColumns.trim().split(/\s+/).length > 1;
-    if (twoCol)
-      top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(${PREVIEW_MIN}px, 1fr)`;
   }
+  /* The width is the row's own, not the stage's guessed at: .stagetop is as wide as
+     the stage's content box whatever its columns hold, so measuring it is not the loop
+     described above. The 30 is the card's chrome around the map — #fillwrap's 14 px of
+     padding each side and the border — which is also what the column below adds back.
+     The old "stage minus 44" over-counted it by 26 px on one column, enough for the
+     max-width:100% clamp to letterbox the grid inside its own box. */
+  const stage = document.querySelector('.stage');
+  const rowW = top ? top.clientWidth : (stage ? stage.clientWidth : 900) - 40;
+  const gap = top ? parseFloat(getComputedStyle(top).columnGap) || 0 : 0;
+  const availW = Math.max(180, twoCol ? rowW - gap - PREVIEW_MIN - 30 : rowW - 30);
+  const availH = Math.min(720, (window.innerHeight || 900) * 0.66);
+  const sc = Math.min(availW / W, availH / H, CELL_PX / S);
+  svg.setAttribute('width', Math.round(W * sc));
+  svg.setAttribute('height', Math.round(H * sc));
+  if (top && twoCol)
+    top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(${PREVIEW_MIN}px, 1fr)`;
 
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const el = (n, a) => { const e = document.createElementNS(SVGNS, n);
