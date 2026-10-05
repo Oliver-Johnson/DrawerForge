@@ -3,6 +3,13 @@
 Thanks for looking. Issues and pull requests are both welcome, and so is simply
 telling me something printed badly — that is harder to find out than it sounds.
 
+## Licence of what you contribute
+
+Drawerforge is [AGPL-3.0-or-later](LICENSE) with the additional terms in [NOTICE](NOTICE).
+A pull request is offered under those same terms — the licence you received the code under
+is the licence your change is accepted under, and you keep the copyright in it. Only send
+code you have the right to license that way.
+
 ## The one thing that will trip you up
 
 **`index.html`, `bins/index.html` and every page under `guide/` are generated. Do not

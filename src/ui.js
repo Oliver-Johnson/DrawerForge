@@ -1,4 +1,9 @@
 
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+ * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+ * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+ * covered by this licence. The models you make with it are yours. */
 'use strict';
 /* Drawerforge UI. Core geometry functions are in scope from the previous script tag. */
 const $ = (id) => document.getElementById(id);
@@ -1099,7 +1104,7 @@ function readmeText() {
   lines.push('');
   lines.push('-----------------------------------------------');
   lines.push('Made with Drawerforge — https://drawerforge.co.uk');
-  lines.push('Free and open source (MIT). Runs entirely in your browser.');
+  lines.push('Free and open source (AGPL-3.0). Runs in your browser. These files are yours.');
   lines.push('');
   lines.push('Bugs & feature requests:');
   lines.push('  https://github.com/Oliver-Johnson/DrawerForge/issues');

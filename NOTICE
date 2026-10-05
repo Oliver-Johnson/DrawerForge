@@ -1,0 +1,78 @@
+Drawerforge
+Copyright (C) 2026 Oliver Johnson
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version, together with the additional permission and the additional terms
+set out below under section 7 of that licence.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program, in the file LICENSE.  If not, see
+<https://www.gnu.org/licenses/>.
+
+Every version of this software published before the one that added this file
+was released under the MIT licence, and that grant is not withdrawn: anyone who
+obtained one of those versions keeps their MIT rights to it. This licence
+governs the version that added this file and every version after it.
+
+The licence text is kept verbatim in LICENSE and the terms below are kept here,
+so that each can be read, and recognised, for what it is. Each source file
+carries a short notice that points to both.
+
+
+================================================================================
+ADDITIONAL PERMISSION — OUTPUT OF THE PROGRAM
+================================================================================
+
+As an additional permission under section 7 of the GNU Affero General Public
+License version 3:
+
+The files this program generates — including but not limited to STL, 3MF and ZIP
+files, and the geometry described in them — are NOT covered by this licence and
+are not works derived from it. You own the models you make with this program.
+You may use, share, modify and SELL them, and the objects printed from them, for
+any purpose and without restriction, attribution or obligation of any kind.
+
+This permission applies to the output alone. Combining part of this program's
+source code into another program is not covered by it.
+
+
+================================================================================
+ADDITIONAL TERMS — NAMES AND MARKS
+================================================================================
+
+As additional terms under section 7 of the GNU Affero General Public License
+version 3:
+
+1. Under section 7(e), declining to grant rights under trademark law: this
+   licence grants no permission to use the trade names "Drawerforge" or
+   "Baseplate Studio", the drawerforge.co.uk domain, or the project's logos and
+   branding, except in reasonable and customary use in describing the origin of
+   the work (for example, "based on Drawerforge") and in reproducing the content
+   of this licence and its notices.
+
+2. Under section 7(c), requiring that modified versions be marked in reasonable
+   ways as different from the original version, and prohibiting
+   misrepresentation of the origin of the material: a modified version must be
+   given a name other than "Drawerforge" or "Baseplate Studio", and must not be
+   presented as the original version.
+
+The code is yours to build on; the name is how visitors know whose work they are
+looking at.
+
+
+================================================================================
+THIRD-PARTY COMPONENTS
+================================================================================
+
+This repository vendors two libraries under vendor/, unmodified and with their
+own licence banners intact. They keep their own terms and are not relicensed by
+this file:
+
+  three.js  r128    MIT              (c) 2010-2021 Three.js Authors
+  JSZip     3.10.1  MIT or GPLv3     (c) 2009-2016 Stuart Knightley

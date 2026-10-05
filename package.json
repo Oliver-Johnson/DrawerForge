@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Gridfinity baseplates and bins, built to the drawer you actually have.",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "build": "node build.js",
     "test": "node build.js --check && node test/bin-audit.js && node test/plate-audit.js && node test/fit-check.js && node test/stack-check.js && node test/hash-roundtrip.js && node test/seo-check.js && node test/guide-facts.js && node test/indexnow-check.js",
