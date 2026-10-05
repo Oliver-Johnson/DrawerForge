@@ -45,6 +45,10 @@ const CASES = [
   { name: '1x1x1', u: 1, v: 1, hUnits: 1 },
   { name: '2x1x3-scoop', u: 2, v: 1, hUnits: 3, scoop: 8 },
   { name: '2x1x3-label', u: 2, v: 1, hUnits: 3, label: 12 },
+  /* A shelf deeper than the cavity is tall: its 45 degree underside used to run down
+     through the floor and out among the feet, 4 open edges from 8 mm on a 1-unit bin. */
+  { name: '1x1x1-label12', u: 1, v: 1, hUnits: 1, label: 12 },
+  { name: '2x1x2-label20', u: 2, v: 1, hUnits: 2, label: 20 },
   { name: '2x1x3-openfront', u: 2, v: 1, hUnits: 3, edges: { f: 0 } },
   { name: '2x2x2-tray', u: 2, v: 2, hUnits: 2, edges: { f: 0, b: 0, l: 0, r: 0 } },
   { name: '6x4x5-everything', u: 6, v: 4, hUnits: 5, divX: 2, divY: 1, scoop: 6, label: 10 },
@@ -394,6 +398,76 @@ console.log('\na lid fits the lip it is made for');
     console.log(`  lid, ${name.padEnd(32)}${m.bad === 0 && wOk ? 'watertight, right footprint' :
       (m.bad ? m.bad + ' BAD EDGES' : `FOOTPRINT ${L.meta.W} vs ${expW}`)}`);
     if (m.bad || !wOk) bad++;
+  }
+
+  /* A lid with every skirt unticked is the plate alone. It was reported as plate plus
+     skirt, 4.2 mm, to the packer and to the download list, for a 1.2 mm part. */
+  const flat = lidPartOf(G, { u: 1, v: 1, lidSides: { f: false, b: false, l: false, r: false } });
+  const fm = G.checkManifold(flat.polys);
+  let fz = 0;
+  for (const p of flat.polys) for (const w of p.verts) fz = Math.max(fz, w[2]);
+  const flatOk = fm.bad === 0 && Math.abs(flat.meta.totalH - fz) < 0.001;
+  console.log(`  lid, ${'no skirt at all'.padEnd(32)}` + (flatOk
+    ? `watertight, ${flat.meta.totalH.toFixed(1)} mm as built`
+    : `says ${flat.meta.totalH.toFixed(1)} mm tall, built ${fz.toFixed(1)} mm` + (fm.bad ? `, ${fm.bad} BAD EDGES` : '')));
+  if (!flatOk) bad++;
+}
+
+/* Every wall the page will let you type, not just the 1.2 everyone uses.
+ *
+ * From 2.70 mm up — the inset of the stacking lip's base — a rectangular bin leaked:
+ * 256 edges used four times to 3 mm, 72 plus coplanar folds beyond. The lip's
+ * underside chamfer runs from the wall thickness out to that base, and at a wall that
+ * thick it had zero height, so the lip's bottom cap lay on the wall's top face. At
+ * exactly 2.70 the wall's top inner edge is the lip's base corner as well, which is
+ * why burying the cap alone did not close it.
+ *
+ * The range comes from the page's own field, so raising the cap there without the
+ * geometry to back it fails here rather than in somebody's slicer. */
+console.log('\nwalls across the whole range the page accepts');
+{
+  const tpl = fs.readFileSync(path.join(__dirname, '..', 'src', 'bins', 'template.html'), 'utf8');
+  const attr = (id, a) => {
+    const m = tpl.match(new RegExp(`id="${id}"[^>]*\\b${a}="([^"]+)"`));
+    return m ? Number(m[1]) : NaN;
+  };
+  const lo = attr('wall', 'min'), hi = attr('wall', 'max');
+  if (!(lo > 0 && hi > lo)) {
+    console.log(`  the wall field has no usable min/max (${lo}..${hi}) — the page would accept anything`);
+    bad++;
+  } else {
+    const walls = [lo, 0.8, 1.2, 2, 2.6, 2.65, 2.69, 2.7, 2.71, 2.75, 3, 3.5, 4, 5, hi]
+      .filter((w, i, a) => w >= lo && w <= hi && a.indexOf(w) === i);
+    const SHAPES = [
+      ['1x1x1', { u: 1, v: 1, hUnits: 1 }],
+      ['1x1x3', { u: 1, v: 1, hUnits: 3 }],
+      ['2x1x5', { u: 2, v: 1, hUnits: 5 }],
+      ['3x2x4 everything', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12 }],
+      ['2x2x3 railed', { u: 2, v: 2, hUnits: 3, divX: 1, divY: 1, divRemovable: true }],
+      ['2x1x3 open front', { u: 2, v: 1, hUnits: 3, edges: { f: 0.5 } }],
+      ['L-3x3', { u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) }],
+    ];
+    for (const [name, base] of SHAPES) {
+      const fails = [];
+      for (const wall of walls) {
+        const r = buildBin(G, Object.assign({}, base, { wall }));
+        const m = G.checkManifold(r.polys);
+        const ori = checkOrientation(r.polys);
+        let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+        for (const p of r.polys) for (const w of p.verts) {
+          xmin = Math.min(xmin, w[0]); xmax = Math.max(xmax, w[0]);
+          ymin = Math.min(ymin, w[1]); ymax = Math.max(ymax, w[1]);
+        }
+        const wOk = Math.abs(xmax - xmin - ((base.u - 1) * 42 + 41.5)) < 0.02 &&
+                    Math.abs(ymax - ymin - ((base.v - 1) * 42 + 41.5)) < 0.02;
+        if (m.bad || !ori.ok || !wOk)
+          fails.push(`${wall}: ` + [m.bad ? `${m.bad} bad edges` : '', ori.ok ? '' : orientationNote(ori),
+                                    wOk ? '' : `footprint ${(xmax - xmin).toFixed(2)}`].filter(Boolean).join(', '));
+      }
+      console.log(`  ${name.padEnd(18)} ${walls[0]}–${walls[walls.length - 1]} mm  ` +
+                  (fails.length ? 'FAILED at ' + fails.join('; ') : `${walls.length} walls, all clean`));
+      if (fails.length) bad++;
+    }
   }
 }
 

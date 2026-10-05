@@ -361,8 +361,8 @@ function wallRing(G, outer, inner, z0, zTop) {
 }
 
 // Closed lip ring: a socket-profiled rim standing on top of the bin walls.
-// A separate overlapping shell, so it works whether the wall is thinner or
-// thicker than the lip's inward reach — no special-casing either way.
+// A separate overlapping shell. How it meets the wall depends on whether the wall
+// is thinner than the lip's base or not; see the chamfer below.
 function lipRing(G, c, hwO, hdO, H, n) {
   const ring = (t) => roundRect(hwO - t, hdO - t, SPEC.r - t, n);
   const lipH = lipHeight(c.lipMin);
@@ -378,9 +378,26 @@ function lipRing(G, c, hwO, hdO, H, n) {
      Clamped to the wall height available: a 1-unit bin has only 1.05 mm of wall
      below the lip, so it gets a steeper chamfer rather than one that starts below
      the floor. Steeper still beats a flat overhang. */
-  const drop = Math.min(Math.max(0, steps[0][1] - c.wall),
-                        Math.max(BLOAT, H - (SPEC.footH + c.floorT) - 0.3));
-  inner.unshift(ring(c.wall)); zsI.unshift(H - drop);
+  const base = steps[0][1];                         // 2.70, the socket floor's inset
+  const room = Math.max(BLOAT, H - (SPEC.footH + c.floorT) - 0.3);
+  if (base - c.wall >= BLOAT) {
+    inner.unshift(ring(c.wall)); zsI.unshift(H - Math.min(base - c.wall, room));
+  } else {
+    /* A wall as thick as the lip's base has nothing to chamfer: the lip stands on it.
+       But the chamfer above collapsed to zero height there, putting the lip's bottom
+       cap on the wall's top face — 256 edges used four times from 2.70 mm, 72 and
+       coplanar folds from 3.5. Burying the cap a BLOAT down is not enough on its own:
+       at exactly 2.70 the wall's top inner edge IS the lip's base corner (2.70, H),
+       so the two shells still share that ring of edges whatever the cap does.
+
+       So the buried part stays strictly inside the wall, a BLOAT in from its inner
+       face, and the lip's next ring sits a BLOAT up its own 45 degree chamfer instead
+       of on that corner. The cost is a 0.05 mm triangle off the corner where the
+       chamfer meets the wall top, in the loose direction, under any nozzle. */
+    inner[0] = ring(base - BLOAT); zsI[0] = H + BLOAT;
+    inner.unshift(ring(Math.min(c.wall, base) - BLOAT)); zsI.unshift(H - Math.min(1, room));
+  }
+  const drop = H - zsI[0];
 
   const outer = ring(0);
   const polys = [];
@@ -842,8 +859,12 @@ function lidPart(G, cfg) {
   side('l', 'x', -1); side('r', 'x', +1);
   side('f', 'y', -1); side('b', 'y', +1);
 
-  return { polys, meta: { W: 2 * hw, D: 2 * hd, totalH: t + skirt, t, skirt,
-                          sides: ['l', 'r', 'f', 'b'].filter(wantSide) } };
+  /* With every side unticked there is no skirt, so the part is the plate alone and
+     stands t tall. Counting the skirt anyway told the plate packer and the download
+     list a 1.2 mm plate was 4.2 mm tall. */
+  const sides = ['l', 'r', 'f', 'b'].filter(wantSide);
+  return { polys, meta: { W: 2 * hw, D: 2 * hd, totalH: sides.length ? t + skirt : t, t,
+                          skirt: sides.length ? skirt : 0, sides } };
 }
 
 function buildBin(G, cfg) {
@@ -939,7 +960,11 @@ function buildBin(G, cfg) {
       if (r > 0.05) polys.push(...scoopPrism(G, iw, id, floorZ, r, Math.max(4, n)));
     }
     if (c.label > 0.05 && eB > 0.99) {
-      const d = Math.min(c.label, id * 0.8);
+      /* Limited by height as well as depth. The shelf's underside runs down at 45
+         degrees, so a shelf deeper than the cavity is tall pokes its foot through the
+         floor and out among the feet: 4 open edges from 8 mm on a 1-unit bin. Kept
+         0.2 above the floor so the two never share a face. */
+      const d = Math.min(c.label, id * 0.8, H - floorZ - c.labelT - 0.2);
       if (d > 0.05) polys.push(...labelPrism(G, iw, id, H, d, c.labelT));
     }
 
