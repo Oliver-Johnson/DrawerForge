@@ -335,14 +335,29 @@ function drawMap() {
   const svg = $('cutmap');
   const pitch = state.pitch;
   const Wmm = state.drawerW, Dmm = state.drawerD;
-  const availW = Math.min(680, ($('mapwrap').clientWidth || 680) - 10);
-  const sc = Math.min(availW / (Wmm + 90), 460 / (Dmm + 90));
+  /* Beside the preview or above it, by the bins map's rules and through the same
+     helper (see DF.stageRow in widgets.js for the two traps it exists to avoid). A
+     drawer more than 1.15 times as wide as it is deep keeps the whole stage width, as
+     a wide bins grid does — 900 × 420 squeezed into half a row would be a smaller map
+     to click cut lines on, which is the opposite of the point.
+     The map used to measure #mapwrap, its own card. That card is now the column being
+     sized from the map, so it is the row that gets measured: its width less the
+     preview's minimum and the gap when paired, less the card's 30 px of chrome
+     (#mapwrap's 14 px padding each side and the border) either way. The 680 and 460
+     caps are unchanged — room is a ceiling, not a target. */
+  const PREVIEW_MIN = 320;
+  const top = document.querySelector('.stagetop');
+  top.classList.toggle('wide', Wmm / Math.max(1, Dmm) > 1.15);
+  const row = DF.stageRow(top, $('stage'));
+  const availW = Math.min(680, row.two ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30);
+  const sc = Math.max(0.05, Math.min(availW / (Wmm + 90), 460 / (Dmm + 90)));
   const ox = 58, oy = 26;
   const X = (mm) => ox + mm * sc;
   const Y = (mm) => oy + (Dmm - mm) * sc;     // front of drawer at the bottom
   const w = ox + Wmm * sc + 34, h = oy + Dmm * sc + 56;
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
   svg.setAttribute('width', w); svg.setAttribute('height', h);
+  if (row.two) DF.pairColumns(top, w + 30, PREVIEW_MIN);
   let s = '';
   const gx0 = layout.mL, gy0 = layout.mF;
   /* Past the cap the map draws the drawer and nothing inside it. A 238 × 238 grid is

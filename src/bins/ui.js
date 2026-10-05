@@ -373,7 +373,10 @@ function applyFocus() {
      the measurement it left behind has to go with it, or the preview stays pinned to a
      column shaped like a map that is no longer on the page. */
   const top = document.querySelector('.stagetop');
-  if (top) { top.style.gridTemplateColumns = ''; top.classList.remove('wide'); }
+  if (top) {
+    top.style.gridTemplateColumns = '';
+    top.classList.remove('wide', 'paired');   // see DF.stageRow for what .paired does
+  }
 }
 /* Frame the bin, not the drawer. The drawer's framing would put a 1×1 bin in the
    middle distance as a speck — the mode looking broken at the exact moment it opens.
@@ -801,15 +804,12 @@ function drawFocusMap() {
      six cells adrift in an empty card. applyFocus() clears this on every pass — which
      is right, because the default focus view has no map at all — so it is re-stated
      here, and only while carving. Asking the element how many tracks it actually got
-     keeps the 1280 px breakpoint in the stylesheet, where drawMap leaves it too. */
+     keeps the 1280 px breakpoint in the stylesheet, where drawMap leaves it too — the
+     same DF.stageRow, which also tells the preview how much stage it has when it is
+     alone in the row, as it is for the rest of focus. */
   const top = document.querySelector('.stagetop');
-  if (top) {
-    top.style.gridTemplateColumns = '';
-    const twoCol = carving &&
-      getComputedStyle(top).gridTemplateColumns.trim().split(/\s+/).length > 1;
-    if (twoCol)
-      top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(320px, 1fr)`;
-  }
+  if (DF.stageRow(top, stage).two && carving)
+    DF.pairColumns(top, Math.round(W * sc) + 30, 320);
 }
 /* The lines written on a bin on the map, cut to fit the bin.
  *
@@ -876,7 +876,7 @@ function drawMap() {
      would make the thing you actually work in smaller — the opposite of the point. */
   const top = document.querySelector('.stagetop');
   const wide = g.nx / g.ny > 1.15;
-  if (top) top.classList.toggle('wide', wide);
+  top.classList.toggle('wide', wide);
 
   /* Size from the STAGE, never from the map's own container. The column width is set
      from the map below, so measuring the container here would make each depend on the
@@ -898,23 +898,19 @@ function drawMap() {
      be asked after the size was settled, and the size always took the preview's 320 px
      share out of the stage — including in one column, where the preview is underneath
      and takes no width at all. A phone got a 180 px map of 26 px cells in a card with
-     room for 45, and a 1024 px tablet a 216 px one. */
-  let twoCol = false;
-  if (top) {
-    top.style.gridTemplateColumns = '';
-    twoCol = !wide &&
-      getComputedStyle(top).gridTemplateColumns.trim().split(/\s+/).length > 1;
-  }
-  /* The width is the row's own, not the stage's guessed at: .stagetop is as wide as
+     room for 45, and a 1024 px tablet a 216 px one. DF.stageRow does the asking, the
+     same way for the baseplates page's cut map.
+
+     The width is the row's own, not the stage's guessed at: .stagetop is as wide as
      the stage's content box whatever its columns hold, so measuring it is not the loop
      described above. The 30 is the card's chrome around the map — #fillwrap's 14 px of
      padding each side and the border — which is also what the column below adds back.
      The old "stage minus 44" over-counted it by 26 px on one column, enough for the
      max-width:100% clamp to letterbox the grid inside its own box. */
   const stage = document.querySelector('.stage');
-  const rowW = top ? top.clientWidth : (stage ? stage.clientWidth : 900) - 40;
-  const gap = top ? parseFloat(getComputedStyle(top).columnGap) || 0 : 0;
-  const availW = Math.max(180, twoCol ? rowW - gap - PREVIEW_MIN - 30 : rowW - 30);
+  const row = DF.stageRow(top, stage);
+  const twoCol = !wide && row.two;
+  const availW = Math.max(180, twoCol ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30);
   /* The height ceiling is the part of the stage you can see. Two thirds of the window
      stood in for that while the stage ran off the bottom of the page anyway; now the
      stage is exactly the window under the header and is the thing that scrolls, so at
@@ -923,24 +919,19 @@ function drawMap() {
      at the very moment they were the point. The map, its front marker and the
      coverage bar now fit together with the stage scrolled to the top.
      Above the map is measured rather than assumed, because the layer tabs wrap as
-     layers are added: the card's heading and tabs, plus the stage's own top padding.
-     Below it the marker and the bar are a fixed 41 px. Stacked, the stage is as tall
-     as its content and it is the window that scrolls, so the window is the room.
+     layers are added: the card's heading and tabs (row.room has already lost the
+     stage's top padding). Below it the marker and the bar are a fixed 41 px. Stacked,
+     the stage is as tall as its content and it is the window that scrolls, so there
+     the window is the room — see DF.stageRow.
      Fitting the height never takes a cell under 40 px, the size the phone pass set as
      the smallest thing a finger can hit: on a short window with the "picked up your
      layout" banner showing, a map that scrolls a little beats one too fine to use. */
-  let availH = Math.min(720, (window.innerHeight || 900) * 0.66);
-  if (top && stage) {
-    const room = Math.min(stage.clientHeight, window.innerHeight || 900);
-    const above = svg.getBoundingClientRect().top - top.getBoundingClientRect().top +
-                  (parseFloat(getComputedStyle(stage).paddingTop) || 0);
-    availH = Math.max(H * 40 / S, Math.min(720, room - above - 41));
-  }
+  const above = svg.getBoundingClientRect().top - top.getBoundingClientRect().top;
+  const availH = Math.max(H * 40 / S, Math.min(720, row.room - above - 41));
   const sc = Math.min(availW / W, availH / H, CELL_PX / S);
   svg.setAttribute('width', Math.round(W * sc));
   svg.setAttribute('height', Math.round(H * sc));
-  if (top && twoCol)
-    top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(${PREVIEW_MIN}px, 1fr)`;
+  if (twoCol) DF.pairColumns(top, Math.round(W * sc) + 30, PREVIEW_MIN);
 
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const el = (n, a) => { const e = document.createElementNS(SVGNS, n);

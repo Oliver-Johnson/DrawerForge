@@ -448,11 +448,26 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
 /* Map beside the 3D view. The grid is usually portrait, so the map never uses the
    full stage width on its own — and you want to watch the result while drawing. */
 .stagetop{display:grid;grid-template-columns:auto minmax(340px,1fr);gap:14px;
-  align-items:stretch}   /* stretch, so the shorter card does not leave dead space */
+  align-items:stretch;   /* stretch, so the shorter card does not leave dead space */
+  margin-bottom:14px}    /* its cards give up their own margin, so the row keeps one */
 @media(max-width:1280px){.stagetop{grid-template-columns:1fr}}
 .stagetop > .stagecard{margin-bottom:0;display:flex;flex-direction:column}
-/* the 3D view takes whatever height the taller card sets, rather than leaving a hole */
+/* The preview's height.
+   It was a fixed 380 px wherever it was not stretched beside a map, which was too
+   short on a tall window and, on Baseplates, sat under the cut map below the fold.
+   Now it comes from the space there is:
+     - beside the map (.paired, which DF.stageRow sets with the columns) the row
+       decides: the 3D view takes whatever height the taller card sets, rather than
+       leaving a hole. flex-basis 0 so it is the MAP card that sets the row — a preview
+       that brought its own height would stretch the map's card into an empty slab;
+     - alone in the row (under the map, or the whole row in single-bin focus) it is
+       the stage you can see, --room, less its card's heading and a little of the next
+       card showing, so scrolling to it shows all of it. 420 is the floor it always had.
+   :not(.expanded) because the expanded preview's own height is set by an equally
+   specific rule earlier in the sheet, and these would otherwise win it back. */
 .stagetop #threewrap{flex:1 1 auto;min-height:420px}
+.stagetop #threewrap:not(.expanded){height:clamp(420px,calc(var(--room,520px) - 58px),1400px)}
+.stagetop.paired #threewrap:not(.expanded){flex-basis:0;height:auto}
 /* A wide drawer's map needs the whole stage; the 3D view drops beneath it. */
 .stagetop.wide{grid-template-columns:1fr}
 
@@ -616,6 +631,11 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   #warnings .w{font-size:12.5px}
   #status{font-size:12px}
   #threehint{font-size:12px}
+  /* Stacked, the window is the room, and a preview the height of a phone screen is a
+     screen's worth of page to scroll past (the canvas has to let a finger scroll the
+     page, so it is never trapped there, but it is still a long way). It stays at the
+     floor; Expand is the way to see it big. */
+  .stagetop #threewrap:not(.expanded){height:420px}
   .previewbtn,.fitbtn{font-size:13px;min-height:40px}
   footer{font-size:13px}
   footer .mono{font-size:12px}
@@ -3543,7 +3563,8 @@ if (typeof module !== 'undefined') {
  * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
  * covered by this licence. The models you make with it are yours. */
 /* Widgets for the download dialog. Both tools have one, and they must look and read
-   the same in both, so the pieces live here rather than being written twice.
+   the same in both, so the pieces live here rather than being written twice. The
+   map-beside-preview sizing at the end is here on the same grounds.
  *
  * They take the container element as an argument and know no ids. That is the whole
  * discipline: every getElementById stays in a tool's ui.js, where the build's id audit
@@ -3670,6 +3691,45 @@ const DF = {
                       Math.abs(dot(q, upv)) / tv - z, 1 - z);
     }
     return { target: c, dist };
+  },
+
+  /* ---- the map beside the preview -------------------------------------------
+     Not a dialog widget, but shared for the same reason: both tools put their map and
+     their 3D preview in one .stagetop row — side by side when the stylesheet gives the
+     row two columns, the preview underneath when it gives one — and it has to behave
+     the same in both. It took the bins page two shipped bugs to get right, and the
+     baseplates page arriving at the same layout later is exactly how a third happens.
+
+     The map's column is sized from the map, as an inline grid-template-columns, and the
+     map from the room it has. Both halves have a trap:
+       - an inline style beats the media query that collapses the row to one column,
+         so the column count is asked of the element with the inline style cleared.
+         That keeps the breakpoint in the stylesheet, the one place it lives;
+       - the map's own container IS the column being sized, so measuring it makes each
+         depend on the other. The row is measured instead: it is as wide as the stage's
+         content box whatever its columns hold.
+     stageRow() answers both before a map is sized, and pairColumns() states the columns
+     once it is. Callers toggle .wide first, since that also collapses the row.
+
+     It also leaves two things for the stylesheet. `.paired` says the preview is beside
+     the map, where its height comes from the row. `--room` is the height of the stage
+     you can see, for when it is not beside it: the stage is exactly the window under the
+     header and is the thing that scrolls, so that is the space a preview below the map
+     has to fit in. Stacked on a phone the stage is as tall as its content and it is
+     the window that scrolls, which is why the window caps it. */
+  stageRow(top, stage) {
+    top.style.gridTemplateColumns = '';
+    top.classList.remove('paired');
+    const cs = getComputedStyle(top);
+    const pad = stage ? parseFloat(getComputedStyle(stage).paddingTop) || 0 : 0;
+    const room = Math.min(stage ? stage.clientHeight : Infinity, window.innerHeight || 900) - pad;
+    top.style.setProperty('--room', Math.round(room) + 'px');
+    return { two: cs.gridTemplateColumns.trim().split(/\s+/).length > 1,
+             width: top.clientWidth, gap: parseFloat(cs.columnGap) || 0, room };
+  },
+  pairColumns(top, mapCol, previewMin) {
+    top.style.gridTemplateColumns = `${Math.round(mapCol)}px minmax(${previewMin}px, 1fr)`;
+    top.classList.add('paired');
   },
 };
 </script>
@@ -5870,7 +5930,10 @@ function applyFocus() {
      the measurement it left behind has to go with it, or the preview stays pinned to a
      column shaped like a map that is no longer on the page. */
   const top = document.querySelector('.stagetop');
-  if (top) { top.style.gridTemplateColumns = ''; top.classList.remove('wide'); }
+  if (top) {
+    top.style.gridTemplateColumns = '';
+    top.classList.remove('wide', 'paired');   // see DF.stageRow for what .paired does
+  }
 }
 /* Frame the bin, not the drawer. The drawer's framing would put a 1×1 bin in the
    middle distance as a speck — the mode looking broken at the exact moment it opens.
@@ -6298,15 +6361,12 @@ function drawFocusMap() {
      six cells adrift in an empty card. applyFocus() clears this on every pass — which
      is right, because the default focus view has no map at all — so it is re-stated
      here, and only while carving. Asking the element how many tracks it actually got
-     keeps the 1280 px breakpoint in the stylesheet, where drawMap leaves it too. */
+     keeps the 1280 px breakpoint in the stylesheet, where drawMap leaves it too — the
+     same DF.stageRow, which also tells the preview how much stage it has when it is
+     alone in the row, as it is for the rest of focus. */
   const top = document.querySelector('.stagetop');
-  if (top) {
-    top.style.gridTemplateColumns = '';
-    const twoCol = carving &&
-      getComputedStyle(top).gridTemplateColumns.trim().split(/\s+/).length > 1;
-    if (twoCol)
-      top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(320px, 1fr)`;
-  }
+  if (DF.stageRow(top, stage).two && carving)
+    DF.pairColumns(top, Math.round(W * sc) + 30, 320);
 }
 /* The lines written on a bin on the map, cut to fit the bin.
  *
@@ -6373,7 +6433,7 @@ function drawMap() {
      would make the thing you actually work in smaller — the opposite of the point. */
   const top = document.querySelector('.stagetop');
   const wide = g.nx / g.ny > 1.15;
-  if (top) top.classList.toggle('wide', wide);
+  top.classList.toggle('wide', wide);
 
   /* Size from the STAGE, never from the map's own container. The column width is set
      from the map below, so measuring the container here would make each depend on the
@@ -6395,23 +6455,19 @@ function drawMap() {
      be asked after the size was settled, and the size always took the preview's 320 px
      share out of the stage — including in one column, where the preview is underneath
      and takes no width at all. A phone got a 180 px map of 26 px cells in a card with
-     room for 45, and a 1024 px tablet a 216 px one. */
-  let twoCol = false;
-  if (top) {
-    top.style.gridTemplateColumns = '';
-    twoCol = !wide &&
-      getComputedStyle(top).gridTemplateColumns.trim().split(/\s+/).length > 1;
-  }
-  /* The width is the row's own, not the stage's guessed at: .stagetop is as wide as
+     room for 45, and a 1024 px tablet a 216 px one. DF.stageRow does the asking, the
+     same way for the baseplates page's cut map.
+
+     The width is the row's own, not the stage's guessed at: .stagetop is as wide as
      the stage's content box whatever its columns hold, so measuring it is not the loop
      described above. The 30 is the card's chrome around the map — #fillwrap's 14 px of
      padding each side and the border — which is also what the column below adds back.
      The old "stage minus 44" over-counted it by 26 px on one column, enough for the
      max-width:100% clamp to letterbox the grid inside its own box. */
   const stage = document.querySelector('.stage');
-  const rowW = top ? top.clientWidth : (stage ? stage.clientWidth : 900) - 40;
-  const gap = top ? parseFloat(getComputedStyle(top).columnGap) || 0 : 0;
-  const availW = Math.max(180, twoCol ? rowW - gap - PREVIEW_MIN - 30 : rowW - 30);
+  const row = DF.stageRow(top, stage);
+  const twoCol = !wide && row.two;
+  const availW = Math.max(180, twoCol ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30);
   /* The height ceiling is the part of the stage you can see. Two thirds of the window
      stood in for that while the stage ran off the bottom of the page anyway; now the
      stage is exactly the window under the header and is the thing that scrolls, so at
@@ -6420,24 +6476,19 @@ function drawMap() {
      at the very moment they were the point. The map, its front marker and the
      coverage bar now fit together with the stage scrolled to the top.
      Above the map is measured rather than assumed, because the layer tabs wrap as
-     layers are added: the card's heading and tabs, plus the stage's own top padding.
-     Below it the marker and the bar are a fixed 41 px. Stacked, the stage is as tall
-     as its content and it is the window that scrolls, so the window is the room.
+     layers are added: the card's heading and tabs (row.room has already lost the
+     stage's top padding). Below it the marker and the bar are a fixed 41 px. Stacked,
+     the stage is as tall as its content and it is the window that scrolls, so there
+     the window is the room — see DF.stageRow.
      Fitting the height never takes a cell under 40 px, the size the phone pass set as
      the smallest thing a finger can hit: on a short window with the "picked up your
      layout" banner showing, a map that scrolls a little beats one too fine to use. */
-  let availH = Math.min(720, (window.innerHeight || 900) * 0.66);
-  if (top && stage) {
-    const room = Math.min(stage.clientHeight, window.innerHeight || 900);
-    const above = svg.getBoundingClientRect().top - top.getBoundingClientRect().top +
-                  (parseFloat(getComputedStyle(stage).paddingTop) || 0);
-    availH = Math.max(H * 40 / S, Math.min(720, room - above - 41));
-  }
+  const above = svg.getBoundingClientRect().top - top.getBoundingClientRect().top;
+  const availH = Math.max(H * 40 / S, Math.min(720, row.room - above - 41));
   const sc = Math.min(availW / W, availH / H, CELL_PX / S);
   svg.setAttribute('width', Math.round(W * sc));
   svg.setAttribute('height', Math.round(H * sc));
-  if (top && twoCol)
-    top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(${PREVIEW_MIN}px, 1fr)`;
+  if (twoCol) DF.pairColumns(top, Math.round(W * sc) + 30, PREVIEW_MIN);
 
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const el = (n, a) => { const e = document.createElementNS(SVGNS, n);

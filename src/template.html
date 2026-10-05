@@ -253,6 +253,13 @@
      computed anything yet; drawMap and drawPieceTable rewrite them from the real state
      on every draw, so they say what is actually there rather than what the markup
      guessed. -->
+<!-- The map and the preview share a row, the same .stagetop the bins page uses. Below
+     the map, the preview started 750 px down a 768 px window, so changing a setting at
+     a common laptop size changed nothing you could see. Side by side when there is
+     room, the preview underneath when the window is narrow or the drawer is wide —
+     drawMap decides, through the same DF.stageRow as the bins map. -->
+<div class="stagetop">
+
 <div class="stagecard">
   <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
   <div id="mapwrap"><svg id="cutmap" role="img" aria-label="Cut map, loading"></svg></div>
@@ -269,6 +276,8 @@
 <div class="stagecard">
   <h3>Preview <span class="tail"><label class="tog"><input type="checkbox" id="explode"> exploded</label></span></h3>
   <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the baseplate, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · middle-drag or shift-drag pan · wheel zoom</div></div>
+</div>
+
 </div>
 
 <div class="stagecard">

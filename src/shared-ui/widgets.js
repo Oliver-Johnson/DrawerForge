@@ -4,7 +4,8 @@
  * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
  * covered by this licence. The models you make with it are yours. */
 /* Widgets for the download dialog. Both tools have one, and they must look and read
-   the same in both, so the pieces live here rather than being written twice.
+   the same in both, so the pieces live here rather than being written twice. The
+   map-beside-preview sizing at the end is here on the same grounds.
  *
  * They take the container element as an argument and know no ids. That is the whole
  * discipline: every getElementById stays in a tool's ui.js, where the build's id audit
@@ -131,5 +132,44 @@ const DF = {
                       Math.abs(dot(q, upv)) / tv - z, 1 - z);
     }
     return { target: c, dist };
+  },
+
+  /* ---- the map beside the preview -------------------------------------------
+     Not a dialog widget, but shared for the same reason: both tools put their map and
+     their 3D preview in one .stagetop row — side by side when the stylesheet gives the
+     row two columns, the preview underneath when it gives one — and it has to behave
+     the same in both. It took the bins page two shipped bugs to get right, and the
+     baseplates page arriving at the same layout later is exactly how a third happens.
+
+     The map's column is sized from the map, as an inline grid-template-columns, and the
+     map from the room it has. Both halves have a trap:
+       - an inline style beats the media query that collapses the row to one column,
+         so the column count is asked of the element with the inline style cleared.
+         That keeps the breakpoint in the stylesheet, the one place it lives;
+       - the map's own container IS the column being sized, so measuring it makes each
+         depend on the other. The row is measured instead: it is as wide as the stage's
+         content box whatever its columns hold.
+     stageRow() answers both before a map is sized, and pairColumns() states the columns
+     once it is. Callers toggle .wide first, since that also collapses the row.
+
+     It also leaves two things for the stylesheet. `.paired` says the preview is beside
+     the map, where its height comes from the row. `--room` is the height of the stage
+     you can see, for when it is not beside it: the stage is exactly the window under the
+     header and is the thing that scrolls, so that is the space a preview below the map
+     has to fit in. Stacked on a phone the stage is as tall as its content and it is
+     the window that scrolls, which is why the window caps it. */
+  stageRow(top, stage) {
+    top.style.gridTemplateColumns = '';
+    top.classList.remove('paired');
+    const cs = getComputedStyle(top);
+    const pad = stage ? parseFloat(getComputedStyle(stage).paddingTop) || 0 : 0;
+    const room = Math.min(stage ? stage.clientHeight : Infinity, window.innerHeight || 900) - pad;
+    top.style.setProperty('--room', Math.round(room) + 'px');
+    return { two: cs.gridTemplateColumns.trim().split(/\s+/).length > 1,
+             width: top.clientWidth, gap: parseFloat(cs.columnGap) || 0, room };
+  },
+  pairColumns(top, mapCol, previewMin) {
+    top.style.gridTemplateColumns = `${Math.round(mapCol)}px minmax(${previewMin}px, 1fr)`;
+    top.classList.add('paired');
   },
 };
