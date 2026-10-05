@@ -1,73 +1,3 @@
-Drawerforge
-Copyright (C) 2026 Oliver Johnson
-
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU Affero General Public License as published by the Free
-Software Foundation, either version 3 of the License, or (at your option) any
-later version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License along
-with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-Versions of this software published before 2026-08-20 were released under the
-MIT licence, and that grant is not withdrawn: anyone who obtained those versions
-keeps their MIT rights to them. This licence governs this version onward.
-
-
-================================================================================
-ADDITIONAL PERMISSION — OUTPUT OF THE PROGRAM
-================================================================================
-
-As an additional permission under section 7 of the GNU Affero General Public
-License version 3:
-
-The files this program generates — including but not limited to STL, 3MF and ZIP
-files, and the geometry described in them — are NOT covered by this licence and
-are not works derived from it. You own the models you make with this program.
-You may use, share, modify and SELL them, and the objects printed from them, for
-any purpose and without restriction, attribution or obligation of any kind.
-
-This permission applies to the output alone. Combining part of this program's
-source code into another program is not covered by it.
-
-
-================================================================================
-ADDITIONAL TERM — NAMES AND MARKS
-================================================================================
-
-As an additional term under section 7(e) of the GNU Affero General Public
-License version 3:
-
-This licence grants no permission to use the trade names "Drawerforge" or
-"Baseplate Studio", the drawerforge.co.uk domain, or the project's logos and
-branding, except in reasonable and customary use in describing the origin of the
-work (for example, "based on Drawerforge") and in reproducing the content of
-this licence and its notices.
-
-A modified version must be given a different name, so that people can tell your
-version from this one. The code is yours to build on; the name is how visitors
-know whose work they are looking at.
-
-
-================================================================================
-THIRD-PARTY COMPONENTS
-================================================================================
-
-This repository vendors two libraries under vendor/, unmodified and with their
-own licence banners intact. They keep their own terms and are not relicensed by
-this file:
-
-  three.js  r128    MIT              (c) 2010-2021 Three.js Authors
-  JSZip     3.10.1  MIT or GPLv3     (c) 2009-2016 Stuart Knightley
-
-
-================================================================================
-
-
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 
@@ -703,8 +633,8 @@ the "copyright" line and a pointer to where the full notice is found.
     Copyright (C) <year>  <name of author>
 
     This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published
-    by the Free Software Foundation, either version 3 of the License, or
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
     This program is distributed in the hope that it will be useful,
@@ -729,4 +659,3 @@ specific requirements.
 if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
-
