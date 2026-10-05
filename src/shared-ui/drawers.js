@@ -48,16 +48,19 @@ const DRAWERS = (function () {
   const cut = (s, n) => s.slice(0, s.length > n && /[\ud800-\udbff]/.test(s[n - 1]) ? n - 1 : n);
 
   /* A name is shown on the page and nowhere else, always as text. Control characters go
-     because they have no business in a label, and the bidirectional overrides because
-     they can make one name display as another — the list is how you tell drawers apart.
-     The characters that draw nothing at all go for the same reason: the soft hyphen, the
-     word joiner and the invisible operators would let two names that look identical be
-     different names. Those are removed rather than turned into spaces, because they sit
-     inside a word, and Kitchen with a soft hyphen in it reads as Kitchen. */
+     because they have no business in a label, and the bidirectional overrides and marks
+     because they can make one name display as another — the list is how you tell drawers
+     apart. The characters that draw nothing at all go for the same reason: the soft
+     hyphen, the word joiner, the invisible operators, the combining grapheme joiner and
+     the Hangul fillers would let two names that look identical be different names. Those
+     are removed rather than turned into spaces, because they sit inside a word, and
+     Kitchen with a soft hyphen in it reads as Kitchen. Variation selectors and tag
+     characters stay: they are how an emoji picks its look, and how the flags of England,
+     Scotland and Wales are written. */
   function cleanName(v) {
     if (typeof v !== 'string') return '';
-    return cut(wellFormed(v).replace(/[\u00ad\u2060-\u2065\u206a-\u206f]/g, '')
-      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, ' ')
+    return cut(wellFormed(v).replace(/[\u00ad\u034f\u115f\u1160\u2060-\u2065\u206a-\u206f\u3164\uffa0]/g, '')
+      .replace(/[\u0000-\u001f\u007f-\u009f\u061c\u180e\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, ' ')
       .replace(/\s+/g, ' ').trim(), CAP.name).trim();
   }
   const sameName = (a, b) => a.toLowerCase() === b.toLowerCase();

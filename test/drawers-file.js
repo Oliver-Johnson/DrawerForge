@@ -154,6 +154,16 @@ console.log('\nnames');
   // invisible, so two names that differ only by them look the same in the list
   check('soft hyphens and word joiners are removed',
     D.cleanName('Kit' + ch(0xad) + 'chen') === 'Kitchen' && D.cleanName('a' + ch(0x2060) + 'b' + ch(0x2063) + 'c') === 'abc');
+  check('so are the grapheme joiner and the Hangul fillers',
+    D.cleanName('Kit' + ch(0x34f) + 'chen') === 'Kitchen' &&
+    D.cleanName('a' + ch(0x3164) + ch(0x115f) + ch(0x1160) + ch(0xffa0) + 'b') === 'ab' &&
+    D.cleanName(ch(0x3164)) === '');
+  check('the Arabic letter mark and U+180E become spaces',
+    D.cleanName('Top' + ch(0x61c) + 'drawer') === 'Top drawer' && D.cleanName('a' + ch(0x180e) + 'b') === 'a b');
+  const flag = String.fromCodePoint(0x1f3f4, 0xe0067, 0xe0062, 0xe0065, 0xe006e, 0xe0067, 0xe007f);
+  check('an emoji\'s look and a nation\'s flag are kept',
+    D.cleanName('Box ' + ch(0x2764) + ch(0xfe0f)) === 'Box ' + ch(0x2764) + ch(0xfe0f) &&
+    D.cleanName('Shed ' + flag) === 'Shed ' + flag);
   const face = ch(0xd83d) + ch(0xde00);
   const cut = D.cleanName('x'.repeat(D.CAP.name - 1) + face + 'tail');
   check('the cap does not cut an emoji in half', cut === 'x'.repeat(D.CAP.name - 1), JSON.stringify(cut));
