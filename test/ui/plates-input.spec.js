@@ -170,10 +170,56 @@ test('the split mode is named, not enumerated', async ({ page }) => {
 
   await page.locator('#openExport').click();
   // the enum went straight into the sentence: "4 piece(s), plates split, joined with…"
-  await expect(page.locator('#exDesign')).toContainText('piece(s), fewest plates split,');
+  // (and the "(s)" has gone since, too — see the next case)
+  await expect(page.locator('#exDesign')).toContainText(/\d+ pieces?, fewest plates split,/);
   const readme = await page.evaluate(() => readmeText());
   expect(readme).toContain('Split: fewest plates');
   expect(readme).not.toContain('Split: plates');
+});
+
+/* Counts as a person says them. The download dialog read "4 piece(s)", "1 part(s)" and
+   "4 plate(s)", the README said "2 row band(s)", and the tails that did try said "0
+   piece". The bins page fixed the same thing earlier and has the matching case in
+   on-screen.spec.js. Two drawers, because a hedge and a wrong singular show up at
+   different counts: the default splits into several pieces, a 200 mm drawer is one. */
+test('counts read as English, on the page, in the dialog and in the README', async ({ page }) => {
+  const ready = () => page.waitForFunction(
+    () => /ready/.test(document.getElementById('pieceTail').textContent),
+    null, { timeout: 30000 });
+  const read = async () => {
+    await page.locator('#openExport').click();
+    await page.waitForTimeout(300);
+    const text = await page.evaluate(() => {
+      // collapsed bodies are not on screen, so open everything before reading it
+      document.querySelectorAll('section.p.closed').forEach((s) => s.classList.remove('closed'));
+      return document.body.innerText + '\n' + document.getElementById('exportDlg').innerText +
+        '\n' + readmeText();
+    });
+    await page.locator('#exportClose').click();
+    return text;
+  };
+  const NOUNS = '(pieces?|plates?|print plates?|parts?|tabs?|pockets?|puzzles?|keys?|row bands?)';
+  const english = (text) => {
+    expect(text, 'nothing should be hedging its plural').not.toMatch(/\(s\)/);
+    expect(text, 'a plural where one is meant')
+      .not.toMatch(new RegExp(`\\b1 ${NOUNS.replace(/s\?/g, 's')}\\b`));
+    expect(text, 'a singular where several are meant')
+      .not.toMatch(new RegExp(`\\b(0|[2-9]|[1-9]\\d+) ${NOUNS.replace(/s\?/g, '')}\\b`));
+  };
+
+  await H.openPlates(page);
+  const several = await read();
+  english(several);
+  expect(several, 'fixture: the default drawer is several pieces').toMatch(/\b[2-9] pieces\b/);
+
+  await H.setField(page, 'drawerW', 200);
+  await H.setField(page, 'drawerD', 200);
+  await ready();
+  const one = await read();
+  english(one);
+  expect(one).toMatch(/\b1 piece\b/);
+  expect(one, 'one piece is "the piece", not "all 1"').toContain('The piece fits your');
+  expect(one).toMatch(/\b1 part on a\b/);
 });
 
 /* ---- the export dialog --------------------------------------------------- */

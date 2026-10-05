@@ -7,6 +7,8 @@
 'use strict';
 /* Drawerforge UI. Core geometry functions are in scope from the previous script tag. */
 const $ = (id) => document.getElementById(id);
+// "4 pieces", "1 piece" — never "4 piece(s)". Shared with the bins tool; see widgets.js.
+const plural = DF.plural;
 
 // ---------- state ----------
 const state = Object.assign({}, DEFAULTS, {
@@ -415,7 +417,7 @@ function drawMap() {
      + `<text x="${dx-6}" y="${Y(Dmm/2)}" text-anchor="middle" font-size="11" transform="rotate(-90 ${dx-6} ${Y(Dmm/2)})">${Dmm} mm</text>`;
   s += `<text x="${X(Wmm/2)}" y="${h-6}" text-anchor="middle" font-size="10">▾ front of drawer</text>`;
   svg.innerHTML = s;
-  $('mapTail').textContent = `${layout.nx} × ${layout.ny} cells · ${layout.pieces.length} piece${layout.pieces.length>1?'s':''}`;
+  $('mapTail').textContent = `${layout.nx} × ${layout.ny} cells · ${plural(layout.pieces.length, 'piece')}`;
   /* Both units with inches on, millimetres first. The grid is millimetres by nature —
      42 mm cells — and that is the number the rest of the page and every download quote,
      so it stays; the inches are there to hold against the tape measure the drawer was
@@ -437,7 +439,7 @@ function drawMap() {
     ? 'Cut map: not drawn — the grid is larger than this tool will build. See the checks below.'
     : `Cut map: a ${layout.nx} by ${layout.ny} cell grid in a ${Wmm} by ${Dmm} millimetre ` +
       `drawer, ${splitName()} split into ` +
-      `${layout.pieces.length} piece${layout.pieces.length === 1 ? '' : 's'}. ` +
+      `${plural(layout.pieces.length, 'piece')}. ` +
       'Front of the drawer is at the bottom.');
 
   svg.querySelectorAll('.hitline').forEach(el => el.addEventListener('click', onMapClick));
@@ -504,10 +506,10 @@ function drawPieceTable() {
     let joints = '…';
     if (built) {
       const m = built.meta, parts = [];
-      if (m.tabs) parts.push(`${m.tabs} tab`);
-      if (m.notches) parts.push(`${m.notches} pocket`);
-      if (m.puzzles) parts.push(`${m.puzzles} puzzle`);
-      if (m.bowties) parts.push(`${m.bowties} key`);
+      if (m.tabs) parts.push(plural(m.tabs, 'tab'));
+      if (m.notches) parts.push(plural(m.notches, 'pocket'));
+      if (m.puzzles) parts.push(plural(m.puzzles, 'puzzle'));
+      if (m.bowties) parts.push(plural(m.bowties, 'key'));
       joints = parts.join(' + ') || '—';
     }
     return `<tr>
@@ -549,11 +551,11 @@ function updatePreviewLabel(blocked) {
   $('three').setAttribute('aria-label', blocked
     ? '3D preview: nothing to show — see the checks under the cut map.'
     : built < n
-      ? `3D preview: building, ${built} of ${n} piece${n === 1 ? '' : 's'} so far.`
+      ? `3D preview: building, ${built} of ${plural(n, 'piece')} so far.`
       : `3D preview: a ${layout.nx} by ${layout.ny} cell baseplate, ` +
         `${(layout.nx * state.pitch).toFixed(0)} by ` +
         `${(layout.ny * state.pitch).toFixed(0)} millimetres, split into ` +
-        `${n} piece${n === 1 ? '' : 's'} and joined with ` +
+        `${plural(n, 'piece')} and joined with ` +
         `${CONNECTOR_NAMES[state.connector] || state.connector}.`);
 }
 
@@ -823,7 +825,7 @@ function renderPrintPlan() {
   if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; return; }
   const plates = printPlan.plates;
   const stacked = plates.some(pl => pl.placed.some(p => p.z > 0.01));
-  $('planTail').textContent = `${plates.length} print plate${plates.length > 1 ? 's' : ''}` + (stacked ? ' · stacked' : '');
+  $('planTail').textContent = plural(plates.length, 'print plate') + (stacked ? ' · stacked' : '');
   const sc = 116 / Math.max(state.bedW, state.bedD);
   row.innerHTML = plates.map((pl, i) => {
     let svg = `<svg width="${state.bedW*sc+2}" height="${state.bedD*sc+2}" style="background:var(--panel2);border:1px solid var(--line);border-radius:5px">`;
@@ -1147,7 +1149,7 @@ function readmeText() {
   lines.push('');
   lines.push(`Drawer: ${state.drawerW} x ${state.drawerD} mm | Grid: ${layout.nx} x ${layout.ny} cells @ ${state.pitch} mm`);
   lines.push(`Margins: L ${layout.mL.toFixed(1)} R ${layout.mR.toFixed(1)} F ${layout.mF.toFixed(1)} B ${layout.mB.toFixed(1)} mm`);
-  lines.push(`Split: ${splitName()} | Pieces: ${layout.pieces.length} in ${rows} row band(s)`);
+  lines.push(`Split: ${splitName()} | Pieces: ${layout.pieces.length} in ${plural(rows, 'row band')}`);
   lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
   if (state.magnets) lines.push(`Magnets: ${state.magnetD} x ${state.magnetH} mm, from ${state.magnetSide}`);
   if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ${state.screwHeadD} mm counterbore`);
@@ -1241,19 +1243,22 @@ function bedFitText() {
     return { cls: 'bad', t: 'There is nothing to generate yet — see the checks under the cut map.' };
   const bad = layout.pieces.filter((pc) => !pieceFits(pc));
   if (bad.length)
-    return { cls: 'bad', t: `${bad.length} piece(s) — ${bad.map((pc) => pc.id).join(', ')} — ` +
+    return { cls: 'bad', t: `${plural(bad.length, 'piece')} — ${bad.map((pc) => pc.id).join(', ')} — ` +
       `will not fit your ${bed}. Add a cut through them on the cut map, or pick a split mode ` +
       'that makes smaller pieces; the files below would print oversized as they stand.' };
   const err = warningsList().find((w) => w.err);
   if (err) return { cls: 'bad', t: err.t + ' Nothing can be exported until that is fixed.' };
   const ready = Object.keys(builds).length;
   if (ready < layout.pieces.length)
-    return { cls: 'wait', t: `Still building — ${ready} of ${layout.pieces.length} piece(s) ready. ` +
+    return { cls: 'wait', t: `Still building — ${ready} of ${plural(layout.pieces.length, 'piece')} ready. ` +
       'The meshes below appear as they finish.' };
   // quoting pieceExtent, so the number shown is the number the test above used
   const big = layout.pieces.map(pieceExtent).sort((a, b) => b[0] * b[1] - a[0] * a[1])[0];
-  return { cls: 'ok', t: `All ${layout.pieces.length} piece(s) fit your ${bed} — the largest ` +
-    `needs ${big[0].toFixed(0)} × ${big[1].toFixed(0)} mm.` };
+  /* One piece is "the piece", not "all 1 piece", and has no "largest" to compare. */
+  const size = `${big[0].toFixed(0)} × ${big[1].toFixed(0)} mm`;
+  return { cls: 'ok', t: layout.pieces.length === 1
+    ? `The piece fits your ${bed} — it needs ${size}.`
+    : `All ${layout.pieces.length} pieces fit your ${bed} — the largest needs ${size}.` };
 }
 
 function renderExportSummary() {
@@ -1262,7 +1267,7 @@ function renderExportSummary() {
   $('exDesign').textContent =
     `${layout.nx} × ${layout.ny} cell grid (${(layout.nx * pitch).toFixed(0)} × ${(layout.ny * pitch).toFixed(0)} mm) ` +
     `in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
-    `${layout.pieces.length} piece(s), ${splitName()} split, joined with ${CONNECTOR_NAMES[state.connector] || state.connector}\n` +
+    `${plural(layout.pieces.length, 'piece')}, ${splitName()} split, joined with ${CONNECTOR_NAMES[state.connector] || state.connector}\n` +
     `margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm` +
     (g === null ? '' : `\nabout ${massText(g)} of PLA ${infillNote()}`);
   const fit = bedFitText();
@@ -1303,7 +1308,7 @@ function renderExportFiles() {
     // named as the recommended path, because it is: every part already placed on a bed,
     // in the order the plan worked out, with nothing left to arrange
     exRow('Every plate — recommended',
-          `${n} plate(s) · 3MF` + (n > 1 ? ' in a ZIP' : '') + ' · the whole job, arranged',
+          `${plural(n, 'plate')} · 3MF` + (n > 1 ? ' in a ZIP' : '') + ' · the whole job, arranged',
           'Download', downloadAllPlates,
           { 'data-ex': 'allplates', 'aria-label': 'Download every print plate (3MF)' });
     /* Per-plate downloads. The combined export already builds each plate on its own
@@ -1311,7 +1316,7 @@ function renderExportFiles() {
        off — and it is what you want when one print failed, or when tonight's print is
        only this plate. */
     printPlan.plates.forEach((pl, i) => exRow(`Plate ${i + 1}`,
-      `${pl.placed.length} part(s) on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      `${plural(pl.placed.length, 'part')} on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
       async () => saveBlob(await plate3mfBytes(i), `plate-${i + 1}.3mf`),
       { 'data-ex': 'plate', 'aria-label': `Download plate ${i + 1} (3MF)` }));
   }
@@ -1361,8 +1366,8 @@ function syncExportDialog() {
 function updateExportTail() {
   if (!layout) return;
   const n = layout.pieces.length;
-  $('exportTail').textContent = `${n} piece${n > 1 ? 's' : ''}` +
-    (printPlan ? ` · ${printPlan.plates.length} plate${printPlan.plates.length > 1 ? 's' : ''}` : '');
+  $('exportTail').textContent = plural(n, 'piece') +
+    (printPlan ? ` · ${plural(printPlan.plates.length, 'plate')}` : '');
   syncExportDialog();
 }
 function openExportDialog() {

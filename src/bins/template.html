@@ -273,7 +273,7 @@
     <button class="act" id="focusBin" style="display:none">Edit this bin on its own</button>
     <div class="hint" id="focusBinHint" style="display:none">Hides the drawer, the layers and the map, and gives this one bin the whole page. Everything here still works and the bin stays exactly where it is — this only changes what you are shown.</div>
     <button class="act" id="carveMode" style="display:none">Carve this bin into a shape</button>
-    <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. Alt-click does the same thing without turning the mode on. Press Escape or the button again when you are done.</div>
+    <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. <span class="haskeys">Alt-click does the same thing without turning the mode on. </span>Press <span class="haskeys">Escape or </span>the button again when you are done.</div>
     <button class="act" id="mergeBins" style="display:none">Merge into one bin</button>
     <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</div>
     <div class="row" id="selActions" style="display:none">
@@ -316,7 +316,10 @@
          layout is sound, so a good design pays nothing for it. -->
     <div class="exfit bad" id="mapChecks" style="display:none"><div id="mapChecksList"></div></div>
     <div class="mono" id="coverage">—</div>
-    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</div>
+    <!-- Carving was taught as Alt-click only, and a touch screen has no Alt key, so on a
+         phone the one sentence about L and U shapes described something impossible.
+         The Carve button in panel 03 is the route there, and the touch wording names it. -->
+    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <span class="haskeys"><b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</span><span class="hastouch">To make an L or a U, tap a bin, press <b>Carve this bin into a shape</b> in panel 03, then tap the cells to cut out — tap a gap to put one back.</span></div>
     <div class="row3">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>

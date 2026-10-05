@@ -898,7 +898,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <button class="act" id="focusBin" style="display:none">Edit this bin on its own</button>
     <div class="hint" id="focusBinHint" style="display:none">Hides the drawer, the layers and the map, and gives this one bin the whole page. Everything here still works and the bin stays exactly where it is — this only changes what you are shown.</div>
     <button class="act" id="carveMode" style="display:none">Carve this bin into a shape</button>
-    <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. Alt-click does the same thing without turning the mode on. Press Escape or the button again when you are done.</div>
+    <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. <span class="haskeys">Alt-click does the same thing without turning the mode on. </span>Press <span class="haskeys">Escape or </span>the button again when you are done.</div>
     <button class="act" id="mergeBins" style="display:none">Merge into one bin</button>
     <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</div>
     <div class="row" id="selActions" style="display:none">
@@ -941,7 +941,10 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
          layout is sound, so a good design pays nothing for it. -->
     <div class="exfit bad" id="mapChecks" style="display:none"><div id="mapChecksList"></div></div>
     <div class="mono" id="coverage">—</div>
-    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</div>
+    <!-- Carving was taught as Alt-click only, and a touch screen has no Alt key, so on a
+         phone the one sentence about L and U shapes described something impossible.
+         The Carve button in panel 03 is the route there, and the touch wording names it. -->
+    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <span class="haskeys"><b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</span><span class="hastouch">To make an L or a U, tap a bin, press <b>Carve this bin into a shape</b> in panel 03, then tap the cells to cut out — tap a gap to put one back.</span></div>
     <div class="row3">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>
@@ -3455,6 +3458,17 @@ if (typeof module !== 'undefined') {
 'use strict';
 
 const DF = {
+  /* Counted things, written the way a person would say them. The bins page carried
+     eleven "bin(s)" and "layer(s)", including one line that managed both "1 bin(s)" and
+     "1 bins" in eleven words — a form nobody says out loud, and the clearest sign that
+     the text was written for the person who already knew what it meant. The baseplates
+     page then turned out to have its own: "4 piece(s)" in the download dialog, "1
+     part(s)" on a plate, and a hand-rolled `n > 1 ? 's' : ''` that said "0 piece". One
+     helper for both tools, so the next count is written properly by default. Irregulars
+     pass their own plural; everything so far takes an s. */
+  plural(n, one, many) {
+    return `${n} ${n === 1 ? one : many || one + 's'}`;
+  },
   /* An STL is an 84-byte header plus 50 bytes a triangle, and a polygon fans into
      verts-2 of them, so the exact file size follows from polygons already in memory. */
   stlBytes(polys) {
@@ -4827,12 +4841,9 @@ for (const fn of REQUIRED_CORE)
 const PLA_DENSITY = 1.24;   // g/cm3
 const S = 40;               // map cell size, svg units
 
-/* Counted things, written the way a person would say them. The page carried eleven
-   "bin(s)" and "layer(s)", including one line that managed both "1 bin(s)" and
-   "1 bins" in eleven words — a form nobody says out loud, and the clearest sign that
-   the text was written for the person who already knew what it meant. Irregulars pass
-   their own plural; everything here so far takes an s. */
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
+/* Counted things, written the way a person would say them — see DF.plural, which both
+   tools share now that baseplates needed the same fix. */
+const plural = DF.plural;
 
 const state = {};           // drawer + defaults for new bins
 let layers = [{ bins: [] }];
@@ -5616,6 +5627,54 @@ function drawFocusMap() {
       top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(320px, 1fr)`;
   }
 }
+/* The lines written on a bin on the map, cut to fit the bin.
+ *
+ * They were written at a fixed size whatever the bin, so the height line "3u · 21mm" —
+ * about 51 map units wide — spilled out of every one-cell-wide bin, which is 36 wide,
+ * and across its neighbours' labels. A note did the same at seven characters a cell,
+ * and in a bin one cell deep the note sat below the bottom edge altogether.
+ *
+ * So each line is measured against the room the bin has. The height line drops to "3u"
+ * when the whole of it will not fit, and a note is cut to what will, with an ellipsis.
+ * Lines are stacked and centred, and when there are more than the bin is tall — a note
+ * in a one-deep bin — the height goes first: the size says which bin this is and the
+ * note is what you wrote on it, while the height is in the hover text and the preview.
+ *
+ * Measured by character count, not by asking the browser. The map font is monospace,
+ * and getComputedTextLength() answers 0 for a map that is not on screen, which would
+ * hand every bin the long form the next time it appeared. CH, ASC and DESC are a little
+ * wider and taller than any monospace in --mono actually is, so the estimate errs into
+ * the margin rather than out of the bin. Sizes are the stylesheet's #fillmap ones.
+ *
+ * Returns [{ cls, text, dy }], dy being each baseline's offset from the bin's centre. */
+const LABEL = { CH: 0.62, ASC: 0.95, DESC: 0.27, GAP: 1.5,
+                size: { blabel: 12, bsub: 9.5, bnote: 9 } };
+function binLabels(b) {
+  const roomW = b.u * S - 10, roomH = b.v * S - 8;   // the rect's 2 inset, plus clearance
+  const fits = (str, cls) => str.length * LABEL.CH * LABEL.size[cls] <= roomW;
+  const lines = [{ cls: 'blabel', text: `${b.u}×${b.v}`, rank: 0 }];
+  const full = `${b.hUnits}u · ${b.hUnits * SPEC.unitH}mm`, short = `${b.hUnits}u`;
+  const ht = fits(full, 'bsub') ? full : fits(short, 'bsub') ? short : null;
+  if (ht) lines.push({ cls: 'bsub', text: ht, rank: 2 });
+  if (b.note) {
+    const max = Math.floor(roomW / (LABEL.CH * LABEL.size.bnote));
+    const note = b.note.length <= max ? b.note : max >= 3 ? b.note.slice(0, max - 1) + '…' : '';
+    if (note) lines.push({ cls: 'bnote', text: note, rank: 1 });
+  }
+  const tall = (ls) => ls.reduce((a, l) => a + (LABEL.ASC + LABEL.DESC) * LABEL.size[l.cls], 0) +
+                       LABEL.GAP * (ls.length - 1);
+  // drop the least important line until the stack fits the bin's height
+  let keep = lines.slice();
+  while (keep.length > 1 && tall(keep) > roomH)
+    keep = keep.filter((l) => l.rank !== Math.max(...keep.map((k) => k.rank)));
+  let y = -tall(keep) / 2;
+  return keep.map((l) => {
+    const fs = LABEL.size[l.cls];
+    const dy = y + LABEL.ASC * fs;
+    y += (LABEL.ASC + LABEL.DESC) * fs + LABEL.GAP;
+    return { cls: l.cls, text: l.text, dy };
+  });
+}
 function drawMap() {
   /* In focus there is no drawer map to draw, and drawing it would be worse than
      doing nothing: the body of this function sizes .stagetop's columns from the map,
@@ -5718,21 +5777,17 @@ function drawMap() {
       }
     }
     const cx = (b.x + b.u / 2) * S, cy = sy(b.y, b.v) + b.v * S / 2;
-    const t1 = el('text', { class: 'blabel', x: cx, y: cy - 2, 'text-anchor': 'middle' });
-    t1.textContent = `${b.u}×${b.v}`;
-    const t2 = el('text', { class: 'bsub', x: cx, y: cy + 12, 'text-anchor': 'middle' });
-    t2.textContent = `${b.hUnits}u · ${b.hUnits * SPEC.unitH}mm`;
-    svg.appendChild(t1); svg.appendChild(t2);
-    // hovering a bin says what you decided goes in it
+    for (const t of binLabels(b)) {
+      const e = el('text', { class: t.cls, x: cx, y: cy + t.dy, 'text-anchor': 'middle' });
+      e.textContent = t.text;
+      svg.appendChild(e);
+    }
+    // hovering a bin says what you decided goes in it — and the whole of it, which is
+    // what makes it safe for the labels to shorten or drop a line in a small bin
     const tip = document.createElementNS(SVGNS, 'title');
     tip.textContent = (b.note ? b.note + ' — ' : '') +
       `${b.u}×${b.v}, ${b.hUnits} units (${b.hUnits * SPEC.unitH} mm)`;
     r.appendChild(tip);
-    if (b.note) {
-      const t3 = el('text', { class: 'bnote', x: cx, y: cy + 25, 'text-anchor': 'middle' });
-      t3.textContent = b.note.length > b.u * 7 ? b.note.slice(0, b.u * 7 - 1) + '…' : b.note;
-      svg.appendChild(t3);
-    }
     if (issues.length) {
       const warn = el('text', { class: 'bwarn', x: b.x * S + 13, y: sy(b.y, b.v) + 20 });
       warn.textContent = '⚠';

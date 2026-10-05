@@ -25,12 +25,9 @@ for (const fn of REQUIRED_CORE)
 const PLA_DENSITY = 1.24;   // g/cm3
 const S = 40;               // map cell size, svg units
 
-/* Counted things, written the way a person would say them. The page carried eleven
-   "bin(s)" and "layer(s)", including one line that managed both "1 bin(s)" and
-   "1 bins" in eleven words — a form nobody says out loud, and the clearest sign that
-   the text was written for the person who already knew what it meant. Irregulars pass
-   their own plural; everything here so far takes an s. */
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
+/* Counted things, written the way a person would say them — see DF.plural, which both
+   tools share now that baseplates needed the same fix. */
+const plural = DF.plural;
 
 const state = {};           // drawer + defaults for new bins
 let layers = [{ bins: [] }];
@@ -814,6 +811,54 @@ function drawFocusMap() {
       top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(320px, 1fr)`;
   }
 }
+/* The lines written on a bin on the map, cut to fit the bin.
+ *
+ * They were written at a fixed size whatever the bin, so the height line "3u · 21mm" —
+ * about 51 map units wide — spilled out of every one-cell-wide bin, which is 36 wide,
+ * and across its neighbours' labels. A note did the same at seven characters a cell,
+ * and in a bin one cell deep the note sat below the bottom edge altogether.
+ *
+ * So each line is measured against the room the bin has. The height line drops to "3u"
+ * when the whole of it will not fit, and a note is cut to what will, with an ellipsis.
+ * Lines are stacked and centred, and when there are more than the bin is tall — a note
+ * in a one-deep bin — the height goes first: the size says which bin this is and the
+ * note is what you wrote on it, while the height is in the hover text and the preview.
+ *
+ * Measured by character count, not by asking the browser. The map font is monospace,
+ * and getComputedTextLength() answers 0 for a map that is not on screen, which would
+ * hand every bin the long form the next time it appeared. CH, ASC and DESC are a little
+ * wider and taller than any monospace in --mono actually is, so the estimate errs into
+ * the margin rather than out of the bin. Sizes are the stylesheet's #fillmap ones.
+ *
+ * Returns [{ cls, text, dy }], dy being each baseline's offset from the bin's centre. */
+const LABEL = { CH: 0.62, ASC: 0.95, DESC: 0.27, GAP: 1.5,
+                size: { blabel: 12, bsub: 9.5, bnote: 9 } };
+function binLabels(b) {
+  const roomW = b.u * S - 10, roomH = b.v * S - 8;   // the rect's 2 inset, plus clearance
+  const fits = (str, cls) => str.length * LABEL.CH * LABEL.size[cls] <= roomW;
+  const lines = [{ cls: 'blabel', text: `${b.u}×${b.v}`, rank: 0 }];
+  const full = `${b.hUnits}u · ${b.hUnits * SPEC.unitH}mm`, short = `${b.hUnits}u`;
+  const ht = fits(full, 'bsub') ? full : fits(short, 'bsub') ? short : null;
+  if (ht) lines.push({ cls: 'bsub', text: ht, rank: 2 });
+  if (b.note) {
+    const max = Math.floor(roomW / (LABEL.CH * LABEL.size.bnote));
+    const note = b.note.length <= max ? b.note : max >= 3 ? b.note.slice(0, max - 1) + '…' : '';
+    if (note) lines.push({ cls: 'bnote', text: note, rank: 1 });
+  }
+  const tall = (ls) => ls.reduce((a, l) => a + (LABEL.ASC + LABEL.DESC) * LABEL.size[l.cls], 0) +
+                       LABEL.GAP * (ls.length - 1);
+  // drop the least important line until the stack fits the bin's height
+  let keep = lines.slice();
+  while (keep.length > 1 && tall(keep) > roomH)
+    keep = keep.filter((l) => l.rank !== Math.max(...keep.map((k) => k.rank)));
+  let y = -tall(keep) / 2;
+  return keep.map((l) => {
+    const fs = LABEL.size[l.cls];
+    const dy = y + LABEL.ASC * fs;
+    y += (LABEL.ASC + LABEL.DESC) * fs + LABEL.GAP;
+    return { cls: l.cls, text: l.text, dy };
+  });
+}
 function drawMap() {
   /* In focus there is no drawer map to draw, and drawing it would be worse than
      doing nothing: the body of this function sizes .stagetop's columns from the map,
@@ -916,21 +961,17 @@ function drawMap() {
       }
     }
     const cx = (b.x + b.u / 2) * S, cy = sy(b.y, b.v) + b.v * S / 2;
-    const t1 = el('text', { class: 'blabel', x: cx, y: cy - 2, 'text-anchor': 'middle' });
-    t1.textContent = `${b.u}×${b.v}`;
-    const t2 = el('text', { class: 'bsub', x: cx, y: cy + 12, 'text-anchor': 'middle' });
-    t2.textContent = `${b.hUnits}u · ${b.hUnits * SPEC.unitH}mm`;
-    svg.appendChild(t1); svg.appendChild(t2);
-    // hovering a bin says what you decided goes in it
+    for (const t of binLabels(b)) {
+      const e = el('text', { class: t.cls, x: cx, y: cy + t.dy, 'text-anchor': 'middle' });
+      e.textContent = t.text;
+      svg.appendChild(e);
+    }
+    // hovering a bin says what you decided goes in it — and the whole of it, which is
+    // what makes it safe for the labels to shorten or drop a line in a small bin
     const tip = document.createElementNS(SVGNS, 'title');
     tip.textContent = (b.note ? b.note + ' — ' : '') +
       `${b.u}×${b.v}, ${b.hUnits} units (${b.hUnits * SPEC.unitH} mm)`;
     r.appendChild(tip);
-    if (b.note) {
-      const t3 = el('text', { class: 'bnote', x: cx, y: cy + 25, 'text-anchor': 'middle' });
-      t3.textContent = b.note.length > b.u * 7 ? b.note.slice(0, b.u * 7 - 1) + '…' : b.note;
-      svg.appendChild(t3);
-    }
     if (issues.length) {
       const warn = el('text', { class: 'bwarn', x: b.x * S + 13, y: sy(b.y, b.v) + 20 });
       warn.textContent = '⚠';

@@ -21,6 +21,17 @@
 'use strict';
 
 const DF = {
+  /* Counted things, written the way a person would say them. The bins page carried
+     eleven "bin(s)" and "layer(s)", including one line that managed both "1 bin(s)" and
+     "1 bins" in eleven words — a form nobody says out loud, and the clearest sign that
+     the text was written for the person who already knew what it meant. The baseplates
+     page then turned out to have its own: "4 piece(s)" in the download dialog, "1
+     part(s)" on a plate, and a hand-rolled `n > 1 ? 's' : ''` that said "0 piece". One
+     helper for both tools, so the next count is written properly by default. Irregulars
+     pass their own plural; everything so far takes an s. */
+  plural(n, one, many) {
+    return `${n} ${n === 1 ? one : many || one + 's'}`;
+  },
   /* An STL is an 84-byte header plus 50 bytes a triangle, and a polygon fans into
      verts-2 of them, so the exact file size follows from polygons already in memory. */
   stlBytes(polys) {
