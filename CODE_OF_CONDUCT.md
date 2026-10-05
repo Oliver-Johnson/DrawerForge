@@ -29,7 +29,7 @@ and any space where someone is speaking as part of Drawerforge.
 
 If someone is behaving this way, report it privately rather than arguing in the thread:
 
-- [Open a private report](https://github.com/Oliver-Johnson/Baseplate-Studio/security/advisories/new)
+- [Open a private report](https://github.com/Oliver-Johnson/DrawerForge/security/advisories/new)
   on this repository, or
 - use [GitHub's report abuse form](https://github.com/contact/report-abuse) if the
   behaviour is better handled by GitHub directly.

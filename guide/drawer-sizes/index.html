@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later
+     Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+     GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+     Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+     covered by this licence. The models you make with it are yours. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -17,6 +22,11 @@
 <meta name="twitter:title" content="Drawer Size to Gridfinity Grid: How Many Cells Fit">
 <meta name="twitter:description" content="Reference tables for metric and inch drawers, what to do with the leftover millimetres, and how to check height.">
 <style>
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+ * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+ * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+ * covered by this licence. The models you make with it are yours. */
 :root{
   /* The page is dark and says so. Without this the browser still believes it is
      rendering a light document, so everything it draws itself comes out for a light
@@ -748,14 +758,19 @@ items, is a perfectly good design and uses far less filament.</p>
 
 <footer>
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these tools implement the published profiles.</div>
-  <div style="margin-top:10px">Issues and feature requests <a href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
+  <div style="margin-top:10px">Free software under the <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/LICENSE" rel="noopener">AGPL</a>, and the models you make with it <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/NOTICE" rel="noopener">are yours</a>. <a href="https://github.com/Oliver-Johnson/DrawerForge" rel="noopener">Source code</a>, <a href="https://github.com/Oliver-Johnson/DrawerForge/issues" rel="noopener">issues and feature requests</a> on GitHub. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
   <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL and 3MF output is mm scale.</div>
 </footer>
 <!-- The dismiss control is a sibling of the link, not a child of it: a <button> inside
      an <a> is interactive content inside a link, which is invalid. It also starts
      hidden; chrome.js decides when showing it stops being an interruption. -->
 <div id="kofi" class="kofi" hidden><a href="https://ko-fi.com/oliver_johnson" target="_blank" rel="noopener"><span class="cup">☕</span><span><b>Buy me a coffee</b><i>free and open, no ads, no accounts</i></span></a><button type="button" id="kofiX" title="Hide this" aria-label="Hide the tip jar">×</button></div>
-<script>/* Shared page furniture — runs on every page, tools and prose alike. */
+<script>/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+ * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+ * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+ * covered by this licence. The models you make with it are yours. */
+/* Shared page furniture — runs on every page, tools and prose alike. */
 (function () {
   /* Carry the working state across links that ask for it.
      The guide pages hold no state of their own, so following one and coming back
