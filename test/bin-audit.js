@@ -422,6 +422,10 @@ console.log('\na lid fits the lip it is made for');
  * exactly 2.70 the wall's top inner edge is the lip's base corner as well, which is
  * why burying the cap alone did not close it.
  *
+ * At the thin end, a wall of 0 put the cavity's skin on the outer one — 64 open edges
+ * and shells inside out — and 0.2 still left a carved shape 3; the engine now builds
+ * anything under 0.4 at 0.4. The page accepts 0 because a shared link does.
+ *
  * The range comes from the page's own field, so raising the cap there without the
  * geometry to back it fails here rather than in somebody's slicer. */
 console.log('\nwalls across the whole range the page accepts');
@@ -432,11 +436,11 @@ console.log('\nwalls across the whole range the page accepts');
     return m ? Number(m[1]) : NaN;
   };
   const lo = attr('wall', 'min'), hi = attr('wall', 'max');
-  if (!(lo > 0 && hi > lo)) {
+  if (!(lo >= 0 && hi > lo)) {
     console.log(`  the wall field has no usable min/max (${lo}..${hi}) — the page would accept anything`);
     bad++;
   } else {
-    const walls = [lo, 0.8, 1.2, 2, 2.6, 2.65, 2.69, 2.7, 2.71, 2.75, 3, 3.5, 4, 5, hi]
+    const walls = [lo, 0.1, 0.2, 0.3, 0.4, 0.8, 1.2, 2, 2.6, 2.65, 2.69, 2.7, 2.71, 2.75, 3, 3.5, 4, 5, hi]
       .filter((w, i, a) => w >= lo && w <= hi && a.indexOf(w) === i);
     const SHAPES = [
       ['1x1x1', { u: 1, v: 1, hUnits: 1 }],
@@ -468,6 +472,66 @@ console.log('\nwalls across the whole range the page accepts');
                   (fails.length ? 'FAILED at ' + fails.join('; ') : `${walls.length} walls, all clean`));
       if (fails.length) bad++;
     }
+  }
+}
+
+/* The other limits the page and a shared link share: a floor as thick as the bin is
+   tall, and as many dividers as fit across the inside. Each used to build broken at its
+   edge, so each is built here at the edge of what is allowed. */
+const cleanBuild = (cfg) => {
+  const r = buildBin(G, cfg);
+  const m = G.checkManifold(r.polys), ori = checkOrientation(r.polys);
+  let zmax = -Infinity;
+  for (const p of r.polys) for (const w of p.verts) zmax = Math.max(zmax, w[2]);
+  const H = cfg.hUnits * SPEC.unitH;
+  // nothing but the stacking lip may stand above the bin's own height
+  const lipTop = H + (r.meta.hasLip ? r.meta.lipH : 0) + 0.001;
+  return [m.bad ? `${m.bad} bad edges` : '', ori.ok ? '' : orientationNote(ori),
+          zmax > lipTop ? `${(zmax - lipTop).toFixed(2)} mm above the top` : '']
+    .filter(Boolean).join(', ');
+};
+const sweepReport = (label, rows) => {
+  const fails = rows.map(([name, cfg]) => { const f = cleanBuild(cfg); return f ? `${name}: ${f}` : ''; })
+    .filter(Boolean);
+  console.log(`  ${label.padEnd(34)} ` + (fails.length ? 'FAILED at ' + fails.join('; ') : `${rows.length} builds, all clean`));
+  if (fails.length) bad++;
+};
+const L3 = cellsExcept(2, 2, [[1, 1]]);
+
+console.log('\nfloors up to the bin\'s own height');
+/* A carved bin's wall panels run from the floor up to the top; a floor past the top
+   swept them downwards — inside out, folded, and standing above the lip. */
+for (const hUnits of [1, 3, 6]) {
+  const H = hUnits * SPEC.unitH, cavity = H - SPEC.footH;
+  const floors = [0, cavity - 0.3, cavity - 0.1, cavity, cavity + 0.5, H].filter((f) => f >= 0);
+  for (const [name, base] of [['rectangle', { u: 2, v: 1 }],
+                              ['rectangle, dividers', { u: 2, v: 2, divX: 1, divY: 1 }],
+                              ['rectangle, rails', { u: 2, v: 2, divX: 1, divRemovable: true }],
+                              ['rectangle, scoop + label', { u: 2, v: 1, scoop: H, label: 42 }],
+                              ['L-2x2', { u: 2, v: 2, cells: L3 }],
+                              ['L-2x2, 3 mm walls', { u: 2, v: 2, cells: L3, wall: 3 }]])
+    sweepReport(`${hUnits}u ${name}`, floors.map((floorT) =>
+      [`floor ${floorT.toFixed(2)}`, Object.assign({ hUnits, floorT }, base)]));
+}
+
+console.log('\nas many dividers as the fields allow');
+/* The divider fields stop at what fits across the inside at one wall thickness, never
+   counted thinner than 1.2 mm — the same rule the link uses. At exactly that many,
+   some walls space the dividers exactly one divider apart (4.15 mm in a 1x1, 8.35 in a
+   2x1) or the rails exactly one rail apart (0.95 mm, 0.9 in a 3x1), and neighbours
+   touched face to face. A wall of 0 is counted for a 0 mm wall and built at 0.4, which
+   packs the rails a hair closer than one apart. Those walls are swept along with a
+   spread of ordinary ones. */
+{
+  const most = (n, wall) =>
+    Math.max(0, Math.floor(((n - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall) / Math.max(wall, 1.2)) - 1);
+  for (const n of [1, 2, 3]) {
+    const walls = [0, 0.4, 0.9, 0.95, 1.2, 2, 4.15, 5, 8.35, 10];
+    for (const divRemovable of [false, true])
+      sweepReport(`${n}x1 ${divRemovable ? 'rails' : 'fixed'}`, walls.map((wall) =>
+        [`wall ${wall} x${most(n, wall)}`, { u: n, v: 1, hUnits: 2, wall, divX: most(n, wall), divRemovable }]));
+    sweepReport(`${n}x${n} both ways, rails`, [0, 0.4, 0.95, 1.2, 3].map((wall) =>
+      [`wall ${wall} x${most(n, wall)}`, { u: n, v: n, hUnits: 2, wall, divX: most(n, wall), divY: most(n, wall), divRemovable: true }]));
   }
 }
 

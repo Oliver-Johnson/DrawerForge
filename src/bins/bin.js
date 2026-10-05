@@ -43,6 +43,15 @@ const BLOAT = 0.05;     // shell overlap; never rely on coincident faces
    rather than as two skins with a void between them. */
 const RAIL_T = 1.2, RAIL_D = 1.2;
 
+/* The thinnest wall the engine will build, whatever it is asked for. A wall of 0 puts
+   the cavity's skin exactly on the outer one — the coincident faces this file exists to
+   avoid — and came out with 64 open edges and shells inside out; at 0.2 a carved shape
+   still left 3. 0.4 is one line from a 0.4 mm nozzle, so nothing thinner prints anyway.
+   The page and a shared link both accept walls down to 0, so the floor is kept here,
+   where every way of handing the engine a bin passes, and Checks says when it bites. */
+const WALL_MIN = 0.4;
+const withWall = (c) => Object.assign(c, { wall: isFinite(c.wall) ? Math.max(WALL_MIN, c.wall) : BIN_DEFAULTS.wall });
+
 // Everything buildBin reaches for through G. The bins UI checks itself against this
 // at load; keep it in step when a new primitive is used.
 const REQUIRED_CORE = ['makePoly', 'triangulateRing', 'extrudePoly', 'clampZ', 'profilePrism',
@@ -750,7 +759,7 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
  * the split.
  */
 function dividerPart(G, cfg, axis) {
-  const c = Object.assign({}, BIN_DEFAULTS, cfg);
+  const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const iw = hw - c.wall, id = hd - c.wall;
@@ -868,7 +877,7 @@ function lidPart(G, cfg) {
 }
 
 function buildBin(G, cfg) {
-  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg || {}));
   const n = c.arcSegs;
   const H = c.hUnits * SPEC.unitH;
   if (H <= SPEC.footH + 0.5)
@@ -925,7 +934,15 @@ function buildBin(G, cfg) {
        assume a rectangle and are left off rather than guessed at. The stacking lip is
        not one of them: it rides on the wall panels, so a carved bin still stacks. */
     const zTop = (c.solid || floorZ >= H - 0.2) ? H : H;
-    polys.push(...carvedBody(G, c, mask, H, c.solid ? H - 0.01 : floorZ, zTop,
+    /* A floor at or past the top is held a quarter of a millimetre under it. The panels
+       run from the floor up to the top, so one starting above the top was a wall swept
+       downwards — shells inside out and folded back on themselves, and with the floor as
+       thick as the bin is tall the cell slabs stood 0.85 mm above the top of the lip —
+       and one starting a tenth below it left 40 open edges. A rectangle's body goes
+       solid instead, but here the panels are what carry the stacking lip, so they keep
+       a sliver of wall to stand on. */
+    const carvedFloor = c.solid ? H - 0.01 : Math.min(floorZ, H - 0.25);
+    polys.push(...carvedBody(G, c, mask, H, carvedFloor, zTop,
                              c.solid ? null : lipSteps));
   } else if (c.solid || floorZ >= H - 0.2) {
     polys.push(...G.extrudePoly(outer, bodyBase - BLOAT, H));
@@ -982,37 +999,45 @@ function buildBin(G, cfg) {
      * between them are the same slot made out of added material.
      */
     const t = c.wall / 2;
-    const rails = (centre, along) => {
-      /* `along` is the axis the divider plane runs along: 'y' for a divider standing at
-         a fixed x. The rails sit on the two walls that face each other across it. */
-      const half = c.divT / 2 + c.divClr;          // inner face of each rail
-      const outer = half + RAIL_T;
-      const ends = along === 'y' ? [[-id, -id + RAIL_D], [id - RAIL_D, id]]
-                                 : [[-iw, -iw + RAIL_D], [iw - RAIL_D, iw]];
-      for (const [a, b] of ends)
-        for (const [lo, hi] of [[-outer, -half], [half, outer]]) {
-          const rect = along === 'y'
-            ? [[centre + lo, a - BLOAT], [centre + hi, a - BLOAT],
-               [centre + hi, b], [centre + lo, b]]
-            : [[a - BLOAT, centre + lo], [b, centre + lo],
-               [b, centre + hi], [a - BLOAT, centre + hi]];
-          polys.push(...G.extrudePoly(rect, floorZ - BLOAT, H));
-        }
+    const slot = c.divT / 2 + c.divClr;            // inner face of each rail: the slot
+    const rail = slot + RAIL_T;                    // outer face of each rail
+    /* Where the dividers of one direction cross the cavity, as spans of the axis they
+       stand on — a fixed divider is one span, a removable one the two rails either side
+       of its slot — merged wherever two meet. Packed as closely as the divider fields
+       allow, neighbours did meet: at the most dividers that fit, a wall of 4.15 mm put
+       fixed ones exactly side by side and a spacing of 1.2 mm put one rail's face on its
+       neighbour's, and two shells face to face cost 24 to 1616 edges used four times. A
+       span that runs into the next is one prism, so there is no face between them to
+       coincide; at any sensible count nothing meets and nothing changes. */
+    const spans = (n, inner) => {
+      const out = [];
+      for (let k = 1; k <= n; k++) {
+        const p = -inner + (2 * inner) * k / (n + 1);
+        if (c.divRemovable) out.push([p - rail, p - slot], [p + slot, p + rail]);
+        else out.push([p - t, p + t]);
+      }
+      out.sort((a, b) => a[0] - b[0]);
+      const merged = [];
+      for (const [lo, hi] of out) {
+        const last = merged[merged.length - 1];
+        if (last && lo <= last[1] + BLOAT) last[1] = Math.max(last[1], hi);
+        else merged.push([lo, hi]);
+      }
+      return merged;
     };
-    for (let k = 1; k <= c.divX; k++) {
-      const x = -iw + (2 * iw) * k / (c.divX + 1);
-      if (c.divRemovable) { rails(x, 'y'); continue; }
-      polys.push(...G.extrudePoly(
-        [[x - t, -id - BLOAT], [x + t, -id - BLOAT], [x + t, id + BLOAT], [x - t, id + BLOAT]],
-        floorZ - BLOAT, H));
-    }
-    for (let k = 1; k <= c.divY; k++) {
-      const y = -id + (2 * id) * k / (c.divY + 1);
-      if (c.divRemovable) { rails(y, 'x'); continue; }
-      polys.push(...G.extrudePoly(
-        [[-iw - BLOAT, y - t], [iw + BLOAT, y - t], [iw + BLOAT, y + t], [-iw - BLOAT, y + t]],
-        floorZ - BLOAT, H));
-    }
+    /* Across the cavity for a fixed divider, from wall to wall and BLOAT into each; for a
+       removable one, a rail's depth out from each of the two walls the plate slides
+       between, again BLOAT into the wall. The far rail used to stop exactly on the wall's
+       inner face, the near one BLOAT inside its wall; both now reach in. */
+    const reach = (inner) => (c.divRemovable
+      ? [[-inner - BLOAT, -inner + RAIL_D], [inner - RAIL_D, inner + BLOAT]]
+      : [[-inner - BLOAT, inner + BLOAT]]);
+    for (const [a, b] of spans(c.divX, iw))
+      for (const [lo, hi] of reach(id))
+        polys.push(...G.extrudePoly([[a, lo], [b, lo], [b, hi], [a, hi]], floorZ - BLOAT, H));
+    for (const [a, b] of spans(c.divY, id))
+      for (const [lo, hi] of reach(iw))
+        polys.push(...G.extrudePoly([[lo, a], [hi, a], [hi, b], [lo, b]], floorZ - BLOAT, H));
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */
