@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+ * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+ * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+ * covered by this licence. The models you make with it are yours. */
 /* Drawerforge Bins UI. Core geometry and buildBin are in scope from the previous
    script tags (both end with a module.exports guard, so in the browser their
    functions land as globals). */
@@ -488,7 +493,8 @@ function discardScratch() {
   readControls(); drawLayerTabs(); drawMap(); refresh();
 }
 $('focusBin').addEventListener('click', enterFocus);
-for (const id of ['scratchBin', 'scratchBinMap']) $(id).addEventListener('click', startScratch);
+for (const id of ['scratchBin', 'scratchBinMap', 'scratchBinTop'])
+  $(id).addEventListener('click', startScratch);
 $('scratchAdd').addEventListener('click', addScratchToDrawer);
 $('scratchDrop').addEventListener('click', discardScratch);
 $('focusExit').addEventListener('click', () => leaveFocus());

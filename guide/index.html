@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later
+     Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+     GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+     Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+     covered by this licence. The models you make with it are yours. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -17,6 +22,11 @@
 <meta name="twitter:title" content="Gridfinity for Drawers: Measuring and Bin Heights">
 <meta name="twitter:description" content="Measuring a drawer, splitting a baseplate too big for your bed, choosing a joint, and which bin heights actually fit.">
 <style>
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+ * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+ * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+ * covered by this licence. The models you make with it are yours. */
 :root{
   /* The page is dark and says so. Without this the browser still believes it is
      rendering a light document, so everything it draws itself comes out for a light
@@ -305,6 +315,11 @@ footer .mono{font-family:var(--mono);font-size:11px}
 
 /* ---- cross-tool navigation ---- */
 header nav{display:flex;gap:6px;margin-top:14px}
+header .quickstart{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+header .quickstart span{font-size:11.5px;color:var(--dim);max-width:52ch}
+/* Already designing one bin, so the way in is noise -- the way OUT is what the focus bar
+   is for. Hidden by the same class that hides everything else focus takes away. */
+body.binfocus header .quickstart{display:none}
 header nav a{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
   padding:7px 15px;border:1px solid var(--line);border-radius:6px;color:var(--dim);
   text-decoration:none;background:var(--panel2);transition:color .12s,border-color .12s}
@@ -470,6 +485,11 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
    where the layout is already one column, so the desktop rail keeps its density. */
 @media(max-width:980px){
   header .privacy{font-size:12px}
+  /* The button says what it does; the sentence beside it is a desktop luxury. On a phone
+     it wrapped to three lines of 11.5px text, which failed the 12px floor this block
+     exists to enforce AND pushed the drawer map below the fold -- the exact regression
+     on-screen.spec.js was written to catch. The way in stays; only the gloss goes. */
+  header .quickstart span{display:none}
   header nav a{font-size:12px;padding:0 16px;min-height:40px;display:flex;align-items:center}
   section.p>h2{font-size:12px;padding:13px}
   /* the padding is the button's when there is one, or the tap target is the text only.
@@ -832,14 +852,19 @@ can come back to it later.</p>
 
 <footer>
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these tools implement the published profiles.</div>
-  <div style="margin-top:10px">Issues and feature requests <a href="https://github.com/Oliver-Johnson/Baseplate-Studio/issues" rel="noopener">on GitHub</a>. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
+  <div style="margin-top:10px">Free software under the <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/LICENSE" rel="noopener">AGPL</a>, and the models you make with it <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/NOTICE" rel="noopener">are yours</a>. <a href="https://github.com/Oliver-Johnson/DrawerForge" rel="noopener">Source code</a>, <a href="https://github.com/Oliver-Johnson/DrawerForge/issues" rel="noopener">issues and feature requests</a> on GitHub. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
   <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL and 3MF output is mm scale.</div>
 </footer>
 <!-- The dismiss control is a sibling of the link, not a child of it: a <button> inside
      an <a> is interactive content inside a link, which is invalid. It also starts
      hidden; chrome.js decides when showing it stops being an interruption. -->
 <div id="kofi" class="kofi" hidden><a href="https://ko-fi.com/oliver_johnson" target="_blank" rel="noopener"><span class="cup">☕</span><span><b>Buy me a coffee</b><i>free and open, no ads, no accounts</i></span></a><button type="button" id="kofiX" title="Hide this" aria-label="Hide the tip jar">×</button></div>
-<script>/* Shared page furniture — runs on every page, tools and prose alike. */
+<script>/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+ * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+ * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+ * covered by this licence. The models you make with it are yours. */
+/* Shared page furniture — runs on every page, tools and prose alike. */
 (function () {
   /* Carry the working state across links that ask for it.
      The guide pages hold no state of their own, so following one and coming back
