@@ -223,27 +223,22 @@ const toInches = async (page) => {
   await page.waitForTimeout(150);
 };
 
-/* For a page just opened after the switch. In CI a page has now and then opened in
-   millimetres straight after it, on builds that pass again on a re-run, although the
-   unit had been stored before the test moved on. The unit is written by one page and
-   read through the browser's storage by the next, which hands a write on
-   asynchronously, so this reloads until the page sees the stored unit. A unit that is
-   never shared still fails, and the failure says what was stored. */
-async function opensInInches(page) {
-  await expect.poll(async () => {
-    await page.waitForFunction(() => typeof hashReady !== 'undefined' && hashReady);
-    const seen = await page.evaluate((k) => [
-      document.getElementById('unitIn').getAttribute('aria-pressed'),
-      localStorage.getItem(k)].join(' / stored '), UNIT_KEY);
-    if (seen !== 'true / stored in') await page.reload();
-    return seen;
-  }, { timeout: 20000, intervals: [500, 1000, 2000] }).toBe('true / stored in');
-}
+/* The two tests below take the unit from one page to the next, so they run on a real
+   origin, as the site does: from file:// pages the CI browser has now and then opened
+   the next page with the stored unit missing. See H.serveRoot. */
+let site;
+test.beforeAll(async () => { site = await H.serveRoot(); });
+test.afterAll(() => site.close());
+const platesOver = async (page) => {
+  await page.goto(site.base);
+  await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail')?.textContent || ''),
+                             null, { timeout: 30000 });
+};
+const booted = (page) => page.waitForFunction(() => typeof hashReady !== 'undefined' && hashReady);
 
 test('baseplates: 12 in is 304.8 mm to the model and the link, and 12 in again on reload',
   async ({ page }) => {
-    await H.forgetSaved(page);
-    await H.openPlates(page);
+    await platesOver(page);
     await toInches(page);
     await expect(page.locator('label:has(#drawerW) b')).toHaveText('Drawer width (in)');
     await H.setField(page, 'drawerW', '12');
@@ -257,9 +252,10 @@ test('baseplates: 12 in is 304.8 mm to the model and the link, and 12 in again o
     // the unit is remembered on the device, and the link's millimetres shown in it
     await page.goto('about:blank');
     await page.goto(link);
-    await opensInInches(page);
+    await booted(page);
     expect(await page.inputValue('#drawerW')).toBe('12');
     expect(await page.evaluate(() => state.drawerW)).toBe(304.8);
+    await expect(page.locator('#unitIn')).toHaveAttribute('aria-pressed', 'true');
   });
 
 /* Looking at a drawer in another unit must not change it. 306 mm is 12.047 in, shown
@@ -385,11 +381,12 @@ test('bins: the drawer is typed in inches, the height and front too', async ({ p
 
 test('one unit for both tools: inches picked on one page are inches on the other',
   async ({ page }) => {
-    await H.forgetSaved(page);
-    await H.openPlates(page);
+    await platesOver(page);
     await toInches(page);
-    await toBins(page);
-    await opensInInches(page);
+    await page.click('#navBins');                // the header link, as a visitor goes
+    await page.waitForURL(/\/bins\/#/);
+    await booted(page);
+    await expect(page.locator('#unitIn')).toHaveAttribute('aria-pressed', 'true');
     expect(await page.inputValue('#drawerW')).toBe('12.05');
     expect(await page.evaluate(() => state.drawerW)).toBe(306);
   });
