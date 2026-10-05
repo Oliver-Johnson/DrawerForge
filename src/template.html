@@ -248,6 +248,13 @@
 <div class="stagecard">
   <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
   <div id="mapwrap"><svg id="cutmap" role="img" aria-label="Cut map, loading"></svg></div>
+  <!-- Under the map because the map is where the stray click happens: one click on a grid
+       line switches the whole split to Manual. They cover every setting on the page, not
+       just the cuts — the panels are a click away from here, the reverse is not. -->
+  <div class="row" style="padding:0 14px 10px">
+    <button type="button" class="ghost" id="undoBtn" disabled title="Undo (Ctrl+Z)" aria-keyshortcuts="Control+Z">Undo</button>
+    <button type="button" class="ghost" id="redoBtn" disabled title="Redo (Ctrl+Shift+Z)" aria-keyshortcuts="Control+Shift+Z Control+Y">Redo</button>
+  </div>
   <div id="warnings"></div>
 </div>
 

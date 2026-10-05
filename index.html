@@ -873,6 +873,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
 <div class="stagecard">
   <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
   <div id="mapwrap"><svg id="cutmap" role="img" aria-label="Cut map, loading"></svg></div>
+  <!-- Under the map because the map is where the stray click happens: one click on a grid
+       line switches the whole split to Manual. They cover every setting on the page, not
+       just the cuts — the panels are a click away from here, the reverse is not. -->
+  <div class="row" style="padding:0 14px 10px">
+    <button type="button" class="ghost" id="undoBtn" disabled title="Undo (Ctrl+Z)" aria-keyshortcuts="Control+Z">Undo</button>
+    <button type="button" class="ghost" id="redoBtn" disabled title="Redo (Ctrl+Shift+Z)" aria-keyshortcuts="Control+Shift+Z Control+Y">Redo</button>
+  </div>
   <div id="warnings"></div>
 </div>
 
@@ -3812,7 +3819,10 @@ function plateStyleHint() {
 }
 
 // ---------- layout & validation ----------
-function recomputeLayout() {
+/* `ev` is the input or change event when a field called this directly — the undo
+   history uses it to tell typing apart from a discrete edit. Every other caller passes
+   nothing, and each of those is a discrete edit. */
+function recomputeLayout(ev) {
   readControls();
   layout = computeLayout(state);
   // clamp stored manual cuts to the current grid
@@ -3827,6 +3837,7 @@ function recomputeLayout() {
   /* Here rather than in readControls: this is where a change has settled into a layout,
      and readControls also runs on paths that are only reading the panel back. */
   rememberState();
+  noteDesignChange(ev);
 }
 
 /* The bed room a piece actually needs: its plate, plus the dovetail tabs that stick
@@ -5154,6 +5165,119 @@ function loadFromHash(src) {
   $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
 }
 const bedNow = () => [+$('bedW').value, +$('bedD').value, +$('bedH').value];
+
+/* ---------- undo -----------------------------------------------------------
+ * Bins has had Undo since it shipped and this page had none, so a stray click on the
+ * cut map — one click on a grid line switches the whole split to Manual — or a figure
+ * typed into the wrong field could only be put back by remembering what it was.
+ *
+ * Each step is the serialised design: the string the share link and the local save
+ * already carry. So "what undo restores" and "what a link reproduces" are the same
+ * thing by construction, and a setting added to the link is undoable without anyone
+ * remembering to make it so. What the link leaves out — the print plan's spacing and
+ * stacking, the exploded view — is how the job is laid out or looked at, not what is
+ * being made, and undo leaves it alone for the reason bins' undo leaves the drawer
+ * walls alone: it should never move something you did not just change.
+ *
+ * Recorded from recomputeLayout, which every design change already passes through,
+ * rather than pushed from each handler. Bins pushes per handler, and the one handler
+ * that forgot (drawing a new bin) shipped with an Undo that did nothing; here there is
+ * no handler to forget.
+ *
+ * Typing is coalesced. Every keystroke in a number field is an input event and a full
+ * recompute, so one step per event made "306" to "512" three undos with two designs
+ * nobody asked for in between. A run of typing in one field is one step, and it ends
+ * when the field commits — its change event, which is leaving it or pressing Enter — or
+ * when anything else changes the design.
+ *
+ * Not a timer. "Keystrokes under a second apart" was the first version, and it split a
+ * typed number into several steps whenever a build was running: each piece is built in
+ * one synchronous slice of CSG that can hold the page for longer than that, the next
+ * keystroke is only seen once it lets go, and so the gap between two keys typed a
+ * quarter of a second apart measured as two seconds. The field's own commit is the
+ * boundary the person actually drew. */
+const undoStack = [], redoStack = [];
+const UNDO_MAX = 60;          // the same depth bins keeps
+let undoNow = null;           // the design on screen: what the next step moves away from
+let typing = null;            // id of the field whose run of typing is still open
+let undoApplying = false;
+const designNow = () => encodeDesc(descriptor());
+
+function noteDesignChange(ev) {
+  const now = designNow();
+  // the first call is the page arriving, and arriving is not an edit
+  if (undoNow === null || undoApplying) { undoNow = now; updateUndoButtons(); return; }
+  // the field committing ends its run of typing, even when the value did not move
+  if (ev && ev.type === 'change') typing = null;
+  if (now === undoNow) return;
+  const el = ev && ev.type === 'input' ? ev.target : null;
+  const typed = !!el && el.tagName === 'INPUT' && (el.type === 'number' || el.type === 'text');
+  const sameRun = typed && typing === el.id;
+  if (!sameRun) {
+    undoStack.push(undoNow);
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+  } else if (undoStack[undoStack.length - 1] === now) {
+    /* The run has typed its way back to where it started — most often the browser's own
+       field undo, which Ctrl+Z inside a field is left to (see the keydown handler). The
+       entry it opened now describes no change, and an Undo that visibly does nothing is
+       the kind that teaches people the button is broken, so it goes. */
+    undoStack.pop();
+    typing = null;
+    undoNow = now;
+    updateUndoButtons();
+    return;
+  }
+  redoStack.length = 0;
+  typing = typed ? el.id : null;
+  undoNow = now;
+  updateUndoButtons();
+}
+
+/* Through loadFromHash, the same road a link or a reload takes, so a step cannot come
+   back differently from the way a shared link of it would. The cuts are cleared first
+   because loadFromHash only writes them for a manual split, and a step back from Manual
+   to Balanced would otherwise keep serialising cuts the layout is no longer using. */
+function applyDesign(h) {
+  undoApplying = true;
+  try {
+    state.rowCuts = null; state.colCuts = null;
+    loadFromHash(h);
+    recomputeLayout();
+  } finally {
+    undoApplying = false;
+    typing = null;
+  }
+}
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(designNow());
+  applyDesign(undoStack.pop());
+  updateUndoButtons();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(designNow());
+  applyDesign(redoStack.pop());
+  updateUndoButtons();
+}
+function updateUndoButtons() {
+  $('undoBtn').disabled = !undoStack.length;
+  $('redoBtn').disabled = !redoStack.length;
+}
+$('undoBtn').addEventListener('click', undo);
+$('redoBtn').addEventListener('click', redo);
+/* The same keys as bins, and the same rule about where they apply: not while focus is in
+   a field. There Ctrl+Z belongs to the field — it takes back the last few characters you
+   typed, which is what anyone pressing it mid-number means — and the run-of-typing logic
+   above tidies up after it. Everywhere else, including a button you just clicked, it is
+   the design's. */
+document.addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+});
 
 // ---------- wiring ----------
 /* The handler is on the <button> inside the header, not on the <h2>.
