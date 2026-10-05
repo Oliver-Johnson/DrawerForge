@@ -795,6 +795,19 @@ items, is a perfectly good design and uses far less filament.</p>
       location.href = a.getAttribute('href') + location.hash;
     });
 
+  /* Skip links move focus and leave the address alone. Followed the ordinary way, one
+     put #stage in the address bar where the tools keep the layout, and a hash change
+     reloads both tools — so the first thing Tab reaches wiped the drawer on screen and
+     then the save behind it. The target takes focus (tabindex="-1"), and focusing it
+     scrolls it into view, which is all the jump was for. */
+  for (const s of document.querySelectorAll('a.skip'))
+    s.addEventListener('click', function (e) {
+      var t = document.getElementById((s.getAttribute('href') || '').slice(1));
+      if (!t) return;
+      e.preventDefault();
+      t.focus();
+    });
+
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
      described controls that do not exist there. Rewritten rather than removed: the
      gestures are still worth naming, they are just different ones. Matching on

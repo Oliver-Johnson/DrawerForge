@@ -2580,6 +2580,10 @@ const saveLocal = (h) => {
                    an exception that stops the page working */ }
 };
 const readLocal = () => { try { return localStorage.getItem(SAVE_KEY) || ''; } catch (err) { return ''; } };
+/* Only a fragment that carries settings is a layout. The page has fragments of its own —
+   the skip link's #stage — and one arriving as if it were a shared link loaded nothing,
+   then saved the empty default over the drawer this browser had kept. */
+const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
   location.href = location.origin + location.pathname;   // drop the hash and reload clean
@@ -2747,7 +2751,7 @@ document.addEventListener('keydown', (e) => {
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
-if (incomingHash.length > 2) loadFromHash();
+if (isLayoutHash(incomingHash)) loadFromHash();
 else {
   const saved = readLocal();
   if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; }
@@ -2936,6 +2940,9 @@ if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);
    Before local saving that was merely confusing; now it means a shared layout loses to
    whatever this browser had stored, which is the one case that must never happen.
    Reloading applies the link. replaceState does not fire this event, so the saves this
-   page makes every few seconds cannot trigger it. */
-addEventListener('hashchange', () => location.reload());
+   page makes every few seconds cannot trigger it. A fragment with no settings in it is
+   an anchor, not a link to a drawer, and reloading for one threw the drawer away. */
+addEventListener('hashchange', () => {
+  if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
+});
 
