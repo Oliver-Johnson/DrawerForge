@@ -4744,6 +4744,8 @@ function drawMap() {
   const svg = $('cutmap');
   const pitch = state.pitch;
   const Wmm = state.drawerW, Dmm = state.drawerD;
+  // first, because it is in the heading the map's height is measured against
+  $('mapTail').textContent = `${layout.nx} × ${layout.ny} cells · ${plural(layout.pieces.length, 'piece')}`;
   /* Beside the preview or above it, by the bins map's rules and through the same
      helper (see DF.stageRow in widgets.js for the two traps it exists to avoid). A
      drawer more than 1.15 times as wide as it is deep keeps the whole stage width, as
@@ -4765,14 +4767,41 @@ function drawMap() {
   const row = DF.stageRow(top, $('stage'));
   const availW = Math.min(680 * row.big,
                           row.two ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30);
-  const sc = Math.max(0.05, Math.min(availW / (Wmm + 90), 460 * row.big / (Dmm + 90)));
+  /* The height is also held to the stage you can see, as the bins map's is. Paired, the
+     preview is as tall as this card, so with the Undo row under the map a 768 px window
+     put the bottom of both 15 px under the window. The heading above the map and the
+     Undo row below it are measured; the warnings are left out, because they come and
+     go with the design, and a map that changed size as they did would be worse than a
+     warning you scroll to. Below the map is measured down to the top of the warnings,
+     not to the bottom of the card: paired, the card is stretched to the row, so its
+     bottom is wherever the last draw left the preview. Never under 300 px: a short
+     window scrolls a little rather than shrinking the thing you click cut lines on. The
+     82 is the map's own margin, oy above the drawer and 56 below it, and the 1 the
+     card's bottom border.
+     It is sized twice when paired. stageRow has just taken the columns away to ask how
+     many there are, so the first measure is of a card the whole row wide; paired, the
+     card is half that, and its heading wraps onto a second line that the first measure
+     never saw. */
+  const chrome = () => {
+    const sr = svg.getBoundingClientRect();
+    return (sr.top - top.getBoundingClientRect().top)
+         + ($('warnings').getBoundingClientRect().top - sr.bottom) + 1;
+  };
   const ox = 58, oy = 26;
+  let sc, w, h;
+  const size = (fixed) => {
+    sc = Math.max(0.05, Math.min(availW / (Wmm + 90), 460 * row.big / (Dmm + 90),
+                                 (Math.max(300, row.room - fixed) - 82) / Math.max(1, Dmm)));
+    w = ox + Wmm * sc + 34; h = oy + Dmm * sc + 56;
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    svg.setAttribute('width', w); svg.setAttribute('height', h);
+    if (row.two) DF.pairColumns(top, w + 30, PREVIEW_MIN);
+  };
+  const fixed = chrome();
+  size(fixed);
+  if (row.two) { const paired = chrome(); if (paired > fixed) size(paired); }
   const X = (mm) => ox + mm * sc;
   const Y = (mm) => oy + (Dmm - mm) * sc;     // front of drawer at the bottom
-  const w = ox + Wmm * sc + 34, h = oy + Dmm * sc + 56;
-  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-  svg.setAttribute('width', w); svg.setAttribute('height', h);
-  if (row.two) DF.pairColumns(top, w + 30, PREVIEW_MIN);
   let s = '';
   const gx0 = layout.mL, gy0 = layout.mF;
   /* Past the cap the map draws the drawer and nothing inside it. A 238 × 238 grid is
@@ -4851,7 +4880,6 @@ function drawMap() {
      + `<text x="${dx-6}" y="${Y(Dmm/2)}" text-anchor="middle" font-size="11" transform="rotate(-90 ${dx-6} ${Y(Dmm/2)})">${Dmm} mm</text>`;
   s += `<text x="${X(Wmm/2)}" y="${h-6}" text-anchor="middle" font-size="10">▾ front of drawer</text>`;
   svg.innerHTML = s;
-  $('mapTail').textContent = `${layout.nx} × ${layout.ny} cells · ${plural(layout.pieces.length, 'piece')}`;
   /* Both units with inches on, millimetres first. The grid is millimetres by nature —
      42 mm cells — and that is the number the rest of the page and every download quote,
      so it stays; the inches are there to hold against the tape measure the drawer was
