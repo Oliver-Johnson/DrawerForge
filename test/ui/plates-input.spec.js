@@ -239,7 +239,7 @@ test.describe('the download dialog', () => {
     // twenty-odd rows, and off the bottom of the dialog
     const g = await page.locator('#exFiles .exgroup')
       .filter({ hasText: /print these first/i }).boundingBox();
-    const body = await page.locator('.sheetbody').boundingBox();
+    const body = await page.locator('#exportDlg .sheetbody').boundingBox();
     expect(g.y).toBeGreaterThanOrEqual(body.y);
     expect(g.y + g.height).toBeLessThanOrEqual(body.y + body.height);
   });
@@ -264,7 +264,7 @@ test.describe('the download dialog', () => {
      or which one you wanted. Asserted on the prose rather than the whole dialog, or the
      file metas would satisfy it. */
   test('it says what the two formats are for', async ({ page }) => {
-    const notes = (await page.locator('.sheetbody > .exnote').allTextContents()).join(' ');
+    const notes = (await page.locator('#exportDlg .sheetbody > .exnote').allTextContents()).join(' ');
     expect(notes).toMatch(/3MF/);
     expect(notes).toMatch(/STL/);
     expect(notes).toMatch(/arranged on the bed/i);
