@@ -103,10 +103,10 @@ test('a reload straight after the hand-over is still the drawer that was handed 
   });
 
 /* The page saves 400 ms after a change, and a page being reloaded runs on until the new
-   one arrives. On a slow connection that save lands after the reload has taken the
-   address from before it, and the page used to come back unsaved. The server is slowed
-   here so the save always lands in that gap. */
-test('a reload that the last save overtakes is still the drawer', async ({ page }) => {
+   one arrives. On a slow connection that save landed after the reload had taken the
+   address from before it, and the page came back unsaved. The server is slowed here so
+   the save would always land in that gap. */
+test('a reload started before the last save is still the drawer', async ({ page }) => {
   const errors = await openPlates(page);
   await saveAs(page, 'Kitchen');
   await toBins(page);
@@ -122,6 +122,37 @@ test('a reload that the last save overtakes is still the drawer', async ({ page 
   await page.reload();
   await binsReady(page);
   await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+  expect(errors).toEqual([]);
+});
+
+/* A link copied from the page is the design as it was then. Opened after a later change
+   has been saved, it is an older design than the drawer's, and opening it as the drawer
+   would save it over that change. */
+test('a link copied before the last change does not open as the drawer', async ({ page, context }) => {
+  const errors = await openPlates(page);
+  await saveAs(page, 'Kitchen');
+  await H.setField(page, 'drawerW', '410');
+  await settle(page);
+  const link = page.url();
+  await H.setField(page, 'drawerW', '420');
+  await settle(page);
+
+  // in a new tab, which has only the device's record of the drawer
+  const other = await context.newPage();
+  other.on('pageerror', (e) => errors.push(String(e)));
+  await other.goto(link);
+  await platesReady(other);
+  await expect(other.locator('#drawerName')).toHaveText('not saved');
+  await settle(other);
+  await other.close();
+
+  // and in this tab, which has its own
+  await page.goto('about:blank');
+  await page.goto(link);
+  await platesReady(page);
+  await expect(page.locator('#drawerName')).toHaveText('not saved');
+  await settle(page);
+  expect((await stored(page)).Kitchen.w, 'the later change is still in the drawer').toBe('420');
   expect(errors).toEqual([]);
 });
 

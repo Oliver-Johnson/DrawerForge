@@ -1565,7 +1565,9 @@ function startFresh() {
 function rememberState() {
   if (!hashReady) return;
   clearTimeout(hashSaveT);
+  addEventListener('beforeunload', dropSave);
   hashSaveT = setTimeout(() => {
+    removeEventListener('beforeunload', dropSave);
     const h = encodeDesc(descriptor());
     try { history.replaceState(null, '', '#' + h); }
     catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
@@ -1573,6 +1575,17 @@ function rememberState() {
     saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
     drawers.wrote(h);   // and into the saved drawer this is, if it is one
   }, 400);
+}
+/* A reload takes the address as it stands when it starts, and the page runs on until the
+   new one arrives. A save still waiting would land in that gap and record in the saved
+   drawer a design the reloaded page did not arrive with, and the page came back unsaved.
+   So a save still waiting when the page starts to go is dropped: the change it held is in
+   neither the address nor the drawer, and the page comes back as both have it. The
+   listener is there only while a save waits, because some browsers keep no page that
+   listens for beforeunload in the back-forward cache. */
+function dropSave() {
+  clearTimeout(hashSaveT);
+  removeEventListener('beforeunload', dropSave);
 }
 function shareLink() {
   return location.origin + location.pathname + '#' + encodeDesc(descriptor());
