@@ -1767,13 +1767,25 @@ function updateUndoButtons() {
 $('undoBtn').addEventListener('click', undo);
 $('redoBtn').addEventListener('click', redo);
 /* The same keys as bins, and the same rule about where they apply: not while focus is in
-   a field. There Ctrl+Z belongs to the field — it takes back the last few characters you
-   typed, which is what anyone pressing it mid-number means — and the run-of-typing logic
-   above tidies up after it. Everywhere else, including a button you just clicked, it is
-   the design's. */
+   a field you type in. There Ctrl+Z belongs to the field — it takes back the last few
+   characters you typed, which is what anyone pressing it mid-number means — and the
+   run-of-typing logic above tidies up after it. Everywhere else, including a button you
+   just clicked, it is the design's.
+   A field you type in, not every form control. The rule used to be every <input> and
+   <select>, and focus stays on a list after you pick from it and on a box after you tick
+   it, so Ctrl+Z straight after choosing a joint or ticking Magnets did nothing at all —
+   neither has an undo of its own for the shortcut to be left to. The types below are
+   the inputs that take no typing; anything else, including a type a newer browser adds,
+   is treated as text, which errs towards leaving the key alone.
+   And not while a dialog is open. The design behind it is not what you are working on:
+   Ctrl+Z on a button in the Drawers dialog took back a step of the design out of sight,
+   and that dialog's Save then stored the design as it was a step before. */
+const UNTYPED = new Set(['checkbox', 'radio', 'range', 'color', 'file',
+                         'button', 'submit', 'reset', 'image']);
+const typesText = (t) => !!t && (t.isContentEditable || t.tagName === 'TEXTAREA' ||
+                                 (t.tagName === 'INPUT' && !UNTYPED.has(t.type)));
 document.addEventListener('keydown', (e) => {
-  const t = e.target;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+  if (typesText(e.target) || document.querySelector('dialog[open]')) return;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }

@@ -219,6 +219,64 @@ test('Ctrl+Z inside a field is left to the field', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+/* Only a field you type in has an undo of its own to leave Ctrl+Z to. Focus stays on a
+   list after you pick from it and on a box after you tick it, and the shortcut used to
+   stand aside for every <input> and <select> alike — so Ctrl+Z straight after choosing a
+   joint or ticking Magnets did nothing at all. */
+test('Ctrl+Z straight after picking from a list or ticking a box takes it back',
+  async ({ page }) => {
+    const errors = await H.openPlates(page);
+    const original = await design(page);
+
+    await page.locator('#connector').focus();
+    await page.selectOption('#connector', 'puzzle');
+    await settle(page);
+    expect(await design(page)).not.toBe(original);
+    expect(await page.evaluate(() => document.activeElement.id),
+      'fixture: focus is still on the list').toBe('connector');
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect(await design(page), 'Ctrl+Z on the list took back the pick').toBe(original);
+    expect(await page.inputValue('#connector')).toBe('dovetail');
+
+    await page.locator('#magnets').check();
+    await settle(page);
+    expect(await page.evaluate(() => document.activeElement.id),
+      'fixture: focus is on the box').toBe('magnets');
+    await page.keyboard.press('Control+z');
+    await settle(page);
+    expect(await page.isChecked('#magnets'), 'Ctrl+Z on the box took back the tick').toBe(false);
+    expect(await design(page)).toBe(original);
+    expect(errors).toEqual([]);
+  });
+
+/* A dialog has the keyboard, and the design behind it is not what is being worked on.
+   Ctrl+Z on one of the Drawers dialog's buttons took back a step of the design out of
+   sight underneath it, and the dialog's own Save then stored the design as it was one
+   step before. */
+test('Ctrl+Z with a dialog open leaves the design behind it alone', async ({ page }) => {
+  const errors = await H.openPlates(page);
+  await H.setField(page, 'drawerW', '500');           // a step there to be undone
+  const wider = await design(page);
+
+  await page.locator('#drawersBtn').click();
+  await expect(page.locator('#drawersDlg')).toBeVisible();
+  await page.locator('#drawersClose').focus();        // a button in it, not a field
+  await page.keyboard.press('Control+z');
+  await settle(page);
+  expect(await design(page), 'the design behind the dialog was undone').toBe(wider);
+  await expect(redoBtn(page), 'and no step of it was spent').toBeDisabled();
+
+  // closed again, the shortcut is the design's as it was
+  await page.locator('#drawersClose').click();
+  await expect(page.locator('#drawersDlg')).toBeHidden();
+  await page.locator('#undoBtn').focus();
+  await page.keyboard.press('Control+z');
+  await settle(page);
+  expect(await page.inputValue('#drawerW')).toBe('306');
+  expect(errors).toEqual([]);
+});
+
 /* The page keeps the design in the address bar with replaceState. Undo goes through the
    same save, and it must not be the thing that starts filling the back button with
    entries — leaving the tool would then take one press per undo. */
