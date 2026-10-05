@@ -87,6 +87,10 @@ async function saveAs(page, name) {
   await expect(page.locator('#drawerName')).toHaveText(name);
 }
 const listed = (page) => page.$$eval('#drawersList .dwrow .nm', (els) => els.map((e) => e.textContent));
+// every saved drawer's settings, by name, read straight out of storage
+const stored = (page) => page.evaluate(() => Object.fromEntries(
+  JSON.parse(localStorage.getItem('drawerforge:drawers:v1')).drawers.map((d) => [d.name,
+    Object.fromEntries(d.hash.split('&').map((kv) => kv.split('=').map(decodeURIComponent)))])));
 /* Opening a drawer reloads the page with that drawer's design, so wait for the reload
    rather than for a duration. */
 async function openDrawer(page, name, ready) {
@@ -336,6 +340,56 @@ test('a shared link or a fresh start never writes over the drawer you had open',
   expect(await page.inputValue('#drawerW')).toBe('400');
   expect(errors).toEqual([]);
 });
+
+/* Two drawers can hold one design, and so share a fingerprint: a backup saved from the
+   drawer on screen, or a row of placeholders saved straight from the defaults. Opening
+   one used to attach the page to whichever of them was saved last, so the next edit went
+   into the other. */
+test('opening a drawer saves into that drawer, even when another holds the same design',
+  async ({ page }) => {
+    const errors = await openPlates(page);
+    await H.setField(page, 'drawerW', '400');
+    await saveAs(page, 'Kitchen');
+    await saveAs(page, 'Kitchen backup');       // the same design, and saved last
+    await settle(page);
+    await openDrawer(page, 'Kitchen', platesReady);
+    await H.setField(page, 'drawerW', '450');
+    await settle(page);
+    let all = await stored(page);
+    expect([all.Kitchen.w, all['Kitchen backup'].w], 'the edit went into Kitchen').toEqual(['450', '400']);
+    await page.reload();
+    await platesReady(page);
+    await expect(page.locator('#drawerName'), 'and a reload stays on it').toHaveText('Kitchen');
+
+    // placeholders: three drawers saved from the defaults, before any of them is measured
+    await page.evaluate(() => localStorage.clear());
+    await page.goto('about:blank');
+    await openPlates(page);
+    for (const n of ['Drawer 1', 'Drawer 2', 'Drawer 3']) await saveAs(page, n);
+    await settle(page);
+    await openDrawer(page, 'Drawer 1', platesReady);
+    await H.setField(page, 'drawerD', '420');
+    await settle(page);
+    all = await stored(page);
+    expect([1, 2, 3].map((n) => all[`Drawer ${n}`].d)).toEqual(['420', '380', '380']);
+
+    /* A fresh start shows the defaults, which are exactly what Drawers 2 and 3 hold. It is
+       still not a drawer, and a reload of it does not quietly become one. */
+    await page.goto('about:blank');
+    await openPlates(page);
+    await Promise.all([page.waitForEvent('load'), page.click('#startFresh')]);
+    await platesReady(page);
+    await settle(page);
+    await page.reload();
+    await platesReady(page);
+    await expect(page.locator('#drawerName')).toHaveText('not saved');
+    await H.setField(page, 'drawerW', '500');
+    await settle(page);
+    all = await stored(page);
+    expect([1, 2, 3].map((n) => all[`Drawer ${n}`].w), 'no placeholder took the edit')
+      .toEqual(['306', '306', '306']);
+    expect(errors).toEqual([]);
+  });
 
 test('rename and delete, each from the list', async ({ page }) => {
   const errors = await openPlates(page);

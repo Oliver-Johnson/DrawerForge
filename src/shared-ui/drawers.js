@@ -189,6 +189,22 @@ const DRAWERS = (function () {
     try { localStorage.setItem(STORE, JSON.stringify(s)); return true; }
     catch (err) { return false; }   // private mode, or the quota is full: the caller says so
   }
+  /* Two small records beside the list, of which drawer each tool last saved into (see
+     attach). One is per tab, in sessionStorage, which a reload and Back keep and a new tab
+     starts without. The other is per device, and goes with the local save the bare site
+     restores. The tab's record also carries the note for the next page to load in it:
+     which drawer the design it arrives with belongs to. */
+  const TAB = 'drawerforge:drawers:tab';
+  const LAST = 'drawerforge:drawers:last';
+  function readNote(area, key) {
+    let v = null;
+    try { v = JSON.parse(window[area].getItem(key) || 'null'); } catch (err) { v = null; }
+    return isPlain(v) ? v : {};
+  }
+  function writeNote(area, key, v) {
+    try { window[area].setItem(key, JSON.stringify(v)); return true; }
+    catch (err) { return false; }
+  }
   function newId(s) {
     let id;
     do id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -229,6 +245,39 @@ const DRAWERS = (function () {
     let renaming = '';
 
     const find = (s, id) => s.drawers.find((d) => d.id === id) || null;
+
+    /* Which drawer this page just saved into, '' for none, kept for this tab and for this
+       device. Written only when it changes, because an unsaved page saves often. */
+    function savedInto(id) {
+      for (const [area, key] of [['sessionStorage', TAB], ['localStorage', LAST]]) {
+        const n = readNote(area, key);
+        if (n[o.tool] !== id) { n[o.tool] = id; writeNote(area, key, n); }
+      }
+    }
+    /* The note for the next page to load in this tab: the drawer, and the fingerprint of
+       the design that page will arrive with. Read once, by attach. False if the browser
+       would not keep it. */
+    function handOver(id, h) {
+      const n = readNote('sessionStorage', TAB);
+      n.next = { id, fp: fingerprint(h) };
+      return writeNote('sessionStorage', TAB, n);
+    }
+    function takeHandOver() {
+      const n = readNote('sessionStorage', TAB);
+      if (!('next' in n)) return null;
+      const next = n.next;
+      delete n.next;
+      writeNote('sessionStorage', TAB, n);
+      return isPlain(next) ? next : null;
+    }
+    /* Replaces the page with design `h`. replaceState and a reload rather than a
+       navigation: the design being replaced is not a page you went back from, and the
+       back button should not offer it. */
+    function go(h) {
+      o.stop();
+      try { history.replaceState(null, '', '#' + h); location.reload(); }
+      catch (err) { location.replace('#' + h); }   // the page reloads on hashchange
+    }
     /* Opening another drawer replaces what is on screen. That costs nothing when what is
        on screen is itself a saved drawer, or is the untouched page you get on a first
        visit; anything else is work that exists nowhere but here. */
@@ -369,6 +418,7 @@ const DRAWERS = (function () {
         return;
       }
       attached = d.id; armed = ''; renaming = '';
+      savedInto(d.id);
       el.input.value = '';
       render();
       say(`Saved as “${name}”. From now on it keeps itself up to date as you work, here and on ${other}.`);
@@ -384,15 +434,10 @@ const DRAWERS = (function () {
           'it. Save it first with the box above, or press Open anyway.', 'bad');
         return;
       }
-      /* The mark is how the reloaded page knows the design it finds in its address bar is
-         this drawer, and so keeps saving into it — see attach. */
-      d.marks.open = fingerprint(d.hash);
-      saveAll(s);
-      o.stop();
-      /* replaceState and a reload rather than a navigation: the drawer you switched away
-         from is not a page you went back from, and the back button should not offer it. */
-      try { history.replaceState(null, '', '#' + d.hash); location.reload(); }
-      catch (err) { location.replace('#' + d.hash); }   // the page reloads on hashchange
+      /* The note is how the reloaded page knows the design it finds in its address bar is
+         this drawer, and not another drawer holding the same design — see attach. */
+      handOver(d.id, d.hash);
+      go(d.hash);
     }
 
     function rename(id, raw) {
@@ -523,12 +568,26 @@ const DRAWERS = (function () {
        * The obvious answer — "whichever drawer was open last" — is wrong in the case that
        * matters. Follow someone's shared link while your Kitchen drawer is open and the
        * page would save their design into your Kitchen. Start fresh would overwrite it
-       * with the defaults. So a page belongs to a drawer only when the string it arrived
-       * with is one this browser wrote for that drawer: its own last save (a reload, or
-       * the bare site restoring the local copy), the hand-over from the other tool or
-       * the guide, or the drawer being opened from the list. Each drawer keeps the
-       * fingerprint of the latest of each. Anything else — a link from someone else, a
-       * fresh start — arrives unsaved, and nothing of yours is written over.
+       * with the defaults. So a page belongs to a drawer only when this browser has a
+       * record that says so:
+       *
+       * Opening a drawer from the list, and the hand-over from the other tool or the
+       * guide, leave a note in this tab naming the drawer and the fingerprint of the
+       * design the next page arrives with. The note is read once, here, and it decides.
+       * Matching the design against the drawers is not enough, because two drawers can
+       * hold the same design: a backup saved from the drawer on screen, or placeholders
+       * saved straight from the defaults. Picking the newest of those opened the backup
+       * when you asked for the original, and your next edit went into the backup.
+       *
+       * Without a note the page is a reload, a Back, or the bare site restoring the local
+       * save, so the design is one this tool saved itself. It goes back to the drawer
+       * this tool last saved into, in this tab or else on this device, and only if that
+       * drawer's fingerprint of its last save from this tool matches. A tab whose last
+       * save went into no drawer stays unsaved, so a fresh start whose defaults match a
+       * placeholder drawer does not quietly become that drawer.
+       *
+       * Anything else — a link from someone else, a fresh start — arrives unsaved, and
+       * nothing of yours is written over.
        *
        * Called once the page has loaded its design and drawn it, so that `bootDesign` is
        * what an untouched page looks like. */
@@ -536,37 +595,47 @@ const DRAWERS = (function () {
         fresh = !arrivedWith;
         bootDesign = o.design();
         attached = null;
+        const next = takeHandOver();      // read every time, so a stale note never lingers
         if (arrivedWith) {
+          const s = loadAll();
           const fp = fingerprint(arrivedWith);
-          const hit = loadAll().drawers
-            .filter((d) => Object.values(d.marks).includes(fp))
-            .sort((a, b) => b.saved - a.saved)[0];
-          if (hit) attached = hit.id;
+          let d = next && next.fp === fp ? find(s, next.id) : null;
+          if (!d) {
+            const tab = readNote('sessionStorage', TAB)[o.tool];
+            const dev = readNote('localStorage', LAST)[o.tool];
+            for (const id of tab === '' ? [] : [tab, dev]) {
+              const c = typeof id === 'string' && find(s, id);
+              if (c && c.marks[o.tool] === fp) { d = c; break; }
+            }
+          }
+          if (d) attached = d.id;
         }
         paintBar();
       },
       /* After the page writes its design to the address bar and its local save. */
       wrote(h) {
-        if (!attached) return;
+        if (!attached) { savedInto(''); return; }
         const s = loadAll();
         const d = find(s, attached);
-        if (!d) { attached = null; paintBar(); return; }
+        if (!d) { attached = null; savedInto(''); paintBar(); return; }
         d.hash = mergeDesign(d.hash, h, o.owns);
         d.marks[o.tool] = fingerprint(h);
         d.saved = Date.now();
         saveAll(s);   // a failure here loses no more than the page's own save already does
+        savedInto(d.id);
       },
       /* Before the page navigates to the other tool or the guide with `h` in the address.
-         Also saves: the debounced save may not have run yet, and this is the last chance. */
+         Also saves: the debounced save may not have run yet, and this is the last chance.
+         And leaves the note that tells the page at the other end which drawer it is. */
       handoff(h) {
         if (!attached) return;
         const s = loadAll();
         const d = find(s, attached);
         if (!d) return;
         d.hash = mergeDesign(d.hash, h, o.owns);
-        d.marks.out = fingerprint(h);
         d.saved = Date.now();
         saveAll(s);
+        handOver(d.id, h);
       },
     };
   }
