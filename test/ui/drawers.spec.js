@@ -155,6 +155,77 @@ test('two drawers, switched on either page, bring both halves back and survive a
     expect(errors).toEqual([]);
   });
 
+/* Both pages write the drawer's size and the printer, so a page that saved them whether
+   or not it had changed them made the rule "the last page to save anything wins". Going
+   Back is the plain way to hit it: the page you return to reloads the address it last
+   wrote, which still has the old size, and its first save put that size back. */
+test('going Back to the other page shows the drawer as it is now, and puts no old size back',
+  async ({ page }) => {
+    const errors = await openPlates(page);
+    await saveAs(page, 'Kitchen');                // 306 wide, saved from the baseplates page
+    await settle(page);
+    await toBins(page);
+    await H.setField(page, 'drawerW', '400');
+    await settle(page);
+    expect((await stored(page)).Kitchen.w).toBe('400');
+
+    // the browser's Back, not the header link: the baseplates address still says 306
+    await page.goBack();
+    await expect.poll(() => page.inputValue('#drawerW').catch(() => ''),
+      { message: 'the page shows the drawer as it is now', timeout: 20000 }).toBe('400');
+    await platesReady(page);
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    await settle(page);
+    expect((await stored(page)).Kitchen.w, 'and its first save left the width alone').toBe('400');
+    expect(errors).toEqual([]);
+  });
+
+/* Two tabs on one drawer: each saves only what it changed, so neither undoes the other.
+   And a page the browser restores from its back-forward cache, where nothing reloads,
+   catches up with the drawer instead of going on showing a size it no longer has. */
+test('a second tab resizing the drawer is not undone when the first tab saves', async ({ page, context }) => {
+  const errors = await openPlates(page);
+  await saveAs(page, 'Kitchen');
+  await toBins(page);                             // so the bins page has a save of Kitchen
+  await settle(page);
+  await toPlates(page);
+  await settle(page);
+
+  const other = await context.newPage();
+  other.on('pageerror', (e) => errors.push(String(e)));
+  await other.goto(base + 'bins/');
+  await binsReady(other);
+  await expect(other.locator('#drawerName')).toHaveText('Kitchen');
+  /* drawers.js keeps its own list of the keys both pages write, and it has to be exactly
+     the keys both pages own. The baseplates page lists 'ph' only so as not to echo it, and
+     does not write it into a drawer (see the comment above DRAWERS.create in src/ui.js). */
+  const platesOwn = await page.evaluate(() => [...OWNED].filter((k) => k !== 'ph'));
+  const binsOwn = await other.evaluate(() => [...BINS_OWN]);
+  expect(platesOwn.filter((k) => binsOwn.includes(k)).sort(), 'the keys both pages own')
+    .toEqual(await page.evaluate(() => [...DRAWERS.SHARED].sort()));
+
+  await H.setField(other, 'drawerW', '400');
+  await settle(other);
+
+  // the first tab still shows 306, and changes something of its own
+  expect(await page.inputValue('#drawerW')).toBe('306');
+  await page.selectOption('#connector', 'hclip');
+  await settle(page);
+  const k = (await stored(page)).Kitchen;
+  expect(k.w, 'the width the other tab set').toBe('400');
+  expect(k.cn, 'and the connector this one set').toBe('hclip');
+
+  await Promise.all([page.waitForEvent('load'), page.evaluate(() =>
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })))]);
+  await platesReady(page);
+  expect(await page.inputValue('#drawerW')).toBe('400');
+  expect(await page.inputValue('#connector')).toBe('hclip');
+  await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+  await settle(page);
+  expect((await stored(page)).Kitchen).toMatchObject({ w: '400', cn: 'hclip' });
+  expect(errors).toEqual([]);
+});
+
 test('export, clear the browser, import: the same design comes back', async ({ page }) => {
   const errors = await openPlates(page);
   await H.setField(page, 'drawerW', '412');

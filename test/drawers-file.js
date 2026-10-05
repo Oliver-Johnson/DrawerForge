@@ -136,6 +136,21 @@ console.log('\nmerging one page\'s save into a drawer');
   check('the other page\'s keys survive the bins save', q(fromBins).cn === 'hclip');
   check('nothing is duplicated', D.parsePairs(fromBins).length === new Set(D.parsePairs(fromBins).map((p) => p[0])).size);
   check('a string with a broken escape parses as nothing', D.parsePairs('w=%E0%A4%A') === null);
+
+  /* The drawer's size and the printer are written by both pages. Each writes them only
+     when it changed them, so a page that saves for any other reason does not put back
+     the size it arrived with over one the other page has set since. */
+  const arrived = new Map(D.parsePairs('w=300&d=200&v=2'));
+  const widened = 'w=400&d=200&cn=hclip&bl=OLD&v=2';          // the bins page set 400 since
+  const kept = q(D.mergeDesign(widened, 'w=300&d=200&cn=puzzle&v=2', platesOwns, arrived));
+  check('a shared key this page did not change keeps what is stored', kept.w === '400');
+  check('while the keys it did change are written', kept.cn === 'puzzle');
+  const moved = q(D.mergeDesign(widened, 'w=350&d=200&cn=puzzle&v=2', platesOwns, arrived));
+  check('a shared key this page changed is written', moved.w === '350');
+  check('with no record of what it arrived with, every key is written',
+    q(D.mergeDesign(widened, 'w=300&d=200&cn=puzzle&v=2', platesOwns)).w === '300');
+  check('the drawer and the printer are what is shared',
+    ['w', 'd', 'bw', 'bd', 'bh', 'pr'].every((k) => D.SHARED.has(k)) && !D.SHARED.has('cn') && !D.SHARED.has('bl'));
 }
 
 console.log('\nfingerprints');

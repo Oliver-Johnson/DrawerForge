@@ -3993,17 +3993,35 @@ const DRAWERS = (function () {
   const encodePairs = (pairs) =>
     pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 
+  /* The keys both pages write: the drawer's size, the printer, and the format version,
+     which is the same on both. Every other key belongs to one page or the other. The UI
+     spec checks this list against what the two pages actually own. */
+  const SHARED = new Set(['w', 'd', 'bw', 'bd', 'bh', 'pr', 'v']);
+
   /* One drawer, two pages writing to it. Each page's design string carries the other
      page's keys too — that is how the carry works — but its copy of them is only as new
      as the moment it was handed over, so a page that wrote its whole string would put
      back the other page's half as it stood then. Each writes the keys it owns and keeps
-     everyone else's from what is stored. The drawer's width and depth are owned by both,
-     and the last page to change them wins, which is what the carry already does. */
-  function mergeDesign(stored, mine, owns) {
-    const theirs = (parsePairs(stored) || []).filter(([k]) => !owns(k));
-    const ours = (parsePairs(mine) || []).filter(([k]) => owns(k));
+     everyone else's from what is stored.
+
+     The shared keys above are owned by both pages, and those need one more rule. Every
+     page saves as it loads, so writing them on every save made the real rule "the last
+     page to save anything wins": going Back to the other page, or a second tab saving
+     for any reason, put back the size that page arrived with. So a page writes a shared
+     key only when it has changed it, meaning its value differs from `base`, the value
+     the page arrived with or last saved. The last page to CHANGE the drawer's size or
+     printer wins, and a page that has not changed them leaves whatever is stored. With
+     no base, every owned key is written. */
+  function mergeDesign(stored, mine, owns, base) {
+    const was = parsePairs(stored) || [];
+    const now = new Map(was);
+    const theirs = was.filter(([k]) => !owns(k));
+    const ours = (parsePairs(mine) || []).filter(([k]) => owns(k)).map(([k, v]) =>
+      (base && SHARED.has(k) && base.get(k) === v && now.has(k) ? [k, now.get(k)] : [k, v]));
     return encodePairs(theirs.concat(ours));
   }
+  // the shared keys of a design string, in the form `base` above takes
+  const sharedOf = (h) => new Map((parsePairs(h) || []).filter(([k]) => SHARED.has(k)));
 
   /* A short fingerprint of a design string, for recognising one this browser wrote (see
      attach below). Stored instead of the strings themselves because a bins layout can run
@@ -4167,6 +4185,7 @@ const DRAWERS = (function () {
     const el = o.els;
     const other = o.tool === 'plates' ? 'Bins' : 'Baseplates';
     let attached = null;     // the drawer this page saves into, or null for an unsaved design
+    let base = null;         // its shared keys as this page arrived with or last saved them
     let fresh = false;       // arrived with nothing to restore
     let bootDesign = '';
     let armed = '';          // 'open:id' or 'del:id' — the first press of a two-press action
@@ -4185,9 +4204,9 @@ const DRAWERS = (function () {
     /* The note for the next page to load in this tab: the drawer, and the fingerprint of
        the design that page will arrive with. Read once, by attach. False if the browser
        would not keep it. */
-    function handOver(id, h) {
+    function handOver(id, h, caughtUp) {
       const n = readNote('sessionStorage', TAB);
-      n.next = { id, fp: fingerprint(h) };
+      n.next = { id, fp: fingerprint(h), caughtUp: !!caughtUp };
       return writeNote('sessionStorage', TAB, n);
     }
     function takeHandOver() {
@@ -4205,6 +4224,24 @@ const DRAWERS = (function () {
       o.stop();
       try { history.replaceState(null, '', '#' + h); location.reload(); }
       catch (err) { location.replace('#' + h); }   // the page reloads on hashchange
+    }
+    /* The drawer's size and printer can have moved on since the design `h` this page has:
+       the other page changed them after this one last saved, which is what going Back to
+       this page finds, or another tab did. Showing the old values would be wrong twice
+       over, since a download would use them too, so the page reloads onto the stored ones
+       instead. The note marks that reload as a catch-up, and a catch-up is never followed
+       by another, so this cannot loop. True if the page is reloading. */
+    function catchUp(h, d) {
+      const stored = sharedOf(d.hash);
+      const moved = [...stored.keys()].filter((k) => o.owns(k) && base.get(k) !== stored.get(k));
+      if (!moved.length) return false;
+      const pairs = parsePairs(h) || [];
+      const merged = encodePairs(pairs.map(([k, v]) => [k, moved.includes(k) ? stored.get(k) : v])
+        .concat(moved.filter((k) => !pairs.some((p) => p[0] === k)).map((k) => [k, stored.get(k)])));
+      // without the note the reloaded page could not tell it is this drawer, so stay put
+      if (!handOver(d.id, merged, true)) return false;
+      go(merged);
+      return true;
     }
     /* Opening another drawer replaces what is on screen. That costs nothing when what is
        on screen is itself a saved drawer, or is the untouched page you get on a first
@@ -4346,6 +4383,7 @@ const DRAWERS = (function () {
         return;
       }
       attached = d.id; armed = ''; renaming = '';
+      base = sharedOf(h);
       savedInto(d.id);
       el.input.value = '';
       render();
@@ -4408,7 +4446,7 @@ const DRAWERS = (function () {
 
     /* The open drawer is exported as it stands this moment, not as of its last save,
        which may be a debounce behind the last edit. */
-    const live = (d) => (d.id === attached ? mergeDesign(d.hash, o.design(), o.owns) : d.hash);
+    const live = (d) => (d.id === attached ? mergeDesign(d.hash, o.design(), o.owns, base) : d.hash);
     function exportOne() {
       const s = loadAll();
       const cur = attached && find(s, attached);
@@ -4490,6 +4528,16 @@ const DRAWERS = (function () {
     el.importInput.addEventListener('change', () =>
       importFile(el.importInput.files && el.importInput.files[0]));
 
+    /* A page the browser kept in its back-forward cache comes back without loading, so
+       attach never sees the return. Coming Back from the other page is exactly when the
+       drawer's size may have changed, so this gets the same chance to catch up as a
+       reload does. */
+    addEventListener('pageshow', (e) => {
+      if (!e.persisted || !attached) return;
+      const d = find(loadAll(), attached);
+      if (d) catchUp(o.design(), d);
+    });
+
     return {
       /* Which drawer, if any, the design this page arrived with belongs to.
        *
@@ -4527,7 +4575,8 @@ const DRAWERS = (function () {
         if (arrivedWith) {
           const s = loadAll();
           const fp = fingerprint(arrivedWith);
-          let d = next && next.fp === fp ? find(s, next.id) : null;
+          const noted = next && next.fp === fp ? find(s, next.id) : null;
+          let d = noted;
           if (!d) {
             const tab = readNote('sessionStorage', TAB)[o.tool];
             const dev = readNote('localStorage', LAST)[o.tool];
@@ -4536,7 +4585,11 @@ const DRAWERS = (function () {
               if (c && c.marks[o.tool] === fp) { d = c; break; }
             }
           }
-          if (d) attached = d.id;
+          if (d) {
+            attached = d.id;
+            base = sharedOf(arrivedWith);
+            if (!(noted && next.caughtUp) && catchUp(arrivedWith, d)) return;
+          }
         }
         paintBar();
       },
@@ -4546,10 +4599,11 @@ const DRAWERS = (function () {
         const s = loadAll();
         const d = find(s, attached);
         if (!d) { attached = null; savedInto(''); paintBar(); return; }
-        d.hash = mergeDesign(d.hash, h, o.owns);
+        d.hash = mergeDesign(d.hash, h, o.owns, base);
         d.marks[o.tool] = fingerprint(h);
         d.saved = Date.now();
-        saveAll(s);   // a failure here loses no more than the page's own save already does
+        // a failure here loses no more than the page's own save already does
+        if (saveAll(s)) base = sharedOf(h);
         savedInto(d.id);
       },
       /* Before the page navigates to the other tool or the guide with `h` in the address.
@@ -4560,16 +4614,16 @@ const DRAWERS = (function () {
         const s = loadAll();
         const d = find(s, attached);
         if (!d) return;
-        d.hash = mergeDesign(d.hash, h, o.owns);
+        d.hash = mergeDesign(d.hash, h, o.owns, base);
         d.saved = Date.now();
-        saveAll(s);
+        if (saveAll(s)) base = sharedOf(h);
         handOver(d.id, h);
       },
     };
   }
 
   return { create, readDesignFile, designFile, mergeDesign, parsePairs, encodePairs,
-           fingerprint, cleanName, FileError, CAP, STORE, KIND, VERSION };
+           fingerprint, cleanName, FileError, CAP, SHARED, STORE, KIND, VERSION };
 })();
 
 if (typeof module !== 'undefined') module.exports = DRAWERS;
