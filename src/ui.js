@@ -589,11 +589,24 @@ async function runBuild() {
   }
   $('status').textContent = '';
   computePrintPlan();
-  fitThree();
+  autoFrame();
 }
 
 // ---------- three.js ----------
-let scene, camera, renderer, root, sph = { theta: -0.7, phi: 1.05, r: 420, cx: 0, cy: 0 };
+let scene, camera, renderer, root, sph = { theta: -0.7, phi: 1.05, r: 420, cx: 0, cy: 0, cz: 0 };
+/* Who is in charge of the framing, the page or the person looking at it.
+ *
+ * The preview re-framed itself at the end of every build, and a build follows every
+ * change on the page — so zooming in on a joint and then changing the clearance threw
+ * the zoom away. It now frames itself only when what it is framing changes: the plate's
+ * size, the exploded view, or the canvas's own shape. And not even then once you have
+ * zoomed or panned, because those say what you want to look at, and re-framing would
+ * overrule it.
+ *
+ * Rotating does not count. It says which SIDE you want to look from, and a re-frame
+ * keeps the angle, so there is nothing to overrule. The Fit button hands control back:
+ * it frames now and lets the page frame again from then on. */
+let viewOwned = false, framedKey = '', fitR = 0;
 function initThree() {
   const canvas = $('three');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -605,6 +618,10 @@ function initThree() {
   const onResize = () => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    // a new shape of canvas wants a new distance: expanding to full screen, or the page
+    // settling its layout after load, would otherwise keep a framing worked out for
+    // a different rectangle
+    if (layout) autoFrame();
   };
   new ResizeObserver(onResize).observe(canvas); onResize();
   // controls
@@ -624,7 +641,7 @@ function initThree() {
     return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
   };
   let pinch = null, pmid = null;
-  const zoom = (f) => { sph.r = Math.max(60, Math.min(2200, sph.r * f)); };
+  const zoom = (f) => { sph.r = clampR(sph.r * f); viewOwned = true; };
 
   canvas.addEventListener('pointerdown', e => {
     pts.set(e.pointerId, [e.clientX, e.clientY]);
@@ -644,13 +661,16 @@ function initThree() {
     if (pts.size >= 2) {
       const g = gap(), m = mid();
       if (pinch > 0 && g > 0) zoom(pinch / g);
-      if (pmid) { sph.cx -= (m[0] - pmid[0]) * sph.r * 0.0011; sph.cy += (m[1] - pmid[1]) * sph.r * 0.0011; }
+      if (pmid && (m[0] !== pmid[0] || m[1] !== pmid[1])) {
+        sph.cx -= (m[0] - pmid[0]) * sph.r * 0.0011; sph.cy += (m[1] - pmid[1]) * sph.r * 0.0011;
+        viewOwned = true;
+      }
       pinch = g; pmid = m;
       return;
     }
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (drag.pan) { sph.cx -= dx * sph.r * 0.0011; sph.cy += dy * sph.r * 0.0011; }
+    if (drag.pan) { sph.cx -= dx * sph.r * 0.0011; sph.cy += dy * sph.r * 0.0011; viewOwned = true; }
     else { sph.theta -= dx * 0.0065; sph.phi = Math.max(0.03, Math.min(3.11, sph.phi - dy * 0.0065)); }
     drag.x = e.clientX; drag.y = e.clientY;
   });
@@ -665,15 +685,15 @@ function initThree() {
   canvas.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
   canvas.addEventListener('pointerup', lift);
   canvas.addEventListener('pointercancel', lift);
-  canvas.addEventListener('wheel', e => { e.preventDefault(); sph.r = Math.max(60, Math.min(2200, sph.r * (1 + e.deltaY * 0.0011))); }, { passive: false });
+  canvas.addEventListener('wheel', e => { e.preventDefault(); zoom(1 + e.deltaY * 0.0011); }, { passive: false });
   (function loop() {
     requestAnimationFrame(loop);
     camera.position.set(
       sph.cx + sph.r * Math.sin(sph.phi) * Math.sin(sph.theta),
       sph.cy - sph.r * Math.sin(sph.phi) * Math.cos(sph.theta),
-      sph.r * Math.cos(sph.phi));
+      sph.cz + sph.r * Math.cos(sph.phi));
     camera.up.set(0, 0, 1);
-    camera.lookAt(sph.cx, sph.cy, 0);
+    camera.lookAt(sph.cx, sph.cy, sph.cz);
     renderer.render(scene, camera);
   })();
 }
@@ -707,15 +727,62 @@ function addPieceToThree(pc, res) {
   mesh.userData.pieceId = pc.id;
   root.add(mesh);
 }
-function fitThree() {
-  sph.cx = state.drawerW / 2; sph.cy = state.drawerD / 2;
-  sph.r = Math.max(state.drawerW, state.drawerD) * 1.5;
+/* The wheel's limits, widened to suit the drawer. A fixed 2200 mm ceiling is short of
+   the distance the largest drawer this page accepts needs to fit a narrow canvas, and a
+   ceiling below the fitted distance would make the first wheel tick OUT jump inwards. */
+const clampR = (r) => Math.max(60, Math.min(Math.max(2200, fitR * 2), r));
+
+/* What there is to look at: the plate the layout describes, which is there from the
+   start, and whatever has been built so far, which is where exploded pieces and tabs
+   standing proud of an edge come from. The layout alone would crop an exploded view;
+   the meshes alone are empty until the first piece finishes, which is when the first
+   framing has to happen. */
+function sceneBox() {
+  // not builtH(): that reads the first piece, and a layout the checks stopped has none
+  const h = (state.plateHeight || 4.25) + (state.bottomPad || 0);
+  const box = new THREE.Box3(new THREE.Vector3(0, 0, 0),
+                             new THREE.Vector3(state.drawerW, state.drawerD, h));
+  if (root.children.length) box.union(new THREE.Box3().setFromObject(root));
+  return box;
 }
+const frameKey = () => {
+  const cv = $('three');
+  return [state.drawerW, state.drawerD, $('explode').checked, cv.clientWidth, cv.clientHeight].join('/');
+};
+/* Frame the plate from wherever the camera is now looking from. Keeping the angle is
+   deliberate, for Fit as much as for the automatic case: the button answers "show me
+   all of it", not "start again", and a reload is still there for that. */
+function fitThree() {
+  const cv = $('three');
+  const w = cv.clientWidth, h = cv.clientHeight;
+  framedKey = frameKey();
+  if (!w || !h) return;               // not laid out yet; the resize observer comes back
+  const box = sceneBox();
+  const f = DF.frame({ min: box.min.toArray(), max: box.max.toArray() },
+    [Math.sin(sph.phi) * Math.sin(sph.theta), -Math.sin(sph.phi) * Math.cos(sph.theta), Math.cos(sph.phi)],
+    [0, 0, 1], camera.fov, w / h, 0.08);
+  [sph.cx, sph.cy, sph.cz] = f.target;
+  sph.r = fitR = f.dist;
+  // the far plane was set for drawers of a sensible size, and a large one zoomed all the
+  // way out would lose its back edge to it
+  camera.far = Math.max(5000, fitR * 4);
+  camera.updateProjectionMatrix();
+}
+function autoFrame() {
+  if (frameKey() === framedKey) return;
+  if (viewOwned) framedKey = frameKey();
+  else fitThree();
+}
+/* chrome.js owns the button, because it owns Expand beside it and runs on both tools;
+   it says "fit" with an event rather than calling in, so it needs to know nothing of
+   how either tool keeps its camera. */
+$('threewrap').addEventListener('previewfit', () => { viewOwned = false; fitThree(); });
 $('explode').addEventListener('change', () => {
   for (const mesh of root.children) {
     const pc = layout.pieces.find(p => p.id === mesh.userData.pieceId);
     if (pc) { const [px, py] = piecePlacement(pc); mesh.position.set(px, py, 0); }
   }
+  autoFrame();
 });
 
 
@@ -1566,7 +1633,7 @@ else {
 }
 hashReady = true;                         // loadFromHash has had its say; ours may start
 recomputeLayout();
-fitThree();
+autoFrame();
 
 
 if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);

@@ -275,15 +275,19 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
    the largest thing on the page. An empty preview should look deliberately empty. */
 #threeempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   padding:0 24px;text-align:center;color:var(--dim);font-size:13px;pointer-events:none}
-.previewbtn{position:absolute;top:8px;right:8px;z-index:3;
+/* Fit and Expand, top right. The row is what is positioned, so the two cannot overlap
+   when Expand becomes Close and changes width. */
+.previewbtns{position:absolute;top:8px;right:8px;z-index:3;display:flex;gap:6px}
+.previewbtn,.fitbtn{
   background:rgba(12,17,22,.78);color:var(--cyan);border:1px solid var(--line);
   border-radius:6px;padding:7px 12px;font:inherit;font-size:12px;cursor:pointer}
-.previewbtn:hover{border-color:var(--cyan)}
+.previewbtn:hover,.fitbtn:hover{border-color:var(--cyan)}
 #threewrap.expanded{position:fixed;inset:0;z-index:200;height:100dvh;width:100vw;
   margin:0;border-radius:0;background:var(--bg)}
 #threewrap.expanded canvas{width:100%;height:100%;touch-action:none}
-#threewrap.expanded .previewbtn{top:max(10px,env(safe-area-inset-top));
-  right:max(10px,env(safe-area-inset-right));padding:10px 16px;font-size:14px}
+#threewrap.expanded .previewbtns{top:max(10px,env(safe-area-inset-top));
+  right:max(10px,env(safe-area-inset-right));gap:8px}
+#threewrap.expanded .previewbtn,#threewrap.expanded .fitbtn{padding:10px 16px;font-size:14px}
 body.previewlock{overflow:hidden}
 #three{width:100%;height:100%;display:block;border-radius:0 0 8px 8px;cursor:grab}
 #three:active{cursor:grabbing}
@@ -536,7 +540,7 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   #warnings .w{font-size:12.5px}
   #status{font-size:12px}
   #threehint{font-size:12px}
-  .previewbtn{font-size:13px;min-height:40px}
+  .previewbtn,.fitbtn{font-size:13px;min-height:40px}
   footer{font-size:13px}
   footer .mono{font-size:12px}
   .kofi b{font-size:13px}
@@ -3434,6 +3438,10 @@ if (typeof module !== 'undefined') {
  * Spliced between the core and each tool's ui.js, so DF is simply in scope by the time
  * a ui.js is parsed — no load-order rule to remember, and the three prose pages, which
  * have no dialog, do not ship it.
+ *
+ * One thing here is not a dialog widget: frame(), the arithmetic that fits a 3D preview
+ * to what it is showing. It is here for the same reason the rest is — both tools need
+ * it, and two copies of it would be two answers to "is the whole drawer in view".
  */
 'use strict';
 
@@ -3481,6 +3489,62 @@ const DF = {
     row.appendChild(left); row.appendChild(btn);
     list.appendChild(row);
     return btn;
+  },
+
+  /* How far back a perspective camera has to stand to see all of a box.
+   *
+   * Both previews used to guess. Bins stood at 600 mm whatever the drawer, and
+   * baseplates at one and a half times the drawer's longer side — and neither asked
+   * what shape the canvas was. A preview that is tall and narrow (Bins beside its map at
+   * 1366 px is 516 × 966) needs the camera much further back than a wide one for the
+   * same drawer, so the default drawer showed one corner there, ran off two edges at
+   * 1920, and a 600 × 500 drawer was cropped everywhere.
+   *
+   * This is the exact answer rather than a better guess. Each corner of the box is put
+   * into the camera's own frame — right, up, and depth along the line of sight — and a
+   * corner `x` across at depth `d` is on screen when |x| <= d · tan(half-fov). Solving
+   * that for the distance gives one lower bound per corner per axis; the largest of
+   * them is the distance. `margin` is the fraction of the half-view kept clear at the
+   * edge, so the outline does not sit under the canvas border or the buttons on it.
+   *
+   * The camera looks at the CENTRE of the box, and orbits about it afterwards. Centring
+   * the projected outline on screen instead would frame a little tighter — the near
+   * edge of a drawer seen from above is drawn bigger than the far one, so the picture
+   * sits low — but it moves the pivot off the middle of the model, and then the first
+   * rotation swings the drawer out of frame. A slack strip at the far edge is the
+   * cheaper fault.
+   *
+   * `dir` points from the target to the camera, `up` is the world's up. Plain arrays
+   * rather than THREE vectors so the two tools, whose scenes disagree about which axis
+   * is up, pass in their own and nothing here has to know. */
+  frame(box, dir, up, fovDeg, aspect, margin) {
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1],
+                             a[2] * b[0] - a[0] * b[2],
+                             a[0] * b[1] - a[1] * b[0]];
+    const unit = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1;
+                          return [a[0] / l, a[1] / l, a[2] / l]; };
+    const c = [0, 1, 2].map((i) => (box.min[i] + box.max[i]) / 2);
+    const fwd = unit([-dir[0], -dir[1], -dir[2]]);
+    // looking straight down the up axis leaves right undefined; any horizontal will do
+    let right = cross(fwd, up);
+    if (Math.hypot(right[0], right[1], right[2]) < 1e-6) right = cross(fwd, [up[1], up[2], up[0]]);
+    right = unit(right);
+    const upv = cross(right, fwd);
+    const tv = Math.tan(fovDeg * Math.PI / 360) * (1 - margin);
+    const th = tv * aspect;
+    let dist = 0;
+    for (let i = 0; i < 8; i++) {
+      const q = [(i & 1 ? box.max[0] : box.min[0]) - c[0],
+                 (i & 2 ? box.max[1] : box.min[1]) - c[1],
+                 (i & 4 ? box.max[2] : box.min[2]) - c[2]];
+      const z = dot(q, fwd);
+      // the + 1 keeps the nearest corner beyond a near plane of 1, should a box ever
+      // be thin enough edge-on that neither width nor height asks for any distance
+      dist = Math.max(dist, Math.abs(dot(q, right)) / th - z,
+                      Math.abs(dot(q, upv)) / tv - z, 1 - z);
+    }
+    return { target: c, dist };
   },
 };
 </script>
@@ -5107,20 +5171,28 @@ function applyFocus() {
   const top = document.querySelector('.stagetop');
   if (top) { top.style.gridTemplateColumns = ''; top.classList.remove('wide'); }
 }
-/* Frame the bin, not the drawer. dist is sized for a 300 mm layout, which would put a
-   1×1 bin in the middle distance as a speck — the mode looking broken at the exact
-   moment it opens. */
+/* Frame the bin, not the drawer. The drawer's framing would put a 1×1 bin in the
+   middle distance as a speck — the mode looking broken at the exact moment it opens.
+
+   The framing itself is done by autoFrame() on the next draw, because the bin is the
+   subject of the frame key in focus and the key has just changed. All this has to do is
+   put the drawer's view somewhere safe and let the page frame again, whatever had been
+   done to the drawer's view: a zoom into one corner of the drawer means nothing for a
+   bin on its own. The angle carries over, as it always did. What comes back on the way
+   out is the whole view, including whose it was — a drawer view you had zoomed stays
+   yours, and one the page framed is framed again if the canvas changed shape meanwhile,
+   which leaving focus does, since the map comes back and takes its column. */
 function restoreView() {
   if (!savedView) return;
   theta = savedView.theta; phi = savedView.phi; dist = savedView.dist;
-  panX = savedView.panX; panZ = savedView.panZ;
+  panX = savedView.panX; panZ = savedView.panZ; lookY = savedView.lookY;
+  viewOwned = savedView.owned; framedKey = savedView.key;
   savedView = null;
 }
-function frameBin(b) {
-  savedView = savedView || { theta, phi, dist, panX, panZ };
-  panX = 0; panZ = 0;
-  dist = Math.max(150, 2.4 * Math.max(b.u * SPEC.pitch, b.v * SPEC.pitch,
-                                      b.hUnits * SPEC.unitH + LIP_H));
+function frameBin() {
+  savedView = savedView ||
+    { theta, phi, dist, panX, panZ, lookY, owned: viewOwned, key: framedKey };
+  viewOwned = false;
 }
 /* Where a loose bin would go if you added it now: the first free spot on the layer you
    were last editing, scanned front-left first because that is the corner the map draws
@@ -5150,7 +5222,7 @@ function enterFocus() {
   selExtra.clear();          // focus is one bin; a companion selection means nothing here
   focused = true; carving = false; scratch = null;
   const b = B()[selected];
-  frameBin(b);
+  frameBin();
   setPanel('s-bin', true);
   $('focusSay').textContent =
     `Editing the ${b.u} by ${b.v} bin on its own. The drawer, the layers and the map are hidden.`;
@@ -5186,7 +5258,7 @@ function startScratch() {
               edges: Object.assign({}, state.edges) };
   sUndoStack.length = 0; sRedoStack.length = 0;
   focused = true; carving = false;
-  frameBin(scratch);
+  frameBin();
   setPanel('s-bin', true);
   $('focusSay').textContent =
     `Designing a ${scratch.u} by ${scratch.v} bin on its own. There is no drawer and no map.`;
@@ -6509,6 +6581,8 @@ let scene, camera, renderer, group, drawerGroup;
    that out until the drawer shell arrived and its tall front panel appeared at the
    back. Same elevation and distance, same view, just from the side you open. */
 let theta = 0.9, phi = 0.95, dist = 600, dragging = null;
+/* Who is in charge of the framing: see autoFrame(). */
+let viewOwned = false, framedKey = '', fitDist = 0;
 /* Where the camera is looking, on the drawer floor. Orbit alone always swung about the
    middle of the grid, so a bin in a far corner of a nine-cell drawer could not be
    brought to the middle of the view to be looked at — you could only get further away.
@@ -6516,6 +6590,14 @@ let theta = 0.9, phi = 0.95, dist = 600, dragging = null;
    from the start and now takes the middle button too, so the two previews answer to the
    same hands. */
 let panX = 0, panZ = 0, panning = false;
+/* The height of that point. It was a fixed 20 mm, which is about right for the middle of
+   a drawer of 3-unit bins and wrong for anything else — a drawer shell 150 mm tall had
+   its pivot near the floor. Framing sets it to the middle of what is drawn. */
+let lookY = 20;
+/* The wheel's limits. The outer one follows the drawer, because a fixed 4000 mm would
+   sit inside the fitted distance for a big enough drawer in a narrow enough canvas, and
+   the first wheel tick OUT would then jump the camera in. */
+const clampDist = (d) => Math.min(Math.max(4000, fitDist * 2), Math.max(80, d));
 function initThree() {
   const canvas = $('three');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -6567,7 +6649,8 @@ function initThree() {
     if (pts.size >= 2) {
       const g = gap();
       if (pinch > 0 && g > 0) {
-        dist = Math.min(4000, Math.max(80, dist * (pinch / g)));
+        dist = clampDist(dist * (pinch / g));
+        viewOwned = true;
         render();
       }
       pinch = g;
@@ -6582,6 +6665,7 @@ function initThree() {
         const k = dist * 0.0011;
         panX -= (dx * Math.sin(theta) + dy * Math.cos(theta)) * k;
         panZ += (dx * Math.cos(theta) - dy * Math.sin(theta)) * k;
+        if (dx || dy) viewOwned = true;
       } else {
         theta -= dx * 0.01;
         phi = Math.min(3.11, Math.max(0.03, phi - dy * 0.01));
@@ -6620,10 +6704,19 @@ function initThree() {
   });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    dist = Math.min(4000, Math.max(80, dist * (1 + Math.sign(e.deltaY) * 0.12)));
+    dist = clampDist(dist * (1 + Math.sign(e.deltaY) * 0.12));
+    viewOwned = true;
     render();
   }, { passive: false });
   window.addEventListener('resize', () => { drawMap(); render(); });
+  /* chrome.js owns the button, because it owns Expand beside it and runs on both tools;
+     it says "fit" with an event rather than calling in, so it needs to know nothing of
+     how either tool keeps its camera. */
+  $('threewrap').addEventListener('previewfit', () => {
+    viewOwned = false;
+    framedKey = '';           // whatever the key says, frame now
+    render();
+  });
 }
 /* The one place the model axes are mapped to the scene: model (x, y, z) becomes
    (x, z, -y), so model z is up and model y runs into the screen. The parts beside the
@@ -6916,17 +7009,72 @@ function sceneLabel(empty, shell, g) {
          `on a ${g.nx} by ${g.ny} cell baseplate, ` +
          `tallest stack ${stackHeight().toFixed(1)} millimetres.`;
 }
+/* Fitting the view to what is drawn.
+ *
+ * The camera stood 600 mm away whatever the drawer and whatever the canvas, which at
+ * 1366 px — where the preview is a tall narrow column beside the map — showed one
+ * corner of the default drawer, and at 1920 ran it off two edges. DF.frame works out
+ * the real distance from the field of view and the canvas's shape.
+ *
+ * When it runs is the other half. The key is the SUBJECT — the drawer's footprint, the
+ * shell if it is shown, or in focus the one bin's size — plus the canvas's size. While
+ * that holds still the view is left alone, so placing a bin, changing a wall or
+ * switching layer never moves the camera under you. When it changes, the view is
+ * re-framed from the angle it is already at, unless you have zoomed or panned: those
+ * say what you want to look at, and re-framing would overrule it. Rotating does not
+ * count, because the angle survives a re-frame anyway. Fit hands control back — it
+ * frames now, and lets the page frame again from then on.
+ *
+ * Bins are deliberately not in the key. The frame is taken from the meshes when it
+ * happens, so a stack that is already there is in it; but re-framing because a taller
+ * bin went in would move the camera on the edit itself, which is the thing above that
+ * must not happen. Fit is one press away, and an empty drawer is framed with room for a
+ * bin of the size you would draw next. */
+function frameKey(w, h) {
+  const b = fBin();
+  const subject = b ? ['bin', b.u, b.v, b.hUnits]
+    : ['drawer', state.drawerW, state.drawerD,
+       shellOn() ? `${state.drawerH}x${state.drawerFrontH}` : 'open'];
+  return subject.concat([w, h]).join('/');
+}
+function sceneBox() {
+  // drawerGroup is empty when the shell is off, and an empty box unions to nothing
+  const box = new THREE.Box3().setFromObject(group)
+    .union(new THREE.Box3().setFromObject(drawerGroup));
+  if (box.isEmpty()) {
+    const g = grid(), hw = g.nx * SPEC.pitch / 2, hd = g.ny * SPEC.pitch / 2;
+    box.set(new THREE.Vector3(-hw, -state.plateH, -hd),
+            new THREE.Vector3(hw, state.hUnits * SPEC.unitH + LIP_H, hd));
+  }
+  return box;
+}
+function fitView(w, h) {
+  const box = sceneBox();
+  const f = DF.frame({ min: box.min.toArray(), max: box.max.toArray() },
+    [Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)],
+    [0, 1, 0], camera.fov, w / h, 0.08);
+  [panX, lookY, panZ] = f.target;
+  dist = fitDist = f.dist;
+  camera.far = Math.max(8000, fitDist * 4);
+}
+function autoFrame(w, h) {
+  const key = frameKey(w, h);
+  if (key === framedKey) return;
+  framedKey = key;
+  if (!viewOwned) fitView(w, h);
+}
 function render() {
   if (!renderer) return;
   const wrap = $('threewrap');
   const w = wrap.clientWidth, h = wrap.clientHeight || 380;
+  if (w > 0) autoFrame(w, h);
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(w, h, false);
   camera.aspect = w / h; camera.updateProjectionMatrix();
   camera.position.set(panX + dist * Math.sin(phi) * Math.cos(theta),
-                      30 + dist * Math.cos(phi),
+                      lookY + dist * Math.cos(phi),
                       panZ + dist * Math.sin(phi) * Math.sin(theta));
-  camera.lookAt(panX, 20, panZ);
+  camera.lookAt(panX, lookY, panZ);
   renderer.render(scene, camera);
 }
 
@@ -7577,7 +7725,7 @@ if (pendingScratch) {
   if (b) {
     scratch = b;
     focused = true;
-    frameBin(scratch);
+    frameBin();
     setPanel('s-bin', true);
     writeControls(scratch);
     readControls(); drawMap(); refresh();
@@ -7792,13 +7940,35 @@ addEventListener('hashchange', () => location.reload());
      one dispatch covers them. */
   var wrap = document.getElementById('threewrap');
   if (wrap) {
+    /* Fit, beside it. Once you have zoomed into a corner or panned the drawer half out of
+       view there was no way back but zooming out by feel or reloading the page. The
+       button only announces itself — each tool listens for 'previewfit' and frames its
+       own camera, since the two keep their cameras differently and this file is shared
+       with pages that have none. Fit keeps the angle you are looking from: it answers
+       "show me all of it", not "start again". */
+    var row = document.createElement('div');
+    row.className = 'previewbtns';
+    var fit = document.createElement('button');
+    fit.className = 'fitbtn';
+    fit.type = 'button';
+    fit.title = 'Fit the whole design in the view';
+    fit.setAttribute('aria-label', fit.title);
+    fit.textContent = 'Fit';
+    fit.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      wrap.dispatchEvent(new CustomEvent('previewfit'));
+    });
+    row.appendChild(fit);
+
     var btn = document.createElement('button');
     btn.className = 'previewbtn';
     btn.type = 'button';
     btn.title = 'Expand the preview';
     btn.setAttribute('aria-label', 'Expand the preview');
     btn.textContent = 'Expand';
-    wrap.appendChild(btn);
+    row.appendChild(btn);
+    wrap.appendChild(row);
 
     var setExpanded = function (on) {
       wrap.classList.toggle('expanded', on);

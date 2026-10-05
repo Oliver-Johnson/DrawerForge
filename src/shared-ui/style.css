@@ -242,15 +242,19 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
    the largest thing on the page. An empty preview should look deliberately empty. */
 #threeempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   padding:0 24px;text-align:center;color:var(--dim);font-size:13px;pointer-events:none}
-.previewbtn{position:absolute;top:8px;right:8px;z-index:3;
+/* Fit and Expand, top right. The row is what is positioned, so the two cannot overlap
+   when Expand becomes Close and changes width. */
+.previewbtns{position:absolute;top:8px;right:8px;z-index:3;display:flex;gap:6px}
+.previewbtn,.fitbtn{
   background:rgba(12,17,22,.78);color:var(--cyan);border:1px solid var(--line);
   border-radius:6px;padding:7px 12px;font:inherit;font-size:12px;cursor:pointer}
-.previewbtn:hover{border-color:var(--cyan)}
+.previewbtn:hover,.fitbtn:hover{border-color:var(--cyan)}
 #threewrap.expanded{position:fixed;inset:0;z-index:200;height:100dvh;width:100vw;
   margin:0;border-radius:0;background:var(--bg)}
 #threewrap.expanded canvas{width:100%;height:100%;touch-action:none}
-#threewrap.expanded .previewbtn{top:max(10px,env(safe-area-inset-top));
-  right:max(10px,env(safe-area-inset-right));padding:10px 16px;font-size:14px}
+#threewrap.expanded .previewbtns{top:max(10px,env(safe-area-inset-top));
+  right:max(10px,env(safe-area-inset-right));gap:8px}
+#threewrap.expanded .previewbtn,#threewrap.expanded .fitbtn{padding:10px 16px;font-size:14px}
 body.previewlock{overflow:hidden}
 #three{width:100%;height:100%;display:block;border-radius:0 0 8px 8px;cursor:grab}
 #three:active{cursor:grabbing}
@@ -503,7 +507,7 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   #warnings .w{font-size:12.5px}
   #status{font-size:12px}
   #threehint{font-size:12px}
-  .previewbtn{font-size:13px;min-height:40px}
+  .previewbtn,.fitbtn{font-size:13px;min-height:40px}
   footer{font-size:13px}
   footer .mono{font-size:12px}
   .kofi b{font-size:13px}
