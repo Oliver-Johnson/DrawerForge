@@ -700,8 +700,8 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <button type="button" class="act" id="scratchAdd">Add to the drawer</button>
     <button type="button" class="ghost" id="scratchDrop">Discard</button>
   </div>
-  <!-- Where the loose bin will land. The refusal below names two remedies -- pick a
-       different layer, or add one -- and both of them used to live on the drawer page
+  <!-- Where the loose bin will land. The refusal below names two remedies — pick a
+       different layer, or add one — and both of them used to live on the drawer page
        this mode hides, so taking either meant discarding the bin first. -->
   <div id="scratchTarget">
     <label for="scratchLayer">Land on</label>
@@ -5243,12 +5243,15 @@ function drawLayerTabs() {
 }
 /* The drawer's layer tabs live inside #s-layout, which focus hides wholesale, so a loose
    bin had no way to answer the refusal that told it to pick another layer. This is the
-   same choice in the shape that fits a one-line bar. Rebuilt only when the layers or the
-   selection actually change: it is written on every refresh, and replacing the options
-   under a select the keyboard is inside would drop focus mid-choice. */
+   same choice in the shape that fits a one-line bar. Rebuilt only when what it shows
+   actually changes: it is written on every refresh, and replacing the options under a
+   select the keyboard is inside would drop focus mid-choice. The key carries every
+   layer's bin count, not just how many layers there are, because the count is what the
+   options say — a key without it left a layer that had since filled up reading "empty"
+   the next time a loose bin was started. */
 let scratchLayerKey = '';
 function drawScratchLayers() {
-  const sel = $('scratchLayer'), key = layers.length + '/' + cur;
+  const sel = $('scratchLayer'), key = cur + '/' + layers.map((L) => L.bins.length).join(',');
   if (key === scratchLayerKey) return;
   scratchLayerKey = key;
   sel.innerHTML = '';
@@ -5260,22 +5263,21 @@ function drawScratchLayers() {
     sel.appendChild(o);
   });
 }
-/* Switching the target layer is not an edit -- it changes where the bin WOULD go, and the
+/* Switching the target layer is not an edit — it changes where the bin WOULD go, and the
    drawer's own layer tabs do not bank an undo entry for the same choice either. refresh()
    re-runs scratchLanding, so the reason under the button answers the new layer straight
-   away rather than keeping the old one's. */
+   away rather than keeping the old one's. It does move the drawer's own current layer,
+   so Discard comes back to the layer you picked: that is where the bin was going. */
 $('scratchLayer').addEventListener('change', (e) => {
   const i = parseInt(e.target.value, 10);
   if (!(i >= 0 && i < layers.length)) return;
   cur = i;
-  scratchLayerKey = '';
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 $('scratchAddLayer').addEventListener('click', () => {
   pushDrawerUndo();
   layers.push({ bins: [] });
   cur = layers.length - 1;
-  scratchLayerKey = '';
   readControls(); drawLayerTabs(); drawMap(); refresh();
 });
 $('addLayer').addEventListener('click', () => {
@@ -5796,8 +5798,8 @@ const sUndoStack = [], sRedoStack = [];
 const uStack = () => (scratch ? sUndoStack : undoStack);
 const rStack = () => (scratch ? sRedoStack : redoStack);
 const UNDO_MAX = 60;
-const snapshot = () => (scratch ? JSON.stringify({ scratch })
-                                : JSON.stringify({ layers, cur }));
+const drawerSnap = () => JSON.stringify({ layers, cur });
+const snapshot = () => (scratch ? JSON.stringify({ scratch }) : drawerSnap());
 function pushOn(U, R, snap) {
   if (U.length && U[U.length - 1] === snap) return;
   U.push(snap);
@@ -5809,9 +5811,9 @@ function pushUndo() { pushOn(uStack(), rStack(), snapshot()); }
 /* Adding a layer while a loose bin is on screen edits the DRAWER, and the loose bin has
    its own history that captures only itself. Routing this through pushUndo would file the
    entry on the scratch stack, where undoing it restores the bin and leaves the new layer
-   standing -- and spends an Undo that appears to do nothing. It belongs on the drawer,
+   standing — and spends an Undo that appears to do nothing. It belongs on the drawer,
    which is where it will be seen when you go back. Same push, named target. */
-function pushDrawerUndo() { pushOn(undoStack, redoStack, JSON.stringify({ layers, cur })); }
+function pushDrawerUndo() { pushOn(undoStack, redoStack, drawerSnap()); }
 function applySnap(snap) {
   const o = JSON.parse(snap);
   /* A loose bin's history holds only the bin. Nothing about the drawer is restored,

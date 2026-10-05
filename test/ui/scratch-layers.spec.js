@@ -36,7 +36,7 @@ test('the loose bin can see and choose the layer it will land on', async ({ page
 test('choosing another layer re-answers the landing question straight away',
   async ({ page }) => {
     await openBins(page);
-    /* Added from the drawer, because #addLayer is hidden inside the mode -- which is the
+    /* Added from the drawer, because #addLayer is hidden inside the mode — which is the
        whole reason this feature exists. The picker is the way in from here. */
     await page.locator('#addLayer').click();
     await start(page);
@@ -61,7 +61,7 @@ test('adding a layer from here clears a refusal that had no answer on this page'
     await openBins(page);
     const g = await page.evaluate(() => { const q = grid(); return { nx: q.nx, ny: q.ny }; });
     /* Layer 1 covered edge to edge by ONE bin, so a landing spot on layer 2 is certain
-       wherever the loose bin ends up. That is the only reason for full coverage here --
+       wherever the loose bin ends up. That is the only reason for full coverage here —
        NOT that a partial layer would refuse the bin. Support is judged per bin: seat(b, k)
        walks the new bin's own footprint and nothing else, so a mostly-empty layer below
        takes a bin quite happily as long as the cells directly under it are covered on
@@ -86,6 +86,27 @@ test('adding a layer from here clears a refusal that had no answer on this page'
       'the full layer below supports the new one, so the bin can land').toBeEnabled();
     expect(await why(page)).toContain('layer 2');
   });
+
+/* The picker is cached so that a refresh does not pull the options out from under the
+   keyboard. The cache key once held only the number of layers and the current one, but
+   the options also say how full each layer is — so a layer that filled up between two
+   loose bins went on reading "empty", beside a refusal saying it had no room. */
+test('the picker counts bins placed since the last loose bin', async ({ page }) => {
+  const errors = await openBins(page);
+  await start(page);
+  expect(await page.locator('#scratchLayer option').allTextContents())
+    .toEqual(['Layer 1 · empty']);
+
+  await page.locator('#scratchDrop').click();
+  await page.waitForTimeout(200);
+  await dragCells(page, [0, 0], [1, 0]);
+  expect((await bins(page)).length).toBe(1);
+
+  await start(page);
+  expect(await page.locator('#scratchLayer option').allTextContents(),
+    'the layer now holds a bin, and the picker says so').toEqual(['Layer 1 · 1']);
+  expect(errors).toEqual([]);
+});
 
 /* The one that is easy to get wrong. snapshot() in scratch mode captures ONLY the loose
  * bin, and pushUndo files it on the loose bin's stack. Adding a layer edits the DRAWER,
