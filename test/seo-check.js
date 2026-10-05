@@ -15,7 +15,7 @@ const SITE = 'https://drawerforge.co.uk';
 
 let bad = 0;
 const say = (name, ok, detail) => {
-  console.log(`  ${name.padEnd(42)}${ok ? 'ok' : 'FAILED — ' + detail}`);
+  console.log(`  ${(name + ' ').padEnd(42)}${ok ? 'ok' : 'FAILED — ' + detail}`);
   if (!ok) bad++;
 };
 
@@ -133,6 +133,63 @@ console.log('\ntitles fit, and their social copies agree');
   }
 }
 
+
+/* The link preview and the tab icon.
+ *
+ * Every page gets the same tags from tools/seo.js, so what can go wrong is not the tags
+ * disagreeing with each other but the tags disagreeing with the files: an og:image that
+ * 404s, a width and height that are not the picture's, an icon path that climbs one
+ * directory too few from guide/split/. Each is invisible on the site itself and shows up
+ * only as a broken preview on somebody else's. The PNG's size is read from its own
+ * header (bytes 16-23 of the IHDR chunk) rather than trusted from the constant.
+ */
+console.log('\nlink previews and icons');
+{
+  const pngSize = (file) => {
+    const b = fs.readFileSync(file);
+    return b.slice(1, 4).toString() === 'PNG' ? [b.readUInt32BE(16), b.readUInt32BE(20)] : null;
+  };
+  const S = seo.SOCIAL;
+  const imgFile = path.join(ROOT, S.image);
+  const size = fs.existsSync(imgFile) ? pngSize(imgFile) : null;
+  say(`${S.image} exists and is a PNG`, !!size, 'missing, or not a PNG — run tools/social-image.js');
+  if (size) {
+    say(`${S.image} is ${S.width} × ${S.height}`, size[0] === S.width && size[1] === S.height,
+        `it is ${size[0]} × ${size[1]}`);
+    const kb = fs.statSync(imgFile).size / 1024;
+    // the tightest of the platforms' limits is a few MB; a card has no business near it
+    say(`${S.image} is ${kb.toFixed(0)} KB`, kb < 1024, 'over 1 MB');
+  }
+  const touch = path.join(ROOT, S.touchIcon);
+  const tsize = fs.existsSync(touch) ? pngSize(touch) : null;
+  say(`${S.touchIcon} is 180 × 180`, !!tsize && tsize[0] === 180 && tsize[1] === 180,
+      tsize ? `it is ${tsize[0]} × ${tsize[1]}` : 'missing');
+
+  const attr = (html, re) => (html.match(re) || [, null])[1];
+  for (const rel of PAGES) {
+    const html = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const og = attr(html, /property="og:image" content="([^"]*)"/);
+    say(`${rel} og:image`, og === seo.SITE + S.image, `says ${og}`);
+    say(`${rel} og:image size`,
+        attr(html, /property="og:image:width" content="([^"]*)"/) === String(S.width) &&
+        attr(html, /property="og:image:height" content="([^"]*)"/) === String(S.height),
+        'width or height does not match the picture');
+    say(`${rel} og:image:alt`, !!attr(html, /property="og:image:alt" content="([^"]+)"/), 'missing');
+    say(`${rel} twitter:card large`,
+        attr(html, /name="twitter:card" content="([^"]*)"/) === 'summary_large_image',
+        'a summary card shows a thumbnail, not the picture');
+    say(`${rel} twitter:image`, attr(html, /name="twitter:image" content="([^"]*)"/) === og,
+        'does not match og:image');
+    // relative links resolve against the page's own directory, as a browser's do
+    for (const [what, re] of [['icon', /<link rel="icon" href="([^"]*)"/],
+                              ['apple-touch-icon', /<link rel="apple-touch-icon" href="([^"]*)"/]]) {
+      const href = attr(html, re);
+      const target = href && path.join(ROOT, path.dirname(rel), href);
+      say(`${rel} ${what}`, !!href && !/^(https?:)?\/\//.test(href) && fs.existsSync(target),
+          href ? 'points at a file that is not there' : 'no such link');
+    }
+  }
+}
 
 console.log(bad ? `\n${bad} check(s) FAILED` : '\nstructured data is sound');
 process.exit(bad ? 1 : 0);

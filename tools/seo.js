@@ -121,4 +121,64 @@ function sitemap(pages) {
     rows.join(NL) + NL + '</urlset>' + NL;
 }
 
-module.exports = { inject, faqJsonLd, questions, plain, sitemap, urlFor, SITE };
+/* The picture a shared link is shown with, and the icon in the tab.
+ *
+ * Neither existed, so a link posted to Reddit or Discord arrived as a bare line of text
+ * and every tab carried the browser's blank page icon. They are the same on every page,
+ * which is the reason they are written here, once, and spliced in at the
+ * <!--__SHARE__--> marker. Five templates carrying five copies of ten tags is the shape
+ * of thing that drifts — test/seo-check.js already catches the titles doing exactly that.
+ *
+ * The image URL is absolute because it has to be — a crawler fetching it has no page to
+ * resolve a relative one against. That makes it the one URL here that a fork does not
+ * get for free, the same as the canonical links. The icons are relative for the
+ * opposite reason: they are fetched by the visitor's own browser from wherever the page
+ * is served, a fork or a file:// copy included, and an absolute icon would be a request
+ * to this site from somebody else's. Nothing here is fetched from a third party, and
+ * the build's subresource audit now reads the finished page as well as the template, so
+ * it would say so if that stopped being true.
+ *
+ * WIDTH and HEIGHT are what tools/social-image.js renders and what test/seo-check.js
+ * reads back out of the PNG, so the size quoted to a crawler is the size it gets. */
+const SOCIAL = {
+  image: 'og-image.png',
+  width: 1200,
+  height: 630,
+  alt: 'Drawerforge: a drawer of Gridfinity bins in its 3D preview, beside the line ' +
+       '“Gridfinity baseplates and bins, built to the drawer you actually have.”',
+  icon: 'favicon.svg',
+  touchIcon: 'apple-touch-icon.png',
+};
+
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+/* The tags themselves, for the page built to `out`. The icon paths climb back to the
+   site root from wherever the page sits — guide/split/index.html is two levels down. */
+function shareTags(out) {
+  const up = '../'.repeat(out.split('/').length - 1);
+  const img = SITE + SOCIAL.image;
+  return [
+    `<link rel="icon" href="${up}${SOCIAL.icon}" type="image/svg+xml">`,
+    `<link rel="apple-touch-icon" href="${up}${SOCIAL.touchIcon}">`,
+    `<meta property="og:image" content="${img}">`,
+    '<meta property="og:image:type" content="image/png">',
+    `<meta property="og:image:width" content="${SOCIAL.width}">`,
+    `<meta property="og:image:height" content="${SOCIAL.height}">`,
+    `<meta property="og:image:alt" content="${esc(SOCIAL.alt)}">`,
+    '<meta name="twitter:card" content="summary_large_image">',
+    `<meta name="twitter:image" content="${img}">`,
+    `<meta name="twitter:image:alt" content="${esc(SOCIAL.alt)}">`,
+  ].join('\n');   // LF on every platform, for the reason given in inject()
+}
+
+/* Every page carries the marker, and a page without it is a build failure rather than a
+   page without a picture: the missing case is silent everywhere except a link preview
+   nobody here will see. */
+function share(html, out) {
+  if (!html.includes('<!--__SHARE__-->'))
+    throw new Error(`${out}: the template has no <!--__SHARE__--> marker for the icon and link-preview tags`);
+  return html.replace('<!--__SHARE__-->', () => shareTags(out));
+}
+
+module.exports = { inject, faqJsonLd, questions, plain, sitemap, urlFor, SITE,
+                   SOCIAL, shareTags, share };

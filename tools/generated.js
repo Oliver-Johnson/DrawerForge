@@ -7,8 +7,9 @@
  *
  * build.js assembles a page by replacing markers with the contents of files, and then
  * does this: content computed at build time from the sources rather than copied out of
- * them. There are two such steps — the FAQ markup seo.js derives from the page's own
- * questions, and the joint diagrams joints.js draws from core.js's DEFAULTS.
+ * them. There are three such steps — the icon and link-preview tags every page shares,
+ * the FAQ markup seo.js derives from the page's own questions, and the joint diagrams
+ * joints.js draws from core.js's DEFAULTS.
  *
  * They live here because test/ci-sim.js has to perform the identical sequence against
  * git's stored bytes, and when the two lists were kept separately they drifted. That
@@ -24,13 +25,18 @@
  * `G` is passed in rather than required here on purpose: build.js works from the
  * working tree and ci-sim.js from the committed blob, and core.js decides what the
  * diagrams look like, so which copy it is matters.
+ *
+ * `page` is the manifest entry being built. The icon and link-preview tags need to know
+ * where the page sits, because the icon is linked relatively and guide/split/ is two
+ * levels further from it than the home page is.
  */
 'use strict';
 const seo = require('./seo.js');
 const joints = require('./joints.js');
 const printers = require('./printers.js');
 
-module.exports = function generated(html, G) {
+module.exports = function generated(html, G, page) {
+  html = seo.share(html, page.out);     // favicon and link-preview image, every page
   html = seo.inject(html);              // FAQ markup, from the page's own questions
   if (html.includes('<!--__JOINTS__-->'))
     html = html.replace('<!--__JOINTS__-->', joints.gallery(G));

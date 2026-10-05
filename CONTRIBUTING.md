@@ -49,7 +49,7 @@ That covers:
 | `test/fit-check.js` | a spec bin fits the socket the baseplate ships |
 | `test/stack-check.js` | a bin seats in the one below it with the spec's 0.25 mm at **every** height up the lip, not merely somewhere positive — the foot comes from the published spec and the lip from an inset of the bin outline, so the two are maintained in different places and can drift apart while both still look right |
 | `test/hash-roundtrip.js` | a layout survives the URL round trip byte for byte |
-| `test/seo-check.js` | structured data parses and matches the visible prose |
+| `test/seo-check.js` | structured data parses and matches the visible prose; the link-preview image and icons exist at the size and path every page's tags claim |
 | `test/guide-facts.js` | the numbers the guides quote, recomputed from `core.js` and the bin spec — every row of the drawer-size and printer tables, and each worked example in the prose — and that the split guide and both tools list the same printers on the same beds as `tools/printers.js` |
 | `test/ui/` | Playwright: place, carve, merge, resize, share |
 | `test/ci-sim.js` | what CI will see, spliced from git's stored bytes rather than your working tree — so a page you rebuilt but never staged fails here, as it would on CI |

@@ -77,6 +77,12 @@ a page makes no third-party request at all and works offline once loaded. Copy t
 directory along with the HTML. The build refuses to emit a page that references an external
 script or stylesheet, so a CDN URL cannot creep back in.
 
+The tab icon (`favicon.svg`, `apple-touch-icon.png`) and the picture a shared link is shown
+with (`og-image.png`) sit at the root beside the pages. The icons are linked relatively and
+follow a fork anywhere; the link-preview image is an absolute `drawerforge.co.uk` URL, as the
+canonical links are, because a crawler has no page to resolve a relative one against. Both
+are set in one place, `tools/seo.js`.
+
 ## Building
 
 `index.html`, `bins/index.html` and every page under `guide/` are **generated**. Edit the
@@ -99,6 +105,14 @@ The build itself needs nothing but Node — it splices text. `node build.js --ch
 the outputs are in sync without writing, and runs in CI. The full test suite does have
 dependencies, because the browser tests drive a real browser; see
 [CONTRIBUTING.md](CONTRIBUTING.md) for how to run it.
+
+`og-image.png` and `apple-touch-icon.png` are generated too, but by a browser rather than by
+the build — the card carries a real render of the Bins preview. After a change you would
+want a shared link to show, rebuild and then run:
+
+```bash
+node tools/social-image.js
+```
 
 The build refuses to emit output unless three checks pass, each of which has caught a
 shipped bug: `node --check` on every source; an **id audit** (every `$('id')` must exist in

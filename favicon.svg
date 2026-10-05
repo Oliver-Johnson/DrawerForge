@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later. Drawerforge — https://drawerforge.co.uk
+     A 2 x 2 patch of Gridfinity grid in the site's own two colours. Filled cells rather
+     than outlines, because at 16 px an outline is a one-pixel line and reads as a smudge.
+     apple-touch-icon.png is rendered from this file by tools/social-image.js. -->
+<rect width="64" height="64" rx="12" fill="#171c22"/>
+<g fill="#4fc3e8">
+<rect x="9" y="9" width="21" height="21" rx="4"/>
+<rect x="34" y="9" width="21" height="21" rx="4"/>
+<rect x="9" y="34" width="21" height="21" rx="4"/>
+<rect x="34" y="34" width="21" height="21" rx="4"/>
+</g>
+</svg>

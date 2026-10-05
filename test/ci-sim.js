@@ -36,7 +36,7 @@ for (const t of tools) {
     if (!MARK(m).test(s)) { console.log(`${t.out}: marker ${m} NOT FOUND`); ok = false; }
     s = s.replace(MARK(m), () => g(f));
   }
-  s = generated(s, CORE);
+  s = generated(s, CORE, t);
   const committed = g(t.out);
   const match = s === committed;
   if (!match) ok = false;
