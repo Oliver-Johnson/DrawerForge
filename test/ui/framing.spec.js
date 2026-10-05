@@ -63,6 +63,22 @@ function expectFramed(pts, what) {
 }
 const offCanvas = (pts) => pts.some(([x, y]) => Math.abs(x) > 1 || Math.abs(y) > 1);
 
+/* Where the middle of the baseplates scene lands, in the same coordinates. All of it in
+   view is not the same as framed for it: a plate framed for a bigger box than its own
+   passes expectFramed too, with every corner on the canvas and one of them near an edge,
+   but the plate is small and off towards a corner. The preview aims at the middle of
+   what it frames, so a frame worked out for this plate puts its middle on the middle of
+   the canvas, and one worked out for anything else does not. */
+async function expectCentred(page, what) {
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const [x, y] = await page.evaluate(() => {
+    const v = new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3()).project(camera);
+    return [v.x, v.y];
+  });
+  expect(Math.hypot(x, y), `${what}: the plate is not in the middle of the canvas`)
+    .toBeLessThan(0.05);
+}
+
 /* A point over the canvas that is also inside the viewport. At 1366 × 768 the bins
    canvas is taller than the window, so its middle can be below the fold — and a wheel
    event there goes to whatever the window has instead. */
@@ -157,6 +173,47 @@ test.describe('at 1366 × 768', () => {
     expectFramed(await corners(page, 'plates'), '600 × 500');
     expect(errors).toEqual([]);
   });
+
+  /* Shrinking is the direction that went wrong, and growing hid it. A size change
+     resizes the map and, beside it, the canvas, and the resize observer framed at once —
+     against the meshes still on screen, which are the old drawer's until the build has
+     waited out its debounce. That frame was then taken to be the new drawer's, so the
+     build finishing framed nothing. Grown, the new drawer's box holds the old meshes and
+     the frame comes out right anyway; shrunk, the plate was left framed for the drawer
+     it used to be, small and off towards a corner, with every corner still in view.
+     Undo is the likeliest way to shrink one, and typing a smaller width the other. */
+  test('baseplates: a drawer made smaller is framed for its new size', async ({ page }) => {
+    const errors = await openPlates(page);
+    await H.setField(page, 'drawerD', 600);
+    await page.waitForTimeout(400);
+    await platesReady(page);
+    expectFramed(await corners(page, 'plates'), '306 × 600');
+    await expectCentred(page, '306 × 600');
+
+    await page.locator('#undoBtn').click();
+    await page.waitForTimeout(400);
+    await platesReady(page);
+    expect(await page.inputValue('#drawerD'), 'fixture: the undo really shrank the drawer')
+      .toBe('380');
+    expectFramed(await corners(page, 'plates'), 'undone to 306 × 380');
+    await expectCentred(page, 'undone to 306 × 380');
+    expect(errors).toEqual([]);
+  });
+
+  test('baseplates: a narrower width typed in is framed for the narrower plate',
+    async ({ page }) => {
+      const errors = await openPlates(page);
+      await H.setField(page, 'drawerW', 600);
+      await H.setField(page, 'drawerD', 600);
+      await page.waitForTimeout(400);
+      await platesReady(page);
+      await H.setField(page, 'drawerW', 306);
+      await page.waitForTimeout(400);
+      await platesReady(page);
+      expectFramed(await corners(page, 'plates'), '600 × 600 narrowed to 306 × 600');
+      await expectCentred(page, '600 × 600 narrowed to 306 × 600');
+      expect(errors).toEqual([]);
+    });
 
   /* The shell stands at the drawer's full height, so it is a taller thing to fit than
      the bins in it — and turning it on is asking to see the drawer. */

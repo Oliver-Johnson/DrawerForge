@@ -638,6 +638,9 @@ async function runBuild() {
     } catch (e) {
       console.error('build failed for', pc.id, e);
       $('status').textContent = `piece ${pc.id} failed — try different cuts`;
+      // the pieces that did build are what is on screen now, and the framing may still be
+      // for the meshes this build cleared away (see frameKey)
+      autoFrame();
       return;
     }
     drawPieceTable();
@@ -653,10 +656,11 @@ let scene, camera, renderer, root, sph = { theta: -0.7, phi: 1.05, r: 420, cx: 0
  *
  * The preview re-framed itself at the end of every build, and a build follows every
  * change on the page — so zooming in on a joint and then changing the clearance threw
- * the zoom away. It now frames itself only when what it is framing changes: the plate's
- * size, the exploded view, or the canvas's own shape. And not even then once you have
- * zoomed or panned, because those say what you want to look at, and re-framing would
- * overrule it.
+ * the zoom away. It now frames itself only when what it is framing changes: the size of
+ * what is drawn — a different drawer, the exploded view, more pieces spread apart, a
+ * thicker floor — or the canvas's own shape (see frameKey). And not even then once you
+ * have zoomed or panned, because those say what you want to look at, and re-framing
+ * would overrule it.
  *
  * Rotating does not count. It says which SIDE you want to look from, and a re-frame
  * keeps the angle, so there is nothing to overrule. The Fit button hands control back:
@@ -800,9 +804,24 @@ function sceneBox() {
   if (root.children.length) box.union(new THREE.Box3().setFromObject(root));
   return box;
 }
+/* When the framing is out of date: the box of what is drawn, to the millimetre, and the
+   canvas it is drawn on.
+   It was the drawer's size, the exploded toggle and the canvas, and that missed the
+   case that matters most. Changing the drawer's size resizes the map, and beside it the
+   canvas, so the resize observer frames straight away — but the build is still waiting
+   out its debounce, and the meshes on screen are the old drawer's. Shrinking 600 deep
+   to 380 was framed for 600, and stamped with the 380 key, so the frame at the end of
+   the build found nothing to do: the plate sat small and off to one side until Fit.
+   Keyed on the box, a frame taken against meshes that are on their way out is out of
+   date the moment they are replaced. The same box also sees what the old key could
+   not: an exploded view spreading further as the piece count grows, an extra floor,
+   tabs standing proud of an edge. A change that leaves the box as it was, which is
+   most of them, still leaves the camera alone — a rotated view in particular keeps
+   the distance it is at, rather than being re-fitted to its new angle by every edit. */
 const frameKey = () => {
-  const cv = $('three');
-  return [state.drawerW, state.drawerD, $('explode').checked, cv.clientWidth, cv.clientHeight].join('/');
+  const cv = $('three'), b = sceneBox();
+  return [...b.min.toArray(), ...b.max.toArray()].map(Math.round)
+    .concat([cv.clientWidth, cv.clientHeight]).join('/');
 };
 /* Frame the plate from wherever the camera is now looking from. Keeping the angle is
    deliberate, for Fit as much as for the automatic case: the button answers "show me
