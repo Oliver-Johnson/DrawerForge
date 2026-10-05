@@ -52,46 +52,119 @@ const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFron
  * it and puts "306" out of reach behind "30", so state gets the clamp and the field
  * keeps what you wrote with the reason underneath it. `min` and `max` go on the markup
  * as well, so the browser's own validity — which reported `valid` for -50 — agrees. */
+/* Every other field that reaches the geometry is here too, because each of them built a
+   broken file while Download stayed on: a blank magnet depth read as 0 and cut a pocket
+   whose roof was the plate's floor; a rim cutoff of 0 left a rim of no width; a margin
+   of -100 laid a 378 mm grid into a 306 mm drawer; 1e308 anywhere reached the mesh as
+   Infinity. The numbers themselves come from core.js PLATE_RANGES and mountLimits,
+   which say why each one is where it is; this adds the words.
+ *
+ * `max` may be a function, for a range that depends on the rest of the design — a
+ * margin cannot exceed the drawer, a magnet pocket has to fit the cell the pitch makes.
+ * `when` says whether the field is in play: magnet sizes are not checked with magnets
+ * off, nor margins outside Custom, because a complaint about a field you cannot see is
+ * one you cannot act on. `why` finishes the too-big message where "check the figure is
+ * in millimetres" would be the wrong advice. */
+const RANGES = PLATE_RANGES;
+const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
+const mount = () => mountLimits(state);
+const mountWhy = (opens) => `at a ${state.pitch} mm pitch — mounting holes sit ` +
+  `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
+  (state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
+    : opens ? 'a cut open to the socket has to stay on the socket floor'
+    : 'a pocket under the floor has to stay inside its cell');
+const bossDepth = () => state.baseMode === 'bosses'
+  ? 'with corner pockets — a boss is 2.6 mm tall, while the solid floor grows to suit' : '';
 const LIMITS = {
   drawerW: { min: 1, max: 2000, label: 'Drawer width' },
   drawerD: { min: 1, max: 2000, label: 'Drawer depth' },
   bedW: { min: 20, max: 2000, label: 'Bed width' },
   bedD: { min: 20, max: 2000, label: 'Bed depth' },
   bedH: { min: 20, max: 2000, label: 'Bed height' },
-  // pitch divides into the drawer to get the cell count, so a zero here is not a bad
-  // plate, it is an infinite one — Math.floor(x / 0) is Infinity and the grid loops
-  // never come back
-  pitch: { min: 5, max: 200, label: 'Grid pitch' },
+  /* pitch divides into the drawer to get the cell count, so a zero here is not a bad
+     plate, it is an infinite one — Math.floor(x / 0) is Infinity and the grid loops
+     never come back. The floor is higher than that now: below it the joints leak. */
+  pitch: { ...RANGES.pitch, label: 'Grid pitch',
+    tooSmall: 'below that the sockets and joints no longer fit their cells, and the plate comes out with holes in it' },
+  mLeft: { min: 0, max: () => state.drawerW, label: 'Left margin', when: customMargins,
+    why: () => 'the drawer is only that wide' },
+  mRight: { min: 0, max: () => state.drawerW, label: 'Right margin', when: customMargins,
+    why: () => 'the drawer is only that wide' },
+  mFront: { min: 0, max: () => state.drawerD, label: 'Front margin', when: customMargins,
+    why: () => 'the drawer is only that deep' },
+  mBack: { min: 0, max: () => state.drawerD, label: 'Back margin', when: customMargins,
+    why: () => 'the drawer is only that deep' },
+  bottomPad: { ...RANGES.bottomPad, label: 'Extra floor' },
+  topCutoff: { ...RANGES.topCutoff, label: 'Rim cutoff',
+    tooSmall: 'at 0 the rim between sockets is a face with no width, and the plate comes out open',
+    why: () => 'past that a spec bin rides on the rim instead of seating in its socket' },
+  magnetD: { ...RANGES.magnetD, max: () => mount().magnetD, label: 'Magnet Ø', when: () => state.magnets,
+    why: () => mountWhy(state.magnetSide === 'top') },
+  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mount().depth), label: 'Magnet depth',
+    when: () => state.magnets, why: bossDepth },
+  screwHoleD: { ...RANGES.screwHoleD, max: () => mount().screwHoleD, label: 'Screw hole Ø',
+    when: () => state.screws, why: () => mountWhy(true) },
+  screwHeadD: { ...RANGES.screwHeadD, max: () => mount().screwHeadD, label: 'Screw head Ø',
+    when: () => state.screws, why: () => mountWhy(false) },
+  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mount().depth),
+    label: 'Screw head depth', when: () => state.screws, why: bossDepth },
+  connClr: { ...RANGES.connClr, label: 'Fit clearance', when: () => state.connector !== 'none',
+    why: () => 'any looser and a dovetail pocket breaks through into the socket beside it' },
 };
 /* id -> the message that goes under it. Rebuilt from scratch on every read, so a field
    that has come good stops complaining without anything having to remember it once did. */
 const fieldErrors = new Map();
 /* Named one field at a time rather than derived from the id: the build audits the
-   template by literal, and $('errDrawerW') is what it looks for. */
+   template by literal, and $('errDrawerW') is what it looks for. Fields that sit in one
+   row share the line under it. */
 const ERR_FIELDS = [
   ['drawerW', 'errDrawerW'], ['drawerD', 'errDrawerD'],
   ['bedW', 'errBedW'], ['bedD', 'errBedD'], ['bedH', 'errBedH'], ['pitch', 'errPitch'],
+  ['mLeft', 'errMargins'], ['mRight', 'errMargins'], ['mFront', 'errMargins'], ['mBack', 'errMargins'],
+  ['bottomPad', 'errFloor'], ['topCutoff', 'errFloor'],
+  ['magnetD', 'errMagnet'], ['magnetH', 'errMagnet'],
+  ['screwHoleD', 'errScrew'], ['screwHeadD', 'errScrew'], ['screwHeadDepth', 'errScrew'],
+  ['connClr', 'errConnClr'],
 ];
 const ERR_EL = { errDrawerW: () => $('errDrawerW'), errDrawerD: () => $('errDrawerD'),
   errBedW: () => $('errBedW'), errBedD: () => $('errBedD'), errBedH: () => $('errBedH'),
-  errPitch: () => $('errPitch') };
+  errPitch: () => $('errPitch'), errMargins: () => $('errMargins'), errFloor: () => $('errFloor'),
+  errMagnet: () => $('errMagnet'), errScrew: () => $('errScrew'), errConnClr: () => $('errConnClr') };
 
+const roundMm = (n) => +n.toFixed(2);
 function readNumber(id) {
   const lim = LIMITS[id];
   const raw = $(id).value.trim();
   const v = parseFloat(raw);
   if (!lim) return isFinite(v) ? v : 0;
+  /* Out of play, a field keeps its fixed range but not the one the rest of the design
+     sets, and does not complain: magnets off at a 30 mm pitch should not quietly shrink
+     the magnet size the link carries, to be found smaller when they go back on. */
+  const inPlay = !lim.when || lim.when();
+  const lo = lim.min;
+  const hi = typeof lim.max !== 'function' ? (lim.max ?? Infinity) : inPlay ? lim.max() : Infinity;
+  $(id).min = lo;
+  if (isFinite(hi)) $(id).max = Math.max(lo, hi); else $(id).removeAttribute('max');
+  const say = (msg) => { if (inPlay) fieldErrors.set(id, msg); };
   if (!isFinite(v)) {
-    fieldErrors.set(id, `${lim.label} is blank — enter a measurement in millimetres.`);
-    return lim.min;
+    say(`${lim.label} is blank — enter a measurement in millimetres.`);
+    return lo;
   }
-  if (v < lim.min) {
-    fieldErrors.set(id, `${lim.label} must be at least ${lim.min} mm.`);
-    return lim.min;
+  /* A range with nothing in it: the pitch leaves no room for a pocket of any size. */
+  if (hi < lo) {
+    say(`${lim.label}: there is no room for one ${lim.why()}. Use a larger pitch, ` +
+        'or turn this off.');
+    return lo;
   }
-  if (v > lim.max) {
-    fieldErrors.set(id, `${lim.label} must be ${lim.max} mm or less — check the figure is in millimetres.`);
-    return lim.max;
+  if (v < lo) {
+    say(`${lim.label} must be at least ${lo} mm` + (lim.tooSmall ? ` — ${lim.tooSmall}.` : '.'));
+    return lo;
+  }
+  if (v > hi) {
+    const why = lim.why && lim.why();
+    say(`${lim.label} must be ${roundMm(hi)} mm or less ` +
+        (why ? `${why}.` : '— check the figure is in millimetres.'));
+    return hi;
   }
   return v;
 }
@@ -100,42 +173,51 @@ function readNumber(id) {
    not carrying it on its own: aria-invalid says it to a screen reader and the message
    below the field says it in words. */
 function showFieldErrors() {
+  const lines = new Map();
   for (const [id, errId] of ERR_FIELDS) {
     const msg = fieldErrors.get(id) || '';
-    const out = ERR_EL[errId]();
     $(id).setAttribute('aria-invalid', msg ? 'true' : 'false');
     $(id).style.borderColor = msg ? 'var(--red)' : '';
-    out.textContent = msg;
-    out.hidden = !msg;
+    if (!lines.has(errId)) lines.set(errId, []);
+    if (msg) lines.get(errId).push(msg);
+  }
+  for (const [errId, msgs] of lines) {
+    const out = ERR_EL[errId]();
+    out.textContent = msgs.join(' ');
+    out.hidden = !msgs.length;
   }
 }
 
 function readControls() {
   fieldErrors.clear();
-  for (const id of numIds) state[id] = readNumber(id);
+  /* The switches before the numbers: which ranges apply, and how wide they are, depend
+     on them — see LIMITS. */
   state.alignX = $('alignX').value; state.alignY = $('alignY').value;
   const mm = $('marginMode').value;
   state.marginMode = mm === 'custom' ? 'custom' : 'auto';
   state.noMargin = mm === 'none';
-  if (state.noMargin) { state.marginMode = 'custom'; state.mLeft = state.mRight = state.mFront = state.mBack = 0; }
   state.connector = $('connector').value;
   state.keyType = KEY_CONN.includes(state.connector) ? state.connector : 'bowtie';
   state.keyMount = $('keyMount').value;
   state.keyInsert = $('keyInsert').value;
   state.baseMode = $('baseMode').value;
   state.plateStyle = $('plateStyle').value;
+  state.tolerance = $('tolerance').value;
+  state.magnets = $('magnets').checked;
+  state.screws = $('screws').checked;
+  state.magnetSide = $('magnetSide').value;
+  for (const id of numIds) state[id] = readNumber(id);
+  if (state.noMargin) { state.marginMode = 'custom'; state.mLeft = state.mRight = state.mFront = state.mBack = 0; }
+  // the per-corner radii need no range here: buildPiece caps each one at the socket's rim
   if ($('perCorner').checked) {
     state.cornerRadii = { ll: parseFloat($('rFL').value)||0, lr: parseFloat($('rFR').value)||0,
                           ul: parseFloat($('rBL').value)||0, ur: parseFloat($('rBR').value)||0 };
   } else state.cornerRadii = null;
-  state.tolerance = $('tolerance').value;
   /* Read with the other numbers above; clamped here because it is a percentage and
      the estimate divides by 100, so a stray 900 would quote a mass nothing can print. */
   state.infill = Math.max(0, Math.min(100, state.infill));
-  state.magnets = $('magnets').checked;
-  state.screws = $('screws').checked;
-  state.magnetSide = $('magnetSide').value;
-  const clr = parseFloat($('connClr').value) || 0.2;
+  // `|| 0.2` made a clearance of 0 into 0.2, and let 100 through
+  const clr = readNumber('connClr');
   state.tab = Object.assign({}, DEFAULTS.tab, { clr });
   /* No state.bowtie: a bowtie is built from state.key like the other two keyed joints,
      and DEFAULTS.bowtie is gone. This line survived it by being harmless —
@@ -220,9 +302,18 @@ function pieceExtent(pc) {
   const ext = state.connector === 'dovetail' ? state.tab.dp + 0.4 : 0;
   return [pc.mL + pc.nx*pitch + pc.mR + ext, pc.mF + pc.ny*pitch + pc.mB + ext];
 }
-function pieceFits(pc) {
+function footprintFits(pc) {
   const [w, d] = pieceExtent(pc);
   return w <= state.bedW + 1e-6 && d <= state.bedD + 1e-6;
+}
+/* The bed has three dimensions and only two were checked. An extra floor of 300 mm made
+   a 304 mm plate, the print plan quietly packed it onto nothing — four empty plates —
+   and the dialog said every piece fit while quoting 10 kg of PLA. The height is known
+   before anything is built: it is the floor platePad works out, under the profile. */
+const plateHeightMm = () => platePad(state) + state.plateHeight;
+const heightFits = () => plateHeightMm() <= state.bedH + 1e-6;
+function pieceFits(pc) {
+  return footprintFits(pc) && heightFits();
 }
 
 /* How big a job this tool will take on in one go.
@@ -230,8 +321,14 @@ function pieceFits(pc) {
    from 999 — gave a 238 × 238 grid, 1600 pieces, and a build that started working
    through them one real CSG at a time with nothing on the page to say it would not
    finish. Both numbers are well past any drawer: MAX_CELLS is a 1.26 m square of grid
-   at the spec pitch, MAX_PIECES more separate prints than anyone is going to run. */
-const MAX_CELLS = 900, MAX_PIECES = 60;
+   at the spec pitch, MAX_PIECES more separate prints than anyone is going to run.
+   MAX_CELLS is core.js's, because the Fewest plates search has to stop at it too.
+
+   MAX_PIECE_CELLS is the same idea for one piece, which is one synchronous build: the
+   bed fields go to 2 m, so a 1260 mm drawer on a "2000 mm bed" was one 900-cell piece,
+   22 s with the page frozen and a 189 MB STL at the end. 24 × 24 cells is a metre
+   square at the spec pitch — bigger than any printer's bed. */
+const MAX_CELLS = PLATE_MAX_CELLS, MAX_PIECES = 60, MAX_PIECE_CELLS = 576;
 const overCap = () => !!layout &&
   (layout.nx * layout.ny > MAX_CELLS || layout.pieces.length > MAX_PIECES);
 
@@ -253,13 +350,37 @@ function warningsList() {
     out.push({ err: true, stop: true, t: `This split makes ${layout.pieces.length} pieces, ` +
       `past the ${MAX_PIECES} this tool will build in one go. A larger printer bed, or ` +
       'fewer cuts on the map, brings it back down.' });
+  else {
+    const big = layout.pieces.find((pc) => pc.nx * pc.ny > MAX_PIECE_CELLS);
+    if (big)
+      out.push({ err: true, stop: true, t: `Piece ${big.id} is ${big.nx} × ${big.ny} = ` +
+        `${big.nx * big.ny} cells, past the ${MAX_PIECE_CELLS} this tool will build as one ` +
+        'piece — no printer bed is that big. Check the bed size, or add cuts on the map.' });
+  }
   // suppressed when the drawer fields are already complaining: "smaller than one cell"
   // is true of the clamped value and useless as a diagnosis of a blank or negative one
-  if (!fieldErrors.has('drawerW') && !fieldErrors.has('drawerD') &&
-      (layout.nx < 1 || layout.ny < 1 || state.drawerW < state.pitch || state.drawerD < state.pitch))
+  const tooSmall = !fieldErrors.has('drawerW') && !fieldErrors.has('drawerD') &&
+      (layout.nx < 1 || layout.ny < 1 || state.drawerW < state.pitch || state.drawerD < state.pitch);
+  if (tooSmall)
     out.push({ err: true, stop: true, t: `Drawer smaller than one ${state.pitch} mm cell — nothing to generate.` });
-  for (const pc of layout.pieces) if (!pieceFits(pc))
+  /* Each custom margin can be inside the drawer while the pair of them leaves no room
+     for a cell. computeLayout puts one there regardless and hands the far margin what
+     is left, which is then a negative width. */
+  else if (customMargins()) {
+    const freeW = state.drawerW - state.mLeft - state.mRight;
+    const freeD = state.drawerD - state.mFront - state.mBack;
+    if (freeW < state.pitch - 1e-6)
+      out.push({ err: true, stop: true, t: `The left and right margins leave ${roundMm(freeW)} mm ` +
+        `of the drawer's width — not enough for one ${state.pitch} mm cell.` });
+    if (freeD < state.pitch - 1e-6)
+      out.push({ err: true, stop: true, t: `The front and back margins leave ${roundMm(freeD)} mm ` +
+        `of the drawer's depth — not enough for one ${state.pitch} mm cell.` });
+  }
+  for (const pc of layout.pieces) if (!footprintFits(pc))
     out.push({ err: true, t: `Piece ${pc.id} (${(pc.mL+pc.nx*state.pitch+pc.mR).toFixed(0)} × ${(pc.mF+pc.ny*state.pitch+pc.mB).toFixed(0)} mm) exceeds the ${state.bedW} × ${state.bedD} bed — add a cut through it.` });
+  if (!heightFits())
+    out.push({ err: true, t: `The plate is ${roundMm(plateHeightMm())} mm tall, more than ` +
+      `your printer's ${state.bedH} mm build height — lower the extra floor, or check the bed height.` });
   if (layout.pieces.some(pc => pc.nx*pc.ny === 1))
     out.push({ t: 'A piece is a single cell — printable, but consider moving a cut for a sturdier layout.' });
   /* One axis at a time. It fired on either and then printed both, so a drawer narrower
@@ -304,8 +425,9 @@ function drawWarnings() {
      said "resolve the errors above to generate" and offered you the download in the
      same breath. See warningsList for why this is `stop` and not `err`. */
   const stop = ws.some(w => w.stop);
-  $('openExport').disabled = stop;
-  $('openExport').title = stop ? 'Fix the errors under the cut map first' : '';
+  $('openExport').disabled = stop || !!buildFailed;
+  $('openExport').title = stop ? 'Fix the errors under the cut map first'
+    : buildFailed ? `Piece ${buildFailed} failed to build — try different cuts` : '';
 }
 
 // ---------- interactive cut map ----------
@@ -476,7 +598,7 @@ function drawPieceTable() {
     const w = pc.mL + pc.nx*pitch + pc.mR, d = pc.mF + pc.ny*pitch + pc.mB;
     const fit = pieceFits(pc);
     const built = builds[pc.id];
-    let joints = '…';
+    let joints = pc.id === buildFailed ? 'failed' : '…';
     if (built) {
       const m = built.meta, parts = [];
       if (m.tabs) parts.push(`${m.tabs} tab`);
@@ -490,7 +612,7 @@ function drawPieceTable() {
       <td class="mono">${pc.nx} × ${pc.ny}</td>
       <td class="mono">${w.toFixed(1)} × ${d.toFixed(1)}</td>
       <td class="mono">${joints || '—'}</td>
-      <td class="${fit?'':'bad'}">${fit ? 'fits' : 'TOO BIG'}</td>
+      <td class="${fit?'':'bad'}">${fit ? 'fits' : footprintFits(pc) ? 'TOO TALL' : 'TOO BIG'}</td>
       <td><button class="ghost" data-dl="${pc.id}" ${built?'':'disabled'}>STL</button></td>
     </tr>`;
   }).join('');
@@ -502,6 +624,7 @@ function drawPieceTable() {
      it would never reach, next to a status line saying the build could not start. */
   const blocked = ws.some(w => w.err);
   $('pieceTail').textContent = blocked ? 'not building — see the checks above'
+    : buildFailed ? `build failed at piece ${buildFailed} — try different cuts`
     : okc < tot ? `building ${okc}/${tot}…` : `${tot} ready`;
   updatePreviewLabel(blocked);
   // this runs once per piece as the build proceeds, which is exactly the cadence an
@@ -521,8 +644,13 @@ function drawPieceTable() {
    set once goes stale, and a stale label is worse than none because it is confident. */
 function updatePreviewLabel(blocked) {
   const n = layout.pieces.length, built = Object.keys(builds).length;
+  if (!threeOk) {
+    $('three').setAttribute('aria-label', '3D preview unavailable — this browser could not start WebGL.');
+    return;
+  }
   $('three').setAttribute('aria-label', blocked
     ? '3D preview: nothing to show — see the checks under the cut map.'
+    : buildFailed ? `3D preview: the build failed at piece ${buildFailed}.`
     : built < n
       ? `3D preview: building, ${built} of ${n} piece${n === 1 ? '' : 's'} so far.`
       : `3D preview: a ${layout.nx} by ${layout.ny} cell baseplate, ` +
@@ -538,9 +666,15 @@ function scheduleBuild() {
   clearTimeout(buildTimer);
   buildTimer = setTimeout(runBuild, 260);
 }
+/* The id of the piece whose build threw, until the next build starts. A failure used to
+   be a line in the preview's corner and nothing else: the piece table sat on "building
+   1/2…" for good, the dialog said "Still building", and Download stayed on — for a
+   build that had already given up. */
+let buildFailed = null;
 async function runBuild() {
   const token = ++buildToken;
   builds = {};
+  if (buildFailed) { buildFailed = null; drawWarnings(); }
   printPlan = null; renderPrintPlan();
   drawPieceTable();
   clearThree();
@@ -558,6 +692,9 @@ async function runBuild() {
     } catch (e) {
       console.error('build failed for', pc.id, e);
       $('status').textContent = `piece ${pc.id} failed — try different cuts`;
+      buildFailed = pc.id;
+      drawWarnings();
+      drawPieceTable();
       return;
     }
     drawPieceTable();
@@ -569,7 +706,24 @@ async function runBuild() {
 
 // ---------- three.js ----------
 let scene, camera, renderer, root, sph = { theta: -0.7, phi: 1.05, r: 420, cx: 0, cy: 0 };
+/* The preview is the one part of the page that needs WebGL, and it was set up first, so
+   a browser without it — GPU blocklisted, hardware acceleration off, three.js not
+   loaded — threw on the renderer and took the rest of the boot with it: no layout, no
+   build, no downloads, for a tool whose files never touch the GPU. So a failed setup
+   says so in the preview box and leaves `threeOk` false, and every preview function
+   below checks it and does nothing. */
+let threeOk = false;
 function initThree() {
+  try {
+    setupThree();
+    threeOk = true;
+  } catch (e) {
+    console.warn('3D preview unavailable:', e && e.message);
+    $('noGl').style.display = 'grid';
+    $('threehint').style.display = 'none';
+  }
+}
+function setupThree() {
   const canvas = $('three');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   scene = new THREE.Scene();
@@ -653,6 +807,7 @@ function initThree() {
   })();
 }
 function clearThree() {
+  if (!threeOk) return;
   while (root.children.length) {
     const m = root.children.pop();
     m.geometry.dispose(); m.material.dispose();
@@ -665,6 +820,7 @@ function piecePlacement(pc) {
   return [gx + pc.seg * gap, gy + pc.band * gap];
 }
 function addPieceToThree(pc, res) {
+  if (!threeOk) return;
   const tris = polysToTriangles(res.polys);
   const pos = new Float32Array(tris.length * 9);
   let o = 0;
@@ -687,6 +843,7 @@ function fitThree() {
   sph.r = Math.max(state.drawerW, state.drawerD) * 1.5;
 }
 $('explode').addEventListener('change', () => {
+  if (!threeOk) return;
   for (const mesh of root.children) {
     const pc = layout.pieces.find(p => p.id === mesh.userData.pieceId);
     if (pc) { const [px, py] = piecePlacement(pc); mesh.position.set(px, py, 0); }
@@ -698,9 +855,17 @@ $('explode').addEventListener('change', () => {
 let printPlan = null;
 function computePrintPlan() {
   if (!layout || Object.keys(builds).length < layout.pieces.length) { printPlan = null; renderPrintPlan(); return; }
-  const gap = parseFloat($('plateGap').value) || 4;
+  /* Never below zero. A negative spacing packed parts into each other, and a negative
+     stack gap sank the upper piece into the one under it, so the 3MF printed them as
+     one fused lump. A blank field means the default; 0 is an answer and stays 0 — the
+     old `|| 4` turned it into 4. */
+  const gapOf = (id, dflt) => {
+    const v = parseFloat($(id).value);
+    return isFinite(v) ? Math.max(0, v) : dflt;
+  };
+  const gap = gapOf('plateGap', 4);
   const stack = $('stackToggle').checked;
-  const zGap = parseFloat($('stackGap').value) || 0.24;
+  const zGap = gapOf('stackGap', 0.24);
   $('stackHint').style.display = stack ? '' : 'none';
   const items = layout.pieces.map(pc => {
     const m = builds[pc.id].meta;
@@ -716,7 +881,7 @@ function computePrintPlan() {
      Same for the size: measured off the mesh connectorPart returns, not off the
      parameters that made it. The two are the same rectangle for a flat key and are
      nothing like each other for the U-clip, whose prm describes a cross-section. */
-  if (KEYED.includes(state.connector)) {
+  if (shipsKeys()) {
     const ext = partExtent(connectorPart().polys);
     items.push({ id: 'key', w: ext.w, d: ext.d, h: ext.h,
                  qty: keysNeeded(), stackable: false });
@@ -763,13 +928,18 @@ function platePolysAndItems(idx) {
   }
   return objs;
 }
+/* JSZip stores files uncompressed unless asked, and a 3MF is a ZIP of XML text — a
+   format that compresses several times over. Stored, every 3MF and ZIP was several
+   times the size it needed to be, which on a big plate is the difference between a
+   download and a stall. Slicers read either. */
+const ZIP_DEFLATE = { compression: 'DEFLATE', compressionOptions: { level: 6 } };
 async function plate3mfBytes(idx) {
   const x = build3mfXML(platePolysAndItems(idx));
   const pz = new JSZip();
   pz.file('[Content_Types].xml', x.contentTypes);
   pz.file('_rels/.rels', x.rels);
   pz.file('3D/3dmodel.model', x.model);
-  return pz.generateAsync({ type: 'uint8array' });
+  return pz.generateAsync({ type: 'uint8array', ...ZIP_DEFLATE });
 }
 async function downloadAllPlates() {
   if (!printPlan) return;
@@ -777,7 +947,7 @@ async function downloadAllPlates() {
   if (n === 1) { saveBlob(await plate3mfBytes(0), 'print-plates.3mf'); return; }
   const zip = new JSZip();
   for (let i = 0; i < n; i++) zip.file(`plate-${i+1}.3mf`, await plate3mfBytes(i));
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }), `print-plates-x${n}.zip`);
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }), `print-plates-x${n}.zip`);
 }
 $('plateGap').addEventListener('input', computePrintPlan);
 $('stackToggle').addEventListener('change', computePrintPlan);
@@ -963,7 +1133,7 @@ function materialGrams() {
   let mm3 = layout.pieces.reduce((a, pc) => a + filamentOf(builds[pc.id].mat), 0);
   // the loose parts are part of the job: keysNeeded is the same count the STL lays out
   // and the print plan reserves bed space for
-  if (KEYED.includes(state.connector))
+  if (shipsKeys())
     mm3 += filamentOf(meshMaterial(connectorPart().polys)) * keysNeeded();
   return mm3 * PLA_DENSITY / 1000;
 }
@@ -1028,13 +1198,18 @@ function keyCount(wallOnly) {
     !wallish || Math.abs(j - Math.round(j)) <= 0.25).length, 0);
 }
 const topClips = () => state.connector === 'snap' && state.keyInsert === 'top';
-const keysNeeded = () => keyCount(topClips()) || 1;
+/* No floor of one. A plate that is a single piece has no seams, so it needs no keys —
+   the `|| 1` that used to sit here put a key in the ZIP, on the print plan and in the
+   file list for a design with nothing to join. shipsKeys is the one test for "is there
+   a loose part to offer at all", so the plan, the ZIP and the dialog agree on it. */
+const keysNeeded = () => keyCount(topClips());
+const shipsKeys = () => KEYED.includes(state.connector) && keysNeeded() > 0;
 async function downloadEverythingZip() {
   if (Object.keys(builds).length < layout.pieces.length) return;
   const zip = new JSZip();
   for (const pc of layout.pieces)
     zip.file(`baseplate-${pc.id}.stl`, stlBinary(builds[pc.id].polys, pc.id));
-  if (KEYED.includes(state.connector)) {
+  if (shipsKeys()) {
     const k = keysStl();
     zip.file(k.name, stlBinary(k.polys, k.mesh));
   }
@@ -1043,7 +1218,7 @@ async function downloadEverythingZip() {
       zip.file(`print-plates/plate-${i+1}.3mf`, await plate3mfBytes(i));
   }
   zip.file('README.txt', readmeText());
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }),
                 `gridfinity-baseplate-${layout.nx}x${layout.ny}.zip`);
 }
 function readmeText() {
@@ -1147,13 +1322,20 @@ function bedFitText() {
   // guard, so the "largest piece" arithmetic below never reasons about an empty list
   if (!layout.pieces.length)
     return { cls: 'bad', t: 'There is nothing to generate yet — see the checks under the cut map.' };
-  const bad = layout.pieces.filter((pc) => !pieceFits(pc));
+  const bad = layout.pieces.filter((pc) => !footprintFits(pc));
   if (bad.length)
     return { cls: 'bad', t: `${bad.length} piece(s) — ${bad.map((pc) => pc.id).join(', ')} — ` +
       `will not fit your ${bed}. Add a cut through them on the cut map, or pick a split mode ` +
       'that makes smaller pieces; the files below would print oversized as they stand.' };
+  // a cut cannot fix this one, so it gets its own sentence rather than the one above
+  if (!heightFits())
+    return { cls: 'bad', t: `The plate is ${roundMm(plateHeightMm())} mm tall and your printer ` +
+      `builds ${state.bedH} mm high. Lower the extra floor, or check the bed height.` };
   const err = warningsList().find((w) => w.err);
   if (err) return { cls: 'bad', t: err.t + ' Nothing can be exported until that is fixed.' };
+  if (buildFailed)
+    return { cls: 'bad', t: `Piece ${buildFailed} could not be built, so the build stopped there. ` +
+      'Move a cut through it or pick another joint; the plates cannot be exported until every piece builds.' };
   const ready = Object.keys(builds).length;
   if (ready < layout.pieces.length)
     return { cls: 'wait', t: `Still building — ${ready} of ${layout.pieces.length} piece(s) ready. ` +
@@ -1237,7 +1419,7 @@ function renderExportFiles() {
           { 'data-ex': 'piece', 'aria-label': `Download piece ${pc.id} (STL)` });
     btn.disabled = !b;   // downloadPiece would otherwise fail silently
   }
-  if (KEYED.includes(state.connector)) {
+  if (shipsKeys()) {
     const kn = state.connector === 'snap' ? 'Snap clips' : 'Connector keys';
     exRow(kn, `${keysNeeded()} needed, laid out on one plate · STL`, 'STL', downloadKeys,
           { 'data-ex': 'keys', 'aria-label': `Download the ${kn.toLowerCase()} (STL)` });

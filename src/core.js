@@ -749,6 +749,53 @@ function clipToRect(pts, x0, y0, x1, y1) {
 }
 
 // ---------- layout ----------
+/* The biggest grid the page will build in one go, a 1.26 m square at the spec pitch. It
+   lives here because computeLayout has to honour it too (see the 'plates' split); the
+   page's MAX_CELLS is this number. */
+const PLATE_MAX_CELLS = 900;
+/* The range the page accepts for each setting that reaches the geometry with nothing
+   else bounding it. They live here, beside the geometry they protect, because
+   test/plate-audit.js builds every joint at their ends — a limit the audit cannot read
+   is a limit nobody re-measures when the geometry changes. The page adds the labels and
+   the wording; src/ui.js LIMITS.
+ *
+ *   pitch      Below 13.5 the joints stop closing: keys, snaps and puzzle lobes run into
+ *              their neighbours or out of their cells, and every joint leaked somewhere in
+ *              5–13 mm. 13.3 still leaks a 1-cell-wide piece; 13.4 up is closed. It was 5,
+ *              which only stopped the grid dividing by zero.
+ *   topCutoff  0 puts the socket's top edge on the plate's own outline, and the rim there
+ *              is a face of no width: every joint leaked. It closes from about 0.02; 0.1
+ *              keeps clear of the last value that leaked. From 0.75 the socket's top edge
+ *              is narrower than a spec bin's chamfer at that height, so the bin stops
+ *              reaching the socket floor and rides on the rim — by 0.25 mm at 1, and the
+ *              chamfer turns over entirely at 2.15. 1 is as far as that is worth taking.
+ *   connClr    Past 0.3 the dovetail pocket, cut 1.9 mm + this into the piece, breaks
+ *              through the 2.15 mm socket wall and crosses the chamfer cone — it leaked
+ *              from 0.34. The hint's own advice stops at 0.25.
+ *   bottomPad  Nothing breaks above 20; a plate that tall is a typing slip, and the bed
+ *              check is what stops one taller than the printer.
+ *   magnet and screw minimums keep a cutter from sitting flush with a face — a 0 mm
+ *              magnet is a pocket whose roof is the plate's floor, and coplanar cuts are
+ *              ENGINE.md §1's oldest rule. The diameters' maximums depend on the pitch
+ *              and come from mountLimits. */
+const PLATE_RANGES = {
+  pitch: { min: 13.5, max: 200 },
+  topCutoff: { min: 0.1, max: 1 },
+  connClr: { min: 0, max: 0.3 },
+  bottomPad: { min: 0, max: 20 },
+  magnetD: { min: 1 }, magnetH: { min: 0.5, max: 10 },
+  screwHoleD: { min: 1 }, screwHeadD: { min: 1 }, screwHeadDepth: { min: 0.5, max: 10 },
+};
+/* A piece's column letters, spreadsheet-style: A … Z, AA, AB … The id was
+   String.fromCharCode(65 + s), which runs on past Z into '[', '\' and the lower case — a
+   33-piece row shipped `baseplate-\1.stl`, and both `baseplate-A1.stl` and
+   `baseplate-a1.stl`, which are one file on Windows and macOS. */
+function pieceColumn(s) {
+  let out = '';
+  for (let n = s + 1; n > 0; n = Math.floor((n - 1) / 26))
+    out = String.fromCharCode(65 + (n - 1) % 26) + out;
+  return out;
+}
 /* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
    splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
 function computeLayout(p) {
@@ -796,7 +843,13 @@ function computeLayout(p) {
   // row bands
   let rowCuts;
   if (p.splitMode === 'plates') {
-    const opt = optimizeForPlates(Object.assign({}, p, { splitMode: 'balanced' }));
+    /* Past the cell cap the page will refuse the job whatever split it gets, and this
+       search runs first, inside the layout, before the page can say so. That ordering
+       is how a stray 5 mm pitch on a big drawer froze the tab for 21 s to end at "not
+       building" anyway — and every keystroke in the pitch field passes through values
+       like that on its way to the one being typed. */
+    const opt = nx * ny <= PLATE_MAX_CELLS
+      ? optimizeForPlates(Object.assign({}, p, { splitMode: 'balanced' })) : null;
     if (opt) return computeLayout(Object.assign({}, p, { splitMode: 'manual', rowCuts: opt.rowCuts, colCuts: opt.colCuts }));
     return computeLayout(Object.assign({}, p, { splitMode: 'balanced' }));
   }
@@ -853,7 +906,7 @@ function computeLayout(p) {
     const segEnds = [...colCuts[b], nx];
     for (let s = 0; s < segStarts.length; s++) {
       pieces.push({
-        id: `${String.fromCharCode(65 + s)}${b + 1}`,
+        id: `${pieceColumn(s)}${b + 1}`,
         band: b, seg: s,
         cellX0: segStarts[s], cellY0: bandStarts[b],
         nx: segEnds[s] - segStarts[s], ny: bandEnds[b] - bandStarts[b],
@@ -1647,6 +1700,86 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
 }
 
 // ---------- plate builder ----------
+/* Plastic left between a mounting pocket and the face it stops short of. The solid
+   floor was a fixed 2.8 mm, which is a 2 mm magnet plus 0.8 — so a 6 × 3 mm magnet, as
+   common as the 6 × 2 the spec draws, was cut clean through it: from above it fell out
+   of the bottom, from below it stood 0.2 mm proud of the socket floor. 0.6 is what the
+   corner bosses leave under a stock magnet (2.6 − 2), and it changes nothing for one:
+   2 + 0.6 is under the 2.8 the floor already has. */
+const MOUNT_SKIN = 0.6;
+/* The corner bosses of baseMode 'bosses': a quarter square this far in from each cell
+   corner, its inner corner rounded, never taller than BOSS_H. Named because mountLimits
+   has to know how much room a boss leaves around its pocket. */
+const BOSS_W = 12.5, BOSS_R = 3.5, BOSS_H = 2.6;
+
+/* How thick the solid floor under the sockets is: what was asked for, raised to whatever
+   the plate is carrying needs. A pocket cut into the floor — a magnet from either side, a
+   screw head's counterbore from below — has to be shallower than the floor by
+   MOUNT_SKIN, or it is a hole.
+   Its own function because the page needs the plate's height before anything is built:
+   a plate taller than the printer can build is a check, not a surprise in the slicer. */
+function platePad(cfg) {
+  let pad = cfg.bottomPad;
+  if ((cfg.magnets || cfg.screws) && cfg.baseMode !== 'bosses') {
+    pad = Math.max(pad, cfg.magnetBase || 2.8);
+    if (cfg.magnets) pad = Math.max(pad, cfg.magnetH + MOUNT_SKIN);
+    if (cfg.screws && cfg.screwHeadD > cfg.screwHoleD)
+      pad = Math.max(pad, cfg.screwHeadDepth + MOUNT_SKIN);
+  }
+  const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
+  if (keyedConn && cfg.keyMount !== 'wall') pad = Math.max(pad, cfg.key.depth + 0.8);
+  if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
+  return pad;
+}
+
+/* Plastic left round a mounting cut, to whatever holds it. 1 mm rather than a token
+   wall, and measured: the sites sit holeOffset from each cell centre whatever the
+   pitch, and with less than this between them and the socket floor's edge the cutter's
+   facets graze the floor's own triangulation — screws at a 36 mm pitch leaked 192 edges
+   with 0.65 mm to spare. */
+const MOUNT_WALL = 1.0;
+/* The largest mounting cuts this configuration has room for, as diameters and depths in
+   the units the page's fields use. Magnets and screws sit holeOffset (13 mm, the spec's)
+   from each cell centre at ANY pitch, so the room round them shrinks with the pitch:
+   below about 34 mm a stock magnet pocket no longer fits inside its cell at all, and every
+   magnet-and-screw leak a pitch sweep found, 24.5 to 36 mm, was a cutter out past the
+   socket floor or the cell edge.
+ *
+ * Three kinds of room, by where the cut opens:
+ *   - into the socket (a magnet from above, the screw shank): it must stay on the socket
+ *     floor, or it crosses the floor's chamfer cone — see ENGINE.md §2;
+ *   - under the floor (a magnet from below, the counterbore): it must stay in its cell;
+ *   - in a corner boss: it must stay in the boss, which is shorter than the solid floor
+ *     and does not grow with the pocket, so it also caps the depth. */
+function mountLimits(cfg) {
+  const half = cfg.pitch / 2, off = cfg.holeOffset;
+  const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
+  // distance from a point at (s, s) to the edge of a rounded square of half-size h,
+  // corner radius r, centred on the origin
+  const roomIn = (h, r, s) => {
+    const q = s - (h - r);
+    return q > 0 ? r - Math.SQRT2 * q : h - s;
+  };
+  // the socket floor ring, as buildPiece's profile and roundedSquareRing make it
+  const dBot = 2.85 + tol, hf = half - dBot;
+  const rf = Math.max(0.3, Math.min(cfg.socketRadius - (dBot - cfg.topCutoff), hf - 0.01));
+  const onFloor = roomIn(hf, rf, off) - MOUNT_WALL;
+  const inCell = half - off - MOUNT_WALL;
+  const s = half - off;              // the site's distance in from the cell's edges
+  const inBoss = Math.min(roomIn(BOSS_W, BOSS_R, s), s) - MOUNT_WALL;
+  const bosses = cfg.baseMode === 'bosses';
+  const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
+  const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // the fields step in tenths
+  return {
+    // a magnet pocket is cut 0.1 mm over the magnet's radius
+    magnetD: r10(2 * ((cfg.magnetSide === 'top' ? top : under) - 0.1)),
+    screwHoleD: r10(2 * top),
+    screwHeadD: r10(2 * under),
+    // in the solid floor the pad grows to suit, so only a boss caps the depth
+    depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
+  };
+}
+
 /* Region-decomposed build: no global CSG. Each piece = margin/corner regions (plain
    extrusions) + one region per cell (extrusion minus its socket cutter and holes).
    Regions are clipped from the global outline (rounded corners, connector bites)
@@ -1654,7 +1787,7 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
 function buildPiece(cfg, layout, piece, onStatus) {
   const pitch = cfg.pitch, half = pitch/2;
   const solidBase = cfg.baseMode !== 'bosses';
-  let pad = ((cfg.magnets || cfg.screws) && solidBase) ? Math.max(cfg.bottomPad, cfg.magnetBase || 2.8) : cfg.bottomPad;
+  const pad = platePad(cfg);
   const isHclip = cfg.connector === 'hclip';
   const topInsert = cfg.keyInsert === 'top';
   const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
@@ -1680,8 +1813,6 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const keyKind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
   const keyClr = keyKind === 'snaptop' ? cfg.key.clr
                : isHclip ? cfg.hclip.clr : keyDims.clr;
-  if (keyedConn && !wallKeys) pad = Math.max(pad, cfg.key.depth + 0.8);
-  if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
   const H = pad + cfg.plateHeight;
   const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
   const dTop = cfg.topCutoff, dMid = 2.15 + tol, dBot = 2.85 + tol;
@@ -1902,8 +2033,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
   // ---- corner bosses (pocket-style mounting, saves filament) ----
   if ((cfg.magnets || cfg.screws) && !solidBase) {
     const off = cfg.holeOffset;
-    const bossW = 12.5, rIn = 3.5;
-    const bossH = Math.min(2.6, Math.max(
+    const bossW = BOSS_W, rIn = BOSS_R;
+    // never more than BOSS_H, so a pocket deeper than BOSS_H − MOUNT_SKIN would come out
+    // through the top: mountLimits refuses one rather than this growing past it
+    const bossH = Math.min(BOSS_H, Math.max(
       cfg.magnets ? cfg.magnetH + 0.8 : 0,
       cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
     const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
@@ -2203,7 +2336,10 @@ function build3mfXML(items) {
    Shelf packing with rotation; stackable identical footprints pile up with zGap. */
 function packPlates(items, bedW, bedD, gap, opts) {
   opts = opts || {};
-  const zGap = opts.zGap || 0.24;
+  // a gap below zero overlaps the parts it separates — they print fused — so neither is
+  // allowed to be one, whoever is calling
+  gap = Math.max(0, gap || 0);
+  const zGap = Math.max(0, opts.zGap ?? 0.24);
   const bedH = opts.bedH || 1e9;
   const stack = !!opts.stack;
   // expand qty into units
@@ -2273,11 +2409,22 @@ function packPlates(items, bedW, bedD, gap, opts) {
 }
 
 // ---- split optimizer: choose cuts minimizing print plates ----
-function compositions(n, maxPart, maxParts) {
+/* Every way to write n as an ordered sum of at most maxParts parts of at most maxPart,
+   largest first parts first — up to `limit` of them.
+ *
+ * It used to walk the whole tree and keep what reached zero, which is fine for a drawer
+ * and 24 million nodes for 200 cells into parts of 70: a branch whose remaining parts
+ * could not carry what is left was walked to the bottom anyway. Pruning those changes
+ * nothing about what comes out or in what order — they never produced anything — and
+ * the limit is there for the cases that are genuinely that big, which a real drawer
+ * never reaches: none of the plans test/plate-audit.js holds comes near it. */
+const COMPOSITION_LIMIT = 5000;
+function compositions(n, maxPart, maxParts, limit = COMPOSITION_LIMIT) {
   const out = [];
   function rec(rem, parts) {
-    if (parts.length > maxParts) return;
+    if (out.length >= limit) return;
     if (rem === 0) { if (parts.length) out.push(parts.slice()); return; }
+    if (rem > (maxParts - parts.length) * maxPart) return;   // cannot finish from here
     for (let p = Math.min(rem, maxPart); p >= 1; p--) { parts.push(p); rec(rem - p, parts); parts.pop(); }
   }
   rec(n, []);
@@ -2296,6 +2443,11 @@ function optimizeForPlates(p) {
     .filter(c => c.every((v, i) => v*pitch + extra + (i === 0 ? mF : 0) + (i === c.length-1 ? mB : 0) <= p.bedD + 1e-6));
   const colComps = compositions(nx, maxCols, Math.min(kColMin + 1, 4))
     .filter(c => c.every((v, i) => v*pitch + extra + (i === 0 ? mL : 0) + (i === c.length-1 ? mR : 0) <= p.bedW + 1e-6));
+  /* No way to cut the columns at all — every split that fits the count puts a full-width
+     segment against a margin that tips it over the bed. The loop below indexed into the
+     empty list and threw, so a 1000 × 600 drawer on a 256 mm bed took the page down when
+     Fewest plates was picked. The balanced split the caller falls back to copes. */
+  if (!rowComps.length || !colComps.length) return null;
   let best = null, tried = 0;
   for (const rc of rowComps) {
     if (tried > 4000) break;
@@ -2373,6 +2525,7 @@ const DEFAULTS = {
 
 if (typeof module !== 'undefined') {
   module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+    platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };
