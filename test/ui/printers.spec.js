@@ -187,8 +187,10 @@ for (const [name, open] of [['baseplates', H.openPlates], ['bins', H.openBins]])
 async function toBins(page) {
   const hash = await page.evaluate(() => binsHref().split('#')[1]);
   await page.goto(H.BINS_URL + '#' + hash);
-  await page.waitForFunction(() => !!document.getElementById('fillmap') &&
-                                   typeof THREE !== 'undefined');
+  /* hashReady is the last thing the page's boot sets, after the saved unit and the
+     link are applied. The map and three.js are both there before the page's own script
+     has run, and on a loaded machine a fixed wait after them was not always enough. */
+  await page.waitForFunction(() => typeof hashReady !== 'undefined' && hashReady);
   await page.waitForTimeout(300);
 }
 
@@ -212,7 +214,14 @@ test('the printer picked on the baseplates page arrives on the bins page', async
    millimetres, so a drawer typed as 12 in has to BE 304.8 mm everywhere past the field
    — and come back as 12 in for the person who typed it. */
 const UNIT_KEY = 'drawerforge:units:v1';
-const toInches = async (page) => { await page.click('#unitIn'); await page.waitForTimeout(150); };
+/* Waits for the switch to have taken rather than for a fixed time: under load a click
+   could still be queued when a test went on to the other page, which then opened in
+   millimetres. The unit is stored in the same click handler that sets aria-pressed. */
+const toInches = async (page) => {
+  await page.click('#unitIn');
+  await expect(page.locator('#unitIn')).toHaveAttribute('aria-pressed', 'true');
+  await page.waitForTimeout(150);
+};
 
 test('baseplates: 12 in is 304.8 mm to the model and the link, and 12 in again on reload',
   async ({ page }) => {
