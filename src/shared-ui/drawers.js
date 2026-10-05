@@ -326,6 +326,19 @@ const DRAWERS = (function () {
 
     const find = (s, id) => s.drawers.find((d) => d.id === id) || null;
 
+    /* A drawer's record of this tool's saves into it: the fingerprint of the last, and of
+       the one before. The one before is for a reload that its own page's save overtook.
+       The page saves 400 ms after a change, and a page being reloaded runs on until the
+       new one arrives, so on a slow connection that save can land after the reload has
+       already taken the address from before it. The reload then arrives with the design
+       of the save before, which is still this drawer. */
+    const WAS = ':was';
+    function mark(d, fp) {
+      if (d.marks[o.tool] !== fp) d.marks[o.tool + WAS] = d.marks[o.tool];
+      d.marks[o.tool] = fp;
+    }
+    const marked = (d, fp) => d.marks[o.tool] === fp || d.marks[o.tool + WAS] === fp;
+
     /* Which drawer this page just saved into, '' for none, kept for this tab and for this
        device. Written only when it changes, because an unsaved page saves often. */
     function savedInto(id) {
@@ -717,10 +730,10 @@ const DRAWERS = (function () {
        *
        * Without a note the page is a reload, a Back, or the bare site restoring the local
        * save, so the design is one this tool saved itself. It goes back to the drawer
-       * this tool last saved into, in this tab or else on this device, and only if that
-       * drawer's fingerprint of its last save from this tool matches. A tab whose last
-       * save went into no drawer stays unsaved, so a fresh start whose defaults match a
-       * placeholder drawer does not quietly become that drawer.
+       * this tool last saved into, in this tab or else on this device, and only if the
+       * design is that drawer's last save from this tool, or the one before (see mark).
+       * A tab whose last save went into no drawer stays unsaved, so a fresh start whose
+       * defaults match a placeholder drawer does not quietly become that drawer.
        *
        * Anything else — a link from someone else, a fresh start — arrives unsaved, and
        * nothing of yours is written over.
@@ -742,7 +755,7 @@ const DRAWERS = (function () {
             const dev = readNote('localStorage', LAST)[o.tool];
             for (const id of tab === '' ? [] : [tab, dev]) {
               const c = typeof id === 'string' && find(s, id);
-              if (c && c.marks[o.tool] === fp) { d = c; break; }
+              if (c && marked(c, fp)) { d = c; break; }
             }
           }
           if (d) {
@@ -752,7 +765,7 @@ const DRAWERS = (function () {
             /* A hand-over is written down now rather than at the page's first save, which
                is 400 ms off: a reload before it found no record of this tool in the
                drawer, and the page came back unsaved. */
-            if (noted) { d.marks[o.tool] = fp; saveAll(s); savedInto(d.id); }
+            if (noted) { mark(d, fp); saveAll(s); savedInto(d.id); }
           }
         }
         paintBar();
@@ -764,7 +777,7 @@ const DRAWERS = (function () {
         const d = find(s, attached);
         if (!d) { attached = null; failing = false; savedInto(''); paintBar(); return; }
         d.hash = mergeDesign(d.hash, h, o.owns, base);
-        d.marks[o.tool] = fingerprint(h);
+        mark(d, fingerprint(h));
         d.saved = Date.now();
         const ok = saveAll(s);
         if (ok) base = sharedOf(h);

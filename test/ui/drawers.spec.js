@@ -102,6 +102,29 @@ test('a reload straight after the hand-over is still the drawer that was handed 
     expect(errors).toEqual([]);
   });
 
+/* The page saves 400 ms after a change, and a page being reloaded runs on until the new
+   one arrives. On a slow connection that save lands after the reload has taken the
+   address from before it, and the page used to come back unsaved. The server is slowed
+   here so the save always lands in that gap. */
+test('a reload that the last save overtakes is still the drawer', async ({ page }) => {
+  const errors = await openPlates(page);
+  await saveAs(page, 'Kitchen');
+  await toBins(page);
+  await settle(page);
+  let slow = 0;
+  await page.route(/\/bins\/$/, async (route) => {
+    await new Promise((r) => setTimeout(r, slow));
+    await route.continue();
+  });
+  slow = 900;
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await page.waitForTimeout(100);
+  await page.reload();
+  await binsReady(page);
+  await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+  expect(errors).toEqual([]);
+});
+
 test('two drawers, switched on either page, bring both halves back and survive a reload',
   async ({ page }) => {
     const errors = await openPlates(page);
