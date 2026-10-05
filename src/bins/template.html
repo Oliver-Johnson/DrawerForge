@@ -65,6 +65,13 @@
   <span>Picked up the layout you left here last time.</span>
   <button type="button" id="startFresh">Start fresh</button>
 </div>
+<!-- Shown when a layout of yours was set aside instead of lost: a link replaced it, or
+     the last visit never finished loading one and this visit declined to try again. -->
+<div id="setAside" class="restored" style="display:none" role="status">
+  <span id="setAsideMsg"></span>
+  <button type="button" id="putBack" style="display:none">Put my layout back</button>
+  <button type="button" id="tryAnyway" style="display:none">Try it anyway</button>
+</div>
 <!-- Right-click menu for a bin, on the map and in the preview. Built fresh each time
      it opens, because half its entries depend on the bin under the cursor — which layer
      it can move to, and whether it is already marked printed. -->

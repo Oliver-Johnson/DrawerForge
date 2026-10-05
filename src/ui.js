@@ -1135,7 +1135,10 @@ const CONNECTOR_NAMES = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', bowt
    "Split: plates". An internal enum is not a name for anything. */
 const SPLIT_NAMES = { balanced: 'balanced', staggered: 'staggered',
   plates: 'fewest plates', manual: 'manual' };
-const splitName = () => SPLIT_NAMES[state.splitMode] || state.splitMode;
+/* hasOwn, not a bare lookup: SPLIT_NAMES.constructor is Object, so "sp=constructor" in a
+   link was a "function Object() { [native code] } split" on screen and in the README. */
+const splitName = () =>
+  (Object.hasOwn(SPLIT_NAMES, state.splitMode) ? SPLIT_NAMES[state.splitMode] : state.splitMode);
 
 /* What goes wrong is tested before whether the build has finished, not after. Anything
    the checks call an error stops runBuild, so the pieces never finish and never will —
@@ -1323,7 +1326,24 @@ function descriptor() {
   };
   return Object.assign({}, hashExtras, o, { v: 2 });
 }
-const encodeDesc = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+/* Names are encoded as well as values. Keys from other tools ride through here as they
+   came, and loadFromHash decodes them, so one written raw did not survive its own round
+   trip: "%25=1" was carried as "%=1", and every visit after that threw URIError reading
+   the save back. A raw line break in a name would also have reached the README. */
+const encodeDesc = (o) => Object.entries(o)
+  .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+/* One bad pair costs that pair. A malformed escape (%E0%A4%A) used to throw out of the
+   whole load, and a pair with no '=' was kept as a setting whose value was undefined. */
+function parseHash(h) {
+  const q = Object.create(null);
+  for (const kv of h.split('&')) {
+    const i = kv.indexOf('=');
+    if (i < 1) continue;
+    try { q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1)); }
+    catch (err) { /* not valid percent-encoding: drop it, keep the rest */ }
+  }
+  return q;
+}
 /* Keep the address bar holding the current design, so a reload does not throw it away.
  *
  * The tool has no accounts and no server, which is the point of it — but it also meant
@@ -1382,6 +1402,60 @@ function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
   location.href = location.origin + location.pathname;   // drop the hash and reload clean
 }
+/* Wired here, before the boot below reads any link: a link that throws there must not
+   also take away the button that gets you out of it, or stop the next link working. */
+$('startFresh').addEventListener('click', startFresh);
+/* A hash this page did not write means someone navigated to a link — pasted a share URL
+   into the address bar, or picked a bookmark — and changing only the fragment is a
+   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
+   Before local saving that was merely confusing; now it means a shared layout loses to
+   whatever this browser had stored, which is the one case that must never happen.
+   Reloading applies the link. replaceState does not fire this event, so the saves this
+   page makes every few seconds cannot trigger it. A fragment with no settings in it is
+   an anchor, not a link to a drawer, and reloading for one threw the drawer away. */
+addEventListener('hashchange', () => {
+  if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
+});
+
+/* Two more slots beside the save, so a layout is set aside rather than lost.
+ *
+ * PREV_KEY: following a link overwrote the save within 400 ms with no way back, so
+ * whatever is about to replace it — a link, or the defaults standing in for a layout
+ * that would not load — copies it here first, and the page offers to put it back.
+ *
+ * LOADING_KEY: names the layout being loaded, and is cleared once the page has drawn
+ * it. Still there at the next visit, for the same layout, means the last attempt hung or
+ * crashed the tab; loading it again would only do that again, on every visit. */
+const PREV_KEY = SAVE_KEY + ':prev', LOADING_KEY = SAVE_KEY + ':loading';
+const readKey = (k) => { try { return localStorage.getItem(k) || ''; } catch (err) { return ''; } };
+const writeKey = (k, v) => {
+  try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); }
+  catch (err) { /* private mode: the guard and the backup go, the page does not */ }
+};
+let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+function leaveFor(url) {
+  hashReady = false; clearTimeout(hashSaveT);   // no save of this page's may land after
+  location.href = url;
+}
+function putBack() {
+  const prev = readKey(PREV_KEY);
+  if (!prev) return;
+  saveLocal(prev);
+  leaveFor(location.href.split('#')[0]);   // a bare visit restores it, and says so
+}
+function tryAnyway() {
+  writeKey(LOADING_KEY, '');
+  leaveFor(location.href.split('#')[0] + '#' + stalled);
+  location.reload();   // a change of fragment alone reloads nothing
+}
+function showSetAside(msg, canPutBack, canTry) {
+  $('setAsideMsg').textContent = msg;
+  $('putBack').style.display = canPutBack ? '' : 'none';
+  $('tryAnyway').style.display = canTry ? '' : 'none';
+  $('setAside').style.display = '';
+}
+$('putBack').addEventListener('click', putBack);
+$('tryAnyway').addEventListener('click', tryAnyway);
 
 function rememberState() {
   if (!hashReady) return;
@@ -1421,9 +1495,17 @@ $('shareBtn').addEventListener('click', () => {
 function loadFromHash(src) {
   const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
   if (h.length < 2) return;
-  const q = Object.fromEntries(h.split('&').map(kv => kv.split('=').map(decodeURIComponent)));
+  const q = parseHash(h);
   for (const [k, v] of Object.entries(q)) if (!OWNED.has(k)) hashExtras[k] = v;
-  const set = (id, v) => { if (v !== undefined && $(id)) $(id).value = v; };
+  /* A menu takes only a value it offers. "cn=bogus" left the connector menu blank, so
+     the plates were cut for keys that were then never exported, and the fit sample was
+     named "-fit-sample-". Anything else keeps the default. */
+  const set = (id, v) => {
+    const el = $(id);
+    if (v === undefined || !el) return;
+    if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === v)) return;
+    el.value = v;
+  };
   set('drawerW', q.w); set('drawerD', q.d); set('marginMode', q.mm);
   set('alignX', q.ax); set('alignY', q.ay);
   set('mLeft', q.ml); set('mRight', q.mr); set('mFront', q.mf); set('mBack', q.mb);
@@ -1437,14 +1519,22 @@ function loadFromHash(src) {
   set('baseMode', q.bm); set('plateStyle', q.ps); set('infill', q.if);
   if (q.pc !== undefined) $('perCorner').checked = q.pc === '1';
   set('rFL', q.r1); set('rFR', q.r2); set('rBL', q.r3); set('rBR', q.r4);
-  if (q.sp) {
+  // only a split the page has; anything else is not a split, it is text for the README
+  if (q.sp && Object.hasOwn(SPLIT_NAMES, q.sp)) {
     state.splitMode = q.sp; setSplitSeg(q.sp);
     if (q.sp === 'manual') {
-      state.rowCuts = q.rc ? q.rc.split(',').map(Number).filter(n => !isNaN(n)) : [];
-      state.colCuts = q.cc ? q.cc.split('_').map(s => s ? s.split('.').map(Number) : []) : [];
+      state.rowCuts = cutList(q.rc, ',');
+      state.colCuts = q.cc ? q.cc.split('_').slice(0, MAX_PIECES).map((s) => cutList(s, '.')) : [];
     }
   }
 }
+/* Cuts are whole cells, each one once, in order, and no more than the pieces this page
+   will build. "rc=2,2,2" built zero-height pieces, "rc=1.5" a fractional one, and 2,500
+   copies of one cut took 1.8 GB — and were saved, so every visit after took it again. */
+const CUT_TOP = Math.floor(LIMITS.drawerW.max / LIMITS.pitch.min);   // most cells on a side
+const cutList = (s, sep) => [...new Set(String(s || '').split(sep).map(Number))]
+  .filter((n) => Number.isInteger(n) && n > 0 && n < CUT_TOP)
+  .sort((a, b) => a - b).slice(0, MAX_PIECES - 1);
 
 // ---------- wiring ----------
 /* The handler is on the <button> inside the header, not on the <h2>.
@@ -1482,27 +1572,34 @@ initThree();
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
-if (isLayoutHash(incomingHash)) loadFromHash();
-else {
+{
+  const fromLink = isLayoutHash(incomingHash);
   const saved = readLocal();
-  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; }
+  const src = fromLink ? incomingHash : saved.length > 2 ? saved : '';
+  /* What this page saves when nobody has touched it. A save that is only that is no
+     one's work, so replacing it sets nothing aside — or every link would offer the
+     defaults back. */
+  readControls();
+  const pristine = encodeDesc(descriptor());
+  stalled = src && readKey(LOADING_KEY) === src ? src : '';
+  // set aside whatever is about to replace the save: a different link, or the defaults
+  const aside = saved.length > 2 && saved !== pristine &&
+    (saved !== src || (!!stalled && !fromLink));
+  if (aside) writeKey(PREV_KEY, saved);
+  if (stalled) {
+    showSetAside('This layout did not finish loading last time, so the page has started ' +
+      'from its defaults rather than try it again.', aside && saved !== src, true);
+  } else if (src) {
+    writeKey(LOADING_KEY, src);
+    loadFromHash(src);
+    if (!fromLink) $('restored').style.display = '';
+    else if (aside) showSetAside('This link replaced the layout you had here.', true, false);
+  }
 }
 hashReady = true;                         // loadFromHash has had its say; ours may start
 recomputeLayout();
+/* Laid out and drawn, so the marker has done its job. A stalled layout keeps its marker:
+   reloading the same link must be declined again, not tried again. */
+if (!stalled) writeKey(LOADING_KEY, '');
 fitThree();
-
-
-if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);
-
-/* A hash this page did not write means someone navigated to a link — pasted a share URL
-   into the address bar, or picked a bookmark — and changing only the fragment is a
-   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
-   Before local saving that was merely confusing; now it means a shared layout loses to
-   whatever this browser had stored, which is the one case that must never happen.
-   Reloading applies the link. replaceState does not fire this event, so the saves this
-   page makes every few seconds cannot trigger it. A fragment with no settings in it is
-   an anchor, not a link to a drawer, and reloading for one threw the drawer away. */
-addEventListener('hashchange', () => {
-  if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
-});
 

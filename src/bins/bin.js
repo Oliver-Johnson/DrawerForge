@@ -1019,7 +1019,7 @@ function buildBin(G, cfg) {
  * survive the values it carries: the original separator was '.', and wall
  * thickness 1.2 split into "1" and "2", shifting every later field so a bin came
  * back with dividers it never had. Separators are now characters that cannot
- * occur in a non-negative number, and packBin refuses to emit one that could.
+ * occur in a plain non-negative decimal, and packBin writes every number as one.
  *
  * Field positions are the format. A bin is 17 fields and everything after a change
  * shifts, so adding or removing one invalidates every link already in circulation.
@@ -1049,6 +1049,18 @@ function bitsToCells(bits, u, v) {
     if (bits[i] === '1') out.push([x, y]);
   return out.length ? out : null;
 }
+/* Every number goes out as a plain non-negative decimal. packBin used to throw on any
+   value with a '-' in it, and two ordinary ones have one: a negative wall or floor, and
+   a tiny value, which String() writes in exponent form (1e-7). The throw landed in the
+   save, the share link, the hand-over to baseplates and the README, so saving stopped
+   without a word and those buttons died with it. No field can be negative, so a
+   negative is written as 0, and an exponent is spelled out in full instead. */
+const plainNum = (v) => {
+  if (typeof v !== 'number') return v;     // the carve mask: already 0s and 1s
+  if (!(v > 0)) return 0;                  // negative, -0 and NaN alike
+  const s = String(v);
+  return s.includes('e') ? v.toFixed(20).replace(/\.?0+$/, '') : s;
+};
 function packBin(b) {
   const f = [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY,
              b.solid ? 1 : 0]
@@ -1061,29 +1073,64 @@ function packBin(b) {
                 field rather than four: the sides are only meaningful when there is a
                 lid, and the format is positional so every field costs every link. */
              b.lid ? 1 : 0, lidSideBits(b.lidSides)]);
-  for (const v of f)
-    if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
-      throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
-  return f.join(SEP.field);
+  /* Still checked, but answered with a 0 rather than a throw: a bad field then costs
+     that one field, where a separator inside it would shift every field after it. */
+  const seps = Object.values(SEP);
+  return f.map((v) => {
+    const s = String(plainNum(v));
+    return seps.some((c) => s.includes(c)) ? '0' : s;
+  }).join(SEP.field);
 }
+/* The most a link can ask for. Nothing here was bounded and the geometry does what it
+   is told: a million dividers froze the tab for half a minute and were then saved, so
+   every visit froze it again; a footprint of 1e9 cells crashed it; a height of 1e308
+   came out as "Infinity mm". Each limit is past anything that can be printed or put in
+   a drawer — 2000 mm is the largest drawer or bed the baseplates page accepts — so
+   clamping to it loses nothing a person could have meant. */
+const LINK_MAX = {
+  cells: 50,                               // 2100 mm, for a footprint or a position
+  hUnits: Math.floor(2000 / SPEC.unitH),   // as tall as the tallest bed
+  wall: 10,                                // already half the inside of a 1x1 bin
+};
+/* The wall heights the edge menus offer. One that is not in the list put the menu on a
+   blank entry, the next edit read that back as NaN, and the bin was built from NaN. */
+const EDGE_STEPS = [0, 0.25, 0.5, 0.66, 1];
+const snapEdge = (x) => (!isFinite(x) ? 1
+  : EDGE_STEPS.reduce((a, s) => (Math.abs(s - x) < Math.abs(a - x) ? s : a)));
+/* How many dividers fit across `inside` mm. Each is one wall thick, and closer together
+   than that they only overlap into solid plastic: more cannot change the part, only how
+   long it takes to build. Never counted thinner than a rail, two lines of a 0.4 mm
+   nozzle, so a zero wall cannot make the limit infinite. */
+const maxDividers = (inside, wall) =>
+  Math.max(0, Math.floor(inside / Math.max(wall, RAIL_T)) - 1);
 /* Anything can arrive here: the hash is in the address bar, so it gets hand-edited,
    truncated by a chat client and pasted back a field short. Every field therefore
    falls back to its default rather than passing NaN through to the geometry — a bin
    with a NaN footprint builds no polygons at all, so the page comes up blank, which
-   looks exactly like losing the layout rather than like a typo. */
-const numAt = (p, i, d) => (isFinite(p[i]) ? p[i] : d);
-const countAt = (p, i, d) => (isFinite(p[i]) ? Math.max(1, Math.round(p[i])) : d);
+   looks exactly like losing the layout rather than like a typo. Every field is also
+   held to the range it can really take: none is negative, and counts are whole —
+   a y of 0.5 threw in the map, and 2.5 dividers were reported as 3.5 compartments. */
+const numAt = (p, i, d, hi) => (isFinite(p[i]) ? Math.min(hi, Math.max(0, p[i])) : d);
+const countAt = (p, i, d, lo, hi) =>
+  (isFinite(p[i]) ? Math.min(hi, Math.max(lo, Math.round(p[i]))) : d);
 function unpackBin(t) {
   const raw = String(t).split(SEP.field);
   const p = raw.map(Number);
   const edges = {};
-  PACK_EDGES.forEach((k, i) => { edges[k] = isFinite(p[10 + i]) ? p[10 + i] : 1; });
-  const u = countAt(p, 2, BIN_DEFAULTS.u), v = countAt(p, 3, BIN_DEFAULTS.v);
-  return { x: numAt(p, 0, 0), y: numAt(p, 1, 0), u, v,
-           hUnits: countAt(p, 4, BIN_DEFAULTS.hUnits),
-           wall: numAt(p, 5, BIN_DEFAULTS.wall), floorT: numAt(p, 6, BIN_DEFAULTS.floorT),
-           divX: numAt(p, 7, 0), divY: numAt(p, 8, 0), solid: !!p[9],
-           edges, scoop: numAt(p, 14, 0), label: numAt(p, 15, 0),
+  PACK_EDGES.forEach((k, i) => { edges[k] = snapEdge(p[10 + i]); });
+  const u = countAt(p, 2, BIN_DEFAULTS.u, 1, LINK_MAX.cells);
+  const v = countAt(p, 3, BIN_DEFAULTS.v, 1, LINK_MAX.cells);
+  const hUnits = countAt(p, 4, BIN_DEFAULTS.hUnits, 1, LINK_MAX.hUnits);
+  const H = hUnits * SPEC.unitH;
+  const wall = numAt(p, 5, BIN_DEFAULTS.wall, LINK_MAX.wall);
+  const inside = (n) => (n - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall;
+  /* A floor or scoop past the bin's height, or a label shelf past its depth, builds
+     the same part as one at it: the geometry already stops them there. */
+  return { x: countAt(p, 0, 0, 0, LINK_MAX.cells), y: countAt(p, 1, 0, 0, LINK_MAX.cells),
+           u, v, hUnits, wall, floorT: numAt(p, 6, BIN_DEFAULTS.floorT, H),
+           divX: countAt(p, 7, 0, 0, maxDividers(inside(u), wall)),
+           divY: countAt(p, 8, 0, 0, maxDividers(inside(v), wall)), solid: !!p[9],
+           edges, scoop: numAt(p, 14, 0, H), label: numAt(p, 15, 0, v * SPEC.pitch),
            cells: bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v),
            done: !!p[17], divRemovable: !!p[18],
            lid: !!p[19], lidSides: lidSidesFrom(p[20]) };
@@ -1097,5 +1144,5 @@ if (typeof module !== 'undefined') {
   module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
-    packBin, unpackBin, packLayers, unpackLayers };
+    packBin, unpackBin, packLayers, unpackLayers, LINK_MAX };
 }
