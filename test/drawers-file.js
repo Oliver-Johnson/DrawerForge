@@ -31,7 +31,7 @@ console.log('round trip');
       ['v', '2']]) },
   ];
   const text = D.designFile(designs, new Date('2026-01-02T03:04:05Z'));
-  const back = D.readDesignFile(text);
+  const back = D.readDesignFile(text).drawers;
   check('every drawer comes back', back.length === designs.length);
   check('names come back exactly', back.every((b, i) => b.name === designs[i].name));
   check('designs come back byte for byte', back.every((b, i) => b.hash === designs[i].hash),
@@ -44,7 +44,7 @@ console.log('round trip');
   const handEdited = JSON.stringify({ drawerforge: D.KIND, version: 1,
     drawers: [{ name: 'Hand', design: { w: 400, d: 300.5 } }] });
   check('a number where a string was written still reads',
-    D.readDesignFile(handEdited)[0].hash === 'w=400&d=300.5');
+    D.readDesignFile(handEdited).drawers[0].hash === 'w=400&d=300.5');
 }
 
 console.log('\nrefused, with a reason, and nothing else thrown');
@@ -87,6 +87,7 @@ console.log('\nrefused, with a reason, and nothing else thrown');
     ['a value that is null', one({ name: 'Box', design: { w: '300', d: '200', bl: null } })],
     ['a value that is true', one({ name: 'Box', design: { w: '300', d: '200', mg: true } })],
     ['a value far too long', one({ name: 'Box', design: { w: '300', d: '200', bl: 'x'.repeat(D.CAP.value + 1) } })],
+    ['a drawer 0 wide', one({ name: 'Box', design: { w: '0', d: '200' } })],
     ['more settings than any design', one({ name: 'Box', design: Object.assign({ w: '300', d: '200' },
       Object.fromEntries(Array.from({ length: D.CAP.keys }, (_, i) => ['k' + i, '1']))) })],
     ['a whole file past the cap', ' '.repeat(D.CAP.fileBytes + 1)],
@@ -98,13 +99,33 @@ console.log('\nrefused, with a reason, and nothing else thrown');
     check(what, fine, err ? `${err.constructor.name}: ${err.message}` : `accepted ${JSON.stringify(got).slice(0, 80)}`);
   }
   check('nothing reached Object.prototype', ({}).polluted === undefined && ({}).x === undefined);
-  // one bad drawer in a good file refuses the whole file, not just that drawer
-  let whole = false;
-  try {
-    D.readDesignFile(JSON.stringify(Object.assign({}, ok,
-      { drawers: [good, { name: 'Bad', design: { w: '300' } }] })));
-  } catch (e) { whole = e instanceof D.FileError && /drawer 2/i.test(e.message) && /Bad/.test(e.message); }
-  check('one bad drawer refuses the file, and says which', whole);
+}
+
+console.log('\none bad drawer in a file');
+{
+  /* An export of every drawer is one file, and the bins page will save a drawer 0 wide.
+     Refusing the whole file over it lost every good drawer in it as well. */
+  const file = (drawers) => JSON.stringify({ drawerforge: D.KIND, version: 1, drawers });
+  const box = { name: 'Box', design: { w: '300', d: '200' } };
+  const got = D.readDesignFile(file([box, { name: 'Bad', design: { w: '0', d: '300' } },
+    { name: 'Rack', design: { w: '250', d: '250' } }]));
+  check('the good drawers either side of it are read', got.drawers.map((d) => d.name).join() === 'Box,Rack');
+  check('and the bad one is named, with the reason', got.skipped.length === 1 &&
+    /Bad/.test(got.skipped[0]) && /drawer 2/.test(got.skipped[0]) && /width/.test(got.skipped[0]),
+    got.skipped.join(' | '));
+  check('a file of good drawers skips nothing', D.readDesignFile(file([box])).skipped.length === 0);
+  let none = null;
+  try { D.readDesignFile(file([{ name: 'A', design: { w: '0', d: '1' } }, { name: 'B', design: {} }])); }
+  catch (e) { none = e; }
+  check('a file with no good drawer at all is refused, with a reason',
+    none instanceof D.FileError && /“A”/.test(none.message), none && none.message);
+
+  // and the export does not write one in the first place
+  check('a drawer 0 wide is not exported', /“Zero” has no drawer width/.test(
+    D.exportProblem({ name: 'Zero', hash: 'w=0&d=380&v=2' })));
+  check('a drawer whose design does not parse is not exported',
+    D.exportProblem({ name: 'Mangled', hash: 'w=%E0%A4%A&d=380' }) !== '');
+  check('a good one is', D.exportProblem({ name: 'Box', hash: 'w=300&d=200&v=2' }) === '');
 }
 
 console.log('\nnames');

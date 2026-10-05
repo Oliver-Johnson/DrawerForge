@@ -3946,6 +3946,11 @@ const DRAWERS = (function () {
      JSON, with each design spelled out as an object of settings rather than as the link
      string, so a file attached to a bug report can be read without decoding anything.
      It holds settings only, never meshes — the meshes are rebuilt from the settings. */
+  function entry(d) {
+    const design = {};
+    for (const [k, v] of parsePairs(d.hash) || []) if (KEY_RE.test(k)) design[k] = v;
+    return { name: d.name, design };
+  }
   function designFile(list, when) {
     return JSON.stringify({
       drawerforge: KIND,
@@ -3953,11 +3958,7 @@ const DRAWERS = (function () {
       exported: (when || new Date()).toISOString(),
       about: 'Drawerforge design file. To load it, open https://drawerforge.co.uk, press the ' +
              'drawer button under the page links, then "Import a design file".',
-      drawers: list.map((d) => {
-        const design = {};
-        for (const [k, v] of parsePairs(d.hash) || []) if (KEY_RE.test(k)) design[k] = v;
-        return { name: d.name, design };
-      }),
+      drawers: list.map(entry),
     }, null, 2) + '\n';
   }
 
@@ -3990,35 +3991,58 @@ const DRAWERS = (function () {
     if (data.drawers.length > CAP.drawers)
       throw nope(`That design file holds ${data.drawers.length} drawers; this page keeps ` +
         `at most ${CAP.drawers}.`);
-    return data.drawers.map((d, i) => {
-      const which = data.drawers.length > 1 ? `Drawer ${i + 1} in that file` : 'The drawer in that file';
-      if (!isPlain(d)) throw nope(`${which} is not a drawer.`);
-      const name = cleanName(d.name);
-      if (!name) throw nope(`${which} has no name.`);
-      const it = data.drawers.length > 1 ? `“${name}” (drawer ${i + 1} in that file)` : `“${name}”`;
-      if (!isPlain(d.design)) throw nope(`${it} in that file has no design in it.`);
-      const pairs = [];
-      for (const [k, v] of Object.entries(d.design)) {
-        if (!KEY_RE.test(k))
-          throw nope(`${it} has a setting named “${cleanName(k).slice(0, 20)}”, which ` +
-            'Drawerforge never writes.');
-        let s;
-        if (typeof v === 'string') s = v;
-        else if (typeof v === 'number' && isFinite(v)) s = String(v);
-        else throw nope(`${it} has a setting (${k}) that is not a plain value.`);
-        if (s.length > CAP.value) throw nope(`${it} has a setting (${k}) far too long to be real.`);
-        pairs.push([k, s]);
-      }
-      if (pairs.length > CAP.keys) throw nope(`${it} has more settings than any design has.`);
-      /* Both tools always write the drawer's size, and without it there is nothing to
-         build, so a design missing it is not a design. */
-      const num = (k) => { const p = pairs.find((q) => q[0] === k); return p ? parseFloat(p[1]) : NaN; };
-      if (!(num('w') > 0) || !(num('d') > 0))
-        throw nope(`${it} has no drawer width and depth, so it does not describe a drawer.`);
-      const hash = encodePairs(pairs);
-      if (hash.length > CAP.design) throw nope(`${it} is far larger than a design is.`);
-      return { name, hash };
+    /* Each drawer is read on its own. "Export every drawer" puts a whole tool chest in one
+       file, and refusing all of it over one bad drawer lost every good drawer with it. So
+       a bad drawer is left out and named with its reason, and only a file with no good
+       drawer in it at all is refused. */
+    const drawers = [], skipped = [];
+    data.drawers.forEach((d, i) => {
+      try { drawers.push(readDrawer(d, i, data.drawers.length)); }
+      catch (err) { if (!(err instanceof FileError)) throw err; skipped.push(err.message); }
     });
+    if (!drawers.length)
+      throw nope(skipped.length === 1 ? skipped[0]
+        : `None of the ${skipped.length} drawers in that file could be read. ${skipped[0]}`);
+    return { drawers, skipped };
+  }
+  function readDrawer(d, i, count) {
+    const which = count > 1 ? `Drawer ${i + 1} in that file` : 'The drawer in that file';
+    if (!isPlain(d)) throw nope(`${which} is not a drawer.`);
+    const name = cleanName(d.name);
+    if (!name) throw nope(`${which} has no name.`);
+    const it = count > 1 ? `“${name}” (drawer ${i + 1} in that file)` : `“${name}”`;
+    if (!isPlain(d.design)) throw nope(`${it} in that file has no design in it.`);
+    const pairs = [];
+    for (const [k, v] of Object.entries(d.design)) {
+      if (!KEY_RE.test(k))
+        throw nope(`${it} has a setting named “${cleanName(k).slice(0, 20)}”, which ` +
+          'Drawerforge never writes.');
+      let s;
+      if (typeof v === 'string') s = v;
+      else if (typeof v === 'number' && isFinite(v)) s = String(v);
+      else throw nope(`${it} has a setting (${k}) that is not a plain value.`);
+      if (s.length > CAP.value) throw nope(`${it} has a setting (${k}) far too long to be real.`);
+      pairs.push([k, s]);
+    }
+    if (pairs.length > CAP.keys) throw nope(`${it} has more settings than any design has.`);
+    /* Both tools always write the drawer's size, and without it there is nothing to
+       build, so a design missing it is not a design. */
+    const num = (k) => { const p = pairs.find((q) => q[0] === k); return p ? parseFloat(p[1]) : NaN; };
+    if (!(num('w') > 0) || !(num('d') > 0))
+      throw nope(`${it} has no drawer width and depth, so it does not describe a drawer.`);
+    const hash = encodePairs(pairs);
+    if (hash.length > CAP.design) throw nope(`${it} is far larger than a design is.`);
+    return { name, hash };
+  }
+
+  /* Why a drawer would be refused by the file it is exported into, or '' if it would not.
+     The bins page takes a drawer width of 0, so a saved drawer can be one the importer
+     turns away. Checking each with the importer's own reader keeps such a drawer out of
+     the file, and lets the export say so, instead of writing a file that cannot be read
+     back. */
+  function exportProblem(rec) {
+    try { readDrawer(entry(rec), 0, 1); return ''; }
+    catch (err) { if (err instanceof FileError) return err.message; throw err; }
   }
 
   /* ---- the list on this device -------------------------------------------- */
@@ -4349,19 +4373,35 @@ const DRAWERS = (function () {
     /* The open drawer is exported as it stands this moment, not as of its last save,
        which may be a debounce behind the last edit. */
     const live = (d) => (d.id === attached ? mergeDesign(d.hash, o.design(), o.owns, base) : d.hash);
+    /* What an export or an import left out, and why. The first reason is given in full,
+       since one bad drawer is the usual case and its reason says what to fix. */
+    const leftOut = (why, because) => (why.length === 1
+      ? `Left out one ${because}: ${why[0]}`
+      : `Left out ${why.length} ${because}. The first: ${why[0]}`);
     function exportOne() {
       const s = loadAll();
       const cur = attached && find(s, attached);
       const rec = cur ? { name: cur.name, hash: live(cur) } : { name: 'Unsaved drawer', hash: o.design() };
+      const why = exportProblem(rec);
+      if (why) { say(`Not exported, because the file could not be imported again: ${why}`, 'bad'); return; }
       download(designFile([rec]), `drawerforge-${slug(rec.name)}.json`);
       say(`Exported “${rec.name}” as a design file.`);
     }
     function exportAll() {
       const s = loadAll();
       if (!s.drawers.length) return;
-      const list = s.drawers.slice().sort(byName).map((d) => ({ name: d.name, hash: live(d) }));
+      const all = s.drawers.slice().sort(byName).map((d) => ({ name: d.name, hash: live(d) }));
+      const why = all.map(exportProblem);
+      const list = all.filter((d, i) => !why[i]);
+      const bad = why.filter(Boolean);
+      if (!list.length) {
+        say(`Nothing was exported, because none of your drawers could be imported again. ${bad[0]}`, 'bad');
+        return;
+      }
       download(designFile(list), `drawerforge-${list.length}-drawers.json`);
-      say(`Exported all ${list.length} drawer${list.length === 1 ? '' : 's'} as one design file.`);
+      if (bad.length) say(`Exported ${list.length} of your ${all.length} drawers as one design file. ` +
+        leftOut(bad, 'that could not be imported again'), 'bad');
+      else say(`Exported all ${list.length} drawer${list.length === 1 ? '' : 's'} as one design file.`);
     }
 
     /* Added to the list, not opened: an import should never replace the design on screen
@@ -4381,13 +4421,13 @@ const DRAWERS = (function () {
           return;
         }
         const s = loadAll();
-        if (s.drawers.length + got.length > CAP.drawers) {
+        if (s.drawers.length + got.drawers.length > CAP.drawers) {
           say(`That would make more than ${CAP.drawers} drawers, which is as many as this page ` +
             'keeps. Delete some first.', 'bad');
           return;
         }
         const added = [];
-        for (const g of got) {
+        for (const g of got.drawers) {
           const name = uniqueName(s, g.name);
           s.drawers.push({ id: newId(s), name, hash: g.hash, saved: Date.now(), marks: {} });
           added.push(name);
@@ -4399,9 +4439,11 @@ const DRAWERS = (function () {
         }
         armed = '';
         render();
-        say(added.length === 1
+        say((added.length === 1
           ? `Added “${added[0]}” to your drawers. Open it below to load it.`
-          : `Added ${added.length} drawers: ${added.map((n) => `“${n}”`).join(', ')}. Open one below to load it.`);
+          : `Added ${added.length} drawers: ${added.map((n) => `“${n}”`).join(', ')}. Open one below to load it.`) +
+          (got.skipped.length ? ' ' + leftOut(got.skipped, 'that could not be read') : ''),
+        got.skipped.length ? 'bad' : 'ok');
       }, () => say('That file could not be read.', 'bad'));
     }
 
@@ -4524,7 +4566,7 @@ const DRAWERS = (function () {
     };
   }
 
-  return { create, readDesignFile, designFile, mergeDesign, parsePairs, encodePairs,
+  return { create, readDesignFile, designFile, exportProblem, mergeDesign, parsePairs, encodePairs,
            fingerprint, cleanName, FileError, CAP, SHARED, STORE, KIND, VERSION };
 })();
 

@@ -306,6 +306,47 @@ test('every drawer in one file, and importing it twice keeps both copies apart',
   expect(errors).toEqual([]);
 });
 
+/* The bins page takes a drawer width of 0, so a drawer can be saved that the importer
+   refuses. Written into "every drawer", it made the whole file refuse to import. */
+test('a drawer that would not import is left out of an export, and does not spoil a file',
+  async ({ page }) => {
+    const errors = await openPlates(page);
+    await saveAs(page, 'Good');
+    await toBins(page);
+    await saveAs(page, 'Zero');
+    await H.setField(page, 'drawerW', '0');
+    await settle(page);
+    expect((await stored(page)).Zero.w).toBe('0');
+
+    await openDialog(page);
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#drawersExportAll')]);
+    const file = JSON.parse(fs.readFileSync(await dl.path(), 'utf8'));
+    expect(file.drawers.map((d) => d.name)).toEqual(['Good']);
+    await expect(page.locator('#drawersMsg')).toHaveClass(/bad/);
+    await expect(page.locator('#drawersMsg')).toContainText('“Zero” has no drawer width');
+
+    // on its own, the open drawer is not exported at all, and the message says why
+    let downloaded = false;
+    page.on('download', () => { downloaded = true; });
+    await page.evaluate(() => { document.getElementById('drawersMsg').textContent = ''; });
+    await page.click('#drawersExport');
+    await expect(page.locator('#drawersMsg')).toContainText('“Zero” has no drawer width');
+    await page.waitForTimeout(300);
+    expect(downloaded).toBe(false);
+
+    // a file with a bad drawer in the middle, as an older export could have written
+    const text = JSON.stringify({ drawerforge: 'drawerforge-drawers', version: 1, drawers: [
+      { name: 'Shelf', design: { w: '300', d: '200' } },
+      { name: 'Broken', design: { w: '0', d: '380' } },
+      { name: 'Rack', design: { w: '250', d: '250' } }] });
+    await page.setInputFiles('#drawersImport',
+      { name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+    await expect(page.locator('#drawersMsg')).toContainText('Added 2 drawers: “Shelf”, “Rack”');
+    await expect(page.locator('#drawersMsg')).toContainText('“Broken” (drawer 2 in that file)');
+    expect(await listed(page)).toEqual(['Good', 'Rack', 'Shelf', 'Zero']);
+    expect(errors).toEqual([]);
+  });
+
 /* The file is untrusted input. Each of these is refused with a message, and the proof
    that "changes nothing" is that the stored list and the design on screen are the same
    strings afterwards as before. */
