@@ -8565,9 +8565,15 @@ function duplicateSelected() {
     }
 }
 
+/* None of these keys reach the drawer while a dialog is open. The drawer behind it is
+   not what you are working on: Ctrl+Z on a button in the Drawers dialog took back a
+   step of the layout out of sight, and the dialog's Save then stored the layout as it
+   was a step before. Delete and the arrows would have removed or moved the selected bin
+   just as invisibly. */
 document.addEventListener('keydown', (e) => {
   const t = e.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+  if (document.querySelector('dialog[open]')) return;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
