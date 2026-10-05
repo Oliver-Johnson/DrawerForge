@@ -26,7 +26,15 @@ async function openAt(page, hash, timeout = 30000) {
     document.getElementById('pieceTail').textContent), SETTLED.source, { timeout });
   return errors;
 }
-const text = (page, id) => page.evaluate((i) => document.getElementById(i).textContent, id);
+// a missing element reads as empty, so a page without the line fails on what it says
+const text = (page, id) => page.evaluate((i) => {
+  const el = document.getElementById(i);
+  return el ? el.textContent : '';
+}, id);
+const shown = (page, id) => page.evaluate((i) => {
+  const el = document.getElementById(i);
+  return !!el && !el.hidden;
+}, id);
 const exportOff = (page) => page.evaluate(() => document.getElementById('openExport').disabled);
 
 /* ---- #8: Fewest plates on a grid too big to search ------------------------------- */
@@ -94,16 +102,11 @@ test.describe('ranges on the geometry fields', () => {
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {
       const errors = await openAt(page, hash);
-      const s = await page.evaluate((id) => ({
-        msg: document.getElementById(id).textContent,
-        shown: !document.getElementById(id).hidden,
-        checks: document.getElementById('warnings').textContent,
-        tail: document.getElementById('pieceTail').textContent,
-      }), errId);
-      expect(s.msg).toMatch(msg);
-      expect(s.shown).toBe(true);
-      expect(s.checks, 'the checks under the map say the same thing').toMatch(msg);
-      expect(s.tail).toMatch(/not building/);
+      expect(await text(page, errId)).toMatch(msg);
+      expect(await shown(page, errId)).toBe(true);
+      expect(await text(page, 'warnings'), 'the checks under the map say the same thing')
+        .toMatch(msg);
+      expect(await text(page, 'pieceTail')).toMatch(/not building/);
       expect(await exportOff(page), 'Download stayed on for a plate it would build broken')
         .toBe(true);
       expect(errors).toEqual([]);
@@ -118,7 +121,7 @@ test.describe('ranges on the geometry fields', () => {
     await H.setField(page, 'topCutoff', '0.4');
     await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
                                null, { timeout: 30000 });
-    expect(await page.evaluate(() => document.getElementById('errFloor').hidden)).toBe(true);
+    expect(await shown(page, 'errFloor')).toBe(false);
     expect(await exportOff(page)).toBe(false);
   });
 
@@ -126,7 +129,7 @@ test.describe('ranges on the geometry fields', () => {
   test('a magnet size with magnets off is not complained about', async ({ page }) => {
     await openAt(page, '#md=0&mh=-5');
     expect(await text(page, 'pieceTail')).toMatch(/ready/);
-    expect(await page.evaluate(() => document.getElementById('errMagnet').hidden)).toBe(true);
+    expect(await shown(page, 'errMagnet')).toBe(false);
   });
 
   test('margins that leave no room for a cell are a check, not a plate', async ({ page }) => {

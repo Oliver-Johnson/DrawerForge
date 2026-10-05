@@ -764,8 +764,10 @@ const PLATE_MAX_CELLS = 900;
  *              5–13 mm. 13.3 still leaks a 1-cell-wide piece; 13.4 up is closed. It was 5,
  *              which only stopped the grid dividing by zero.
  *   topCutoff  0 puts the socket's top edge on the plate's own outline, and the rim there
- *              is a face of no width: every joint leaked. It closes from about 0.02; 0.1
- *              keeps clear of the last value that leaked. From 0.75 the socket's top edge
+ *              is a face of no width: every joint leaked. It closes from about 0.02, and
+ *              0.1 keeps well clear of that edge (a few isolated values inside the range
+ *              still fold or leak a handful of edges, as they did before there was a
+ *              range: the sliver class ENGINE.md describes, not this limit). From 0.75 the socket's top edge
  *              is narrower than a spec bin's chamfer at that height, so the bin stops
  *              reaching the socket floor and rides on the rim — by 0.25 mm at 1, and the
  *              chamfer turns over entirely at 2.15. 1 is as far as that is worth taking.
@@ -2410,7 +2412,7 @@ function packPlates(items, bedW, bedD, gap, opts) {
 
 // ---- split optimizer: choose cuts minimizing print plates ----
 /* Every way to write n as an ordered sum of at most maxParts parts of at most maxPart,
-   largest first parts first — up to `limit` of them.
+   largest parts first — up to `limit` of them.
  *
  * It used to walk the whole tree and keep what reached zero, which is fine for a drawer
  * and 24 million nodes for 200 cells into parts of 70: a branch whose remaining parts
