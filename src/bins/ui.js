@@ -2543,7 +2543,9 @@ for (const [id, field] of [['gridX', 'drawerW'], ['gridY', 'drawerD']])
   });
 $('bedPreset').addEventListener('change', () => {
   const bed = FIELDS.bedOf($('bedPreset').selectedOptions[0]);   // null for Custom
-  if (!bed) return;
+  /* Custom keeps the bed it had, so there is nothing to rebuild, but the choice is
+     still part of the design: without a save a reload put the printer's name back. */
+  if (!bed) { rememberState(); return; }
   [$('bedW').value, $('bedD').value, $('bedH').value] = bed;
   schedule();
 });

@@ -125,6 +125,24 @@ for (const [name, open] of [['baseplates', H.openPlates], ['bins', H.openBins]])
     expect(await bed(page)).toEqual([256, 256, 256]);
   });
 
+  /* Custom changes no number, which is how the bins page came to skip saving it: a
+     reload put the printer's name back on a bed the person had said was their own. */
+  test(`${name}: picking Custom survives a reload`, async ({ page }) => {
+    await H.forgetSaved(page);
+    await open(page);
+    const [o] = await namedOptions(page, 'Elegoo Centauri Carbon');
+    await pick(page, o.value);
+    await page.waitForTimeout(900);              // past the save debounce
+    await pick(page, 'custom');
+    await page.waitForTimeout(900);
+    expect(await page.evaluate(() => location.hash)).toContain('pr=custom');
+
+    await page.reload();
+    await page.waitForFunction(() => typeof hashReady !== 'undefined' && hashReady);
+    expect(await page.inputValue('#bedPreset')).toBe('custom');
+    expect(await bed(page)).toEqual([256, 256, 256]);
+  });
+
   /* Links and saves made before printers had names carry a bed and no id. They reopen
      on the size-only entry they were made with, and a bed matching nothing on the list
      says Custom — rather than the 256 mm entry the page loads with, which is what it
