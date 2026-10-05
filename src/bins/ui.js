@@ -1722,13 +1722,16 @@ function refresh() {
 
   const ts = types();
   let vol = 0;
+  /* The table is built as markup and a note is text someone typed, so a note goes in
+     escaped: a "<" in a note is a "<" on the screen, not the start of a tag. */
+  const asText = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   $('typeRows').innerHTML = ts.map((t) => {
     const gm = geomFor(t.b);
     vol += gm.vol * t.qty;
     return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${t.b.divX || t.b.divY ? ` · ${(t.b.divX + 1) * (t.b.divY + 1)} comp` : ''}` +
       /* what it is for, beside what it is — the row is how you tell four identical
          shapes apart when they come off the plate */
-      `${t.notes && t.notes.length ? `<span class="tnote">${t.notes.join(', ')}</span>` : ''}</td>` +
+      `${t.notes && t.notes.length ? `<span class="tnote">${asText(t.notes.join(', '))}</span>` : ''}</td>` +
       `<td class="mono">${gm.meta.W.toFixed(1)} × ${gm.meta.D.toFixed(1)} × ${gm.meta.totalH.toFixed(1)}</td>` +
       `<td class="mono">${t.qty}</td>` +
       `<td class="mono">${(gm.vol * t.qty / 1000 * PLA_DENSITY).toFixed(0)} g</td>` +
@@ -3013,11 +3016,14 @@ else {
   const saved = readLocal();
   if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; arrivedWith = saved; }
 }
-if (pendingNotes) {                       // applied after the layout so indices line up
-  try {
-    JSON.parse(pendingNotes).forEach((ns, k) =>
-      ns.forEach((n, i) => { if (layers[k] && layers[k].bins[i]) layers[k].bins[i].note = n; }));
-  } catch (err) { /* a mangled link should not stop the tool loading */ }
+/* Applied after the layout so indices line up, and only in the shape descriptor writes:
+   a list per layer of notes, each a string no longer than the note field takes. Anything
+   else is left out whole. A number where a note should be stopped the map's labels
+   drawing, and a mangled link should not stop the tool loading. */
+if (pendingNotes) {
+  const notes = DRAWERS.binNotes(pendingNotes);
+  if (notes) notes.forEach((ns, k) =>
+    ns.forEach((n, i) => { if (layers[k] && layers[k].bins[i]) layers[k].bins[i].note = n; }));
 }
 readControls();
 hashReady = true;                         // loadFromHash has had its say; ours may start

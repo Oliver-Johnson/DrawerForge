@@ -4076,6 +4076,19 @@ const DRAWERS = (function () {
     }, null, 2) + '\n';
   }
 
+  /* The bins page's notes, as its link carries them: JSON, a list per layer of the notes
+     of that layer's bins, each a string no longer than the note field takes. The parsed
+     lists, or null for anything else, so both the link and a design file turn away the
+     same things. */
+  const NOTE_MAX = 28;
+  function binNotes(s) {
+    let v;
+    try { v = JSON.parse(s); } catch (err) { return null; }
+    const ok = Array.isArray(v) && v.every((L) => Array.isArray(L) &&
+      L.every((n) => typeof n === 'string' && n.length <= NOTE_MAX));
+    return ok ? v : null;
+  }
+
   // the only errors readDesignFile throws, so a message from one is fit to show as it is
   class FileError extends Error {}
   const nope = (msg) => new FileError(msg);
@@ -4083,9 +4096,11 @@ const DRAWERS = (function () {
   /* A design file is untrusted input: it may come from anyone, made by anything. So it
      is checked all the way through before any of it is kept, and anything that is not
      exactly what designFile writes is refused with the reason, rather than repaired by
-     a guess. Nothing in it is ever evaluated or put into the page as markup: names go in
-     as text, and each design becomes a link string, which is what a pasted share link is
-     already — the pages read every value through a form field or a number parse. */
+     a guess. Nothing in it is evaluated. Names go in as text, and each design becomes a
+     link string, which is what a pasted share link is already: the pages read most
+     values through a form field or a number parse. Bin notes are the exception, text
+     the bins page shows as it was typed, so they are shown as text there and must be
+     here in the shape that page writes (see binNotes). */
   function readDesignFile(text) {
     if (typeof text !== 'string') throw nope('That file could not be read.');
     if (text.length > CAP.fileBytes)
@@ -4141,6 +4156,10 @@ const DRAWERS = (function () {
       pairs.push([k, s]);
     }
     if (pairs.length > CAP.keys) throw nope(`${it} has more settings than any design has.`);
+    const notes = pairs.find((q) => q[0] === 'bnotes');
+    if (notes && !binNotes(notes[1]))
+      throw nope(`${it} has bin notes (bnotes) that are not the short notes the bins page ` +
+        `writes, each at most ${NOTE_MAX} characters.`);
     /* Both tools always write the drawer's size, and without it there is nothing to
        build, so a design missing it is not a design. */
     const num = (k) => { const p = pairs.find((q) => q[0] === k); return p ? parseFloat(p[1]) : NaN; };
@@ -4706,7 +4725,7 @@ const DRAWERS = (function () {
   }
 
   return { create, readDesignFile, designFile, exportProblem, mergeDesign, parsePairs, encodePairs,
-           fingerprint, cleanName, FileError, CAP, SHARED, STORE, KIND, VERSION };
+           fingerprint, cleanName, binNotes, FileError, CAP, SHARED, STORE, KIND, VERSION };
 })();
 
 if (typeof module !== 'undefined') module.exports = DRAWERS;
@@ -7537,13 +7556,16 @@ function refresh() {
 
   const ts = types();
   let vol = 0;
+  /* The table is built as markup and a note is text someone typed, so a note goes in
+     escaped: a "<" in a note is a "<" on the screen, not the start of a tag. */
+  const asText = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   $('typeRows').innerHTML = ts.map((t) => {
     const gm = geomFor(t.b);
     vol += gm.vol * t.qty;
     return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${t.b.divX || t.b.divY ? ` · ${(t.b.divX + 1) * (t.b.divY + 1)} comp` : ''}` +
       /* what it is for, beside what it is — the row is how you tell four identical
          shapes apart when they come off the plate */
-      `${t.notes && t.notes.length ? `<span class="tnote">${t.notes.join(', ')}</span>` : ''}</td>` +
+      `${t.notes && t.notes.length ? `<span class="tnote">${asText(t.notes.join(', '))}</span>` : ''}</td>` +
       `<td class="mono">${gm.meta.W.toFixed(1)} × ${gm.meta.D.toFixed(1)} × ${gm.meta.totalH.toFixed(1)}</td>` +
       `<td class="mono">${t.qty}</td>` +
       `<td class="mono">${(gm.vol * t.qty / 1000 * PLA_DENSITY).toFixed(0)} g</td>` +
@@ -8828,11 +8850,14 @@ else {
   const saved = readLocal();
   if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; arrivedWith = saved; }
 }
-if (pendingNotes) {                       // applied after the layout so indices line up
-  try {
-    JSON.parse(pendingNotes).forEach((ns, k) =>
-      ns.forEach((n, i) => { if (layers[k] && layers[k].bins[i]) layers[k].bins[i].note = n; }));
-  } catch (err) { /* a mangled link should not stop the tool loading */ }
+/* Applied after the layout so indices line up, and only in the shape descriptor writes:
+   a list per layer of notes, each a string no longer than the note field takes. Anything
+   else is left out whole. A number where a note should be stopped the map's labels
+   drawing, and a mangled link should not stop the tool loading. */
+if (pendingNotes) {
+  const notes = DRAWERS.binNotes(pendingNotes);
+  if (notes) notes.forEach((ns, k) =>
+    ns.forEach((n, i) => { if (layers[k] && layers[k].bins[i]) layers[k].bins[i].note = n; }));
 }
 readControls();
 hashReady = true;                         // loadFromHash has had its say; ours may start

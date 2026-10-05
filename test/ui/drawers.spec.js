@@ -370,6 +370,7 @@ test('a malformed design file is refused with a message and changes nothing', as
       '"drawers":[{"name":"Box","design":{"w":"300","d":"300","__proto__":{"x":1}}}]}'],
     ['a value that is not a value', one({ name: 'Box', design: { w: '300', d: '300', bl: { x: 1 } } })],
     ['a value far too long', one({ name: 'Box', design: { w: '300', d: '300', bl: 'x'.repeat(300000) } })],
+    ['bin notes that are not notes', one({ name: 'Box', design: { w: '300', d: '300', bnotes: '[[1]]' } })],
   ];
   await openDialog(page);
   for (const [what, body] of BAD) {
@@ -400,6 +401,56 @@ test('a malformed design file is refused with a message and changes nothing', as
   expect((await listed(page)).sort()).toEqual(['Shed', sneaky].sort());
   expect(await page.locator('#drawersDlg img').count()).toBe(0);
   expect(await page.evaluate(() => window.__ran)).toBeUndefined();
+  expect(errors).toEqual([]);
+});
+
+/* A bin's note is text someone typed, and the bins page lists it in a table it builds as
+   markup. From a design file, or a link, a note with markup in it is shown as the
+   characters it is. */
+test('a bin note from a design file is shown on the bins page as the text it is', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(base + 'bins/');
+  await binsReady(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  const note = '<img src=x onerror=__r=1>';
+  const settings = await page.evaluate((note) => {
+    const o = descriptor();
+    o.bnotes = JSON.stringify([[note]]);
+    return Object.fromEntries(DRAWERS.parsePairs(encodeDesc(o)));
+  }, note);
+  const file = JSON.stringify({ drawerforge: 'drawerforge-drawers', version: 1,
+                                drawers: [{ name: 'Noted', design: settings }] });
+
+  await openDialog(page);
+  await page.setInputFiles('#drawersImport',
+    { name: 'noted.json', mimeType: 'application/json', buffer: Buffer.from(file) });
+  await expect(page.locator('#drawersMsg')).toHaveClass(/ok/);
+  // the bin drawn above is not saved, so opening asks first
+  await page.getByRole('button', { name: 'Open Noted', exact: true }).click();
+  await Promise.all([page.waitForEvent('load'),
+    page.getByRole('button', { name: 'Open anyway: Noted', exact: true }).click()]);
+  await binsReady(page);
+  await expect(page.locator('#drawerName')).toHaveText('Noted');
+  await expect(page.locator('#typeRows .tnote')).toHaveText(note);
+  expect(await page.locator('#typeRows img').count()).toBe(0);
+  expect(await page.evaluate(() => typeof __r)).toBe('undefined');
+  expect(errors).toEqual([]);
+});
+
+/* A note in the link that is not a note at all used to stop the map's labels drawing. */
+test('bin notes in a link that are not notes are left out, and the page still draws', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(base + 'bins/');
+  await binsReady(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  const hash = await page.evaluate(() => { const o = descriptor(); o.bnotes = '[[1]]'; return encodeDesc(o); });
+  await page.goto('about:blank');
+  await page.goto(base + 'bins/#' + hash);
+  await binsReady(page);
+  expect(await binCount(page)).toBe(1);
+  expect(await page.evaluate(() => B()[0].note || '')).toBe('');
   expect(errors).toEqual([]);
 });
 

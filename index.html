@@ -3978,6 +3978,19 @@ const DRAWERS = (function () {
     }, null, 2) + '\n';
   }
 
+  /* The bins page's notes, as its link carries them: JSON, a list per layer of the notes
+     of that layer's bins, each a string no longer than the note field takes. The parsed
+     lists, or null for anything else, so both the link and a design file turn away the
+     same things. */
+  const NOTE_MAX = 28;
+  function binNotes(s) {
+    let v;
+    try { v = JSON.parse(s); } catch (err) { return null; }
+    const ok = Array.isArray(v) && v.every((L) => Array.isArray(L) &&
+      L.every((n) => typeof n === 'string' && n.length <= NOTE_MAX));
+    return ok ? v : null;
+  }
+
   // the only errors readDesignFile throws, so a message from one is fit to show as it is
   class FileError extends Error {}
   const nope = (msg) => new FileError(msg);
@@ -3985,9 +3998,11 @@ const DRAWERS = (function () {
   /* A design file is untrusted input: it may come from anyone, made by anything. So it
      is checked all the way through before any of it is kept, and anything that is not
      exactly what designFile writes is refused with the reason, rather than repaired by
-     a guess. Nothing in it is ever evaluated or put into the page as markup: names go in
-     as text, and each design becomes a link string, which is what a pasted share link is
-     already — the pages read every value through a form field or a number parse. */
+     a guess. Nothing in it is evaluated. Names go in as text, and each design becomes a
+     link string, which is what a pasted share link is already: the pages read most
+     values through a form field or a number parse. Bin notes are the exception, text
+     the bins page shows as it was typed, so they are shown as text there and must be
+     here in the shape that page writes (see binNotes). */
   function readDesignFile(text) {
     if (typeof text !== 'string') throw nope('That file could not be read.');
     if (text.length > CAP.fileBytes)
@@ -4043,6 +4058,10 @@ const DRAWERS = (function () {
       pairs.push([k, s]);
     }
     if (pairs.length > CAP.keys) throw nope(`${it} has more settings than any design has.`);
+    const notes = pairs.find((q) => q[0] === 'bnotes');
+    if (notes && !binNotes(notes[1]))
+      throw nope(`${it} has bin notes (bnotes) that are not the short notes the bins page ` +
+        `writes, each at most ${NOTE_MAX} characters.`);
     /* Both tools always write the drawer's size, and without it there is nothing to
        build, so a design missing it is not a design. */
     const num = (k) => { const p = pairs.find((q) => q[0] === k); return p ? parseFloat(p[1]) : NaN; };
@@ -4608,7 +4627,7 @@ const DRAWERS = (function () {
   }
 
   return { create, readDesignFile, designFile, exportProblem, mergeDesign, parsePairs, encodePairs,
-           fingerprint, cleanName, FileError, CAP, SHARED, STORE, KIND, VERSION };
+           fingerprint, cleanName, binNotes, FileError, CAP, SHARED, STORE, KIND, VERSION };
 })();
 
 if (typeof module !== 'undefined') module.exports = DRAWERS;

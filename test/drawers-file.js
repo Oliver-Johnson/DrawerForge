@@ -89,6 +89,11 @@ console.log('\nrefused, with a reason, and nothing else thrown');
     ['a value far too long', one({ name: 'Box', design: { w: '300', d: '200', bl: 'x'.repeat(D.CAP.value + 1) } })],
     ['a value with half an emoji in it', one({ name: 'Box', design: { w: '300', d: '200', cn: 'a' + ch(0xd83d) } })],
     ['a drawer 0 wide', one({ name: 'Box', design: { w: '0', d: '200' } })],
+    ['bin notes that are not JSON', one({ name: 'Box', design: { w: '300', d: '200', bnotes: 'tape' } })],
+    ['a bin note that is a number', one({ name: 'Box', design: { w: '300', d: '200', bnotes: '[[1]]' } })],
+    ['bin notes that are not a list per layer', one({ name: 'Box', design: { w: '300', d: '200', bnotes: '["tape"]' } })],
+    ['a bin note longer than the note field', one({ name: 'Box', design: { w: '300', d: '200',
+      bnotes: JSON.stringify([['x'.repeat(29)]]) } })],
     ['more settings than any design', one({ name: 'Box', design: Object.assign({ w: '300', d: '200' },
       Object.fromEntries(Array.from({ length: D.CAP.keys }, (_, i) => ['k' + i, '1']))) })],
     ['a whole file past the cap', ' '.repeat(D.CAP.fileBytes + 1)],
@@ -100,6 +105,15 @@ console.log('\nrefused, with a reason, and nothing else thrown');
     check(what, fine, err ? `${err.constructor.name}: ${err.message}` : `accepted ${JSON.stringify(got).slice(0, 80)}`);
   }
   check('nothing reached Object.prototype', ({}).polluted === undefined && ({}).x === undefined);
+}
+
+console.log('\nbin notes');
+{
+  const ok = ['[]', '[[]]', JSON.stringify([['tape', ''], ['x'.repeat(28)]])];
+  check('the shapes the bins page writes are read', ok.every((s) => Array.isArray(D.binNotes(s))));
+  const no = ['', 'tape', '{}', '[1]', '[[1]]', '[[null]]', '[["a"],3]', JSON.stringify([['x'.repeat(29)]])];
+  check('anything else is null', no.every((s) => D.binNotes(s) === null),
+    no.filter((s) => D.binNotes(s) !== null).join(' | '));
 }
 
 console.log('\none bad drawer in a file');
