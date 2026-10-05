@@ -21,7 +21,7 @@ That leaves a short list of things that would count as a vulnerability here:
 ## Reporting
 
 Please report privately rather than opening a public issue, using
-[GitHub's private vulnerability reporting](https://github.com/Oliver-Johnson/Baseplate-Studio/security/advisories/new)
+[GitHub's private vulnerability reporting](https://github.com/Oliver-Johnson/DrawerForge/security/advisories/new)
 on this repository.
 
 Include what you did, what happened, and a layout link if one is involved. You will

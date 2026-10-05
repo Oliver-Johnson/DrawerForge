@@ -138,7 +138,7 @@ mesh repair closes these.
 
 ## Issues, suggestions & support
 
-Found a bug, or want a feature? **[Open an issue](https://github.com/Oliver-Johnson/Baseplate-Studio/issues)** — reports with a settings share-link attached are especially easy to act on.
+Found a bug, or want a feature? **[Open an issue](https://github.com/Oliver-Johnson/DrawerForge/issues)** — reports with a settings share-link attached are especially easy to act on.
 
 If the tool saved you some time, there's a tip jar at **[ko-fi.com/oliver_johnson](https://ko-fi.com/oliver_johnson)** — entirely optional, always appreciated.
 
