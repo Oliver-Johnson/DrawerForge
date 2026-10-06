@@ -55,6 +55,11 @@ const binCount = (page) => page.evaluate(() => B().length);
 // the worker installs after load, caches the site, then takes over the page
 const controlled = (page) => page.waitForFunction(() =>
   !!navigator.serviceWorker && !!navigator.serviceWorker.controller, null, { timeout: 30000 });
+/* The caches there are, by the version at the end of each name. A wait for the caches to
+   change polls this with expect.poll: page.waitForFunction takes an async check's promise
+   for a truthy answer and returns at once, without waiting for anything. */
+const versions = (page) => page.evaluate(() => caches.keys())
+  .then((keys) => keys.map((k) => k.split(' ').pop()));
 async function offline(context) {
   await context.setOffline(true);
   site.down = true;
@@ -134,15 +139,11 @@ test('a new deploy replaces the old cache rather than adding to it', async ({ pa
   await controlled(page);
   const sw = fs.readFileSync(path.join(H.ROOT, 'sw.js'), 'utf8');
   const version = sw.match(/const VERSION = "([0-9a-f]+)";/)[1];
-  const keys = () => page.evaluate(() => caches.keys());
-  expect((await keys()).map((k) => k.split(' ').pop())).toEqual([version]);
+  expect(await versions(page)).toEqual([version]);
 
   site.files['/sw.js'] = sw.replace(`"${version}"`, '"0123456789ab"');
   await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r.update()));
-  await page.waitForFunction(async () => {
-    const k = await caches.keys();
-    return k.length === 1 && k[0].endsWith(' 0123456789ab');
-  }, null, { timeout: 30000 });
+  await expect.poll(() => versions(page), { timeout: 30000 }).toEqual(['0123456789ab']);
 });
 
 /* A deploy whose worker never installs: its list names a file the server does not have,
