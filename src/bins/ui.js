@@ -1849,6 +1849,7 @@ function initMap() {
   svg.addEventListener('pointerdown', (e) => {
     const c = cellFromEvent(e);
     const handle = e.target && e.target.dataset ? e.target.dataset.handle : null;
+    landEdit();                     // before the field is left, which comes after this
     mapSay('');
 
     /* Grips sit on the bin's corners, which is exactly where you click to carve an
@@ -2003,6 +2004,7 @@ function initMap() {
    no whole bin fits: it takes those half strips and quarters, largest first. A layout of
    whole bins comes out of it exactly as it always did. */
 $('fillRest').addEventListener('click', () => {
+  landEdit();
   pushUndo();
   const g = grid();
   clearSel(); readControls();
@@ -4489,8 +4491,19 @@ let timer = null;
    reads, so an edit that changes a bin misses the cache by itself, and refresh() lets go
    of the builds nothing uses. Clearing on every input rebuilt every type in the drawer
    because a note was typed, and leaked the old buffers each time. */
-const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
+const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { timer = null;
   readControls(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
+/* An edit still waiting for its pass lands now, before something takes the selection
+   away, so it goes to the bin it was typed for and not to the next one drawn. Fill the
+   rest and a press on the map both clear the selection first thing: a 2 typed for the
+   1.5 × 1 on a half step and pressed on either inside the 180 ms became the new bins'
+   size, the refusal never having run. The rest of the pass is theirs to do, as the
+   phone sheet's Escape does it (closeSheet). */
+function landEdit() {
+  if (timer === null) return;
+  clearTimeout(timer); timer = null;
+  readControls();
+}
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',

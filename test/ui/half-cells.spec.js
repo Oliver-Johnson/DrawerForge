@@ -743,3 +743,27 @@ test('the Steps switch is on the heading row, not in the heading, and keeps the 
       `at ${w} px wide`).toEqual(['stepHalf', where]);
   }
 });
+
+/* An edit typed into the panel waits 180 ms for its pass (schedule). Pressing Fill the
+   rest, or the map, inside that time took the selection away before the pass had run,
+   and the refused 2 typed for the 1.5 x 1 on a half step became the new bins' size. The
+   press is made the moment the 2 is typed, at a point measured beforehand. */
+test('a size typed a moment before a press elsewhere still goes to the bin it was typed for', async ({ page }) => {
+  for (const press of ['fill', 'map']) {
+    await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1));
+    await select(page, 0);
+    const at = press === 'fill'
+      ? await page.evaluate(() => { const b = $('fillRest'); b.scrollIntoView({ block: 'center' });
+          const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })
+      : await H.cellPoint(page, 4, 4);
+    await page.focus('#u');
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('2');
+    await page.mouse.click(at.x, at.y);
+    await settle(page);
+    const r = await page.evaluate(() => ({ u: state.u, fill: $('fillSize').textContent,
+      twoWide: B().filter((b) => b.u === 2 && b.v === 1).length }));
+    expect(r, `pressed on ${press === 'fill' ? 'Fill the rest' : 'the map'}`)
+      .toEqual({ u: 1.5, fill: '1.5×1', twoWide: 0 });
+  }
+});
