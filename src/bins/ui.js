@@ -2939,8 +2939,11 @@ for (const [id, field] of [['gridX', 'drawerW'], ['gridY', 'drawerD']])
 $('bedPreset').addEventListener('change', () => {
   const bed = FIELDS.bedOf($('bedPreset').selectedOptions[0]);   // null for Custom
   /* Custom keeps the bed it had, so there is nothing to rebuild, but the choice is
-     still part of the design: without a save a reload put the printer's name back. */
-  if (!bed) { rememberState(); return; }
+     still part of the design: without a save a reload put the printer's name back. Nor
+     is it a printer known to be fast, so the times change with it: saving alone left the
+     page timing a fast printer while the dialog and the README timed a standard one.
+     refresh() redraws them, and saves as it always does at the end. */
+  if (!bed) { refresh(); return; }
   [$('bedW').value, $('bedD').value, $('bedH').value] = bed;
   schedule();
 });

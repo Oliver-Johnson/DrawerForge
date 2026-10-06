@@ -398,6 +398,27 @@ test.describe('the print time', () => {
     expect(bambu.min).toBeLessThan(forced.min);
   });
 
+  /* Custom keeps the bed it had, so there is nothing to rebuild, but it is not a printer
+     known to be fast. Going to it from a Bambu left the menu saying "fast" and the
+     summary timing a fast printer, while the dialog and the README timed it as
+     standard. */
+  test('bins: choosing Custom after a fast printer retimes the page as well', async ({ page }) => {
+    await binsJob(page);
+    await H.setField(page, 'bedPreset', 'bambu-p1');
+    await page.waitForTimeout(300);
+    await expect(page.locator('#printSpeed option[value="auto"]')).toHaveText('From the printer: fast');
+    await expect(page.locator('#plateSummary')).toContainText('on a fast printer');
+    await H.setField(page, 'bedPreset', 'custom');
+    await page.waitForTimeout(300);
+    await expect(page.locator('#printSpeed option[value="auto"]')).toHaveText('From the printer: standard');
+    await expect(page.locator('#plateSummary')).toContainText('on a standard printer');
+    const f = await binsFigures(page);
+    const total = await page.evaluate(() => ESTIMATE.duration(jobEstimate().min));
+    for (const t of [f.summary, f.dialog]) expect(t).toContain(total);
+    expect(f.summary).toContain('standard printer');
+    expect(f.dialog).toContain('standard printer');
+  });
+
   /* Conservative is the brief, and these are the bounds it is held to: a 1×1×3 bin on its
      own is half an hour or so on a fast printer and an hour or so on a classic one, and a
      plate of them is more than one of them but less than the sum of each printed alone. */
