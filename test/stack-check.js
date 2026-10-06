@@ -125,5 +125,47 @@ console.log('\nnotes raised on the label shelf, under the bin above');
   }
 }
 
+/* Holes across the floor (insert) stand in a block, and the block is under the bin above.
+ * Its feet come down to H, so the block stops half a millimetre under that however deep
+ * its holes are asked to be. Measured off the mesh as the letters are: every vertex inside
+ * the lip's opening is at or under the top wanted, and the highest is at it, or the block
+ * was not built. Four of them are asked for more than the bin has room for; the last is
+ * not, and stops at its own depth over a floor screws have raised. What the items in the
+ * holes do above the rim is the page's to say (Checks); this is the plastic. */
+console.log('\nholes across the floor, under the bin above');
+{
+  const G = require('../src/core.js');
+  const { buildBin } = require('../src/bins/bin.js');
+  const UNDER = 0.5;
+  const BLOCKS = [
+    ['1x1x3, AA, 16.8 asked', { u: 1, v: 1, hUnits: 3, insert: 1 }, null],
+    ['1x1x2, hex bits, 8.3 asked', { u: 1, v: 1, hUnits: 2, insert: 4 }, null],
+    ['1x1x4, 18650, 100 typed', { u: 1, v: 1, hUnits: 4, insert: 3, insertDepth: 100 }, null],
+    ['0.5x1x2, half a cell, hex bits', { u: 0.5, v: 1, hUnits: 2, insert: 4 }, null],
+    // floor 1.85 under screws, a BLOAT of slab over it, and a third of a 25 mm bit
+    ['2x2x3, hex bits over screws', { u: 2, v: 2, hUnits: 3, insert: 4, screws: true },
+     SPEC.footH + 1.85 + 0.05 + 25 / 3],
+  ];
+  for (const [name, c, own] of BLOCKS) {
+    const H = c.hUnits * SPEC.unitH, want = own === null ? H - UNDER : own;
+    const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half, hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half;
+    const t = LIP_TABLE[0][1] + 0.01, r = SPEC.r - t;
+    const inside = ([x, y]) => {
+      const ax = Math.abs(x), ay = Math.abs(y);
+      if (ax >= hw - t || ay >= hd - t) return false;
+      const dx = Math.max(0, ax - (hw - SPEC.r)), dy = Math.max(0, ay - (hd - SPEC.r));
+      return Math.hypot(dx, dy) < r;
+    };
+    let top = -Infinity;
+    for (const p of buildBin(G, c).polys)
+      for (const v of p.verts) if (inside(v)) top = Math.max(top, v[2]);
+    const ok = Math.abs(top - want) < 1e-9 && top <= H - UNDER + 1e-9;
+    console.log(`   ${name.padEnd(32)} highest ${(top - H).toFixed(3).padStart(7)} mm from H   ` +
+                (ok ? 'clear of the bin above'
+                  : top > H - UNDER ? 'IN THE WAY of the bin above' : `NOT BUILT to ${(want - H).toFixed(3)}`));
+    if (!ok) bad++;
+  }
+}
+
 console.log(bad ? `\n${bad} check(s) FAILED` : '\na bin seats in the bin below it');
 process.exit(bad ? 1 : 0);

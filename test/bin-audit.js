@@ -8,7 +8,7 @@ const path = require('path');
 const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
-        unpackBin, binFeet, shelfNote, NOTE_CLEAR } = require('../src/bins/bin.js');
+        unpackBin, binFeet, shelfNote, NOTE_CLEAR, insertPlan } = require('../src/bins/bin.js');
 const NOTE_TEXT = require('../src/bins/text.js');
 const HERSHEY = require('../src/bins/font.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
@@ -242,6 +242,35 @@ const CASES = [
     magnets: true, screws: true, fit: { lines: 1, cut: false } },
   ...NOTE_GLYPHS.map((note, i) => ({ name: `4x1x3-glyphs-${i + 1}`, u: 4, v: 1, hUnits: 3, label: 12,
                                       labelMode: 1, note, fit: { lines: 1, cut: false } })),
+  /* Holes across the floor for what goes in the bin (insert: 1 AA, 2 AAA, 3 18650, 4 1/4
+     inch hex bits), one tile per hole (holeLayout). Every preset on the four footprints
+     the spec counted, then beside a shelf and under a raised note, at both ends of the
+     wall's range, on half-size bins, over holes in the feet, in a tray, cut to the room
+     the bin has, typed deeper than automatic, at both ends of the clearance field, at
+     both other smoothnesses, and a 6x4 to time. `holes` is how many the section on holes
+     further down expects, from the spec's table and not from the engine; `depth` is
+     written where it is not the automatic third of the item. */
+  ...[['aa', 1, 4, [4, 8, 16, 28]], ['aaa', 2, 4, [9, 18, 36, 54]], ['18650', 3, 5, [1, 3, 9, 15]],
+      ['hex', 4, 3, [16, 40, 80, 120]]].flatMap(([tag, insert, hUnits, counts]) =>
+    [[1, 1], [2, 1], [2, 2], [3, 2]].map(([u, v], k) =>
+      ({ name: `${u}x${v}x${hUnits}-${tag}`, u, v, hUnits, insert, holes: counts[k] }))),
+  { name: '2x1x4-hex-label', u: 2, v: 1, hUnits: 4, insert: 4, label: 12, holes: 20 },
+  { name: '2x1x4-hex-note', u: 2, v: 1, hUnits: 4, insert: 4, label: 12, labelMode: 1, note: 'Hex bits',
+    fit: { lines: 1, cut: false }, holes: 20 },
+  { name: '1x1x4-hex-wall0.4', u: 1, v: 1, hUnits: 4, insert: 4, wall: 0.4, holes: 16 },
+  { name: '1x1x4-hex-wall3', u: 1, v: 1, hUnits: 4, insert: 4, wall: 3, holes: 12 },
+  { name: '0.5x1x3-hex', u: 0.5, v: 1, hUnits: 3, insert: 4, holes: 8 },
+  { name: '1.5x1.5x3-aaa', u: 1.5, v: 1.5, hUnits: 3, insert: 2, holes: 16, depth: 14.5 },
+  { name: '2x2x3-hex-feet', u: 2, v: 2, hUnits: 3, insert: 4, holes: 80, ...BOTH },
+  { name: '2x1x3-hex-tray', u: 2, v: 1, hUnits: 3, insert: 4, edges: { f: 0, b: 0, l: 0, r: 0 }, holes: 40 },
+  // 21 mm tall: the block stops 0.5 under the rim, 14.5 over the floor, short of 16.8
+  { name: '1x1x3-aa-room', u: 1, v: 1, hUnits: 3, insert: 1, holes: 4, depth: 14.5 },
+  { name: '1x1x5-hex-typed', u: 1, v: 1, hUnits: 5, insert: 4, insertDepth: 20, holes: 16, depth: 20 },
+  { name: '1x1x4-aa-clr1', u: 1, v: 1, hUnits: 4, insert: 1, holeClr: 1, holes: 4 },
+  { name: '1x1x3-hex-clr-0.3', u: 1, v: 1, hUnits: 3, insert: 4, holeClr: -0.3, holes: 16 },
+  { name: '1x1x4-aa-smooth8', u: 1, v: 1, hUnits: 4, insert: 1, arcSegs: 8, holes: 4 },
+  { name: '1x1x4-aa-smooth24', u: 1, v: 1, hUnits: 4, insert: 1, arcSegs: 24, holes: 4 },
+  { name: '6x4x5-hex', u: 6, v: 4, hUnits: 5, insert: 4, holes: 558 },
 ];
 
 /* Every carved footprint builds one outer fillet per reflex corner, and every one of
@@ -1242,6 +1271,144 @@ console.log('\nnotes raised on the label shelf');
   console.log(`  bins with nothing to print ` + (moved.length ? 'FAILED: ' + moved.join('; ')
     : `${SAME.length} kinds, each the same STL to the byte, and the page told why`));
   if (moved.length) bad++;
+}
+
+/* Holes across the floor (insert, holeLayout in bin.js).
+ *
+ * Built, not merely closed: a block with no holes in it, or no block, is just as
+ * watertight. So every case above with holes is probed from above. Straight down through
+ * the centre of every hole the first thing met is the bin's floor; through the block
+ * beside a hole it is the block's top, the floor plus the depth. Around the first hole,
+ * just inside its nominal width is the floor on every side, so no hole is tighter than it
+ * says, and just outside the corners of its facets is the block, so none is looser than
+ * its polygon. The hole's width and the item's length are written here from the spec,
+ * not read from INSERTS.
+ *
+ * The layout is checked against the rules it was made by, measured from the spec's
+ * outline: webs of 1.2 mm at least, every hole inside the lip's opening with a quarter of
+ * a millimetre to spare (2.70 from the outside), or 0.8 from the wall without a lip, and
+ * in front of a label shelf by 0.8. With a shelf the block runs on under it to the back
+ * wall and stops below it: under the middle of the shelf there is block, and the highest
+ * thing is still the shelf. */
+console.log('\nholes across the floor');
+{
+  const ITEM = { 1: { across: 15.0, len: 50.5 }, 2: { across: 11.0, len: 44.5 },
+                 3: { across: 19.0, len: 65.5 }, 4: { across: 6.65, len: 25, hex: true } };
+  const near = (z, want) => z !== undefined && Math.abs(z - want) < 1e-6;
+  for (const cs of CASES.filter((c) => c.insert)) {
+    const t0 = Date.now();
+    const r = buildBin(G, cs);
+    const ms = Date.now() - t0;
+    const h = insertPlan(cs), at = prober(r.polys), faults = [];
+    const it = ITEM[cs.insert], across = it.across + (cs.holeClr || 0);
+    const H = cs.hUnits * SPEC.unitH, wall = cs.wall === undefined ? BIN_DEFAULTS.wall : cs.wall;
+    const floorT = cs.screws ? Math.max(BIN_DEFAULTS.floorT, HOLE.floor) : BIN_DEFAULTS.floorT;
+    const floor = SPEC.footH + floorT + 0.05;                 // the slab runs a BLOAT past floorZ
+    const depth = cs.depth !== undefined ? cs.depth : Math.max(5, it.len / 3);
+    // the polygon's corners: a hex's across its flats over cos 30, a round one's over cos 5
+    const corner = it.hex ? across / Math.sqrt(3) : across / 2 / Math.cos(Math.PI / 36);
+    const bx = it.hex ? across : 2 * corner, by = 2 * corner;
+    if (r.meta.holes !== cs.holes || !h.n || h.n !== cs.holes)
+      faults.push(`${r.meta.holes} holes built, ${h.n} said, ${cs.holes} wanted`);
+    else {
+      if (!near(h.depth, depth)) faults.push(`${h.depth.toFixed(2)} deep, not ${depth.toFixed(2)}`);
+      let floors = 0;
+      for (const x of h.xs) for (const y of h.ys) if (near(at(x, y).pop(), floor)) floors++;
+      if (floors !== h.n) faults.push(`${h.n - floors} hole centres not down to the floor at ${floor.toFixed(2)}`);
+      const [x0, y0] = [h.xs[0], h.ys[0]];
+      for (let k = 0; k < 8; k++) {
+        const a = k * Math.PI / 4 + 0.1, c = Math.cos(a), s = Math.sin(a);
+        const inZ = at(x0 + (across / 2 - 0.02) * c, y0 + (across / 2 - 0.02) * s).pop();
+        // the highest surface up to the block's top: by a wall the lip leans in over it
+        const outZ = at(x0 + (corner + 0.02) * c, y0 + (corner + 0.02) * s)
+          .filter((z) => z < floor + depth + 0.5).pop();
+        if (!near(inZ, floor)) { faults.push(`inside the first hole at ${k * 45} degrees, ${inZ && inZ.toFixed(2)}`); break; }
+        if (!near(outZ, floor + depth)) { faults.push(`beside the first hole at ${k * 45} degrees, ${outZ && outZ.toFixed(2)}, not the block's top at ${(floor + depth).toFixed(2)}`); break; }
+      }
+      // the layout's rules, from the spec's outline
+      const hw = (cs.u - 1) * 21 + 20.75, hd = (cs.v - 1) * 21 + 20.75;
+      const lip = !cs.edges, Wl = Math.max(0.4, wall);
+      const side = lip ? Math.max(0.8, 2.70 + 0.25 - Wl) : 0.8;
+      const shelf = cs.label ? shelfNote(cs) : null;
+      const webs = [];
+      for (let i = 1; i < h.xs.length; i++) webs.push(h.xs[i] - h.xs[i - 1] - bx);
+      for (let j = 1; j < h.ys.length; j++) webs.push(h.ys[j] - h.ys[j - 1] - by);
+      if (webs.length && Math.min(...webs) < 1.2 - 1e-9) faults.push(`a web of ${Math.min(...webs).toFixed(2)} mm`);
+      const reachX = Math.max(...h.xs.map(Math.abs)) + bx / 2, front = -Math.min(...h.ys) + by / 2;
+      const backY = Math.max(...h.ys) + by / 2;
+      if (reachX > hw - Wl - side + 1e-9 || front > hd - Wl - side + 1e-9)
+        faults.push(`a hole reaches ${(hw - reachX).toFixed(2)} / ${(hd - front).toFixed(2)} from the outside, past the ${(Wl + side).toFixed(2)} kept`);
+      if (cs.label) {
+        // the shelf as built: noteOnShelf's depth with a note, else as asked (12 fits all of these)
+        const sd = shelf && shelf.depth ? shelf.depth : cs.label;
+        const top = shelf && shelf.fit ? H - 1.0 : H;
+        if (backY > hd - Wl - sd - 0.8 + 1e-9) faults.push(`a hole reaches under the shelf, to ${backY.toFixed(2)}`);
+        const under = at(0, hd - Wl - sd / 2);
+        if (!under.some((z) => near(z, floor + depth))) faults.push('no block under the shelf');
+        if (!near(under[under.length - 1], top)) faults.push(`the block comes through the shelf: ${under[under.length - 1].toFixed(2)}`);
+      } else if (backY > hd - Wl - side + 1e-9) faults.push(`a hole reaches ${(hd - backY).toFixed(2)} from the back`);
+    }
+    console.log(`  ${cs.name.padEnd(20)} ` + (faults.length ? 'WRONG: ' + faults.join('; ')
+      : `${String(h.n).padStart(3)} holes ${across.toFixed(2)} across, ${h.depth.toFixed(2)} deep, ` +
+        `${h.xs.length} x ${h.ys.length}` + (h.n > 200 ? `, built in ${ms} ms` : '')));
+    if (faults.length) bad++;
+  }
+
+  /* No dividers and no scoop where there are holes: the holes take the floor. A bin asked
+     for both is the same part as the bin with neither. */
+  const stl = (cfg) => Buffer.from(G.stlBinary(buildBin(G, cfg).polys, 'b')).toString('base64');
+  const holed = { u: 2, v: 2, hUnits: 3, insert: 4 };
+  const extras = [{ divX: 2, divY: 1, scoop: 8 }, { divX: 1, divY: 1, divRemovable: true }];
+  const kept = extras.filter((e) => stl(Object.assign({}, holed, e)) !== stl(holed)).map((e) => JSON.stringify(e));
+  console.log(`  ${'dividers and scoop'.padEnd(20)} ` + (kept.length ? 'BUILT beside holes: ' + kept.join(', ')
+    : `${extras.length} kinds left off, each the same STL as the bin without`));
+  if (kept.length) bad++;
+
+  /* Opt-in, and only when there are holes to build: every other bin is built to the byte
+     as it was, whatever its hole settings say. Each row is a bin that has to come out the
+     same as without them, and the reason insertPlan gives the page for building none. */
+  const one = { u: 1, v: 1, hUnits: 3 };
+  const SAME = [
+    ['none asked for', { u: 2, v: 1, hUnits: 3, label: 12, scoop: 8, divX: 1 },
+     { insert: 0, insertDepth: 12, holeClr: 0.5 }, 'off'],
+    ['not a preset', one, { insert: 9 }, 'off'],
+    ['not a number', one, { insert: 'AA' }, 'off'],
+    ['carved', { u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) }, { insert: 1 }, 'carved'],
+    ['solid', Object.assign({}, one, { solid: true }), { insert: 4 }, 'solid'],
+    ['a 1-unit bin, too short', Object.assign({}, one, { hUnits: 1 }), { insert: 4 }, 'short'],
+    ['18650s in half a cell', { u: 0.5, v: 0.5, hUnits: 6 }, { insert: 3 }, 'none'],
+  ];
+  const moved = SAME.map(([name, cfg, extra, why]) => {
+    const withIt = Object.assign({}, cfg, extra), got = insertPlan(withIt).why;
+    if (stl(cfg) !== stl(withIt)) return `${name}: BUILT DIFFERENTLY`;
+    if (buildBin(G, withIt).meta.holes) return `${name}: counts holes`;
+    return got === why ? '' : `${name}: insertPlan says ${got}, not ${why}`;
+  }).filter(Boolean);
+  console.log(`  ${'bins with no holes'.padEnd(20)} ` + (moved.length ? 'FAILED: ' + moved.join('; ')
+    : `${SAME.length} kinds, each the same STL to the byte, and the page told why`));
+  if (moved.length) bad++;
+
+  /* Links from before holes, built by the engine before them: the same bytes. A shelf, a
+     raised note and the dividers and scoop are what the holes' code goes past on its way,
+     so those are the rows. Notes ride in bnotes, so the two that print one are given it. */
+  const crypto = require('crypto');
+  const BEFORE = [
+    ['2x1x4, label shelf 12', '0-0-2-1-4-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15', {}, '314a909d03d54277'],
+    ['1x1x3, note raised', '0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-1', { note: 'M3 screws' }, 'e43cbc548a2737ae'],
+    ['3x2x5, dividers, scoop, label, magnets', '0-0-3-2-5-1.2-1.2-2-1-0-1-1-1-1-8-12-0-0-0-0-15-1', {}, '378b909714f22d86'],
+    ['2x2x3, removable dividers', '0-0-2-2-3-1.2-1.2-1-1-0-1-1-1-1-0-0-0-0-1-0-15', {}, '857e407d5b6d51d2'],
+    ['1.5x1x3, scoop and label', '0-0-1.5-1-3-1.2-1.2-0-0-0-1-1-1-1-8-10-0-0-0-0-15', {}, '4a2046d7ad5c3eae'],
+    ['2x1x3 tray, open front', '0-0-2-1-3-1.2-1.2-0-0-0-0-1-1-1-0-0-0-0-0-0-15', {}, '0c8a28868cae2148'],
+    ['2x1x2, note raised over screws', '0-0-2-1-2-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-2-1', { note: 'Fuses 5A' }, 'fadd35485043a028'],
+  ];
+  const changed = BEFORE.map(([name, link, extra, want]) => {
+    const got = crypto.createHash('sha256').update(Buffer.from(G.stlBinary(
+      buildBin(G, Object.assign(unpackBin(link), extra)).polys, 'b'))).digest('hex').slice(0, 16);
+    return got === want ? '' : `${name} (${link}) now ${got}, was ${want}`;
+  }).filter(Boolean);
+  console.log(`  ${'links from before'.padEnd(20)} ` + (changed.length ? 'CHANGED: ' + changed.join('; ')
+    : `${BEFORE.length} links, each the same STL to the byte`));
+  if (changed.length) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');
