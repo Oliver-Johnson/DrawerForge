@@ -1095,8 +1095,16 @@ function computePrintPlan() {
     items.push({ id: 'key', w: ext.w, d: ext.d, h: ext.h,
                  qty: keysNeeded(), stackable: false });
   }
-  printPlan = { plates: packPlates(items, state.bedW, state.bedD, gap,
-    { stack, zGap, bedH: state.bedH || 1e9 }), merged: items, zGap };
+  /* A part too big for the bed comes back as a plate of its own, marked `overflow`, with
+     nothing on it that prints. It is left out of the plan and the files, as the bins
+     page leaves it out, and named instead: drawn and downloaded, it was a plate that
+     looked like it held the piece and a 3MF without it. The check above the plan cannot
+     always catch it first, because it does not count every joint's tabs. */
+  const packed = packPlates(items, state.bedW, state.bedD, gap,
+    { stack, zGap, bedH: state.bedH || 1e9 });
+  printPlan = { plates: packed.filter((pl) => !pl.overflow),
+                over: packed.filter((pl) => pl.overflow).map((pl) => pl.overflow),
+                merged: items, zGap };
   renderPrintPlan();
 }
 function renderPrintPlan() {
@@ -1105,9 +1113,15 @@ function renderPrintPlan() {
   if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; return; }
   const plates = printPlan.plates;
   const stacked = plates.some(pl => pl.placed.some(p => p.z > 0.01));
-  $('planTail').textContent = plural(plates.length, 'print plate') + (stacked ? ' · stacked' : '');
+  const over = printPlan.over.map((id) => id === 'key' ? 'a key' : `piece ${id}`);
+  $('planTail').textContent = plural(plates.length, 'print plate') + (stacked ? ' · stacked' : '') +
+    (over.length ? ` · ${plural(over.length, 'part')} too big for the bed` : '');
   const sc = 116 / Math.max(state.bedW, state.bedD);
-  row.innerHTML = plates.map((pl, i) => {
+  const overNote = !over.length ? '' : `<div class="hint" style="color:var(--red);flex-basis:100%">` +
+    `${over.join(', ').replace(/^./, (c) => c.toUpperCase())} ${over.length > 1 ? 'do' : 'does'} not fit ` +
+    `the ${state.bedW} × ${state.bedD} mm bed with ${over.length > 1 ? 'their' : 'its'} joints, so no ` +
+    `plate file has ${over.length > 1 ? 'them' : 'it'} — add a cut through ${over.length > 1 ? 'each' : 'it'} on the map.</div>`;
+  row.innerHTML = overNote + plates.map((pl, i) => {
     let svg = `<svg width="${state.bedW*sc+2}" height="${state.bedD*sc+2}" style="background:var(--panel2);border:1px solid var(--line);border-radius:5px">`;
     for (const p of pl.placed) {
       const ci = p.id === 'key' ? 7 : layout.pieces.findIndex(pc => pc.id === p.id);
@@ -1151,7 +1165,7 @@ async function plate3mfBytes(idx) {
   return pz.generateAsync({ type: 'uint8array', ...ZIP_DEFLATE });
 }
 async function downloadAllPlates() {
-  if (!printPlan) return;
+  if (!printPlan || !printPlan.plates.length) return;
   const n = printPlan.plates.length;
   if (n === 1) { saveBlob(await plate3mfBytes(0), 'print-plates.3mf'); return; }
   const zip = new JSZip();
@@ -1623,7 +1637,7 @@ function renderExportFiles() {
           'STL', downloadFitSample,
           { 'data-ex': 'fit', 'aria-label': 'Download the joint fit sample (STL)' });
 
-  if (printPlan) {
+  if (printPlan && printPlan.plates.length) {
     const n = printPlan.plates.length;
     exGroup('Pre-arranged print plates');
     // named as the recommended path, because it is: every part already placed on a bed,
