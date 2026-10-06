@@ -1097,13 +1097,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
          picked their own printer was told bins would fit a bed that cannot take them. -->
     <label class="f"><b>Printer</b>
       <select id="bedPreset">
-<optgroup label="Anycubic"><option value="anycubic-kobra-3" data-bed="250,250,260">Anycubic Kobra 3 — 250 × 250 × 260</option></optgroup>
-<optgroup label="Bambu Lab"><option value="bambu-a1-mini" data-bed="180,180,180">Bambu Lab A1 mini — 180 × 180 × 180</option><option value="bambu-a1" data-bed="256,256,256">Bambu Lab A1 — 256 × 256 × 256</option><option value="bambu-p1" data-bed="256,256,256">Bambu Lab P1S / P1P — 256 × 256 × 256</option><option value="bambu-x1c" data-bed="256,256,256">Bambu Lab X1 Carbon — 256 × 256 × 256</option><option value="bambu-h2d" data-bed="325,320,325">Bambu Lab H2D, one nozzle — 325 × 320 × 325</option></optgroup>
-<optgroup label="Creality"><option value="creality-ender-3-v3" data-bed="220,220,250">Creality Ender-3 V3 / V3 SE — 220 × 220 × 250</option><option value="creality-ender-3-v3-ke" data-bed="220,220,240">Creality Ender-3 V3 KE — 220 × 220 × 240</option><option value="creality-k1" data-bed="220,220,250">Creality K1 / K1C — 220 × 220 × 250</option><option value="creality-k1-max" data-bed="300,300,300">Creality K1 Max — 300 × 300 × 300</option><option value="creality-k2-plus" data-bed="350,350,350">Creality K2 Plus — 350 × 350 × 350</option></optgroup>
-<optgroup label="Elegoo"><option value="elegoo-neptune-4" data-bed="225,225,265">Elegoo Neptune 4 / 4 Pro — 225 × 225 × 265</option><option value="elegoo-centauri-carbon" data-bed="256,256,256">Elegoo Centauri Carbon / Carbon 2 — 256 × 256 × 256</option></optgroup>
-<optgroup label="Prusa"><option value="prusa-mini" data-bed="180,180,180">Prusa MINI / MINI+ — 180 × 180 × 180</option><option value="prusa-mk4" data-bed="250,210,220">Prusa MK4 / MK4S — 250 × 210 × 220</option><option value="prusa-core-one" data-bed="250,220,270">Prusa CORE One — 250 × 220 × 270</option><option value="prusa-xl" data-bed="360,360,360">Prusa XL — 360 × 360 × 360</option></optgroup>
+<optgroup label="Anycubic"><option value="anycubic-kobra-3" data-bed="250,250,260" data-speed="fast">Anycubic Kobra 3 — 250 × 250 × 260</option></optgroup>
+<optgroup label="Bambu Lab"><option value="bambu-a1-mini" data-bed="180,180,180" data-speed="fast">Bambu Lab A1 mini — 180 × 180 × 180</option><option value="bambu-a1" data-bed="256,256,256" data-speed="fast">Bambu Lab A1 — 256 × 256 × 256</option><option value="bambu-p1" data-bed="256,256,256" data-speed="fast">Bambu Lab P1S / P1P — 256 × 256 × 256</option><option value="bambu-x1c" data-bed="256,256,256" data-speed="fast">Bambu Lab X1 Carbon — 256 × 256 × 256</option><option value="bambu-h2d" data-bed="325,320,325" data-speed="fast">Bambu Lab H2D, one nozzle — 325 × 320 × 325</option></optgroup>
+<optgroup label="Creality"><option value="creality-ender-3-v3" data-bed="220,220,250">Creality Ender-3 V3 / V3 SE — 220 × 220 × 250</option><option value="creality-ender-3-v3-ke" data-bed="220,220,240" data-speed="fast">Creality Ender-3 V3 KE — 220 × 220 × 240</option><option value="creality-k1" data-bed="220,220,250" data-speed="fast">Creality K1 / K1C — 220 × 220 × 250</option><option value="creality-k1-max" data-bed="300,300,300" data-speed="fast">Creality K1 Max — 300 × 300 × 300</option><option value="creality-k2-plus" data-bed="350,350,350" data-speed="fast">Creality K2 Plus — 350 × 350 × 350</option></optgroup>
+<optgroup label="Elegoo"><option value="elegoo-neptune-4" data-bed="225,225,265" data-speed="fast">Elegoo Neptune 4 / 4 Pro — 225 × 225 × 265</option><option value="elegoo-centauri-carbon" data-bed="256,256,256" data-speed="fast">Elegoo Centauri Carbon / Carbon 2 — 256 × 256 × 256</option></optgroup>
+<optgroup label="Prusa"><option value="prusa-mini" data-bed="180,180,180">Prusa MINI / MINI+ — 180 × 180 × 180</option><option value="prusa-mk4" data-bed="250,210,220" data-speed="fast">Prusa MK4 / MK4S — 250 × 210 × 220</option><option value="prusa-core-one" data-bed="250,220,270" data-speed="fast">Prusa CORE One — 250 × 220 × 270</option><option value="prusa-xl" data-bed="360,360,360" data-speed="fast">Prusa XL — 360 × 360 × 360</option></optgroup>
 <optgroup label="Sovol"><option value="sovol-sv06" data-bed="220,220,250">Sovol SV06 — 220 × 220 × 250</option></optgroup>
-<optgroup label="Voron"><option value="voron-2.4-250" data-bed="250,250,210">Voron 2.4, 250 mm — 250 × 250 × 210</option><option value="voron-2.4-300" data-bed="300,300,260">Voron 2.4, 300 mm — 300 × 300 × 260</option><option value="voron-2.4-350" data-bed="350,350,310">Voron 2.4, 350 mm — 350 × 350 × 310</option></optgroup>
+<optgroup label="Voron"><option value="voron-2.4-250" data-bed="250,250,210" data-speed="fast">Voron 2.4, 250 mm — 250 × 250 × 210</option><option value="voron-2.4-300" data-bed="300,300,260" data-speed="fast">Voron 2.4, 300 mm — 300 × 300 × 260</option><option value="voron-2.4-350" data-bed="350,350,310" data-speed="fast">Voron 2.4, 350 mm — 350 × 350 × 310</option></optgroup>
 <optgroup label="Any printer, by bed size"><option value="bed-180" data-bed="180,180,180" data-generic>180 × 180 × 180 mm</option><option value="bed-220" data-bed="220,220,250" data-generic>220 × 220 × 250 mm</option><option value="bed-250x210" data-bed="250,210,220" data-generic>250 × 210 × 220 mm</option><option value="bed-256" data-bed="256,256,256" data-generic selected>256 × 256 × 256 mm</option><option value="bed-300" data-bed="300,300,300" data-generic>300 × 300 × 300 mm</option></optgroup>
 <option value="custom">Custom…</option>
       </select></label>
@@ -1115,6 +1115,25 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Gap between parts (mm)</b><input id="gap" type="number" step="0.5" value="3"></label>
     <div class="hint">Bins print upright, so a bin's own height has to clear your Z. A tall drawer will happily let you ask for a bin taller than the printer can make.</div>
+    <!-- Cost and print time. Both describe your filament and your printer rather than the
+         layout, so they are kept on this device — one setting the baseplates page shares —
+         and never put in the link. src/shared-ui/estimate.js fills these in and saves
+         them.
+         The price is a text field, not a number one: typed into a number field, a
+         decimal comma, 12,50, was read as 1250. -->
+    <div class="row">
+      <label class="f"><b>Filament price per kg</b><input id="filPrice" type="text" inputmode="decimal" autocomplete="off" placeholder="not set" aria-describedby="filPriceErr"></label>
+      <label class="f"><b>Currency</b><select id="filSym">
+        <option value="£">£</option><option value="€">€</option><option value="$">$</option><option value="">no symbol</option>
+      </select></label>
+    </div>
+    <span class="hint" id="filPriceErr" style="color:var(--red)" hidden></span>
+    <label class="f"><b>Printer speed</b><select id="printSpeed">
+      <option value="auto">From the printer</option>
+      <option value="fast">Fast — CoreXY or input shaping</option>
+      <option value="standard">Standard — a classic bed-slinger</option>
+    </select></label>
+    <div class="hint">With a price set, a cost goes beside every gram figure; leave it empty and none is shown. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Both settings stay on this device, are shared with the baseplates page and never go in the link. The speed only steers the print time, which is a rough estimate from the filament and the layer count — only your slicer can give the real one.</span></div>
   </div>
 </section>
 
@@ -1142,7 +1161,27 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
          when the map cannot show it — a whole size for a bin standing on a half step. -->
     <div class="hint" id="sizeHalfHint">A half cell is 21 mm. Half-size bins have small feet that fit any Gridfinity baseplate, two to a socket.</div>
     <div class="hint" id="sizeWhy" role="status" style="display:none;color:var(--red)"></div>
-    <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
+    <!-- Height three ways. Someone sizing a bin for a part knows the part in millimetres,
+         not in 7 mm units, so the height can be typed as units, as millimetres overall,
+         or as the depth wanted inside. Whichever way it is typed, the bin is still a
+         whole number of units — the link and saved drawers carry units and only units —
+         and the line under the field says what the typing came to. The menu is a
+         preference of the person, remembered on this device like the mm/inch switch.
+         The length takes any step: it shows the height built to the hundredth, and a
+         step of 0.5 made most of those figures ones the browser called invalid, and had
+         the arrow keys snap to the next half instead of stepping from what is there.
+         The menu is "Entered as", not "in": beside "Inside depth (in)" that read as the
+         inch unit. -->
+    <div class="row">
+      <label class="f" id="hUnitsRow"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
+      <label class="f" id="hMmRow" style="display:none"><b id="hMmLabel">Height overall (mm)</b><input id="hMm" type="number" step="any" min="0" max="2000"></label>
+      <label class="f"><b>Entered as</b><select id="hMode" aria-label="Height entered as">
+        <option value="units">7 mm units</option>
+        <option value="overall">overall mm</option>
+        <option value="inside">inside depth</option>
+      </select></label>
+    </div>
+    <div class="hint" id="hResult" role="status">—</div>
     <div class="hint" id="binSizeHint">—</div>
     <label class="f" id="noteRow"><b>What goes in it (optional)</b><input id="note" type="text" maxlength="28" placeholder="M3 screws, drill bits…"></label>
     <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
@@ -4493,6 +4532,265 @@ const FIELDS = (() => {
  * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
  * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
  * covered by this licence. The models you make with it are yours. */
+/* What a job costs and roughly how long it prints: the two questions after "how much
+ * filament", and the two the tools did not answer. Both tools quote grams per part, per
+ * plate and in total; this turns grams into money and a plate into a duration, the same
+ * way on both pages, because two copies of an estimate are two estimates.
+ *
+ * The price is the person's, not the design's. It lives on this device, under one key
+ * both tools read, and never in the link: a friend's link must not tell you what your
+ * filament costs, and yours must not tell them. Empty until someone types one, and while
+ * it is empty no money is shown anywhere — a cost worked out from a price we made up,
+ * in a currency we guessed, is a number people would quote back to us as ours.
+ *
+ * Same discipline as widgets.js and fields.js: everything takes its elements as
+ * arguments and knows no ids, so every getElementById stays in a tool's ui.js where the
+ * build's id audit can see it.
+ */
+'use strict';
+
+const ESTIMATE = (() => {
+  /* ---- the price, and the printer speed override ---------------------------------
+   * One key for both, read by both tools, as JSON so either can grow a field without a
+   * second key to keep in step. Every read and write is wrapped: private windows and
+   * blocked storage throw on access, and a full quota throws on write, and in all of
+   * those the fields still work for the visit — they are just not remembered. */
+  const KEY = 'drawerforge:filament:v1';
+  /* A symbol, or none. A short fixed list rather than a currency code per country: it is
+     a label beside a number the person typed, nothing is converted, and "none" is there
+     for anyone whose symbol is not on it, who then sees the number alone. Prefixed with
+     a full stop for the decimals, like every other figure on these pages. */
+  const SYMBOLS = ['£', '€', '$', ''];
+  /* The starting symbol, from the browser's region — en-GB is £, de-DE €, en-US $ — and
+     none at all when the language names no region, or one that uses another currency.
+     Only a default for the menu: nothing is shown until a price is typed beside it, and
+     whatever the person picks is what is kept. */
+  const POUND = ['GB', 'GG', 'GI', 'IM', 'JE'];
+  const EURO = ['AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'IE', 'IT', 'LT',
+                'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK'];
+  const DOLLAR = ['AU', 'CA', 'HK', 'NZ', 'SG', 'US'];
+  function regionSymbol(langs) {
+    for (const l of langs || []) {
+      const m = /^[a-z]{2,3}(?:-[a-z]{4})?-([a-z]{2})(?:-|$)/i.exec(String(l || ''));
+      if (!m) continue;
+      const r = m[1].toUpperCase();
+      return POUND.includes(r) ? '£' : EURO.includes(r) ? '€' : DOLLAR.includes(r) ? '$' : '';
+    }
+    return '';
+  }
+  const browserLangs = () => {
+    try { return navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]; }
+    catch (err) { return []; }
+  };
+  const SPEED_CHOICES = ['auto', 'fast', 'standard'];
+  // past any real spool, and well short of a typo the size of a phone number
+  const PRICE_MAX = 10000;
+  const priceOf = (v) => (typeof v === 'number' && isFinite(v) && v > 0 ? Math.min(v, PRICE_MAX) : null);
+  /* A price as it is typed: a plain number, with a decimal point or a decimal comma. Half
+     of Europe writes 12,50, and the number input this used to be took that as 1250 — a
+     price then saved, shared with the other tool and written into the README. A lone
+     comma with no point is a decimal comma. Anything else — a thousands separator, a
+     currency sign, a minus, an exponent — is not read at all, because any reading of it
+     would be a guess. The number; null for an empty field, which is no price; NaN for
+     text that is not a price. */
+  function parsePrice(text) {
+    const t = String(text).trim();
+    if (!t) return null;
+    const s = /^\d*,\d*$/.test(t) ? t.replace(',', '.') : t;
+    return /^(\d+\.?\d*|\.\d+)$/.test(s) ? parseFloat(s) : NaN;
+  }
+
+  function load() {
+    let p = null;
+    try { p = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (err) { p = null; }
+    if (!p || typeof p !== 'object') p = {};
+    return {
+      price: priceOf(p.price),
+      sym: SYMBOLS.includes(p.sym) ? p.sym : regionSymbol(browserLangs()),
+      speed: SPEED_CHOICES.includes(p.speed) ? p.speed : 'auto',
+    };
+  }
+  function save(prefs) {
+    try { localStorage.setItem(KEY, JSON.stringify(prefs)); }
+    catch (err) { /* private mode, or the quota is full: the fields still work for this
+                     visit, they are just not remembered */ }
+  }
+
+  /* ---- money ---------------------------------------------------------------------
+   * Two decimals, always: a bin is pennies, and 0.4 next to 0.42 reads as two different
+   * kinds of number. Empty when there is no price, which is how every caller knows to
+   * leave the money out rather than print a zero. */
+  const money = (amount, sym) => `${sym}${amount.toFixed(2)}`;
+  const cost = (grams, prefs) =>
+    (prefs && prefs.price && isFinite(grams) ? money(grams / 1000 * prefs.price, prefs.sym) : '');
+  const perKg = (prefs) => (prefs && prefs.price ? `${money(prefs.price, prefs.sym)}/kg` : '');
+
+  /* ---- print time ----------------------------------------------------------------
+   * A rough guess, and it says so wherever it is shown: only a slicer knows the paths,
+   * the speeds and the accelerations, and this knows none of them. What it does know is
+   * how much plastic a plate is and how tall it stands, and that is most of a print.
+   *
+   *   time = warm-up
+   *        + filament volume / an effective volumetric rate
+   *        + every layer x a layer-change overhead
+   *        + every layer of every part x an overhead per part
+   *
+   * The rate is an average over a whole print — outer walls slow, infill fast, every
+   * corner an acceleration — not the hotend's limit, which is two to four times higher
+   * and which nobody's print averages. A bin or a baseplate is nearly all perimeter, so
+   * the rate is set from wall speeds. A classic bed-slinger's stock profile runs walls
+   * at 25 to 50 mm/s, and a 0.42 × 0.2 mm line at those is 2.1 to 4.2 mm³/s: 3 mm³/s,
+   * about 13 g of PLA an hour. A fast printer's runs them at 150 to 300 mm/s but cannot
+   * reach that on a 40 mm bin wall before it has to slow for the corner, and generic
+   * PLA profiles cap the flow at 12 mm³/s or so: 8 mm³/s, about 36 g an hour. Both sit
+   * at the slow end of what those printers are seen to do on bins.
+   *
+   * The layer terms are the time spent not extruding: the z move and the wipe on every
+   * layer, and the travel to each part and the retraction either side of it, once per
+   * part per layer, so a plate of nine small bins is slower than one bin of the same
+   * weight. 0.2 mm layers, because that is what nearly everyone prints these at. The
+   * warm-up is heating, bed levelling and the purge line, once a plate; six minutes is
+   * on the long side of a printer that levels itself before every print.
+   *
+   * With those, before rounding, a 1×1×3 bin is about 35 minutes fast and 70 standard,
+   * a 2×2×3 about 75 minutes and 2 h 55, and a 5 × 5 baseplate about 1 h 20 and 3 h 15
+   * (77 and 194 minutes: the plate alone, 210 mm square, at the page's defaults; a
+   * plate that carries margins weighs more and takes longer).
+   *
+   * Conservative on purpose — a print that finishes early is a pleasant surprise and
+   * one that runs past bedtime is not — and rounded up to the next 5 minutes under an
+   * hour and the next 15 above, so it never claims a precision it does not have. */
+  const LAYER = 0.2;              // mm
+  const WARMUP_S = 6 * 60;        // heat, level, purge: once a plate
+  const SPEEDS = {
+    // CoreXY and input-shaped printers: Bambu Lab, Prusa MK4 and CORE One, Voron, K1
+    fast: { rate: 8, layerS: 4, partS: 1.5, name: 'fast' },
+    // classic bed-slingers: an Ender 3, a Prusa MK3, anything not known to be fast
+    standard: { rate: 3, layerS: 6, partS: 3, name: 'standard' },
+  };
+  /* What every total time is followed by, in both tools, so none of them can be read as
+     a promise. */
+  const ROUGH = 'a rough estimate; only your slicer can time it exactly';
+  /* Seconds for one plate. `parts` is what is on it, each { vol, h, z }: the filament it
+     takes in mm³, its height and the height it starts at (a part stacked on another
+     starts above the bed, and the plate is as tall as its tallest stack). */
+  function plateSeconds(parts, cls) {
+    const s = SPEEDS[cls] || SPEEDS.standard;
+    let vol = 0, top = 0, partLayers = 0;
+    for (const p of parts) {
+      vol += Math.max(0, p.vol || 0);
+      top = Math.max(top, (p.z || 0) + (p.h || 0));
+      partLayers += Math.ceil((p.h || 0) / LAYER - 1e-9);
+    }
+    return WARMUP_S + vol / s.rate + Math.ceil(top / LAYER - 1e-9) * s.layerS + partLayers * s.partS;
+  }
+  // whole minutes, rounded up: to the next 5 under an hour and the next 15 from there
+  function roundMinutes(sec) {
+    const m = Math.max(0, sec) / 60;
+    const step = m < 60 ? 5 : 15;
+    return Math.max(step, Math.ceil(m / step - 1e-9) * step);
+  }
+  const duration = (min) => {
+    const h = Math.floor(min / 60), m = min % 60;
+    return h ? `${h} h` + (m ? ` ${m} min` : '') : `${m} min`;
+  };
+  /* Which kind of printer the time is for. The override wins; otherwise the printer list
+     says, from the data-speed tools/printers.js writes on the options it knows to be fast,
+     and everything else — the size-only entries, Custom, a printer we have no figure
+     for — is timed as standard, which is the slower and so the safer guess. */
+  const listedSpeed = (select) => {
+    const o = select && select.selectedOptions && select.selectedOptions[0];
+    return o && o.dataset && o.dataset.speed === 'fast' ? 'fast' : 'standard';
+  };
+  const speedOf = (select, prefs) =>
+    (prefs && SPEEDS[prefs.speed] ? prefs.speed : listedSpeed(select));
+
+  /* ---- the fields ----------------------------------------------------------------
+   * The price, the symbol and the speed override, in panel 02 of both tools. Filled from
+   * storage at load, saved on every edit, and refilled when the other tool — or this one
+   * in another tab — changes them, so a price typed on one page is the price on the
+   * other without a reload. `onChange` is the tool's own redraw. `els.err` is the line
+   * under the price that says when what was typed is not a price.
+   *
+   * The price is read from its own field and only from there. A change of symbol or
+   * speed used to read the price box as well, and a tab whose box was left focused when
+   * another tab changed the price wrote its own stale figure back over the new one. */
+  function bind(els, onChange) {
+    let prefs = load();
+    // typed into since it took focus: only then is the box the person's to keep
+    let edited = false, refused = false;
+    /* A price that is not one is said out loud, the way the drawer fields say a bad
+       measurement: marked for a screen reader and in red, and a line under it in words
+       that says what is still in use, since the price in use does not change. */
+    const mark = (bad) => {
+      refused = bad;
+      els.price.setAttribute('aria-invalid', bad ? 'true' : 'false');
+      els.price.style.borderColor = bad ? 'var(--red)' : '';
+      if (!els.err) return;
+      els.err.textContent = bad ? 'Type the price as a number, like 22.99 or 22,99 — ' +
+        (prefs.price ? `the costs still use ${perKg(prefs)}.` : 'no price is set.') : '';
+      els.err.hidden = !bad;
+    };
+    const showPrice = () => {
+      els.price.value = prefs.price === null ? '' : String(prefs.price);
+      mark(false);
+    };
+    const show = () => {
+      if (document.activeElement !== els.price || !edited) showPrice();
+      else if (refused) mark(true);            // still refused, but the price in use moved
+      els.sym.value = prefs.sym;
+      els.speed.value = prefs.speed;
+    };
+    show();
+    const commit = () => { save(prefs); onChange(); };
+    els.price.addEventListener('focus', () => { edited = false; });
+    els.price.addEventListener('input', () => {
+      edited = true;
+      const p = parsePrice(els.price.value);
+      mark(Number.isNaN(p));
+      if (refused) return;
+      prefs = Object.assign({}, prefs, { price: priceOf(p) });
+      commit();
+    });
+    /* Once it is left, the box shows the price in use, as the other fields show the value
+       in use: 1000000000 is held at the limit, 0 is no price, and a price another tab set
+       meanwhile is that price. What was typed stays when it is that price already — 12,50
+       is left as 12,50 — and when it was refused, so it can be put right. */
+    els.price.addEventListener('blur', () => {
+      edited = false;
+      const p = parsePrice(els.price.value);
+      if (!Number.isNaN(p) && p !== prefs.price) showPrice();
+    });
+    const choose = () => {
+      prefs = Object.assign({}, prefs, { sym: els.sym.value,
+        speed: SPEED_CHOICES.includes(els.speed.value) ? els.speed.value : 'auto' });
+      if (refused) mark(true);                  // the line names the price in the new symbol
+      commit();
+    };
+    els.sym.addEventListener('change', choose);
+    els.speed.addEventListener('change', choose);
+    window.addEventListener('storage', (e) => {
+      if (e.key !== KEY) return;
+      prefs = load(); show(); onChange();
+    });
+    return { get: () => prefs };
+  }
+  /* The automatic entry says what it has decided, so nobody has to know the list of
+     fast printers to know which time they are being given. */
+  function labelAuto(speedSelect, printerSelect) {
+    const o = speedSelect.querySelector('option[value="auto"]');
+    if (o) o.textContent = `From the printer: ${listedSpeed(printerSelect)}`;
+  }
+
+  return { KEY, SYMBOLS, SPEEDS, LAYER, ROUGH, regionSymbol, load, parsePrice, cost, perKg, money,
+           plateSeconds, roundMinutes, duration, speedOf, listedSpeed, bind, labelAuto };
+})();
+</script>
+<script>/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+ * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+ * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+ * covered by this licence. The models you make with it are yours. */
 /* Saved drawers: several designs kept on this device, and a file to carry them.
  *
  * Each tool kept exactly one layout, so someone kitting out a tool chest — eight drawers,
@@ -5449,6 +5747,93 @@ function labelPrism(G, hwI, hdI, H, depth, t) {
  */
 const LIP = [[0, 2.70], [0.8, 1.90], [2.6, 1.90]];
 const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
+
+/* The top of the cavity floor. Never less than two BLOAT above the foot, so the slab
+   encloses the foot's overlap extension rather than ending exactly on it — ending on
+   it leaves 128 boundary edges. Only a floor thinner than 0.1 mm ever hits that clamp.
+   A function of its own because the page quotes it: the inside depth shown beside the
+   height field is measured from here, and a second copy of this sum in the UI would be
+   a number that drifts from the bin the day the floor changes. The floor is the one the
+   bin is built with, which screw holes in the feet raise: see builtFloorT. */
+const floorTop = (c) => SPEC.footH + Math.max(builtFloorT(c), 2 * BLOAT);
+/* A floor that reaches within 0.2 mm of the top leaves no cavity worth the name, so
+   buildBin builds that bin as one block, the same as one asked to be solid. */
+const builtSolid = (c) => c.solid || floorTop(c) >= c.hUnits * SPEC.unitH - 0.2;
+/* The tallest of the four walls, as the share of the height above the floor it stands
+   to. A solid block counts as all wall, and so does a carved bin: its walls are built
+   cell by cell to the full height, and the edges never reach them. */
+const tallestWall = (c) => (c.solid || !isFullRect(c) ? 1 : Math.max(...['f', 'b', 'l', 'r'].map((k) =>
+  (!c.edges || c.edges[k] === undefined) ? 1 : Math.max(0, Math.min(1, c.edges[k])))));
+/* How tall a bin really stands, lip aside. H stays the stacking pitch whatever the walls
+   do, but a bin with every wall lowered stops at the tallest of them, and one with every
+   wall open is its floor slab and nothing more: a tray. Dividers are not walls, though:
+   a fixed one, or the rails of a removable one, runs from the floor to H whatever the
+   walls do, so a bin with any stands at H. buildBin reports this as the bin's height,
+   which is what its README, the plate files and the bed's height check use, and the
+   page quotes it beside the height field; one function for all of them, like floorTop,
+   so they cannot drift. It is buildBin's figure, not a measurement of the mesh: the
+   share is taken from the top of the slab while the wall ring runs from floorZ, so a
+   part-height wall stands up to BLOAT under it (0.025 mm at half height). */
+const binTop = (c) => {
+  const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
+  if (builtSolid(c) || c.divX > 0 || c.divY > 0) return H;
+  return floorZ + BLOAT + tallestWall(c) * (H - floorZ - BLOAT);
+};
+
+/* A bin's heights as the page quotes them, from the numbers buildBin builds it with
+   rather than from constants kept beside them. H is the stacking height, units x 7 —
+   the top of the walls, which is where the feet of a bin stacked on this one come to
+   rest — and the lip stands above it. The inside depth runs from the floor to that same
+   top, because a part standing any taller is in the way of the bin above it, or of a
+   lid. A solid bin has no inside, and a bin with a lowered wall has no lip.
+
+   The floor a part stands on is not floorZ itself. buildBin runs the slab a BLOAT past
+   it, so the wall ring that starts below floorZ is buried in the slab instead of meeting
+   it face to face, and the surface left inside the bin is that BLOAT higher. Measured
+   from floorZ, every inside depth was quoted 0.05 mm deeper than the bin is. */
+function binHeights(cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c), top = binTop(c);
+  const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
+    c.edges[k] === undefined || c.edges[k] >= 1);
+  const lipH = c.lip && allFull && !c.solid ? lipHeight(c.lipMin) : 0;
+  /* `top` is H unless a wall is lowered all round, and the inside runs up to it: a part
+     standing taller than every wall is not in the bin. `hollow` says whether the bin has
+     an inside at any height. A solid block never does, and nor does a tray open on every
+     side, whose top is its floor whatever its units. */
+  return { H, floorZ, top, lipH, hollow: !c.solid && tallestWall(c) > 0,
+           inside: builtSolid(c) ? 0 : Math.max(0, top - (floorZ + BLOAT)) };
+}
+/* The fewest whole units that give at least `depth` mm inside. Rounded up, not to the
+   nearest: someone typing the inside depth is sizing a bin for a part, and a bin a
+   millimetre short of the part is a bin the part does not fit. Counted up through
+   binHeights rather than solved for, so it is that function run backwards whatever the
+   bin: a lowered wall adds only its share of each unit to the inside, and a floor that
+   reaches the top makes the first units solid. The epsilon keeps an exact fit exact —
+   36 mm on a 1.2 mm floor is 6 units, not 7 because a sum came out at 35.99999999999999.
+   No units at all, 0, for a bin with no inside at any height; past the tallest bin a
+   link carries, the tallest. */
+function unitsForInside(depth, cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  if (!binHeights(c).hollow) return 0;
+  let n = 1;
+  while (n < LINK_MAX.hUnits && binHeights(Object.assign(c, { hUnits: n })).inside < depth - 1e-9) n++;
+  return n;
+}
+/* The whole units whose top comes nearest `mm`: an overall height is a target, and the
+   nearest bin is the honest answer to it. Halves go up, as Math.round's do. A tray open
+   on every side stands the same at any height, so for one it is the units whose
+   stacking height comes nearest: they still say how much room it keeps in a stack. */
+function unitsForTop(mm, cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  let best = 1, off = Infinity, offH = Infinity;
+  for (let n = 1; n <= LINK_MAX.hUnits; n++) {
+    const h = binHeights(Object.assign(c, { hUnits: n }));
+    const d = Math.abs(h.top - mm), dH = Math.abs(h.H - mm);
+    if (d < off - 1e-9 || (d < off + 1e-9 && dH <= offH)) { best = n; off = d; offH = dH; }
+  }
+  return best;
+}
 
 /* There is one base: the spec foot, 4.75 mm, under the spec lip. Truncated feet
  * were offered for a while and are gone. They bought 1.70 mm of usable depth, and
@@ -6594,10 +6979,8 @@ function buildBin(G, cfg) {
   /* The foot reaches full width at 4.75, so that is where the body starts and there
      is no step in the silhouette between them. */
   const bodyBase = SPEC.footH;
-  /* Never less than two BLOAT above the foot, so the slab encloses the foot's overlap
-     extension rather than ending exactly on it — ending on it leaves 128 boundary
-     edges. Only a floor thinner than 0.1 mm ever hits that clamp. */
-  const floorZ = bodyBase + Math.max(c.floorT, 2 * BLOAT);
+  // see floorTop for the clamp, and for why it is not written out here
+  const floorZ = floorTop(c);
 
   /* Whether there is a lip has to be known before the body: a carved bin's wall
      panels carry their own lip, so the decision cannot wait until after. A lip over
@@ -6640,7 +7023,7 @@ function buildBin(G, cfg) {
     polys.push(...carvedBody(G, c, mask, H, carvedFloor, zTop,
                              c.solid ? null : lipSteps,
                              plan && plan.screws ? { from: slabFrom, layer: slabLayer } : null));
-  } else if (c.solid || floorZ >= H - 0.2) {
+  } else if (builtSolid(c)) {
     if (plan && plan.screws) polys.push(...rectSlabLayer());
     polys.push(...G.extrudePoly(outer, slabFrom, H));
   } else {
@@ -6756,11 +7139,8 @@ function buildBin(G, cfg) {
   if (hasLip && full) polys.push(...lipRing(G, c, hwO, hdO, H, n));
 
   // H stays the stacking pitch whatever the walls do; topZ is how tall it really is,
-  // which for an all-open tray is just the floor.
-  const maxFrac = c.solid ? 1 : Math.max(...['f', 'b', 'l', 'r'].map((k) =>
-    (!c.edges || c.edges[k] === undefined) ? 1 : Math.max(0, Math.min(1, c.edges[k]))));
-  const topZ = (c.solid || floorZ >= H - 0.2) ? H
-    : floorZ + BLOAT + maxFrac * (H - floorZ - BLOAT);
+  // which for an all-open tray is just the floor. See binTop, which the page quotes too.
+  const topZ = binTop(c);
 
   const meta = {
     u: c.u, v: c.v, hUnits: c.hUnits, H, hasLip, openEdges: !allFull,
@@ -6952,8 +7332,9 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
 
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
-    lipHeight, REQUIRED_CORE, FOOT_HOLES, SCREW_FLOOR, holeSites, holePlan, builtFloorT,
-    feetBits, feetFrom, isHalfSize, binFeet, feetHolesOff,
+    lipHeight, binHeights, unitsForInside, unitsForTop, REQUIRED_CORE,
+    FOOT_HOLES, SCREW_FLOOR, holeSites, holePlan, builtFloorT, feetBits, feetFrom,
+    isHalfSize, binFeet, feetHolesOff,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers, LINK_MAX };
 }
@@ -7025,6 +7406,20 @@ const clearSel = () => { selected = -1; selExtra.clear(); };
 /* The bin focus is pointed at, whichever kind it is. Null whenever focus is off. */
 const fBin = () => (!focused ? null : scratch || (selected >= 0 ? B()[selected] : null));
 const LIP_H = lipHeight(0.55);
+/* The most whole units that stand in `room` millimetres with a stacking lip on top —
+   the same sum the drawer-height check makes, run backwards, so the count it names is
+   one the check then passes. Zero when not even one unit fits. */
+const unitsUnder = (room) => Math.max(0, Math.floor((room - LIP_H + 0.001) / SPEC.unitH));
+
+/* The filament price and the printer speed override, in panel 02. They are yours and not
+   the layout's, so ESTIMATE keeps them on this device, shared with the baseplates page,
+   and they never reach the link or a saved drawer. A change redraws the figures and
+   nothing else: no bin changes because a spool got dearer. Bound here, at the top,
+   because refresh() reads it and refresh() can run from any of the boot paths below. */
+const est = ESTIMATE.bind({ price: $('filPrice'), sym: $('filSym'), speed: $('printSpeed'),
+                            err: $('filPriceErr') },
+                          // the dialog too: a price typed on the other page arrives here
+                          () => { refresh(); if ($('exportDlg').open) renderExport(); });
 
 /* ---------- model --------------------------------------------------------- */
 /* The largest drawer the map will lay out, and so the most cells a side. Every draw
@@ -7088,7 +7483,10 @@ function plateCells(W, D) {
 function grid() {
   const { nx, ny } = plateCells(state.drawerW, state.drawerD);
   const avail = state.drawerH - state.plateH;
-  return { nx, ny, avail, maxUnits: Math.max(1, Math.floor((avail - LIP_H) / SPEC.unitH)) };
+  /* By the drawer-height check's own sum, rounding allowance and all: without it 69.1 mm
+     less a 2.15 mm plate came to 8.999… units here, and the summary said 8 where Checks
+     said 9. */
+  return { nx, ny, avail, maxUnits: Math.max(1, unitsUnder(avail)) };
 }
 const EDGES = ['f', 'b', 'l', 'r'];
 const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
@@ -7433,6 +7831,85 @@ function volumeMm3(c) {
   const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
   return { raw: baseRaw + thin, filament: baseFil + thin };
+}
+
+/* The volume a closed mesh encloses: the signed volume of the tetrahedron each triangle
+   makes with the origin, summed, which over a closed mesh is the volume inside wherever
+   the origin falls. For the lids, which have no parameters to estimate from the way a
+   bin does — and which are a thin plate and a thinner skirt, solid whatever the infill,
+   so what they enclose is the filament they take. */
+function meshVolume(polys) {
+  let v = 0;
+  for (const p of polys) {
+    const q = p.verts;
+    for (let i = 1; i + 1 < q.length; i++) {
+      const a = q[0], b = q[i], c = q[i + 1];
+      v += (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) +
+            a[2] * (b[0] * c[1] - b[1] * c[0])) / 6;
+    }
+  }
+  return Math.abs(v);
+}
+
+/* ---------- grams, money and time -----------------------------------------
+   Every gram figure on the page is written through these, so none of them can be the one
+   that forgot the cost: the parts table, the totals, the plan, the download dialog and
+   the README. The money is empty until a price is set, and then it is everywhere. The
+   time is ESTIMATE's rough one, per plate and summed, for whichever kind of printer the
+   list or the override says. */
+const gramsOf = (mm3) => mm3 / 1000 * PLA_DENSITY;
+const costOf = (g) => ESTIMATE.cost(g, est.get());
+// " · £0.42", or nothing without a price
+const costTail = (g) => { const c = costOf(g); return c ? ` · ${c}` : ''; };
+const speedNow = () => ESTIMATE.speedOf($('bedPreset'), est.get());
+/* What one plate of the plan weighs and roughly takes. Every part on it counts, divider
+   plates and lids included — a plate of nothing but dividers is not a free plate. */
+function plateEstimate(pl) {
+  const byKey = new Map(printPlan.types.map((t) => [t.key, t]));
+  const parts = pl.placed.map((p) => ({ vol: (byKey.get(p.id) || {}).vol || 0, h: p.h, z: p.z }));
+  const vol = parts.reduce((a, p) => a + p.vol, 0);
+  return { grams: gramsOf(vol),
+           min: ESTIMATE.roundMinutes(ESTIMATE.plateSeconds(parts, speedNow())) };
+}
+/* The whole job: grams of every part, whether or not it fits the bed, and the time of the
+   plates that can be printed — a part too big for the bed has no plate to time. The total
+   time is the sum of the per-plate times as shown, so the plates and the total add up. */
+function jobEstimate() {
+  if (!printPlan) return { grams: 0, min: 0, plates: [] };
+  const plates = goodPlates().map(([pl]) => plateEstimate(pl));
+  const vol = printPlan.types.reduce((a, t) => a + t.vol * t.qty, 0);
+  return { grams: gramsOf(vol), min: plates.reduce((a, p) => a + p.min, 0), plates };
+}
+// "fast printer", for the sentences that say what the time is for
+const speedName = () => `${ESTIMATE.SPEEDS[speedNow()].name} printer`;
+/* "2 dividers and 1 lid": the loose parts a total weighs along with the bins, named so
+   that a total larger than the bins table adds up to says why. Empty when there are none. */
+function looseParts() {
+  if (!printPlan) return '';
+  let d = 0, l = 0;
+  for (const t of printPlan.types) {
+    if (t.key.startsWith('div:')) d += t.qty;
+    else if (t.key.startsWith('lid:')) l += t.qty;
+  }
+  return [d ? plural(d, 'divider') : '', l ? plural(l, 'lid') : ''].filter(Boolean).join(' and ');
+}
+/* The README's versions. It is read at the printer, away from the page, so the cost says
+   which price it was worked out at, and the time says in full what it is and is not. */
+function readmeCost(g) {
+  const c = costOf(g);
+  return c ? ` — about ${c} at ${ESTIMATE.perKg(est.get())}` : '';
+}
+/* The grams are every part's, but a part too big for the bed has no plate to time, so a
+   time that leaves one out says so. Where it does, "over 3 plates" is not said as well:
+   it would be the plates said twice. */
+const fitNote = () => (printPlan && printPlan.plates.some((p) => p.overflow) ? ' for the plates that fit' : '');
+function readmeTime(job) {
+  if (!job.plates.length) return [];
+  return [`Print time: roughly ${ESTIMATE.duration(job.min)} on a ${speedName()}` +
+            (job.plates.length > 1 && !fitNote() ? ` over ${job.plates.length} plates` : '') +
+            `${fitNote()}.`,
+          'That is a rough estimate from the filament and the layer count, not a slice:',
+          'your slicer gives the real figure.'];
 }
 
 /* ---------- controls ------------------------------------------------------ */
@@ -9117,8 +9594,15 @@ function binIssues(b, k, claims) {
     out.push(`is ${fw.toFixed(0)} × ${fd.toFixed(0)} mm, too big for your ${state.bedW} × ${state.bedD} mm bed in either orientation` +
       (sp ? ` — split it into ${sp.text}` : ''));
   }
-  if (!loose && st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001)
-    out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available`);
+  /* The check has always worked in millimetres; the fix is a number of units, so it
+     says which one. Worked out from where this bin actually stands, so a bin on layer 2
+     is told what fits on top of the bins under it, not what would fit on the baseplate. */
+  if (!loose && st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001) {
+    const fit = unitsUnder(g.avail - st.z);
+    out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available — ` +
+      (fit < 1 ? 'there is no room for a bin at all where it stands'
+               : `${plural(fit, 'unit')} is the tallest that fits ${st.z > 0 ? 'on the bins under it' : 'here'}`));
+  }
   if (!b.solid && b.wall < 0.8)
     /* Below one nozzle line the engine builds the thinnest wall it can rather than an
        open shell, so the file holds more wall than the field says; say so. */
@@ -9203,10 +9687,16 @@ function warnings() {
     out.push({ err: true, t: `The baseplate in this design is laid out on a ${shown > 0 ? `${shown} mm` : 'non-standard'} grid. These bins are made to the standard's ${SPEC.pitch} mm, so they will not seat in it: set Grid pitch on the Baseplates page back to ${SPEC.pitch} mm.` });
   }
   const tot = stackHeight();
+  /* Both say the unit count that fits, since units are what the height field takes. A
+     stack's lip is only the top one's, so a stack fits the same number of units in all as
+     a single bin does: that is one figure, and it is the one Checks gives. */
+  const fit = unitsUnder(g.avail);
+  const fitText = fit < 1 ? 'There is no room above the baseplate for even a 1-unit bin.'
+    : `The tallest that fits is ${plural(fit, 'unit')} (${fit * SPEC.unitH} mm + lip), in one bin or a stack.`;
   if (tot > g.avail + 0.001)
-    out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate.` });
+    out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate. ${fitText}` });
   else if (tot > 0)
-    out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${(g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip).` });
+    out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${(g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip). ${fitText}` });
 
   const claims = layers.map((_, k) => layerClaims(k));
   layers.forEach((L, k) => L.bins.forEach((b) => {
@@ -9303,7 +9793,8 @@ function lidParts() {
     if (!t.b.lid || !lidFits(t.b)) continue;
     const L = L_LID(t.b);
     const key = `${t.b.u}x${t.b.v}:${L.meta.sides.join('')}`;
-    if (!m.has(key)) m.set(key, { key, b: t.b, meta: L.meta, qty: 0 });
+    // measured off the mesh this build already made, once per kind of lid
+    if (!m.has(key)) m.set(key, { key, b: t.b, meta: L.meta, vol: meshVolume(L.polys), qty: 0 });
     m.get(key).qty += t.qty;
   }
   return [...m.values()].sort((a, b) => b.qty - a.qty);
@@ -9373,6 +9864,9 @@ function refresh() {
   const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
+  drawHeight();
+  // the speed menu's own entry says which kind of printer the list makes this one
+  ESTIMATE.labelAuto($('printSpeed'), $('bedPreset'));
 
   /* Cells covered, not cells claimed: summing every bin's cells counted two bins on one
      cell twice and a bin off the grid in full, which is how 500 copies of one bin read
@@ -9397,13 +9891,16 @@ function refresh() {
   $('covfill').style.width = pct + '%';
 
   const ts = types();
-  let vol = 0;
+  /* The plan first: the totals below weigh every part it packs, the divider plates and
+     lids as well as the bins, and the plate times come from it. */
+  computePlan();
+  const job = jobEstimate();
   /* The table is built as markup and a note is text someone typed, so a note goes in
      escaped: a "<" in a note is a "<" on the screen, not the start of a tag. */
   const asText = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   $('typeRows').innerHTML = ts.map((t) => {
     const gm = geomFor(t.b);
-    vol += gm.vol * t.qty;
+    const g = gramsOf(gm.vol * t.qty);
     return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${t.b.divX || t.b.divY ? ` · ${(t.b.divX + 1) * (t.b.divY + 1)} comp` : ''}` +
       `${holesText(t.b) ? ` · ${asText(holesText(t.b))}` : ''}` +
       /* what it is for, beside what it is — the row is how you tell four identical
@@ -9411,7 +9908,7 @@ function refresh() {
       `${t.notes && t.notes.length ? `<span class="tnote">${asText(t.notes.join(', '))}</span>` : ''}</td>` +
       `<td class="mono">${gm.meta.W.toFixed(1)} × ${gm.meta.D.toFixed(1)} × ${gm.meta.totalH.toFixed(1)}</td>` +
       `<td class="mono">${t.qty}</td>` +
-      `<td class="mono">${(gm.vol * t.qty / 1000 * PLA_DENSITY).toFixed(0)} g</td>` +
+      `<td class="mono">${g.toFixed(0)} g${costTail(g)}</td>` +
       `<td><button data-t="${t.key}">STL</button></td></tr>`;
   }).join('') || '<tr><td colspan="5" class="mono">no bins placed</td></tr>';
   for (const btn of $('typeRows').querySelectorAll('button[data-t]'))
@@ -9431,8 +9928,10 @@ function refresh() {
     ? `${plural(inScope.length, 'bin')}` +
       (doneN ? ` · ${plural(inScope.length - doneN, 'bin')} still to print` : '') +
       ` · ${plural(ts.length, 'distinct type')} · ` +
-      `≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA at ${state.infill}% infill` +
+      `≈ ${job.grams.toFixed(0)} g PLA at ${state.infill}% infill` +
       (doneN ? ' for those' : '') +
+      (looseParts() ? `, ${looseParts()} included` : '') +
+      (costOf(job.grams) ? `, about ${costOf(job.grams)}` : '') +
       (fBin() && fBin().done ? ' · this one is marked printed' : '')
     : '—';
 
@@ -9455,15 +9954,19 @@ function computePlan() {
      the job: you would print the whole drawer and then have to come back for the parts
      that divide it. Both are just rectangles with a height as far as the packer is
      concerned, so they go in the same list rather than getting a pass of their own. */
+  /* `vol` is the filament one of each takes, in mm³, for the grams, the cost and the
+     time: a bin's from its own estimate, which knows about infill; a divider plate's
+     from its size, since a plate that thin prints solid; a lid's off its mesh. */
   const parts = ts.map((t) => ({
     key: t.key, b: t.b, qty: t.qty,
-    meta: geomFor(t.b).meta, polys: () => geomFor(t.b).polys,
+    meta: geomFor(t.b).meta, polys: () => geomFor(t.b).polys, vol: geomFor(t.b).vol,
   })).concat(dividerParts().map((d) => ({
     key: 'div:' + d.key, b: null, qty: d.qty, divider: d,
     meta: d.meta, polys: () => B_DIV(d.b, d.axis).polys,
+    vol: d.meta.span * d.meta.tall * d.meta.t,
   }))).concat(lidParts().map((d) => ({
     key: 'lid:' + d.key, b: null, qty: d.qty,
-    meta: d.meta, polys: () => L_LID(d.b).polys,
+    meta: d.meta, polys: () => L_LID(d.b).polys, vol: d.vol,
   })));
   const items = parts.map((t) => ({
     id: t.key, w: t.meta.W, d: t.meta.D, h: t.meta.totalH, qty: t.qty, ids: [t.key],
@@ -9481,7 +9984,7 @@ function countOf(placed) {
           lids ? plural(lids, 'lid') : ''].filter(Boolean).join(' + ') || '0 bins';
 }
 function drawPlan() {
-  computePlan();
+  // computed by refresh(), which weighs the job from it before this draws it
   if (!printPlan) {
     $('plateWrap').innerHTML = '';
     $('plateSummary').textContent = '—';
@@ -9522,12 +10025,20 @@ function drawPlan() {
     }
     svg += '</svg>';
     return `<div style="display:grid;gap:4px;justify-items:center">${svg}` +
-           `<div class="hint">plate ${i + 1} — ${countOf(pl.placed)}</div></div>`;
+           `<div class="hint">plate ${i + 1} — ${countOf(pl.placed)}<br>` +
+           `${plateFigures(plateEstimate(pl))}</div></div>`;
   }).join('');
+  const job = jobEstimate();
   $('plateSummary').textContent =
     `${plural(good.length, 'plate')} on a ${state.bedW} × ${state.bedD} mm bed · ` +
     `${countOf(good.flatMap((p) => p.placed))} packed` +
-    (over.length ? ` · ${plural(over.length, 'part')} TOO BIG for the bed` : '');
+    (over.length ? ` · ${plural(over.length, 'part')} TOO BIG for the bed` : '') +
+    (good.length ? ` · about ${ESTIMATE.duration(job.min)} of printing on a ${speedName()}` +
+                   (over.length ? ' for the plates that fit' : '') + ` (${ESTIMATE.ROUGH})` : '');
+}
+// "96 g · £1.92 · ≈ 3 h 15 min": a plate's weight, its cost once priced, its rough time
+function plateFigures(e) {
+  return `${e.grams.toFixed(0)} g${costTail(e.grams)} · ≈ ${ESTIMATE.duration(e.min)}`;
 }
 
 /* ---------- three.js preview ---------------------------------------------- */
@@ -10160,7 +10671,10 @@ function layoutReadme() {
       (b.divRemovable ? '  (removable divider plates, printed loose)' : ''));
     if (b.lid && lidFits(b)) L.push('Lid: yes — prints upside down, no supports.');
     L.push(...holesReadme([{ b, qty: 1 }]));
-    L.push(`Material: about ${(gm.vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill.`);
+    const job = jobEstimate();
+    L.push(`Material: about ${job.grams.toFixed(0)} g of PLA at ${state.infill}% infill` +
+           (looseParts() ? `, ${looseParts()} included` : '') + `${readmeCost(job.grams)}.`);
+    L.push(...readmeTime(job));
     L.push('');
     L.push(scratch
       ? 'Designed on its own. It is not placed in a drawer.'
@@ -10182,10 +10696,8 @@ function layoutReadme() {
   L.push(`Layers: ${layers.length}`);
   L.push('');
   L.push('BINS TO PRINT:');
-  let vol = 0;
   for (const t of ts) {
     const gm = geomFor(t.b);
-    vol += gm.vol * t.qty;
     L.push(`  ${String(t.qty).padStart(3)} x  ${t.b.u}x${t.b.v}x${t.b.hUnits}` +
       `  (${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip)` +
       `${t.b.solid ? '  solid' : ''}${t.b.divX || t.b.divY ? `  ${(t.b.divX + 1) * (t.b.divY + 1)} compartments` : ''}` +
@@ -10195,7 +10707,9 @@ function layoutReadme() {
       `${holesText(t.b) ? `  ${holesText(t.b)} each` : ''}`);
   }
   L.push('');
-  L.push(`Total: ${plural(scoped().length, 'bin')}, about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA.`);
+  const job = jobEstimate();
+  L.push(`Total: ${plural(scoped().length, 'bin')}` + (looseParts() ? ` plus ${looseParts()}` : '') +
+         `, about ${job.grams.toFixed(0)} g of PLA${readmeCost(job.grams)}.`);
   const fix = holesReadme(ts);
   if (fix.length) L.push(...fix);
   L.push('');
@@ -10220,6 +10734,13 @@ function layoutReadme() {
   if (printPlan) {
     const good = printPlan.plates.filter((p) => !p.overflow);
     L.push(`PRINT PLATES: ${good.length} on a ${state.bedW} x ${state.bedD} mm bed.`);
+    // numbered as the plate files are, among the plates that fit (see plateName)
+    good.forEach((pl, k) => {
+      const e = job.plates[k], c = costOf(e.grams);
+      L.push(`  plate ${k + 1}: ${countOf(pl.placed)}, about ${e.grams.toFixed(0)} g` +
+             (c ? `, ${c}` : '') + `, roughly ${ESTIMATE.duration(e.min)}`);
+    });
+    L.push(...readmeTime(job));
     L.push('');
   }
   L.push('ASSEMBLY: lay layer 1 into the baseplate, then drop each higher layer into');
@@ -10329,8 +10850,11 @@ for (const [id, field] of [['gridX', 'drawerW'], ['gridY', 'drawerD']])
 $('bedPreset').addEventListener('change', () => {
   const bed = FIELDS.bedOf($('bedPreset').selectedOptions[0]);   // null for Custom
   /* Custom keeps the bed it had, so there is nothing to rebuild, but the choice is
-     still part of the design: without a save a reload put the printer's name back. */
-  if (!bed) { rememberState(); return; }
+     still part of the design: without a save a reload put the printer's name back. Nor
+     is it a printer known to be fast, so the times change with it: saving alone left the
+     page timing a fast printer while the dialog and the README timed a standard one.
+     refresh() redraws them, and saves as it always does at the end. */
+  if (!bed) { refresh(); return; }
   [$('bedW').value, $('bedD').value, $('bedH').value] = bed;
   schedule();
 });
@@ -10348,6 +10872,11 @@ for (const id of ['bedW', 'bedD', 'bedH'])
 function applyUnit(to) {
   if (to === unit) return;
   FIELDS.convert(LENGTH_IDS.map((id) => $(id)), unit, to, $('b-drawer'));
+  /* The bin's height, when it is typed as a length, is typed in the same unit as the
+     drawer: someone measuring in inches measures the part in inches too. Converted on
+     its own because it is not a drawer measurement — state has no field for it, and
+     the guard in chooseUnit compares drawer measurements only. */
+  FIELDS.convert([$('hMm')], unit, to, $('hMmRow'));
   unit = to;
   $('unitMm').classList.toggle('on', to === 'mm');
   $('unitMm').setAttribute('aria-pressed', String(to === 'mm'));
@@ -10365,6 +10894,125 @@ function chooseUnit(to) {
 }
 $('unitMm').addEventListener('click', () => chooseUnit('mm'));
 $('unitIn').addEventListener('click', () => chooseUnit('in'));
+
+/* ---------- the bin's height, three ways ----------
+   A bin is a whole number of 7 mm units, and stays one: the link, saved drawers and
+   every export carry units, so nothing past this field learns how the height was typed.
+   What changes is what you may type. Someone sizing a bin for a part knows the part in
+   millimetres, and was left dividing by seven and wondering whether the floor counted.
+
+   Overall millimetres round to the NEAREST unit, because an overall height is a target
+   and the nearest bin is the honest answer to it. Inside depth rounds UP, because it is
+   a requirement: a bin a millimetre too shallow for the part is a bin the part does not
+   go in. Both are worked out from the bin engine's own numbers (binHeights,
+   unitsForTop and unitsForInside in bin.js), so the floor, the lip and the top quoted
+   here are the floor, the lip and the top that get built.
+
+   Which way you type is a habit of the person, not a property of the bin, so it is
+   remembered on this device the way the mm/inch switch is, and never put in the link. */
+const HEIGHT_KEY = 'drawerforge:height-entry:v1';
+const H_MODES = ['units', 'overall', 'inside'];
+let hMode = 'units';
+const savedHMode = () => {
+  try { const m = localStorage.getItem(HEIGHT_KEY); return H_MODES.includes(m) ? m : 'units'; }
+  catch (err) { return 'units'; }        // private mode: units, as before
+};
+const saveHMode = (m) => {
+  try { localStorage.setItem(HEIGHT_KEY, m); }
+  catch (err) { /* private mode or a full quota: the menu still works, unremembered */ }
+};
+// the bin the height field is describing: the one on its own, the selected one, or the next
+const heightSrc = () => scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
+/* everything about a bin its heights depend on, bar the units being worked out. Screws
+   are among them, because their holes raise the floor; so are dividers, which stand to
+   the full height whatever the walls do, and the cells, because a carved bin's walls
+   are full height too. The new-bin settings have no size or cells of their own, and are
+   a whole rectangle. */
+const heightCfg = (b) => ({ floorT: b.floorT, screws: b.screws, solid: b.solid, edges: b.edges,
+                            divX: b.divX || 0, divY: b.divY || 0,
+                            u: b.u || 1, v: b.v || 1, cells: b.cells || null });
+const heightsOf = (b) => binHeights(Object.assign(heightCfg(b), { hUnits: b.hUnits }));
+/* Which length the field takes for this bin. Inside depth when that is the menu's choice
+   and the bin has an inside; a solid block has none at any height, nor has a tray open
+   on every side, and the field used to show 0 for one and work a typed depth out as if
+   it were hollow. Those take their height overall instead, and the label says so. */
+const lengthMode = (b) => (hMode === 'inside' && !heightsOf(b).hollow ? 'overall' : hMode);
+/* Both ways round through the engine's own heights, so a bin with its walls lowered is
+   given the units that stand it, or hold the depth, at the height it is built to. */
+const unitsFor = (mm, b) => {
+  if (lengthMode(b) === 'inside') return fieldClamp('hUnits', unitsForInside(mm, heightCfg(b)));
+  /* The height the field shows, typed back, is the bin it shows. A tray stands at its
+     slab whatever its units, and the nearest stacking height to the 6 mm a 6-unit tray
+     shows made it 1 unit: the same mesh, with another link and another place in a stack. */
+  if (FIELDS.show(mm, unit) === FIELDS.show(heightsOf(b).top, unit)) return b.hUnits;
+  return fieldClamp('hUnits', unitsForTop(mm, heightCfg(b)));
+};
+/* An inside depth as it is shown: to the hundredth of `per` millimetres — one for
+   millimetres, 25.4 for inches — and rounded DOWN. To the nearest, it could be more than
+   the bin holds: 2 units on a bare floor hold 9.1 mm, 0.358 in, shown as 0.36, and 0.36
+   typed back is 9.144 mm, which takes 3. Rounded down, what is shown the bin holds, and
+   typed back it is the same bin. The epsilon keeps 36 from showing as 35.99 because the
+   sum that made it came to 35.99999999999999. */
+const depthDown = (mm, per) => Math.floor(mm / per * 100 + 1e-6) / 100 * per;
+/* What the typing came to, said beside the field. Millimetres to the hundredth because
+   the inside depth is genuinely fractional — 35.95 on a 1.25 mm floor — and rounding
+   it to 36 would quote a bin deeper than the one you get. A bin with every wall lowered
+   is quoted at the height it stands, not at H: the Tray preset at 6 units read "42 mm
+   overall" for a part 6 mm tall. */
+function heightText(b) {
+  const h = heightsOf(b);
+  const mm = (x) => `${Math.round(x * 100) / 100} mm` + (unit === 'in' ? ` / ${FIELDS.inchText(x)} in` : '');
+  // the depth in each unit as the field would show it in that unit
+  const depth = (x) => `${Math.round(depthDown(x, 1) * 100) / 100} mm` +
+    (unit === 'in' ? ` / ${FIELDS.inchText(depthDown(x, FIELDS.MM_PER_IN))} in` : '');
+  return `${plural(b.hUnits, 'unit')} · ` +
+    (h.top < h.H - 1e-6 ? `${mm(h.top)} tall` : `${mm(h.H)} overall`) +
+    (h.lipH ? ` + ${h.lipH.toFixed(2)} mm lip` : '') +
+    (b.solid ? ' · solid, nothing inside' : !h.hollow ? ' · open on every side' : ` · ${depth(h.inside)} inside`);
+}
+/* Called from refresh(), so it follows every change of bin, floor or unit. The length
+   field is rewritten with the height actually built — 43 after typing 40 inside —
+   but never under the caret, where it would turn "4" into "43" before the 0 lands. */
+function drawHeight() {
+  const b = heightSrc(), inMm = hMode !== 'units', mode = lengthMode(b);
+  $('hUnitsRow').style.display = inMm ? 'none' : '';
+  $('hMmRow').style.display = inMm ? '' : 'none';
+  $('hMmLabel').textContent = `${mode === 'inside' ? 'Inside depth' : 'Height overall'} (${unit})`;
+  if (inMm && document.activeElement !== $('hMm')) {
+    const h = heightsOf(b);
+    FIELDS.setLength($('hMm'), mode === 'inside'
+      ? depthDown(h.inside, unit === 'in' ? FIELDS.MM_PER_IN : 1) : h.top, unit);
+  }
+  /* A live region is read out whenever it is written, the same words or not, and this
+     runs on every redraw: typing a note announced the height again. */
+  const said = heightText(b);
+  if ($('hResult').textContent !== said) $('hResult').textContent = said;
+}
+/* Typing a length writes the units field and then goes the way typing units always
+   went, so a bin can only ever be given a height through one door. A blank or a zero is
+   mid-edit, not a request. */
+$('hMm').addEventListener('input', () => {
+  const mm = FIELDS.lengthOf($('hMm'), unit);
+  if (!isFinite(mm) || mm <= 0) return;
+  $('hUnits').value = unitsFor(mm, heightSrc());
+  schedule();
+});
+$('hMm').addEventListener('change', () => schedule());
+/* Leaving the field is when it is put right, and leaving does not always fire change:
+   Enter fires it while the caret is still in the box, and then Tab fires nothing, so the
+   "40" typed stayed over a bin 43 deep. Through schedule, not a redraw here and now, so
+   a value typed a moment ago has reached the bin before the field is rewritten from it;
+   and back in the box before the 180 ms are up, it is under the caret and left alone. */
+$('hMm').addEventListener('blur', () => schedule());
+function applyHMode(m) {
+  hMode = H_MODES.includes(m) ? m : 'units';
+  $('hMode').value = hMode;
+}
+$('hMode').addEventListener('change', () => {
+  applyHMode($('hMode').value);
+  saveHMode(hMode);
+  drawHeight();
+});
 
 /* ---------- the download dialog -------------------------------------------
    Built fresh every time it opens. A column of buttons tells you nothing about what
@@ -10404,8 +11052,17 @@ function bedFitText() {
 
 function renderExport() {
   const g = grid(), ts = types(), n = scoped().length;
-  let vol = 0;
-  for (const t of ts) vol += geomFor(t.b).vol * t.qty;
+  /* The material line weighs everything the files hold, divider plates and lids too, and
+     carries the cost once there is a price; the line after it is the rough time. */
+  const job = jobEstimate();
+  const material = `about ${job.grams.toFixed(0)} g of PLA at ${state.infill}% infill` +
+    (looseParts() ? `, ${looseParts()} included` : '') +
+    (costOf(job.grams) ? `, about ${costOf(job.grams)} at ${ESTIMATE.perKg(est.get())}` : '');
+  const time = job.plates.length
+    ? `\nroughly ${ESTIMATE.duration(job.min)} of printing` +
+      (job.plates.length > 1 && !fitNote() ? ` over ${plural(job.plates.length, 'plate')}` : '') +
+      ` on a ${speedName()}${fitNote()} (${ESTIMATE.ROUGH})`
+    : '';
   /* In focus the dialog is about one bin, and saying "7 × 9 cell grid" over a single
      STL is the same disagreement the README has to avoid. */
   const fb = fBin();
@@ -10414,11 +11071,11 @@ function renderExport() {
       (scratch ? 'designed on its own, not placed in a drawer'
                : `from column ${fb.x + 1}, row ${fb.y + 1} of your drawer` +
                  (layers.length > 1 ? `, layer ${cur + 1}` : '')) + '\n' +
-      `about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill`
+      material + time
     : n
     ? `${g.nx} × ${g.ny} cell grid in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
       `${plural(n, 'bin')} of ${plural(ts.length, 'distinct type')} over ${plural(layers.length, 'layer')}\n` +
-      `about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill`
+      material + time
     : `${g.nx} × ${g.ny} cell grid in a ${state.drawerW} × ${state.drawerD} mm drawer — no bins in it yet`;
   const fit = bedFitText();
   $('exFit').className = 'exfit ' + fit.cls;
@@ -10428,14 +11085,20 @@ function renderExport() {
   const good = goodPlates();
   if (good.length) {
     exGroup('Pre-arranged print plates');
-    exRow('Every plate', `${plural(good.length, 'plate')} · 3MF` + (good.length > 1 ? ' in a ZIP' : ''),
+    /* Each plate says what it weighs, costs and roughly takes, and so does the whole
+       set: "which plate tonight" is a question about time. The whole set's figures are
+       the job's — every plate that fits, summed as the plan sums them. */
+    const all = { grams: job.plates.reduce((a, e) => a + e.grams, 0), min: job.min };
+    exRow('Every plate', `${plural(good.length, 'plate')} · ${plateFigures(all)} · 3MF` +
+          (good.length > 1 ? ' in a ZIP' : ''),
           'Download', downloadAllPlates, { 'data-ex': 'allplates' });
     /* Per-plate downloads. The combined export already builds each plate on its own
        and zips them, so one plate at a time is the same call with the zip left off —
        and it is what you want when a print fails, or when you are only doing one
        plate's worth this evening. */
     good.forEach(([pl], k) => exRow(`Plate ${k + 1}`,
-      `${countOf(pl.placed)} on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      `${countOf(pl.placed)} on a ${state.bedW} × ${state.bedD} mm bed · ` +
+      `${plateFigures(job.plates[k])} · 3MF`, 'Download',
       () => downloadPlate(k), { 'data-ex': 'plate' }));
   }
   if (ts.length) {
@@ -11032,6 +11695,8 @@ if (FIELDS.savedUnit() !== unit) {
   for (const id of LENGTH_IDS) $(id).value = $(id).defaultValue;
   applyUnit(FIELDS.savedUnit());
 }
+// and the way the bin's height is typed, which is the same kind of habit
+applyHMode(savedHMode());
 // the steps this browser last chose; a layout holding a half-size bin turns them on anyway
 halfSteps = readKey(STEPS_KEY) === 'half';
 /* Whether two saves hold the same bins, compared setting by setting on what this page

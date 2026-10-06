@@ -212,6 +212,25 @@ try {
     <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Gap between parts (mm)</b><input id="gap" type="number" step="0.5" value="3"></label>
     <div class="hint">Bins print upright, so a bin's own height has to clear your Z. A tall drawer will happily let you ask for a bin taller than the printer can make.</div>
+    <!-- Cost and print time. Both describe your filament and your printer rather than the
+         layout, so they are kept on this device — one setting the baseplates page shares —
+         and never put in the link. src/shared-ui/estimate.js fills these in and saves
+         them.
+         The price is a text field, not a number one: typed into a number field, a
+         decimal comma, 12,50, was read as 1250. -->
+    <div class="row">
+      <label class="f"><b>Filament price per kg</b><input id="filPrice" type="text" inputmode="decimal" autocomplete="off" placeholder="not set" aria-describedby="filPriceErr"></label>
+      <label class="f"><b>Currency</b><select id="filSym">
+        <option value="£">£</option><option value="€">€</option><option value="$">$</option><option value="">no symbol</option>
+      </select></label>
+    </div>
+    <span class="hint" id="filPriceErr" style="color:var(--red)" hidden></span>
+    <label class="f"><b>Printer speed</b><select id="printSpeed">
+      <option value="auto">From the printer</option>
+      <option value="fast">Fast — CoreXY or input shaping</option>
+      <option value="standard">Standard — a classic bed-slinger</option>
+    </select></label>
+    <div class="hint">With a price set, a cost goes beside every gram figure; leave it empty and none is shown. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Both settings stay on this device, are shared with the baseplates page and never go in the link. The speed only steers the print time, which is a rough estimate from the filament and the layer count — only your slicer can give the real one.</span></div>
   </div>
 </section>
 
@@ -239,7 +258,27 @@ try {
          when the map cannot show it — a whole size for a bin standing on a half step. -->
     <div class="hint" id="sizeHalfHint">A half cell is 21 mm. Half-size bins have small feet that fit any Gridfinity baseplate, two to a socket.</div>
     <div class="hint" id="sizeWhy" role="status" style="display:none;color:var(--red)"></div>
-    <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
+    <!-- Height three ways. Someone sizing a bin for a part knows the part in millimetres,
+         not in 7 mm units, so the height can be typed as units, as millimetres overall,
+         or as the depth wanted inside. Whichever way it is typed, the bin is still a
+         whole number of units — the link and saved drawers carry units and only units —
+         and the line under the field says what the typing came to. The menu is a
+         preference of the person, remembered on this device like the mm/inch switch.
+         The length takes any step: it shows the height built to the hundredth, and a
+         step of 0.5 made most of those figures ones the browser called invalid, and had
+         the arrow keys snap to the next half instead of stepping from what is there.
+         The menu is "Entered as", not "in": beside "Inside depth (in)" that read as the
+         inch unit. -->
+    <div class="row">
+      <label class="f" id="hUnitsRow"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
+      <label class="f" id="hMmRow" style="display:none"><b id="hMmLabel">Height overall (mm)</b><input id="hMm" type="number" step="any" min="0" max="2000"></label>
+      <label class="f"><b>Entered as</b><select id="hMode" aria-label="Height entered as">
+        <option value="units">7 mm units</option>
+        <option value="overall">overall mm</option>
+        <option value="inside">inside depth</option>
+      </select></label>
+    </div>
+    <div class="hint" id="hResult" role="status">—</div>
     <div class="hint" id="binSizeHint">—</div>
     <label class="f" id="noteRow"><b>What goes in it (optional)</b><input id="note" type="text" maxlength="28" placeholder="M3 screws, drill bits…"></label>
     <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
@@ -559,6 +598,9 @@ try {
 </script>
 <script>
 /*__FIELDS__*/
+</script>
+<script>
+/*__ESTIMATE__*/
 </script>
 <script>
 /*__DRAWERS__*/

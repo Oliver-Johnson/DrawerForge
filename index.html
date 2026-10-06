@@ -1065,13 +1065,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
          every check on the page passing because the checks trust the bed. -->
     <label class="f"><b>Printer</b>
       <select id="bedPreset">
-<optgroup label="Anycubic"><option value="anycubic-kobra-3" data-bed="250,250,260">Anycubic Kobra 3 — 250 × 250 × 260</option></optgroup>
-<optgroup label="Bambu Lab"><option value="bambu-a1-mini" data-bed="180,180,180">Bambu Lab A1 mini — 180 × 180 × 180</option><option value="bambu-a1" data-bed="256,256,256">Bambu Lab A1 — 256 × 256 × 256</option><option value="bambu-p1" data-bed="256,256,256">Bambu Lab P1S / P1P — 256 × 256 × 256</option><option value="bambu-x1c" data-bed="256,256,256">Bambu Lab X1 Carbon — 256 × 256 × 256</option><option value="bambu-h2d" data-bed="325,320,325">Bambu Lab H2D, one nozzle — 325 × 320 × 325</option></optgroup>
-<optgroup label="Creality"><option value="creality-ender-3-v3" data-bed="220,220,250">Creality Ender-3 V3 / V3 SE — 220 × 220 × 250</option><option value="creality-ender-3-v3-ke" data-bed="220,220,240">Creality Ender-3 V3 KE — 220 × 220 × 240</option><option value="creality-k1" data-bed="220,220,250">Creality K1 / K1C — 220 × 220 × 250</option><option value="creality-k1-max" data-bed="300,300,300">Creality K1 Max — 300 × 300 × 300</option><option value="creality-k2-plus" data-bed="350,350,350">Creality K2 Plus — 350 × 350 × 350</option></optgroup>
-<optgroup label="Elegoo"><option value="elegoo-neptune-4" data-bed="225,225,265">Elegoo Neptune 4 / 4 Pro — 225 × 225 × 265</option><option value="elegoo-centauri-carbon" data-bed="256,256,256">Elegoo Centauri Carbon / Carbon 2 — 256 × 256 × 256</option></optgroup>
-<optgroup label="Prusa"><option value="prusa-mini" data-bed="180,180,180">Prusa MINI / MINI+ — 180 × 180 × 180</option><option value="prusa-mk4" data-bed="250,210,220">Prusa MK4 / MK4S — 250 × 210 × 220</option><option value="prusa-core-one" data-bed="250,220,270">Prusa CORE One — 250 × 220 × 270</option><option value="prusa-xl" data-bed="360,360,360">Prusa XL — 360 × 360 × 360</option></optgroup>
+<optgroup label="Anycubic"><option value="anycubic-kobra-3" data-bed="250,250,260" data-speed="fast">Anycubic Kobra 3 — 250 × 250 × 260</option></optgroup>
+<optgroup label="Bambu Lab"><option value="bambu-a1-mini" data-bed="180,180,180" data-speed="fast">Bambu Lab A1 mini — 180 × 180 × 180</option><option value="bambu-a1" data-bed="256,256,256" data-speed="fast">Bambu Lab A1 — 256 × 256 × 256</option><option value="bambu-p1" data-bed="256,256,256" data-speed="fast">Bambu Lab P1S / P1P — 256 × 256 × 256</option><option value="bambu-x1c" data-bed="256,256,256" data-speed="fast">Bambu Lab X1 Carbon — 256 × 256 × 256</option><option value="bambu-h2d" data-bed="325,320,325" data-speed="fast">Bambu Lab H2D, one nozzle — 325 × 320 × 325</option></optgroup>
+<optgroup label="Creality"><option value="creality-ender-3-v3" data-bed="220,220,250">Creality Ender-3 V3 / V3 SE — 220 × 220 × 250</option><option value="creality-ender-3-v3-ke" data-bed="220,220,240" data-speed="fast">Creality Ender-3 V3 KE — 220 × 220 × 240</option><option value="creality-k1" data-bed="220,220,250" data-speed="fast">Creality K1 / K1C — 220 × 220 × 250</option><option value="creality-k1-max" data-bed="300,300,300" data-speed="fast">Creality K1 Max — 300 × 300 × 300</option><option value="creality-k2-plus" data-bed="350,350,350" data-speed="fast">Creality K2 Plus — 350 × 350 × 350</option></optgroup>
+<optgroup label="Elegoo"><option value="elegoo-neptune-4" data-bed="225,225,265" data-speed="fast">Elegoo Neptune 4 / 4 Pro — 225 × 225 × 265</option><option value="elegoo-centauri-carbon" data-bed="256,256,256" data-speed="fast">Elegoo Centauri Carbon / Carbon 2 — 256 × 256 × 256</option></optgroup>
+<optgroup label="Prusa"><option value="prusa-mini" data-bed="180,180,180">Prusa MINI / MINI+ — 180 × 180 × 180</option><option value="prusa-mk4" data-bed="250,210,220" data-speed="fast">Prusa MK4 / MK4S — 250 × 210 × 220</option><option value="prusa-core-one" data-bed="250,220,270" data-speed="fast">Prusa CORE One — 250 × 220 × 270</option><option value="prusa-xl" data-bed="360,360,360" data-speed="fast">Prusa XL — 360 × 360 × 360</option></optgroup>
 <optgroup label="Sovol"><option value="sovol-sv06" data-bed="220,220,250">Sovol SV06 — 220 × 220 × 250</option></optgroup>
-<optgroup label="Voron"><option value="voron-2.4-250" data-bed="250,250,210">Voron 2.4, 250 mm — 250 × 250 × 210</option><option value="voron-2.4-300" data-bed="300,300,260">Voron 2.4, 300 mm — 300 × 300 × 260</option><option value="voron-2.4-350" data-bed="350,350,310">Voron 2.4, 350 mm — 350 × 350 × 310</option></optgroup>
+<optgroup label="Voron"><option value="voron-2.4-250" data-bed="250,250,210" data-speed="fast">Voron 2.4, 250 mm — 250 × 250 × 210</option><option value="voron-2.4-300" data-bed="300,300,260" data-speed="fast">Voron 2.4, 300 mm — 300 × 300 × 260</option><option value="voron-2.4-350" data-bed="350,350,310" data-speed="fast">Voron 2.4, 350 mm — 350 × 350 × 310</option></optgroup>
 <optgroup label="Any printer, by bed size"><option value="bed-180" data-bed="180,180,180" data-generic>180 × 180 × 180 mm</option><option value="bed-220" data-bed="220,220,250" data-generic>220 × 220 × 250 mm</option><option value="bed-250x210" data-bed="250,210,220" data-generic>250 × 210 × 220 mm</option><option value="bed-256" data-bed="256,256,256" data-generic selected>256 × 256 × 256 mm</option><option value="bed-300" data-bed="300,300,300" data-generic>300 × 300 × 300 mm</option></optgroup>
 <option value="custom">Custom…</option>
       </select></label>
@@ -1086,6 +1086,24 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
          place (chrome.js). The rest stays inside the hint, where the tests read it, and a
          hint shown or hidden by the joint picked carries all of its text either way. -->
     <div class="hint">Only affects the material estimate, not the geometry. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>A baseplate is nearly all shell — the socket walls are a couple of perimeters wide and print solid whatever you set — so this moves the figure much less than it does for bins. It is the slab under a solid plate that the infill actually reaches.</span></div>
+    <!-- Cost and print time. Both describe your filament and your printer rather than the
+         design, so they are kept on this device — one setting the bins page shares — and
+         never put in the link. src/shared-ui/estimate.js fills these in and saves them.
+         The price is a text field, not a number one: typed into a number field, a
+         decimal comma, 12,50, was read as 1250. -->
+    <div class="row">
+      <label class="f"><b>Filament price per kg</b><input id="filPrice" type="text" inputmode="decimal" autocomplete="off" placeholder="not set" aria-describedby="filPriceErr"></label>
+      <label class="f"><b>Currency</b><select id="filSym">
+        <option value="£">£</option><option value="€">€</option><option value="$">$</option><option value="">no symbol</option>
+      </select></label>
+    </div>
+    <span class="hint" id="filPriceErr" style="color:var(--red)" hidden></span>
+    <label class="f"><b>Printer speed</b><select id="printSpeed">
+      <option value="auto">From the printer</option>
+      <option value="fast">Fast — CoreXY or input shaping</option>
+      <option value="standard">Standard — a classic bed-slinger</option>
+    </select></label>
+    <div class="hint">With a price set, a cost goes beside every gram figure; leave it empty and none is shown. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Both settings stay on this device, are shared with the bins page and never go in the link. The speed only steers the print time, which is a rough estimate from the filament and the layer count — only your slicer can give the real one.</span></div>
     <span class="hint" id="errBedW" style="color:var(--red)" hidden></span>
     <span class="hint" id="errBedD" style="color:var(--red)" hidden></span>
     <span class="hint" id="errBedH" style="color:var(--red)" hidden></span>
@@ -1242,13 +1260,14 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     </div>
     <div class="hint" id="stackHint" style="display:none">Experimental: any piece that fits fully inside the footprint of the one below prints stacked on top, separated by the gap layer — snap apart afterwards. Needs well-tuned bridging (the layer above spans open sockets); test with two first. Respects your printer's Z height.</div>
     <div id="platesRow" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+    <div class="hint" id="planTime"></div>
   </div>
 </div>
 
 <div class="stagecard">
   <h3>Pieces <span class="tail" id="pieceTail"></span></h3>
   <table class="pieces"><thead><tr>
-    <th>Piece</th><th>Grid</th><th>Size (mm)</th><th>Joints</th><th>Bed fit</th><th></th>
+    <th>Piece</th><th>Grid</th><th>Size (mm)</th><th>Joints</th><th>Bed fit</th><th>Material</th><th></th>
   </tr></thead><tbody id="pieceRows"></tbody></table>
 </div>
 
@@ -4359,6 +4378,265 @@ const FIELDS = (() => {
  * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
  * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
  * covered by this licence. The models you make with it are yours. */
+/* What a job costs and roughly how long it prints: the two questions after "how much
+ * filament", and the two the tools did not answer. Both tools quote grams per part, per
+ * plate and in total; this turns grams into money and a plate into a duration, the same
+ * way on both pages, because two copies of an estimate are two estimates.
+ *
+ * The price is the person's, not the design's. It lives on this device, under one key
+ * both tools read, and never in the link: a friend's link must not tell you what your
+ * filament costs, and yours must not tell them. Empty until someone types one, and while
+ * it is empty no money is shown anywhere — a cost worked out from a price we made up,
+ * in a currency we guessed, is a number people would quote back to us as ours.
+ *
+ * Same discipline as widgets.js and fields.js: everything takes its elements as
+ * arguments and knows no ids, so every getElementById stays in a tool's ui.js where the
+ * build's id audit can see it.
+ */
+'use strict';
+
+const ESTIMATE = (() => {
+  /* ---- the price, and the printer speed override ---------------------------------
+   * One key for both, read by both tools, as JSON so either can grow a field without a
+   * second key to keep in step. Every read and write is wrapped: private windows and
+   * blocked storage throw on access, and a full quota throws on write, and in all of
+   * those the fields still work for the visit — they are just not remembered. */
+  const KEY = 'drawerforge:filament:v1';
+  /* A symbol, or none. A short fixed list rather than a currency code per country: it is
+     a label beside a number the person typed, nothing is converted, and "none" is there
+     for anyone whose symbol is not on it, who then sees the number alone. Prefixed with
+     a full stop for the decimals, like every other figure on these pages. */
+  const SYMBOLS = ['£', '€', '$', ''];
+  /* The starting symbol, from the browser's region — en-GB is £, de-DE €, en-US $ — and
+     none at all when the language names no region, or one that uses another currency.
+     Only a default for the menu: nothing is shown until a price is typed beside it, and
+     whatever the person picks is what is kept. */
+  const POUND = ['GB', 'GG', 'GI', 'IM', 'JE'];
+  const EURO = ['AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'IE', 'IT', 'LT',
+                'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK'];
+  const DOLLAR = ['AU', 'CA', 'HK', 'NZ', 'SG', 'US'];
+  function regionSymbol(langs) {
+    for (const l of langs || []) {
+      const m = /^[a-z]{2,3}(?:-[a-z]{4})?-([a-z]{2})(?:-|$)/i.exec(String(l || ''));
+      if (!m) continue;
+      const r = m[1].toUpperCase();
+      return POUND.includes(r) ? '£' : EURO.includes(r) ? '€' : DOLLAR.includes(r) ? '$' : '';
+    }
+    return '';
+  }
+  const browserLangs = () => {
+    try { return navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]; }
+    catch (err) { return []; }
+  };
+  const SPEED_CHOICES = ['auto', 'fast', 'standard'];
+  // past any real spool, and well short of a typo the size of a phone number
+  const PRICE_MAX = 10000;
+  const priceOf = (v) => (typeof v === 'number' && isFinite(v) && v > 0 ? Math.min(v, PRICE_MAX) : null);
+  /* A price as it is typed: a plain number, with a decimal point or a decimal comma. Half
+     of Europe writes 12,50, and the number input this used to be took that as 1250 — a
+     price then saved, shared with the other tool and written into the README. A lone
+     comma with no point is a decimal comma. Anything else — a thousands separator, a
+     currency sign, a minus, an exponent — is not read at all, because any reading of it
+     would be a guess. The number; null for an empty field, which is no price; NaN for
+     text that is not a price. */
+  function parsePrice(text) {
+    const t = String(text).trim();
+    if (!t) return null;
+    const s = /^\d*,\d*$/.test(t) ? t.replace(',', '.') : t;
+    return /^(\d+\.?\d*|\.\d+)$/.test(s) ? parseFloat(s) : NaN;
+  }
+
+  function load() {
+    let p = null;
+    try { p = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (err) { p = null; }
+    if (!p || typeof p !== 'object') p = {};
+    return {
+      price: priceOf(p.price),
+      sym: SYMBOLS.includes(p.sym) ? p.sym : regionSymbol(browserLangs()),
+      speed: SPEED_CHOICES.includes(p.speed) ? p.speed : 'auto',
+    };
+  }
+  function save(prefs) {
+    try { localStorage.setItem(KEY, JSON.stringify(prefs)); }
+    catch (err) { /* private mode, or the quota is full: the fields still work for this
+                     visit, they are just not remembered */ }
+  }
+
+  /* ---- money ---------------------------------------------------------------------
+   * Two decimals, always: a bin is pennies, and 0.4 next to 0.42 reads as two different
+   * kinds of number. Empty when there is no price, which is how every caller knows to
+   * leave the money out rather than print a zero. */
+  const money = (amount, sym) => `${sym}${amount.toFixed(2)}`;
+  const cost = (grams, prefs) =>
+    (prefs && prefs.price && isFinite(grams) ? money(grams / 1000 * prefs.price, prefs.sym) : '');
+  const perKg = (prefs) => (prefs && prefs.price ? `${money(prefs.price, prefs.sym)}/kg` : '');
+
+  /* ---- print time ----------------------------------------------------------------
+   * A rough guess, and it says so wherever it is shown: only a slicer knows the paths,
+   * the speeds and the accelerations, and this knows none of them. What it does know is
+   * how much plastic a plate is and how tall it stands, and that is most of a print.
+   *
+   *   time = warm-up
+   *        + filament volume / an effective volumetric rate
+   *        + every layer x a layer-change overhead
+   *        + every layer of every part x an overhead per part
+   *
+   * The rate is an average over a whole print — outer walls slow, infill fast, every
+   * corner an acceleration — not the hotend's limit, which is two to four times higher
+   * and which nobody's print averages. A bin or a baseplate is nearly all perimeter, so
+   * the rate is set from wall speeds. A classic bed-slinger's stock profile runs walls
+   * at 25 to 50 mm/s, and a 0.42 × 0.2 mm line at those is 2.1 to 4.2 mm³/s: 3 mm³/s,
+   * about 13 g of PLA an hour. A fast printer's runs them at 150 to 300 mm/s but cannot
+   * reach that on a 40 mm bin wall before it has to slow for the corner, and generic
+   * PLA profiles cap the flow at 12 mm³/s or so: 8 mm³/s, about 36 g an hour. Both sit
+   * at the slow end of what those printers are seen to do on bins.
+   *
+   * The layer terms are the time spent not extruding: the z move and the wipe on every
+   * layer, and the travel to each part and the retraction either side of it, once per
+   * part per layer, so a plate of nine small bins is slower than one bin of the same
+   * weight. 0.2 mm layers, because that is what nearly everyone prints these at. The
+   * warm-up is heating, bed levelling and the purge line, once a plate; six minutes is
+   * on the long side of a printer that levels itself before every print.
+   *
+   * With those, before rounding, a 1×1×3 bin is about 35 minutes fast and 70 standard,
+   * a 2×2×3 about 75 minutes and 2 h 55, and a 5 × 5 baseplate about 1 h 20 and 3 h 15
+   * (77 and 194 minutes: the plate alone, 210 mm square, at the page's defaults; a
+   * plate that carries margins weighs more and takes longer).
+   *
+   * Conservative on purpose — a print that finishes early is a pleasant surprise and
+   * one that runs past bedtime is not — and rounded up to the next 5 minutes under an
+   * hour and the next 15 above, so it never claims a precision it does not have. */
+  const LAYER = 0.2;              // mm
+  const WARMUP_S = 6 * 60;        // heat, level, purge: once a plate
+  const SPEEDS = {
+    // CoreXY and input-shaped printers: Bambu Lab, Prusa MK4 and CORE One, Voron, K1
+    fast: { rate: 8, layerS: 4, partS: 1.5, name: 'fast' },
+    // classic bed-slingers: an Ender 3, a Prusa MK3, anything not known to be fast
+    standard: { rate: 3, layerS: 6, partS: 3, name: 'standard' },
+  };
+  /* What every total time is followed by, in both tools, so none of them can be read as
+     a promise. */
+  const ROUGH = 'a rough estimate; only your slicer can time it exactly';
+  /* Seconds for one plate. `parts` is what is on it, each { vol, h, z }: the filament it
+     takes in mm³, its height and the height it starts at (a part stacked on another
+     starts above the bed, and the plate is as tall as its tallest stack). */
+  function plateSeconds(parts, cls) {
+    const s = SPEEDS[cls] || SPEEDS.standard;
+    let vol = 0, top = 0, partLayers = 0;
+    for (const p of parts) {
+      vol += Math.max(0, p.vol || 0);
+      top = Math.max(top, (p.z || 0) + (p.h || 0));
+      partLayers += Math.ceil((p.h || 0) / LAYER - 1e-9);
+    }
+    return WARMUP_S + vol / s.rate + Math.ceil(top / LAYER - 1e-9) * s.layerS + partLayers * s.partS;
+  }
+  // whole minutes, rounded up: to the next 5 under an hour and the next 15 from there
+  function roundMinutes(sec) {
+    const m = Math.max(0, sec) / 60;
+    const step = m < 60 ? 5 : 15;
+    return Math.max(step, Math.ceil(m / step - 1e-9) * step);
+  }
+  const duration = (min) => {
+    const h = Math.floor(min / 60), m = min % 60;
+    return h ? `${h} h` + (m ? ` ${m} min` : '') : `${m} min`;
+  };
+  /* Which kind of printer the time is for. The override wins; otherwise the printer list
+     says, from the data-speed tools/printers.js writes on the options it knows to be fast,
+     and everything else — the size-only entries, Custom, a printer we have no figure
+     for — is timed as standard, which is the slower and so the safer guess. */
+  const listedSpeed = (select) => {
+    const o = select && select.selectedOptions && select.selectedOptions[0];
+    return o && o.dataset && o.dataset.speed === 'fast' ? 'fast' : 'standard';
+  };
+  const speedOf = (select, prefs) =>
+    (prefs && SPEEDS[prefs.speed] ? prefs.speed : listedSpeed(select));
+
+  /* ---- the fields ----------------------------------------------------------------
+   * The price, the symbol and the speed override, in panel 02 of both tools. Filled from
+   * storage at load, saved on every edit, and refilled when the other tool — or this one
+   * in another tab — changes them, so a price typed on one page is the price on the
+   * other without a reload. `onChange` is the tool's own redraw. `els.err` is the line
+   * under the price that says when what was typed is not a price.
+   *
+   * The price is read from its own field and only from there. A change of symbol or
+   * speed used to read the price box as well, and a tab whose box was left focused when
+   * another tab changed the price wrote its own stale figure back over the new one. */
+  function bind(els, onChange) {
+    let prefs = load();
+    // typed into since it took focus: only then is the box the person's to keep
+    let edited = false, refused = false;
+    /* A price that is not one is said out loud, the way the drawer fields say a bad
+       measurement: marked for a screen reader and in red, and a line under it in words
+       that says what is still in use, since the price in use does not change. */
+    const mark = (bad) => {
+      refused = bad;
+      els.price.setAttribute('aria-invalid', bad ? 'true' : 'false');
+      els.price.style.borderColor = bad ? 'var(--red)' : '';
+      if (!els.err) return;
+      els.err.textContent = bad ? 'Type the price as a number, like 22.99 or 22,99 — ' +
+        (prefs.price ? `the costs still use ${perKg(prefs)}.` : 'no price is set.') : '';
+      els.err.hidden = !bad;
+    };
+    const showPrice = () => {
+      els.price.value = prefs.price === null ? '' : String(prefs.price);
+      mark(false);
+    };
+    const show = () => {
+      if (document.activeElement !== els.price || !edited) showPrice();
+      else if (refused) mark(true);            // still refused, but the price in use moved
+      els.sym.value = prefs.sym;
+      els.speed.value = prefs.speed;
+    };
+    show();
+    const commit = () => { save(prefs); onChange(); };
+    els.price.addEventListener('focus', () => { edited = false; });
+    els.price.addEventListener('input', () => {
+      edited = true;
+      const p = parsePrice(els.price.value);
+      mark(Number.isNaN(p));
+      if (refused) return;
+      prefs = Object.assign({}, prefs, { price: priceOf(p) });
+      commit();
+    });
+    /* Once it is left, the box shows the price in use, as the other fields show the value
+       in use: 1000000000 is held at the limit, 0 is no price, and a price another tab set
+       meanwhile is that price. What was typed stays when it is that price already — 12,50
+       is left as 12,50 — and when it was refused, so it can be put right. */
+    els.price.addEventListener('blur', () => {
+      edited = false;
+      const p = parsePrice(els.price.value);
+      if (!Number.isNaN(p) && p !== prefs.price) showPrice();
+    });
+    const choose = () => {
+      prefs = Object.assign({}, prefs, { sym: els.sym.value,
+        speed: SPEED_CHOICES.includes(els.speed.value) ? els.speed.value : 'auto' });
+      if (refused) mark(true);                  // the line names the price in the new symbol
+      commit();
+    };
+    els.sym.addEventListener('change', choose);
+    els.speed.addEventListener('change', choose);
+    window.addEventListener('storage', (e) => {
+      if (e.key !== KEY) return;
+      prefs = load(); show(); onChange();
+    });
+    return { get: () => prefs };
+  }
+  /* The automatic entry says what it has decided, so nobody has to know the list of
+     fast printers to know which time they are being given. */
+  function labelAuto(speedSelect, printerSelect) {
+    const o = speedSelect.querySelector('option[value="auto"]');
+    if (o) o.textContent = `From the printer: ${listedSpeed(printerSelect)}`;
+  }
+
+  return { KEY, SYMBOLS, SPEEDS, LAYER, ROUGH, regionSymbol, load, parsePrice, cost, perKg, money,
+           plateSeconds, roundMinutes, duration, speedOf, listedSpeed, bind, labelAuto };
+})();
+</script>
+<script>/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
+ * GNU AGPL v3 or later, with additional terms under section 7: see LICENSE and NOTICE.
+ * Additional permission: the files this program generates — STL, 3MF, ZIP — are not
+ * covered by this licence. The models you make with it are yours. */
 /* Saved drawers: several designs kept on this device, and a file to carry them.
  *
  * Each tool kept exactly one layout, so someone kitting out a tool chest — eight drawers,
@@ -5198,6 +5476,13 @@ const state = Object.assign({}, DEFAULTS, {
 let layout = null;
 let builds = {};            // pieceId -> {polys, meta}
 let buildToken = 0;
+/* The filament price and the printer speed override, in panel 02. They are yours and not
+   the design's, so ESTIMATE keeps them on this device, shared with the bins page, and they
+   never reach the link or a saved drawer. A change redraws the figures and nothing else:
+   the pieces are seconds of CSG, and a dearer spool changes none of them. */
+const est = ESTIMATE.bind({ price: $('filPrice'), sym: $('filSym'), speed: $('printSpeed'),
+                            err: $('filPriceErr') },
+                          () => refreshEstimates());
 /* The connector families, named once each. KEY_CONN is the three that take a flat key
    and offer the housing choice; KEYED adds the H-clip, whose clip is a loose part too —
    see keysStl for what the ZIP did while it kept its own shorter copy of that list.
@@ -5890,7 +6175,7 @@ function drawPieceTable() {
      self-contradiction this whole guard exists to remove — the screen said "resolve the
      errors above to generate" and "-50.0 × 211.0 … fits" at the same time. */
   if (stopped) {
-    tb.innerHTML = '<tr><td colspan="6">Nothing to list until the checks above are clear.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="7">Nothing to list until the checks above are clear.</td></tr>';
     $('pieceTail').textContent = 'not building — see the checks above';
     updatePreviewLabel(true);
     syncExportDialog();
@@ -5915,6 +6200,7 @@ function drawPieceTable() {
       <td class="mono">${w.toFixed(1)} × ${d.toFixed(1)}</td>
       <td class="mono">${joints || '—'}</td>
       <td class="${fit?'':'bad'}">${fit ? 'fits' : footprintFits(pc) ? 'TOO TALL' : 'TOO BIG'}</td>
+      <td class="mono">${built ? massText(pieceGrams(pc.id)) + costTail(pieceGrams(pc.id)) : '…'}</td>
       <td><button class="ghost" data-dl="${pc.id}" ${built?'':'disabled'}>STL</button></td>
     </tr>`;
   }).join('');
@@ -6271,8 +6557,13 @@ function computePrintPlan() {
      Same for the size: measured off the mesh connectorPart returns, not off the
      parameters that made it. The two are the same rectangle for a flat key and are
      nothing like each other for the U-clip, whose prm describes a cross-section. */
+  /* The key's material is measured here too, off the same part, for the plates' weights
+     and times: one key is the same part on every plate that carries one. */
+  let keyMat = null;
   if (shipsKeys()) {
-    const ext = partExtent(connectorPart().polys);
+    const part = connectorPart();
+    const ext = partExtent(part.polys);
+    keyMat = meshMaterial(part.polys);
     items.push({ id: 'key', w: ext.w, d: ext.d, h: ext.h,
                  qty: keysNeeded(), stackable: false });
   }
@@ -6285,13 +6576,15 @@ function computePrintPlan() {
     { stack, zGap, bedH: state.bedH || 1e9 });
   printPlan = { plates: packed.filter((pl) => !pl.overflow),
                 over: packed.filter((pl) => pl.overflow).map((pl) => pl.overflow),
-                merged: items, zGap };
+                merged: items, zGap, keyMat };
   renderPrintPlan();
 }
 function renderPrintPlan() {
   const row = $('platesRow');
   updateExportTail();
-  if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; return; }
+  // the speed menu's own entry says which kind of printer the list makes this one
+  ESTIMATE.labelAuto($('printSpeed'), $('bedPreset'));
+  if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; $('planTime').textContent = ''; return; }
   const plates = printPlan.plates;
   const stacked = plates.some(pl => pl.placed.some(p => p.z > 0.01));
   const over = printPlan.over.map((id) => id === 'key' ? 'a key' : `piece ${id}`);
@@ -6312,8 +6605,19 @@ function renderPrintPlan() {
         svg += `<text x="${(p.x+p.w/2)*sc+1}" y="${(state.bedD-p.y-p.d/2)*sc+4+(lvl*10)}" text-anchor="middle" font-size="10" fill="var(--ink)">${p.id}${p.z>0.01?' ↥':''}</text>`;
     }
     svg += '</svg>';
-    return `<div style="display:grid;gap:4px;justify-items:center">${svg}<div class="hint">plate ${i+1}</div></div>`;
+    return `<div style="display:grid;gap:4px;justify-items:center">${svg}<div class="hint">plate ${i+1}` +
+           (pl.overflow ? '' : `<br>${plateFigures(plateEstimate(pl))}`) + `</div></div>`;
   }).join('');
+  /* The job in one line under the plates: what it all weighs and costs, and roughly how
+     long, said as the rough figure it is. The weight is materialGrams, the same total the
+     download dialog and the README quote. It weighs every piece, but only a plate can be
+     timed, so with a piece too big for the bed the time says it is for the plates that
+     fit (fitNote), as Bins says it. */
+  const job = jobTime(), g = materialGrams();
+  $('planTime').textContent = job.plates.length && g !== null
+    ? `In all: ${massText(g)}${costTail(g)} · about ${ESTIMATE.duration(job.min)} of printing ` +
+      `on a ${speedName()}${fitNote()} (${ESTIMATE.ROUGH}).`
+    : '';
 }
 /* Each part is placed by its own box, turned, so the box lands on the rectangle the plan
    drew for it.
@@ -6595,6 +6899,54 @@ function materialGrams() {
   return mm3 * PLA_DENSITY / 1000;
 }
 
+/* ---------- money and time --------------------------------------------------
+ * Every gram figure on the page is written through these, so none of them can be the one
+ * that forgot the cost: the piece table, the print plan, the download dialog and the
+ * README. The money is empty until a price is set, and then it is everywhere. The time is
+ * ESTIMATE's rough one, per plate and summed, for whichever kind of printer the list or
+ * the override says. */
+const costOf = (g) => ESTIMATE.cost(g, est.get());
+// " · £0.42", or nothing without a price
+const costTail = (g) => { const c = costOf(g); return c ? ` · ${c}` : ''; };
+const speedNow = () => ESTIMATE.speedOf($('bedPreset'), est.get());
+const speedName = () => `${ESTIMATE.SPEEDS[speedNow()].name} printer`;
+// one piece's filament in grams, once it exists; the same blend as the total
+function pieceGrams(id) {
+  return builds[id] ? filamentOf(builds[id].mat) * PLA_DENSITY / 1000 : null;
+}
+/* What one plate of the plan weighs and roughly takes: its pieces, stacked ones included,
+   and its keys, each measured the way the total measures them. */
+function plateEstimate(pl) {
+  const keyMm3 = printPlan.keyMat ? filamentOf(printPlan.keyMat) : 0;
+  const parts = pl.placed.map((p) => ({
+    vol: p.id === 'key' ? keyMm3 : builds[p.id] ? filamentOf(builds[p.id].mat) : 0,
+    h: p.h, z: p.z }));
+  const mm3 = parts.reduce((a, p) => a + p.vol, 0);
+  return { grams: mm3 * PLA_DENSITY / 1000,
+           min: ESTIMATE.roundMinutes(ESTIMATE.plateSeconds(parts, speedNow())) };
+}
+// "64 g · £1.28 · ≈ 2 h 15 min": a plate's weight, its cost once priced, its rough time
+function plateFigures(e) {
+  return `${massText(e.grams)}${costTail(e.grams)} · ≈ ${ESTIMATE.duration(e.min)}`;
+}
+/* Every plate's figures and the time in all, which is the sum of the plate times as
+   shown, so the plates and the total add up. Null until there is a plan to time. */
+function jobTime() {
+  if (!printPlan) return null;
+  const plates = printPlan.plates.filter((pl) => !pl.overflow).map(plateEstimate);
+  return { plates, min: plates.reduce((a, e) => a + e.min, 0) };
+}
+/* What the time leaves out: the pieces too big for the bed, which have no plate to time.
+   Where it is said, "over 3 plates" is not as well: it would be the plates said twice. */
+const fitNote = () => (printPlan && printPlan.over.length ? ' for the plates that fit' : '');
+/* A new price or speed changes figures and nothing else, so it redraws the two places on
+   the page that show them; the dialog follows, since both of these sync it. */
+function refreshEstimates() {
+  if (!layout) return;
+  drawPieceTable();
+  renderPrintPlan();
+}
+
 // bounding box of a part, for laying copies out and for reserving bed space
 function partExtent(polys) {
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
@@ -6691,6 +7043,14 @@ function readmeText() {
   lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
   if (state.magnets) lines.push(`Magnets: ${state.magnetD} x ${state.magnetH} mm, from ${state.magnetSide}`);
   if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ${state.screwHeadD} mm counterbore`);
+  /* The figure the dialog quotes, said the way it says it, with the price it was worked
+     out at: the README is read away from the page. The ZIP is only made once every piece
+     exists, so there is always a total to give. */
+  const g = materialGrams();
+  if (g !== null)
+    lines.push(`Material: about ${massText(g)} of PLA` +
+               (costOf(g) ? ` (about ${costOf(g)} at ${ESTIMATE.perKg(est.get())})` : '') +
+               ` ${infillNote()}.`);
   lines.push('');
   lines.push('LAYOUT (front of drawer at the bottom):');
   const bandIds = {};
@@ -6700,7 +7060,23 @@ function readmeText() {
   lines.push('PRINTING: flat as oriented, no supports needed. Print the test tile first');
   lines.push('and check a bin fits before committing to the full plates.');
   lines.push('');
-  if (printPlan) lines.push(`PRINT PLATES: ${printPlan.plates.length} — pre-arranged 3MF files in print-plates/ open directly in your slicer.`);
+  if (printPlan) {
+    lines.push(`PRINT PLATES: ${printPlan.plates.length} — pre-arranged 3MF files in print-plates/ open directly in your slicer.`);
+    // numbered as the files in print-plates/ are
+    const job = jobTime();
+    printPlan.plates.forEach((pl, i) => {
+      if (pl.overflow) return;
+      const e = plateEstimate(pl), c = costOf(e.grams);
+      lines.push(`  plate ${i + 1}: ${plural(pl.placed.length, 'part')}, about ${massText(e.grams)}` +
+                 (c ? `, ${c}` : '') + `, roughly ${ESTIMATE.duration(e.min)}`);
+    });
+    if (job.plates.length) {
+      lines.push(`Print time: roughly ${ESTIMATE.duration(job.min)} on a ${speedName()}` +
+                 (job.plates.length > 1 && !fitNote() ? ` over ${job.plates.length} plates` : '') + `${fitNote()}.`);
+      lines.push('That is a rough estimate from the filament and the layer count, not a slice:');
+      lines.push('your slicer gives the real figure.');
+    }
+  }
   lines.push('');
   /* Which assembly the reader is walked through is the same question the geometry
      answered, so it is asked with the same predicates. It was asked here with its own
@@ -6814,13 +7190,20 @@ function bedFitText() {
 
 function renderExportSummary() {
   const pitch = state.pitch;
-  const g = materialGrams();
+  const g = materialGrams(), job = jobTime();
   $('exDesign').textContent =
     `${layout.nx} × ${layout.ny} cell grid (${(layout.nx * pitch).toFixed(0)} × ${(layout.ny * pitch).toFixed(0)} mm) ` +
     `in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
     `${plural(layout.pieces.length, 'piece')}, ${splitName()} split, joined with ${CONNECTOR_NAMES[state.connector] || state.connector}\n` +
     `margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm` +
-    (g === null ? '' : `\nabout ${massText(g)} of PLA ${infillNote()}`);
+    /* The cost goes straight after the grams it is the price of, ahead of the note on
+       the infill, which is about the grams. The time follows on a line of its own. */
+    (g === null ? '' : `\nabout ${massText(g)} of PLA` +
+      (costOf(g) ? ` (about ${costOf(g)} at ${ESTIMATE.perKg(est.get())})` : '') + ` ${infillNote()}`) +
+    (g === null || !job || !job.plates.length ? ''
+      : `\nroughly ${ESTIMATE.duration(job.min)} of printing` +
+        (job.plates.length > 1 && !fitNote() ? ` over ${plural(job.plates.length, 'plate')}` : '') +
+        ` on a ${speedName()}${fitNote()} (${ESTIMATE.ROUGH})`);
   const fit = bedFitText();
   $('exFit').className = 'exfit ' + fit.cls;
   $('exFit').textContent = fit.t;
@@ -6855,11 +7238,16 @@ function renderExportFiles() {
 
   if (printPlan && printPlan.plates.length) {
     const n = printPlan.plates.length;
+    /* Each plate says what it weighs, costs and roughly takes, and so does the whole set:
+       "which plate tonight" is a question about time. */
+    const job = jobTime();
+    const all = { grams: job.plates.reduce((a, e) => a + e.grams, 0), min: job.min };
     exGroup('Pre-arranged print plates');
     // named as the recommended path, because it is: every part already placed on a bed,
     // in the order the plan worked out, with nothing left to arrange
     exRow('Every plate — recommended',
-          `${plural(n, 'plate')} · 3MF` + (n > 1 ? ' in a ZIP' : '') + ' · the whole job, arranged',
+          `${plural(n, 'plate')} · ${plateFigures(all)} · 3MF` + (n > 1 ? ' in a ZIP' : '') +
+          ' · the whole job, arranged',
           'Download', downloadAllPlates,
           { 'data-ex': 'allplates', 'aria-label': 'Download every print plate (3MF)' });
     /* Per-plate downloads. The combined export already builds each plate on its own
@@ -6867,7 +7255,8 @@ function renderExportFiles() {
        off — and it is what you want when one print failed, or when tonight's print is
        only this plate. */
     printPlan.plates.forEach((pl, i) => exRow(`Plate ${i + 1}`,
-      `${plural(pl.placed.length, 'part')} on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      `${plural(pl.placed.length, 'part')} on a ${state.bedW} × ${state.bedD} mm bed · ` +
+      `${plateFigures(plateEstimate(pl))} · 3MF`, 'Download',
       async () => saveBlob(await plate3mfBytes(i), `plate-${i + 1}.3mf`),
       { 'data-ex': 'plate', 'aria-label': `Download plate ${i + 1} (3MF)` }));
   }
