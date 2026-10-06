@@ -190,6 +190,13 @@ const CASES = [
   { name: '1x1x3-wall0.4-rails16', u: 1, v: 1, hUnits: 3, wall: 0.4, divX: 16, divRemovable: true },
   { name: '1x1x3-wall0.4-rails-both', u: 1, v: 1, hUnits: 3, wall: 0.4, divX: 16, divY: 16,
     divRemovable: true, scoop: 8, label: 12 },
+  /* A fixed divider with a face on the label shelf's front shared the shelf's top front
+     edge, used four times: with its back there the two touched face to face. The first
+     two were found by review; the third is the usual wall. The sweep further down finds
+     every one in a range of walls and shelves. */
+  { name: '1x1x3-wall0.6-div30-label12', u: 1, v: 1, hUnits: 3, wall: 0.6, divY: 30, label: 12 },
+  { name: '1.5x2.5x3-wall0.4-div84-label12', u: 1.5, v: 2.5, hUnits: 3, wall: 0.4, divY: 84, label: 12 },
+  { name: '1x1x3-div16-label4', u: 1, v: 1, hUnits: 3, divY: 16, label: 4 },
   { name: '1x1x1-wall0.4-low-scoop', u: 1, v: 1, hUnits: 1, wall: 0.4, scoop: 8, under: 0.05,
     edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 }, magnets: true, screws: true, holesEvery: true },
   /* A shelf deeper than the cavity is tall: its 45 degree underside used to run down
@@ -1022,6 +1029,49 @@ console.log('\nas many dividers as the fields allow');
     sweepReport(`${n}x${n} both ways, rails`, [0, 0.4, 0.95, 1.2, 3].map((wall) =>
       [`wall ${wall} x${most(n, wall)}`, { u: n, v: n, hUnits: 2, wall, divX: most(n, wall), divY: most(n, wall), divRemovable: true }]));
   }
+}
+
+console.log('\nfixed dividers that come to the label shelf\'s front');
+/* A fixed divider along the depth whose face lands on the label shelf's front shared the
+   shelf's top front edge, used four times; one whose back lands there touched the shelf
+   face to face. Which counts do that is arithmetic, worked out here from what the bin is
+   meant to be rather than read from bin.js: dividers evenly spaced and one wall thick, and
+   a shelf as deep as asked, which on a 6-unit bin it is up to 30 mm and 0.8 of the
+   inside's half depth. So every wall from 0.4 to 5 mm, every whole-millimetre shelf and
+   every count the field allows is tried on five depths, and what is built is each count
+   with a face within a micron of the shelf's front, and on a 1-cell depth each one whose
+   back stops short of it by a BLOAT or less too, which now runs on into the shelf. The
+   count of those within a micron is printed and must not be zero, or the sweep would
+   pass while building none of what it is for. */
+{
+  const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
+  const rows = [];
+  let exact = 0;
+  for (const v of [0.5, 1, 1.5, 2, 2.5])
+    for (let w = 4; w <= 50; w++) {
+      const wall = w / 10, inner = (v - 1) * SPEC.pitch / 2 + 20.75 - wall;
+      for (let label = 1; label <= Math.min(30, 0.8 * inner); label++) {
+        const front = inner - label;
+        for (let n = 1; n <= most(2 * inner, wall); n++) {
+          let on = false, near = false;
+          for (let k = 1; k <= n; k++) {
+            const p = -inner + 2 * inner * k / (n + 1);
+            for (const f of [p - wall / 2, p + wall / 2]) on = on || Math.abs(f - front) < 0.001;
+            near = near || (p + wall / 2 <= front && p + wall / 2 >= front - 0.05 - 1e-9);
+          }
+          if (on) exact++;
+          if (on || (near && v === 1))
+            rows.push([`${v} deep, wall ${wall}, ${label} mm shelf, ${n} along`,
+                       { u: 0.5, v, hUnits: 6, wall, label, divY: n }]);
+        }
+      }
+    }
+  const fails = rows.map(([name, cfg]) => { const f = cleanBuild(cfg); return f ? `${name}: ${f}` : ''; })
+    .filter(Boolean);
+  console.log(`  ${`${exact} on its front, ${rows.length - exact} near it`.padEnd(34)} ` + (!exact
+    ? 'NONE FOUND to build' : fails.length ? `FAILED ${fails.length} of ${rows.length}, ` +
+      `among them ${fails.slice(0, 4).join('; ')}` : `${rows.length} builds, all clean`));
+  if (!exact || fails.length) bad++;
 }
 
 /* The label shelf's underside runs down at 45 degrees, so the deeper the shelf the

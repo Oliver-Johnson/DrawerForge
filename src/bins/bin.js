@@ -1628,14 +1628,24 @@ function buildBin(G, cfg) {
        fixed ones exactly side by side and a spacing of 1.2 mm put one rail's face on its
        neighbour's, and two shells face to face cost 24 to 1616 edges used four times. A
        span that runs into the next is one prism, so there is no face between them to
-       coincide; at any sensible count nothing meets and nothing changes. */
-    const spans = (n, inner) => {
+       coincide; at any sensible count nothing meets and nothing changes.
+       The label shelf stands in the way of the dividers along the depth as a neighbour
+       does, and a fixed one that came to it met it the same way. With its back on the
+       shelf's front the two touched face to face under the bin's rim, sharing the top
+       edge, used four times: a 1.5x2.5 with a 0.4 mm wall, 84 dividers and a 12 mm shelf;
+       a 1x1 with the usual wall, 16 dividers and a 4 mm shelf. So a divider whose back
+       comes to the shelf's front, or within a BLOAT of it, runs a BLOAT into the shelf,
+       as it would into its neighbour. Under the shelf that is up to two BLOAT more
+       divider, the most a merge with a neighbour adds. One whose FRONT lies on the
+       shelf's front already runs into the shelf; see box for that one. */
+    const spans = (n, inner, shelf) => {
       const out = [];
       for (let k = 1; k <= n; k++) {
         const p = -inner + (2 * inner) * k / (n + 1);
         if (c.divRemovable) out.push([p - rail, p - slot], [p + slot, p + rail]);
         else out.push([p - t, p + t]);
       }
+      for (const s of out) if (s[1] >= shelf - BLOAT && s[1] < shelf + WELD) s[1] = shelf + BLOAT;
       out.sort((a, b) => a[0] - b[0]);
       const merged = [];
       for (const [lo, hi] of out) {
@@ -1660,9 +1670,14 @@ function buildBin(G, cfg) {
        left with almost nothing inside the outline is all wall, and is not built.
        Each direction's boxes take the outline grown a little less than a BLOAT, and by a
        different amount, so that two cut at one corner, or one and the shelf, never share
-       a vertical edge at the same outline vertex: 8 edges used four times when they did. */
-    const box = (pts, grow) => {
-      if (!pts.some(([x, y]) => outsideArc(hw, hd, x, y, n)))
+       a vertical edge at the same outline vertex: 8 edges used four times when they did.
+       A fixed divider whose front lies on the label shelf's front is built that way too,
+       wherever it stands. Plain, it reached a BLOAT into each wall as the shelf does and
+       stopped at the rim as the shelf does, so the two shared their top front edge; cut
+       from the outline grown less than a BLOAT, it reaches the walls short of the shelf's
+       ends and shares nothing. */
+    const box = (pts, grow, onShelf) => {
+      if (!onShelf && !pts.some(([x, y]) => outsideArc(hw, hd, x, y, n)))
         return G.extrudePoly(pts, floorZ - BLOAT, H);
       const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
       let cut = cavityRing(iw, id, c.wall, n, grow);
@@ -1673,12 +1688,17 @@ function buildBin(G, cfg) {
       return cut.length >= 3 && Math.abs(G.polyArea2D(cut)) > 0.01
         ? G.extrudePoly(cut, floorZ - BLOAT, H) : [];
     };
+    /* Where the label shelf's front stands, for a fixed divider to meet it: the depth the
+       shelf above was built to, by the same sum. Nothing, when there is no shelf. */
+    const shelfFoot = plan && plan.screws ? FOOT_HOLES.screwTop + BLOAT : bodyBase + BLOAT;
+    const shelfD = Math.min(c.label, id * 0.8, H - c.labelT - shelfFoot);
+    const shelf = !c.divRemovable && c.label > 0.05 && eB > 0.99 && shelfD > 0.05 ? id - shelfD : NaN;
     for (const [a, b] of spans(c.divX, iw))
       for (const [lo, hi] of reach(id))
         polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
-    for (const [a, b] of spans(c.divY, id))
+    for (const [a, b] of spans(c.divY, id, shelf))
       for (const [lo, hi] of reach(iw))
-        polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT));
+        polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT, Math.abs(a - shelf) < WELD));
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */
