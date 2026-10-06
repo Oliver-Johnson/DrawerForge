@@ -20,7 +20,7 @@ another device.
 
 ## Baseplates
 
-- **Drawer-first workflow** — start from internal dimensions; choose how leftover space becomes margins (centred, one-sided, custom per side, or left as a gap)
+- **Drawer-first workflow** — start from internal dimensions; choose how leftover space becomes margins (centred, one-sided, custom per side, or left as a gap), or fill it with half cells for half-size bins
 - **Four split modes** — Balanced, Staggered (brickwork joints so seams never line up), **Fewest plates** (searches split patterns to minimise print-bed loads), and Manual
 - **Interactive cut map** — click any grid line to add or remove a cut
 - **Seven joint options** — dovetail tabs, puzzle tabs, bowtie keys, puzzle keys, snap clips, H-clips, or none

@@ -90,7 +90,7 @@ test('typing a cell count with the plate keeping margins gives that many cells',
    Bins page one. */
 test('the other leftover-space modes keep the whole grid', async ({ page }) => {
   const errors = watch(page);
-  for (const mm of ['auto', 'none']) {
+  for (const mm of ['auto', 'none', 'half']) {
     await page.goto(site.base + 'bins/#w=306&d=380&mm=' + mm + '&ml=20&mr=20&mf=30&mb=30');
     await binsReady(page);
     expect(await page.evaluate(() => [grid().nx, grid().ny]), mm).toEqual([7, 9]);
@@ -278,6 +278,11 @@ test('the drawer is drawn where the plate sits in it', async ({ page }) => {
   expect(await gaps('w=306&d=380&mm=auto&ax=end&ay=start'))
     .toEqual({ left: 0, right: 12, front: 2, back: 0 });
   expect(await gaps('w=306&d=380')).toEqual({ left: 6, right: 6, front: 1, back: 1 });
+  /* Half cells: nine whole cells and a half column leave 1 mm, which the alignment puts
+     on the left, and seven and a half row leave 15 at the front. The strips are on the
+     right and the back, so those margins are the strips' 21 mm. */
+  expect(await gaps('w=400&d=330&mm=half&ax=start&ay=start'))
+    .toEqual({ left: 1, right: 21, front: 15, back: 21 });
   /* Margins with no room for a cell: the one cell is drawn against the wall, not through
      it. (Custom margins hand what the cells leave to the right and the back.) */
   expect(await gaps('w=306&d=380&mm=custom&ml=300'))
