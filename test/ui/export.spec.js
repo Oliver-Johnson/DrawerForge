@@ -115,6 +115,16 @@ for (const tool of [
       await page.locator('#openExport').click();
       await expect(page.locator('#exDesign')).toContainText('306 × 380 mm drawer');
       await expect(page.locator('#exFiles .exrow').first()).toBeVisible();
+      /* What it weighs and roughly how long it prints, the time said as the guess it
+         is; and no money, because nobody has typed a price (estimate.spec.js has the
+         rest of that). */
+      const sum = page.locator('#exDesign');
+      await expect(sum).toContainText(/about \d+ g of PLA/);
+      await expect(sum).toContainText(/roughly [\d hmin]+ of printing .*only your slicer can time it exactly/);
+      await expect(sum).not.toContainText(/[$£€]\d/);
+      for (const meta of await page.locator('#exFiles [data-ex="plate"]')
+        .evaluateAll((bs) => bs.map((b) => b.closest('.exrow').querySelector('.meta').textContent)))
+        expect(meta).toMatch(/· \d+ g · ≈ [\d hmin]+ · 3MF$/);
     });
   });
 }
