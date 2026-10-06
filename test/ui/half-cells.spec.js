@@ -56,6 +56,19 @@ const slotHere = (page, sx, sy) => page.evaluate(({ sx, sy, CELL }) => {
   const q = p.matrixTransform(svg.getScreenCTM());
   return { x: q.x, y: q.y };
 }, { sx, sy, CELL: H.CELL });
+/* The centre of the selected bin's grip, read once its box holds still between two
+   looks: one read while the map was still being laid out would be pressed where the
+   grip had been. */
+async function gripPoint(page, handle) {
+  const box = () => page.locator(`#fillmap .grip[data-handle="${handle}"]`).boundingBox();
+  let last = null;
+  await expect.poll(async () => {
+    const b = await box(), still = !!(b && last && Math.abs(b.x - last.x) < 0.5 && Math.abs(b.y - last.y) < 0.5);
+    last = b;
+    return still;
+  }, { message: `the ${handle} grip stops moving`, intervals: [50, 100, 100, 200] }).toBe(true);
+  return { x: last.x + last.width / 2, y: last.y + last.height / 2 };
+}
 /* Types into a field and presses at once at the point where() gives, measured with the
    field focused, while the edit still waits for its pass (schedule's 180 ms). Says
    whether the press did come while it waited: on a slow moment the pass runs first,
@@ -603,9 +616,15 @@ test('a reason under the map stays on the front marker\'s line, at any window si
   await page.setViewportSize({ width: 1366, height: 768 });
   await openAt(page, hash);
   await select(page, 1);
-  const g = await page.locator('#fillmap .grip[data-handle="rb"]').boundingBox();
+  /* Past the save select() set off, 400 ms on, before the drag. Arriving on a link with
+     another layout saved, the page shows the 43 px "set aside" line above the map until
+     a save finds the design changed; landing in the drag, after its first step, that
+     save took the line away and the map moved up under the pointer, and the bin came
+     out 1.5 x 1 now and then. */
+  await page.waitForTimeout(500);
+  const g = await gripPoint(page, 'rb');
   const to = await slotHere(page, 8, 9);
-  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.move(g.x, g.y);
   await page.mouse.down();
   await page.mouse.move(to.x, to.y, { steps: 6 });
   await page.mouse.up();
@@ -794,9 +813,9 @@ test('the carved-shape line goes once the bin is whole-size again', async ({ pag
   await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1) + '_' + L);
   await select(page, 1);
   await H.mapInView(page);
-  const g = await page.locator('#fillmap .grip[data-handle="rb"]').boundingBox();
+  const g = await gripPoint(page, 'rb');
   const half = await slotHere(page, 8, 9), whole = await slotHere(page, 9, 9);
-  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.move(g.x, g.y);
   await page.mouse.down();
   await page.mouse.move(half.x, half.y, { steps: 4 });
   expect(await page.evaluate(() => [B()[1].u, $('stepWhy').textContent]))
