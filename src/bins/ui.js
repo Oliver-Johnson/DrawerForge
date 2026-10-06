@@ -1847,10 +1847,17 @@ function initMap() {
     openMenu(e.clientX, e.clientY, cur, i);
   });
   svg.addEventListener('pointerdown', (e) => {
+    /* An edit still waiting lands first (landEdit), before the field is left, which
+       comes after this, and before the press is read: against the grid it leaves, not
+       the one before it. Read first, a drawer width or depth typed and pressed on the
+       map at once looked a cell up in the old grid and then in the new, smaller one,
+       and threw. And where it changed the grid, the press goes no further: the map was
+       drawn again under the pointer, and the cell aimed at has moved, or is gone. */
+    const was = grid(), landed = landEdit();
+    mapSay('');
+    if (landed && (grid().nx !== was.nx || grid().ny !== was.ny)) return;
     const c = cellFromEvent(e);
     const handle = e.target && e.target.dataset ? e.target.dataset.handle : null;
-    landEdit();                     // before the field is left, which comes after this
-    mapSay('');
 
     /* Grips sit on the bin's corners, which is exactly where you click to carve an
        L. While carving they have to yield, or the one cell you most want to remove
@@ -4494,18 +4501,21 @@ let timer = null;
    reads, so an edit that changes a bin misses the cache by itself, and refresh() lets go
    of the builds nothing uses. Clearing on every input rebuilt every type in the drawer
    because a note was typed, and leaked the old buffers each time. */
-const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { timer = null;
-  readControls(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
-/* An edit still waiting for its pass lands now, before something takes the selection
+const editPass = () => { readControls(); drawLayerTabs(); drawMap(); refresh(); };
+const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { timer = null; editPass(); }, 180); };
+/* An edit still waiting for its pass has it now, before something takes the selection
    away, so it goes to the bin it was typed for and not to the next one drawn. Fill the
    rest and a press on the map both clear the selection first thing: a 2 typed for the
    1.5 × 1 on a half step and pressed on either inside the 180 ms became the new bins'
-   size, the refusal never having run. The rest of the pass is theirs to do, as the
-   phone sheet's Escape does it (closeSheet). */
+   size, the refusal never having run. The whole pass, the map and the save with it:
+   with the fields read alone, a drawer width typed and pressed on the map at once left
+   the map drawn for the old grid, its grips and all, and the address and the saved
+   drawer on the old width until the next edit. True when there was one to land. */
 function landEdit() {
-  if (timer === null) return;
+  if (timer === null) return false;
   clearTimeout(timer); timer = null;
-  readControls();
+  editPass();
+  return true;
 }
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
                   'u', 'v', 'hUnits',

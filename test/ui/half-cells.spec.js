@@ -56,6 +56,22 @@ const slotHere = (page, sx, sy) => page.evaluate(({ sx, sy, CELL }) => {
   const q = p.matrixTransform(svg.getScreenCTM());
   return { x: q.x, y: q.y };
 }, { sx, sy, CELL: H.CELL });
+/* Types into a field and presses at once at the point where() gives, measured with the
+   field focused, while the edit still waits for its pass (schedule's 180 ms). Says
+   whether the press did come while it waited: on a slow moment the pass runs first,
+   which is the ordinary order and not the one a case using this is about. */
+async function typeAndPress(page, field, text, where) {
+  await page.evaluate(() => {
+    window.__pending = null;
+    addEventListener('pointerdown', () => { window.__pending = timer !== null; }, { capture: true, once: true });
+  });
+  await page.focus('#' + field);
+  const at = await where();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type(text);
+  await page.mouse.click(at.x, at.y);
+  return page.evaluate(() => window.__pending);
+}
 async function dragSlots(page, from, to) {
   const a = await slotPoint(page, ...from), b = await slotPoint(page, ...to);
   await page.mouse.move(a.x, a.y);
@@ -747,19 +763,20 @@ test('the Steps switch is on the heading row, not in the heading, and keeps the 
 /* An edit typed into the panel waits 180 ms for its pass (schedule). Pressing Fill the
    rest, or the map, inside that time took the selection away before the pass had run,
    and the refused 2 typed for the 1.5 x 1 on a half step became the new bins' size. The
-   press is made the moment the 2 is typed, at a point measured beforehand. */
+   press is made the moment the 2 is typed, at a point measured beforehand, and made
+   again should the pass have run first all the same (typeAndPress). */
 test('a size typed a moment before a press elsewhere still goes to the bin it was typed for', async ({ page }) => {
   for (const press of ['fill', 'map']) {
-    await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1));
-    await select(page, 0);
-    const at = press === 'fill'
-      ? await page.evaluate(() => { const b = $('fillRest'); b.scrollIntoView({ block: 'center' });
-          const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })
-      : await H.cellPoint(page, 4, 4);
-    await page.focus('#u');
-    await page.keyboard.press('Control+a');
-    await page.keyboard.type('2');
-    await page.mouse.click(at.x, at.y);
+    for (let tries = 1; ; tries++) {
+      await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1));
+      await select(page, 0);
+      const at = () => press === 'fill'
+        ? page.evaluate(() => { const b = $('fillRest'); b.scrollIntoView({ block: 'center' });
+            const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })
+        : H.cellPoint(page, 4, 4);
+      if (await typeAndPress(page, 'u', '2', at)) break;
+      expect(tries, `${press}: pressed while the 2 waited for its pass`).toBeLessThan(3);
+    }
     await settle(page);
     const r = await page.evaluate(() => ({ u: state.u, fill: $('fillSize').textContent,
       twoWide: B().filter((b) => b.u === 2 && b.v === 1).length }));
@@ -789,3 +806,35 @@ test('the carved-shape line goes once the bin is whole-size again', async ({ pag
   expect(await page.evaluate(() => [B()[1].u, B()[1].v, isCarved(B()[1]), $('stepWhy').textContent]))
     .toEqual([2, 2, false, '']);
 });
+
+/* A press on the map lands an edit still waiting for its pass (landEdit). It read the
+   press's cell in the old grid first and looked it up in the new one: a drawer width
+   typed and pressed on at once found no bin in a column the new grid has not got,
+   selected nothing and threw, and a depth threw at a row it has not got. Only the fields
+   were read, so the map stayed drawn for the old grid, and the address and the saved
+   drawer kept the old size. The edit lands now with its whole pass, and a press aimed at
+   a map that has gone places nothing; the next one goes where it is pressed. */
+for (const [size, field, value, cell, cells, key, next] of [
+  ['width', 'drawerW', 120, [5, 5], [2, 9], 'w=120', [1, 3]],
+  ['depth', 'drawerD', 200, [5, 8], [7, 4], 'd=200', [0, 2]]]) {
+  test(`a drawer ${size} typed a moment before a press on the map lands, and the map is drawn for it`, async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    for (let tries = 1; ; tries++) {
+      await openAt(page, 'bl=' + bin(0, 0, 1, 1));
+      await page.click('#s-drawer .ph button');
+      if (await typeAndPress(page, field, String(value), () => H.cellPoint(page, ...cell))) break;
+      expect(tries, `pressed while the ${value} waited for its pass`).toBeLessThan(3);
+    }
+    await page.waitForTimeout(700);                      // past the save's 400 ms
+    expect(page.__errors, 'the page threw').toEqual([]);
+    const r = await page.evaluate((key) => ({
+      grid: [grid().nx, grid().ny],
+      drawn: $('fillmap').getAttribute('viewBox').split(' ').slice(2).map((n) => n / S),
+      saved: location.hash.slice(1).split('&').includes(key),
+      bins: B().map((b) => [b.x, b.y, b.u, b.v]) }), key);
+    expect(r, `${value} typed, and the map pressed`)
+      .toEqual({ grid: cells, drawn: cells, saved: true, bins: [[0, 0, 1, 1]] });
+    await H.clickCell(page, ...next);
+    expect(await binsNow(page), 'the next press').toEqual([[0, 0, 1, 1], [...next, 1, 1]]);
+  });
+}
