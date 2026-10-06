@@ -127,6 +127,36 @@ function labelPrism(G, hwI, hdI, H, depth, t) {
 const LIP = [[0, 2.70], [0.8, 1.90], [2.6, 1.90]];
 const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
 
+/* The top of the cavity floor. Never less than two BLOAT above the foot, so the slab
+   encloses the foot's overlap extension rather than ending exactly on it — ending on
+   it leaves 128 boundary edges. Only a floor thinner than 0.1 mm ever hits that clamp.
+   A function of its own because the page quotes it: the inside depth shown beside the
+   height field is measured from here, and a second copy of this sum in the UI would be
+   a number that drifts from the bin the day the floor changes. */
+const floorTop = (c) => SPEC.footH + Math.max(c.floorT, 2 * BLOAT);
+
+/* A bin's heights as the page quotes them, from the numbers buildBin builds it with
+   rather than from constants kept beside them. H is the stacking height, units x 7 —
+   the top of the walls, which is where the feet of a bin stacked on this one come to
+   rest — and the lip stands above it. The inside depth runs from the floor to that same
+   top, because a part standing any taller is in the way of the bin above it, or of a
+   lid. A solid bin has no inside, and a bin with a lowered wall has no lip. */
+function binHeights(cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
+  const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
+    c.edges[k] === undefined || c.edges[k] >= 1);
+  const lipH = c.lip && allFull && !c.solid ? lipHeight(c.lipMin) : 0;
+  return { H, floorZ, lipH, inside: c.solid ? 0 : Math.max(0, H - floorZ) };
+}
+/* The fewest whole units that give at least `depth` mm inside. Rounded up, not to the
+   nearest: someone typing the inside depth is sizing a bin for a part, and a bin a
+   millimetre short of the part is a bin the part does not fit. The epsilon keeps an
+   exact fit exact — 36.05 mm on a 1.2 mm floor is 6 units, not 7 because the division
+   came out at 6.000000000000001. */
+const unitsForInside = (depth, cfg) => Math.max(1, Math.ceil(
+  (depth + floorTop(Object.assign({}, BIN_DEFAULTS, cfg || {}))) / SPEC.unitH - 1e-9));
+
 /* There is one base: the spec foot, 4.75 mm, under the spec lip. Truncated feet
  * were offered for a while and are gone. They bought 1.70 mm of usable depth, and
  * only in the bins above the first — the bottom one sits on a baseplate and needs a
@@ -915,10 +945,8 @@ function buildBin(G, cfg) {
   /* The foot reaches full width at 4.75, so that is where the body starts and there
      is no step in the silhouette between them. */
   const bodyBase = SPEC.footH;
-  /* Never less than two BLOAT above the foot, so the slab encloses the foot's overlap
-     extension rather than ending exactly on it — ending on it leaves 128 boundary
-     edges. Only a floor thinner than 0.1 mm ever hits that clamp. */
-  const floorZ = bodyBase + Math.max(c.floorT, 2 * BLOAT);
+  // see floorTop for the clamp, and for why it is not written out here
+  const floorZ = floorTop(c);
 
   /* Whether there is a lip has to be known before the body: a carved bin's wall
      panels carry their own lip, so the decision cannot wait until after. A lip over
@@ -1202,7 +1230,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
 
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
-    lipHeight, REQUIRED_CORE,
+    lipHeight, binHeights, unitsForInside, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers, LINK_MAX };
 }

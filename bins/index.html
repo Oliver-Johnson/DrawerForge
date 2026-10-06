@@ -948,7 +948,22 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" max="50" value="1"></label>
       <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" max="50" value="1"></label>
     </div>
-    <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
+    <!-- Height three ways. Someone sizing a bin for a part knows the part in millimetres,
+         not in 7 mm units, so the height can be typed as units, as millimetres overall,
+         or as the depth wanted inside. Whichever way it is typed, the bin is still a
+         whole number of units — the link and saved drawers carry units and only units —
+         and the line under the field says what the typing came to. The menu is a
+         preference of the person, remembered on this device like the mm/inch switch. -->
+    <div class="row">
+      <label class="f" id="hUnitsRow"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
+      <label class="f" id="hMmRow" style="display:none"><b id="hMmLabel">Height overall (mm)</b><input id="hMm" type="number" step="0.5" min="0" max="2000"></label>
+      <label class="f"><b>in</b><select id="hMode" aria-label="Height entered in">
+        <option value="units">7 mm units</option>
+        <option value="overall">overall mm</option>
+        <option value="inside">inside depth</option>
+      </select></label>
+    </div>
+    <div class="hint" id="hResult" role="status">—</div>
     <div class="hint" id="binSizeHint">—</div>
     <label class="f" id="noteRow"><b>What goes in it (optional)</b><input id="note" type="text" maxlength="28" placeholder="M3 screws, drill bits…"></label>
     <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
@@ -5150,6 +5165,36 @@ function labelPrism(G, hwI, hdI, H, depth, t) {
 const LIP = [[0, 2.70], [0.8, 1.90], [2.6, 1.90]];
 const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
 
+/* The top of the cavity floor. Never less than two BLOAT above the foot, so the slab
+   encloses the foot's overlap extension rather than ending exactly on it — ending on
+   it leaves 128 boundary edges. Only a floor thinner than 0.1 mm ever hits that clamp.
+   A function of its own because the page quotes it: the inside depth shown beside the
+   height field is measured from here, and a second copy of this sum in the UI would be
+   a number that drifts from the bin the day the floor changes. */
+const floorTop = (c) => SPEC.footH + Math.max(c.floorT, 2 * BLOAT);
+
+/* A bin's heights as the page quotes them, from the numbers buildBin builds it with
+   rather than from constants kept beside them. H is the stacking height, units x 7 —
+   the top of the walls, which is where the feet of a bin stacked on this one come to
+   rest — and the lip stands above it. The inside depth runs from the floor to that same
+   top, because a part standing any taller is in the way of the bin above it, or of a
+   lid. A solid bin has no inside, and a bin with a lowered wall has no lip. */
+function binHeights(cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
+  const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
+    c.edges[k] === undefined || c.edges[k] >= 1);
+  const lipH = c.lip && allFull && !c.solid ? lipHeight(c.lipMin) : 0;
+  return { H, floorZ, lipH, inside: c.solid ? 0 : Math.max(0, H - floorZ) };
+}
+/* The fewest whole units that give at least `depth` mm inside. Rounded up, not to the
+   nearest: someone typing the inside depth is sizing a bin for a part, and a bin a
+   millimetre short of the part is a bin the part does not fit. The epsilon keeps an
+   exact fit exact — 36.05 mm on a 1.2 mm floor is 6 units, not 7 because the division
+   came out at 6.000000000000001. */
+const unitsForInside = (depth, cfg) => Math.max(1, Math.ceil(
+  (depth + floorTop(Object.assign({}, BIN_DEFAULTS, cfg || {}))) / SPEC.unitH - 1e-9));
+
 /* There is one base: the spec foot, 4.75 mm, under the spec lip. Truncated feet
  * were offered for a while and are gone. They bought 1.70 mm of usable depth, and
  * only in the bins above the first — the bottom one sits on a baseplate and needs a
@@ -5938,10 +5983,8 @@ function buildBin(G, cfg) {
   /* The foot reaches full width at 4.75, so that is where the body starts and there
      is no step in the silhouette between them. */
   const bodyBase = SPEC.footH;
-  /* Never less than two BLOAT above the foot, so the slab encloses the foot's overlap
-     extension rather than ending exactly on it — ending on it leaves 128 boundary
-     edges. Only a floor thinner than 0.1 mm ever hits that clamp. */
-  const floorZ = bodyBase + Math.max(c.floorT, 2 * BLOAT);
+  // see floorTop for the clamp, and for why it is not written out here
+  const floorZ = floorTop(c);
 
   /* Whether there is a lip has to be known before the body: a carved bin's wall
      panels carry their own lip, so the decision cannot wait until after. A lip over
@@ -6225,7 +6268,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
 
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
-    lipHeight, REQUIRED_CORE,
+    lipHeight, binHeights, unitsForInside, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers, LINK_MAX };
 }
@@ -6297,6 +6340,10 @@ const clearSel = () => { selected = -1; selExtra.clear(); };
 /* The bin focus is pointed at, whichever kind it is. Null whenever focus is off. */
 const fBin = () => (!focused ? null : scratch || (selected >= 0 ? B()[selected] : null));
 const LIP_H = lipHeight(0.55);
+/* The most whole units that stand in `room` millimetres with a stacking lip on top —
+   the same sum the drawer-height check makes, run backwards, so the count it names is
+   one the check then passes. Zero when not even one unit fits. */
+const unitsUnder = (room) => Math.max(0, Math.floor((room - LIP_H + 0.001) / SPEC.unitH));
 
 /* ---------- model --------------------------------------------------------- */
 /* The largest drawer the map will lay out, and so the most cells a side. Every draw
@@ -7907,8 +7954,15 @@ function binIssues(b, k, claims) {
     out.push(`is ${fw.toFixed(0)} × ${fd.toFixed(0)} mm, too big for your ${state.bedW} × ${state.bedD} mm bed in either orientation` +
       (sp ? ` — split it into ${sp.text}` : ''));
   }
-  if (!loose && st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001)
-    out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available`);
+  /* The check has always worked in millimetres; the fix is a number of units, so it
+     says which one. Worked out from where this bin actually stands, so a bin on layer 2
+     is told what fits on top of the bins under it, not what would fit on the baseplate. */
+  if (!loose && st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001) {
+    const fit = unitsUnder(g.avail - st.z);
+    out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available — ` +
+      (fit < 1 ? 'there is no room for a bin at all where it stands'
+               : `${plural(fit, 'unit')} is the tallest that fits ${st.z > 0 ? 'on the bins under it' : 'here'}`));
+  }
   if (!b.solid && b.wall < 0.8)
     /* Below one nozzle line the engine builds the thinnest wall it can rather than an
        open shell, so the file holds more wall than the field says; say so. */
@@ -7961,10 +8015,16 @@ function warnings() {
   if (drawerAsked.w > DRAWER_MAX || drawerAsked.d > DRAWER_MAX)
     out.push({ err: true, t: `A ${drawerAsked.w} × ${drawerAsked.d} mm drawer is bigger than the ${DRAWER_MAX} mm a side this tool lays out, so it is drawn as ${state.drawerW} × ${state.drawerD} mm — a ${g.nx} × ${g.ny} grid. Check the drawer size; split a drawer that really is this big into parts.` });
   const tot = stackHeight();
+  /* Both say the unit count that fits, since units are what the height field takes. A
+     stack's lip is only the top one's, so a stack fits the same number of units in all as
+     a single bin does: that is one figure, and it is the one Checks gives. */
+  const fit = unitsUnder(g.avail);
+  const fitText = fit < 1 ? 'There is no room above the baseplate for even a 1-unit bin.'
+    : `The tallest that fits is ${plural(fit, 'unit')} (${fit * SPEC.unitH} mm + lip), in one bin or a stack.`;
   if (tot > g.avail + 0.001)
-    out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate.` });
+    out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate. ${fitText}` });
   else if (tot > 0)
-    out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${(g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip).` });
+    out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${(g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip). ${fitText}` });
 
   const claims = layers.map((_, k) => layerClaims(k));
   layers.forEach((L, k) => L.bins.forEach((b) => {
@@ -8130,6 +8190,7 @@ function refresh() {
   const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
+  drawHeight();
 
   /* Cells covered, not cells claimed: summing every bin's cells counted two bins on one
      cell twice and a bin off the grid in full, which is how 500 copies of one bin read
@@ -9051,6 +9112,11 @@ for (const id of ['bedW', 'bedD', 'bedH'])
 function applyUnit(to) {
   if (to === unit) return;
   FIELDS.convert(LENGTH_IDS.map((id) => $(id)), unit, to, $('b-drawer'));
+  /* The bin's height, when it is typed as a length, is typed in the same unit as the
+     drawer: someone measuring in inches measures the part in inches too. Converted on
+     its own because it is not a drawer measurement — state has no field for it, and
+     the guard in chooseUnit compares drawer measurements only. */
+  FIELDS.convert([$('hMm')], unit, to, $('hMmRow'));
   unit = to;
   $('unitMm').classList.toggle('on', to === 'mm');
   $('unitMm').setAttribute('aria-pressed', String(to === 'mm'));
@@ -9068,6 +9134,83 @@ function chooseUnit(to) {
 }
 $('unitMm').addEventListener('click', () => chooseUnit('mm'));
 $('unitIn').addEventListener('click', () => chooseUnit('in'));
+
+/* ---------- the bin's height, three ways ----------
+   A bin is a whole number of 7 mm units, and stays one: the link, saved drawers and
+   every export carry units, so nothing past this field learns how the height was typed.
+   What changes is what you may type. Someone sizing a bin for a part knows the part in
+   millimetres, and was left dividing by seven and wondering whether the floor counted.
+
+   Overall millimetres round to the NEAREST unit, because an overall height is a target
+   and the nearest bin is the honest answer to it. Inside depth rounds UP, because it is
+   a requirement: a bin a millimetre too shallow for the part is a bin the part does not
+   go in. Both are worked out from the bin engine's own numbers (binHeights,
+   unitsForInside in bin.js), so the floor and the lip quoted here are the floor and the
+   lip that get built.
+
+   Which way you type is a habit of the person, not a property of the bin, so it is
+   remembered on this device the way the mm/inch switch is, and never put in the link. */
+const HEIGHT_KEY = 'drawerforge:height-entry:v1';
+const H_MODES = ['units', 'overall', 'inside'];
+let hMode = 'units';
+const savedHMode = () => {
+  try { const m = localStorage.getItem(HEIGHT_KEY); return H_MODES.includes(m) ? m : 'units'; }
+  catch (err) { return 'units'; }        // private mode: units, as before
+};
+const saveHMode = (m) => {
+  try { localStorage.setItem(HEIGHT_KEY, m); }
+  catch (err) { /* private mode or a full quota: the menu still works, unremembered */ }
+};
+// the bin the height field is describing: the one on its own, the selected one, or the next
+const heightSrc = () => scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
+const heightsOf = (b) => binHeights({ hUnits: b.hUnits, floorT: b.floorT, solid: b.solid,
+                                      edges: b.edges });
+const unitsFor = (mm, b) => fieldClamp('hUnits', hMode === 'inside'
+  ? unitsForInside(mm, { floorT: b.floorT })
+  : Math.max(1, Math.round(mm / SPEC.unitH)));
+/* What the typing came to, said beside the field. Millimetres to the hundredth because
+   the inside depth is genuinely fractional — 36.05 on the default floor — and rounding
+   it to 36.1 would quote a bin deeper than the one you get. */
+function heightText(b) {
+  const h = heightsOf(b);
+  const mm = (x) => `${Math.round(x * 100) / 100} mm` + (unit === 'in' ? ` / ${FIELDS.inchText(x)} in` : '');
+  return `${plural(b.hUnits, 'unit')} · ${mm(h.H)} overall` +
+    (h.lipH ? ` + ${h.lipH.toFixed(2)} mm lip` : '') +
+    (b.solid ? ' · solid, nothing inside' : ` · ${mm(h.inside)} inside`);
+}
+/* Called from refresh(), so it follows every change of bin, floor or unit. The length
+   field is rewritten with the height actually built — 43.05 after typing 40 inside —
+   but never under the caret, where it would turn "4" into "43.05" before the 0 lands. */
+function drawHeight() {
+  const b = heightSrc(), inMm = hMode !== 'units';
+  $('hUnitsRow').style.display = inMm ? 'none' : '';
+  $('hMmRow').style.display = inMm ? '' : 'none';
+  $('hMmLabel').textContent = `${hMode === 'inside' ? 'Inside depth' : 'Height overall'} (${unit})`;
+  if (inMm && document.activeElement !== $('hMm')) {
+    const h = heightsOf(b);
+    FIELDS.setLength($('hMm'), hMode === 'inside' ? h.inside : h.H, unit);
+  }
+  $('hResult').textContent = heightText(b);
+}
+/* Typing a length writes the units field and then goes the way typing units always
+   went, so a bin can only ever be given a height through one door. A blank or a zero is
+   mid-edit, not a request. */
+$('hMm').addEventListener('input', () => {
+  const mm = FIELDS.lengthOf($('hMm'), unit);
+  if (!isFinite(mm) || mm <= 0) return;
+  $('hUnits').value = unitsFor(mm, heightSrc());
+  schedule();
+});
+$('hMm').addEventListener('change', () => schedule());
+function applyHMode(m) {
+  hMode = H_MODES.includes(m) ? m : 'units';
+  $('hMode').value = hMode;
+}
+$('hMode').addEventListener('change', () => {
+  applyHMode($('hMode').value);
+  saveHMode(hMode);
+  drawHeight();
+});
 
 /* ---------- the download dialog -------------------------------------------
    Built fresh every time it opens. A column of buttons tells you nothing about what
@@ -9684,6 +9827,8 @@ if (FIELDS.savedUnit() !== unit) {
   for (const id of LENGTH_IDS) $(id).value = $(id).defaultValue;
   applyUnit(FIELDS.savedUnit());
 }
+// and the way the bin's height is typed, which is the same kind of habit
+applyHMode(savedHMode());
 /* Whether two saves hold the same bins, compared setting by setting on what this page
    owns. Compared as strings, the baseplates page handing the drawer back — its keys in
    its own order, with its own extras — was a link that had replaced your layout, on
