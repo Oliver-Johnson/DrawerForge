@@ -348,6 +348,19 @@ try {
         <option value="0.5">Half</option><option value="0.25">Low lip</option>
         <option value="0">Open</option></select></label>
     </div>
+    <!-- Finger slots, a dip in the top of a wall, per wall like the menus above and laid
+         out as they are. What a bin gets, and what makes way for one, is said in Checks:
+         the hint only says what a slot is. -->
+    <div id="fingerRow" role="group" aria-labelledby="fingerLabel" style="display:grid;gap:6px">
+      <b id="fingerLabel" style="font-size:12px;font-weight:500;color:var(--dim)">Finger slot:</b>
+      <div class="row">
+        <label class="tog"><input id="fingerF" type="checkbox" aria-describedby="fingerHint"> Front</label>
+        <label class="tog"><input id="fingerB" type="checkbox" aria-describedby="fingerHint"> Back</label>
+        <label class="tog"><input id="fingerL" type="checkbox" aria-describedby="fingerHint"> Left</label>
+        <label class="tog"><input id="fingerR" type="checkbox" aria-describedby="fingerHint"> Right</label>
+      </div>
+    </div>
+    <div class="hint" id="fingerHint">A U-shaped dip in the top of the wall, one per compartment, for getting a finger in. Like a lowered wall, it removes the stacking lip.</div>
     <!-- Holes in the feet, for bins that have to stay put on a magnet or screw baseplate.
          Per bin, like the scoop. The magnet's size is page-wide, like the divider
          plate's: a drawer takes one kind of magnet. -->
@@ -403,6 +416,7 @@ try {
       </div>
     </div>
     <div class="hint" id="lidNoLip" style="display:none;color:var(--red)">This bin has a lowered wall, so it has no stacking lip for a lid to grip. Set every wall to full height to give it one.</div>
+    <div class="hint" id="lidNoLipSlot" style="display:none;color:var(--red)">This bin has a finger slot, so it has no stacking lip for a lid to grip. Turn its finger slots off to give it one.</div>
     <div class="hint" id="lidCarved" style="display:none;color:var(--red)">A lid is a plain rectangle, so on a carved bin it would hang out over the cells you cut away. It is left off the downloads; lids are made for rectangular bins.</div>
     <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Corner posts stay full height and a lowered wall ramps up to meet them, so the side walls keep their ends — a wall that stopped square against the post snapped off there. The ramp is 8.5 mm at each end whatever the bin&rsquo;s footprint, so a wider bin keeps the same corner and gains a longer flat opening. Lowering any wall removes the stacking lip — nothing can sit on it.</span></div>
     <button class="ghost" id="presetTray" style="margin-top:8px">Make this a flat tray</button>
