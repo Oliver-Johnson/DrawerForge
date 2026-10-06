@@ -402,8 +402,12 @@ footer .mono{font-family:var(--mono);font-size:11px}
 /* Half steps: a dashed line through the middle of every cell, under the bins, faint
    enough that the cells still read as cells. */
 #fillmap .midline{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 4;opacity:.5;pointer-events:none}
-/* The Steps switch above the map, and the reason beside it when a place is refused. */
-.steps{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* The layer tabs and the Steps switch share a row above the map; the switch drops to a
+   row of its own only when the tabs need the room. #stepWhy, under the map, is the
+   reason a place was refused. */
+.maptools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.maptools #layerTabs{flex:1 0 auto}
+.steps{display:flex;align-items:center;gap:8px}
 .steps .seg button{flex:none;padding:7px 12px}
 #stepWhy{color:var(--red)}
 
