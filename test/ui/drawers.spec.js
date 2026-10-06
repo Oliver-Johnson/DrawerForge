@@ -536,6 +536,143 @@ test('Back to an earlier page of your own is not a link', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+/* The same with no drawer saved. Going back is what you asked for, but the later layout
+   is only in this browser's save, and the first change on the earlier page would write
+   over it. So it goes aside, the page says so, and Put back brings it back. On both
+   pages, and in a second tab reloaded on an address the first tab has moved on from. */
+test('Back to an earlier layout with nothing saved sets the later one aside', async ({ page, context }) => {
+  const errors = await openPlates(page);
+  const key = (t, slot = '') => `drawerforge:${t}:v1${slot}`;
+  const read = (p, k) => p.evaluate((k) => localStorage.getItem(k), k);
+  const wentBack = async (p) => {
+    await expect(p.locator('#setAside')).toBeVisible();
+    await expect(p.locator('#setAsideMsg')).toContainText('went back to an earlier layout');
+    await expect(p.locator('#putBack')).toBeVisible();
+  };
+
+  await H.setField(page, 'drawerW', '500');
+  await page.selectOption('#connector', 'snap');
+  await settle(page);
+  await toBins(page);
+  await settle(page);
+  await toPlates(page);
+  await H.setField(page, 'drawerW', '600');
+  await page.selectOption('#connector', 'hclip');
+  await settle(page);
+  const later = await read(page, key('plates'));
+  await page.goBack();
+  await binsReady(page);
+  await expect(page.locator('#setAside'), 'the bins page has not moved on').toBeHidden();
+  await page.goBack();
+  await expect.poll(() => page.inputValue('#connector').catch(() => ''),
+    { message: 'Back shows the earlier layout', timeout: 20000 }).toBe('snap');
+  await platesReady(page);
+  await wentBack(page);
+  expect(await read(page, key('plates', ':prev'))).toBe(later);
+  await Promise.all([page.waitForEvent('load'), page.click('#putBack')]);
+  await platesReady(page);
+  expect(await page.inputValue('#connector'), 'Put back brings the later one back').toBe('hclip');
+  await settle(page);
+  expect(await read(page, key('plates'))).toBe(later);
+
+  // the bins page
+  await toBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  await toPlates(page);
+  await settle(page);
+  await toBins(page);
+  await H.dragCells(page, [3, 0], [4, 1]);
+  await settle(page);
+  expect(await binCount(page)).toBe(2);
+  const laterBins = await read(page, key('bins'));
+  await page.goBack();
+  await platesReady(page);
+  await expect(page.locator('#setAside'), 'the baseplates page has not moved on').toBeHidden();
+  await page.goBack();
+  await expect.poll(() => binCount(page).catch(() => -1),
+    { message: 'Back shows the earlier layout', timeout: 20000 }).toBe(1);
+  await binsReady(page);
+  await wentBack(page);
+  expect(await read(page, key('bins', ':prev'))).toBe(laterBins);
+
+  // a second tab on an older address, reloaded after the first tab moved on
+  await toPlates(page);
+  await settle(page);
+  const other = await context.newPage();
+  other.on('pageerror', (e) => errors.push(String(e)));
+  await other.goto(base);
+  await platesReady(other);
+  await settle(other);
+  await page.selectOption('#connector', 'puzzle');
+  await settle(page);
+  const newer = await read(page, key('plates'));
+  await other.reload();
+  await platesReady(other);
+  await wentBack(other);
+  expect(await read(other, key('plates', ':prev'))).toBe(newer);
+  await other.close();
+  expect(errors).toEqual([]);
+});
+
+/* Put back after someone's link, then Back to the link's page: that is the link replacing
+   your layout again, not a page of your own. It says so, sets your layout aside again,
+   and the link's settings stay the link's. */
+test('Back to a link after Put back is still that link', async ({ page }) => {
+  const errors = await openPlates(page);
+  const key = (t, slot = '') => `drawerforge:${t}:v1${slot}`;
+  const read = (k) => page.evaluate((k) => localStorage.getItem(k), k);
+  const linkAgain = async () => {
+    await expect(page.locator('#setAside')).toBeVisible();
+    await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
+    await expect(page.locator('#putBack')).toBeVisible();
+  };
+
+  await page.selectOption('#connector', 'snap');
+  await settle(page);
+  const mine = await read(key('plates'));
+  await page.goto('about:blank');
+  await openPlates(page, '#w=520&d=410&cn=hclip&v=2');
+  await linkAgain();
+  await settle(page);
+  await Promise.all([page.waitForEvent('load'), page.click('#putBack')]);
+  await platesReady(page);
+  expect(await page.inputValue('#connector')).toBe('snap');
+  await settle(page);
+  await page.goBack();
+  await expect.poll(() => page.inputValue('#connector').catch(() => ''),
+    { message: 'Back shows the link', timeout: 20000 }).toBe('hclip');
+  await platesReady(page);
+  await linkAgain();
+  expect(await read(key('plates', ':prev'))).toBe(mine);
+  expect(await read(key('plates', ':linked')), 'the link is still a link').toContain('cn=hclip');
+
+  // the bins page
+  await page.goto('about:blank');
+  await page.goto(base + 'bins/');
+  await binsReady(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  const mineBins = await read(key('bins'));
+  await page.goto('about:blank');
+  await page.goto(base + 'bins/#w=500&d=400&bl=0-0-2-2-3_3-0-2-2-3&v=2');
+  await binsReady(page);
+  await linkAgain();
+  await settle(page);
+  await Promise.all([page.waitForEvent('load'), page.click('#putBack')]);
+  await binsReady(page);
+  expect(await binCount(page)).toBe(1);
+  await settle(page);
+  await page.goBack();
+  await expect.poll(() => binCount(page).catch(() => -1),
+    { message: 'Back shows the link', timeout: 20000 }).toBe(2);
+  await binsReady(page);
+  await linkAgain();
+  expect(await read(key('bins', ':prev'))).toBe(mineBins);
+  expect(await read(key('bins', ':linked')), 'the link is still a link').toContain('bl=');
+  expect(errors).toEqual([]);
+});
+
 test('export, clear the browser, import: the same design comes back', async ({ page }) => {
   const errors = await openPlates(page);
   await H.setField(page, 'drawerW', '412');

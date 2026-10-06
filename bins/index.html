@@ -4567,15 +4567,20 @@ const DRAWERS = (function () {
        browser loads again rather than keeping. A link pasted or followed makes a new entry,
        which has none. So an address that carries a matching mark is this tab's own page
        coming back, however far the save has moved on since in another tab or a later
-       page; without it, that older address was taken for someone's link. */
+       page; without it, that older address was taken for someone's link. An entry
+       still holding someone's link as it arrived is marked as that link's, and comes
+       back as that link: after Put back, Back to it is the link replacing your layout
+       again, not your own page. */
     function ownMark(h) {
       let st = null;
       try { st = history.state; } catch (err) { st = null; }
       const m = isPlain(st) && isPlain(st.drawerforge) ? st.drawerforge : null;
-      return m && m.tool === o.tool && !!h && m.fp === fingerprint(h) ? m : null;
+      return m && m.tool === o.tool && !!h && m.fp === fingerprint(h) && m.link !== true ? m : null;
     }
-    // the mark for the address the page writes `h` to
-    const stamp = (h) => ({ drawerforge: { tool: o.tool, fp: fingerprint(h), id: attached || '' } });
+    /* The mark for the address the page writes `h` to; `link` when that is someone's
+       link, untouched since it arrived. */
+    const stamp = (h, link) => ({ drawerforge: { tool: o.tool, fp: fingerprint(h), id: attached || '',
+                                                 link: !!link } });
     /* Replaces the page with design `h`. replaceState and a reload rather than a
        navigation: the design being replaced is not a page you went back from, and the
        back button should not offer it. */
@@ -9512,7 +9517,9 @@ function saveNow() {
       if (stalled) writeKey(LINKED_KEY, '');
     }
   }
-  try { history.replaceState(drawers.stamp(h), '', '#' + h); }   // marked as this tab's own
+  /* Marked as this tab's own, or as someone's link's while the page still holds it as
+     it arrived (see ownMark). */
+  try { history.replaceState(drawers.stamp(h, linkedNow && bootDesc !== null), '', '#' + h); }
   catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                    worth an exception that stops the rest of the page working */ }
   saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
@@ -9802,6 +9809,12 @@ let arrivedWith = '';    // the design string this page was opened with
      only here: it is kept in that drawer. So nothing is set aside, and nothing is said.
      A hand-over still carrying someone's link is that link arriving, and says so. */
   const kept = !!handOver && !handOver.link.length && saved.length > 2 && drawers.holds(saved);
+  /* Your own earlier page come back over a later layout that is only here: Back past a
+     change, or a reload in a tab whose address another tab has moved on from. Going back
+     is what you asked for, but the later layout would be gone at the first save, so it
+     goes aside and Put back brings it back. One that a saved drawer holds is still in
+     that drawer, and the page catches up with it instead. */
+  const back = own && saved.length > 2 && !sameDesign(saved, src) && !drawers.holds(saved);
   const linked = readKey(LINKED_KEY);
   linkKept = handedOver ? '' : linked;
   /* Compared on what the record holds: one made without the settings that came with
@@ -9809,16 +9822,18 @@ let arrivedWith = '';    // the design string this page was opened with
      second link set it aside over the layout the first had. */
   const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked,
     [...SHARED_KEYS].filter((k) => !(k in parseHash(linked))));
-  /* Set aside whatever is about to be replaced: by a different layout, or by the defaults
-     standing in for one that would not load. Not a link's own layout, untouched: what that
-     link replaced is already set aside, and it is the one you would want back. */
+  /* Set aside whatever is about to be replaced: by a different layout, by an earlier one
+     of yours, or by the defaults standing in for one that would not load. Not a link's own
+     layout, untouched: what that link replaced is already set aside, and it is the one
+     you would want back. */
   const aside = saved.length > 2 && saved !== pristine && !savedLinked &&
-    ((replaces && !kept) || !!stalled);
+    ((replaces && !kept) || back || !!stalled);
   if (aside) {
     writeKey(PREV_KEY, saved);
     writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
   }
-  const canPutBack = replaces && !kept && (aside || (savedLinked && !!readKey(PREV_KEY)));
+  const canPutBack = (replaces && !kept && (aside || (savedLinked && !!readKey(PREV_KEY)))) ||
+    (back && aside);
   if (stalled) {
     showSetAside('This layout did not finish loading last time, so the page has started ' +
       'from its defaults rather than try it again.', canPutBack, true);
@@ -9826,7 +9841,10 @@ let arrivedWith = '';    // the design string this page was opened with
     writeKey(LOADING_KEY, src);
     loadFromHash(src);
     if (!fromLink) $('restored').style.display = '';
-    else if (canPutBack) showSetAside('This link replaced the layout you had here.', true, false);
+    else if (canPutBack) {
+      showSetAside(back ? 'This page went back to an earlier layout of yours. The later one is set aside.'
+        : 'This link replaced the layout you had here.', true, false);
+    }
     /* A hand-over is your own layout come back from the other page, never someone's
        link, even onto an empty save; and one that moved the drawer or bed on has been
        changed, by you, there. One still holding a link's settings is that link's. */

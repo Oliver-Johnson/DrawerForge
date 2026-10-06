@@ -367,15 +367,20 @@ const DRAWERS = (function () {
        browser loads again rather than keeping. A link pasted or followed makes a new entry,
        which has none. So an address that carries a matching mark is this tab's own page
        coming back, however far the save has moved on since in another tab or a later
-       page; without it, that older address was taken for someone's link. */
+       page; without it, that older address was taken for someone's link. An entry
+       still holding someone's link as it arrived is marked as that link's, and comes
+       back as that link: after Put back, Back to it is the link replacing your layout
+       again, not your own page. */
     function ownMark(h) {
       let st = null;
       try { st = history.state; } catch (err) { st = null; }
       const m = isPlain(st) && isPlain(st.drawerforge) ? st.drawerforge : null;
-      return m && m.tool === o.tool && !!h && m.fp === fingerprint(h) ? m : null;
+      return m && m.tool === o.tool && !!h && m.fp === fingerprint(h) && m.link !== true ? m : null;
     }
-    // the mark for the address the page writes `h` to
-    const stamp = (h) => ({ drawerforge: { tool: o.tool, fp: fingerprint(h), id: attached || '' } });
+    /* The mark for the address the page writes `h` to; `link` when that is someone's
+       link, untouched since it arrived. */
+    const stamp = (h, link) => ({ drawerforge: { tool: o.tool, fp: fingerprint(h), id: attached || '',
+                                                 link: !!link } });
     /* Replaces the page with design `h`. replaceState and a reload rather than a
        navigation: the design being replaced is not a page you went back from, and the
        back button should not offer it. */
