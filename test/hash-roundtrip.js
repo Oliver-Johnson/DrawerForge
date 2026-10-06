@@ -161,20 +161,73 @@ console.log('\nholes in the feet');
   console.log(`  each hole setting survives the trip    ${fails.length ? 'LOST: ' + fails.join('; ') : '8 combinations, intact'}`);
   if (fails.length) bad++;
 
-  // finger slots will set the higher bits; until then they are read past, not misread
+  // the finger slots share the field from 8 up: 9 is magnets and a front slot, not 1 misread
   const slot = unpackBin(packed.split('-').slice(0, 21).concat(['9']).join('-'));
-  const slotOk = slot.magnets === true && slot.screws === false && slot.holesEvery === false;
-  console.log(`  a slot bit is read past, not misread   ${slotOk ? 'intact' : 'WRONG: ' + holes(slot)}`);
+  const slotOk = slot.magnets === true && slot.screws === false && slot.holesEvery === false &&
+    slot.fingerSlots.f === true && !slot.fingerSlots.b && !slot.fingerSlots.l && !slot.fingerSlots.r;
+  console.log(`  9 is magnets and a front finger slot   ${slotOk ? 'intact' : 'WRONG: ' + holes(slot)}`);
   if (!slotOk) bad++;
 
   const junk = ['NaN', '3.5', '-1', '1e9', '128', 'abc', '', 'Infinity', '7e0.5'];
   const misread = junk.filter((j) => {
     const b = unpackBin(packed.split('-').slice(0, 21).concat([j]).join('-'));
-    return b.magnets || b.screws || b.holesEvery;
+    return b.magnets || b.screws || b.holesEvery || Object.values(b.fingerSlots).some(Boolean);
   });
   console.log(`  junk in the field reads as no holes    ` +
-              (misread.length ? 'MISREAD: ' + misread.join(', ') : `${junk.length} values, none read as holes`));
+              (misread.length ? 'MISREAD: ' + misread.join(', ') : `${junk.length} values, none read as holes or slots`));
   if (misread.length) bad++;
+}
+
+/* Finger slots ride in the same 22nd field as the holes in the feet, 8, 16, 32 and 64
+   for the front, back, left and right walls, so the format did not grow. A link from
+   before them has no slots, whether it has 21 fields or more, and packs back to the same
+   text; so does a bin with every slot unticked. */
+console.log('\nfinger slots');
+{
+  const SIDES = ['f', 'b', 'l', 'r'];
+  const slots = (x) => SIDES.filter((k) => x.fingerSlots && x.fingerSlots[k]).join('') || 'none';
+  const olds = [packBin(bin({})), packBin(bin({ magnets: true, screws: true, holesEvery: true })),
+                packBin(bin({ label: 12, labelMode: 1 })), packBin(bin({ insert: 4, label: 12 })),
+                packBin(bin({ fingerSlots: { f: false, b: false, l: false, r: false } }))];
+  const rewritten = olds.filter((p, i) => {
+    const b = unpackBin(p);
+    return slots(b) !== 'none' || packBin(b) !== p || (i === 0 || i === 4) && p.split('-').length !== 21;
+  });
+  console.log(`  a link from before reads as no slots    ${rewritten.length ? 'WRONG: ' + rewritten.join(', ') : 'and packs as it was, byte for byte'}`);
+  if (rewritten.length) bad++;
+
+  // all sixteen sets of walls, on their own and beside every hole setting
+  const fails = [];
+  for (let n = 0; n < 16; n++)
+    for (let h = 0; h < 8; h++) {
+      const want = {};
+      SIDES.forEach((k, i) => { want[k] = !!(n & (1 << i)); });
+      const holesWant = { magnets: !!(h & 1), screws: !!(h & 2), holesEvery: !!(h & 4) };
+      const p = packBin(bin(Object.assign({ fingerSlots: want }, holesWant))), back = unpackBin(p);
+      const f = p.split('-');
+      if ((n || h ? f[21] !== String(n * 8 + h) : f.length !== 21) ||
+          SIDES.some((k) => back.fingerSlots[k] !== want[k]) ||
+          ['magnets', 'screws', 'holesEvery'].some((k) => back[k] !== holesWant[k]) || packBin(back) !== p)
+        fails.push(`${slots({ fingerSlots: want })}+${h} came back ${slots(back)} from ${f[21]}`);
+    }
+  console.log(`  each set of walls survives the trip     ${fails.length ? 'LOST: ' + fails.join('; ') : '16 sets by 8 hole settings, intact'}`);
+  if (fails.length) bad++;
+
+  // beside everything else the later fields carry
+  const all = packBin(bin({ hUnits: 6, label: 12, labelMode: 1, screws: true, insert: 1, insertDepth: 12.5,
+                            fingerSlots: { f: true, b: false, l: true, r: true } }));
+  const ab = unpackBin(all);
+  const allOk = all.split('-').length === 25 && all.split('-')[21] === String(8 + 32 + 64 + 2) &&
+    slots(ab) === 'flr' && ab.screws && !ab.magnets && ab.labelMode === 1 && ab.insert === 1 &&
+    ab.insertDepth === 12.5 && packBin(ab) === all;
+  console.log(`  beside a raised note and holes         ${allOk ? 'intact' : 'LOST: ' + all}`);
+  if (!allOk) bad++;
+
+  // and the field's top is 127, every hole and every slot
+  const top = unpackBin(packBin(bin({})).split('-').slice(0, 21).concat(['127']).join('-'));
+  const topOk = slots(top) === 'fblr' && top.magnets && top.screws && top.holesEvery;
+  console.log(`  127 is every hole and every slot       ${topOk ? 'intact' : 'WRONG: ' + slots(top)}`);
+  if (!topOk) bad++;
 }
 
 /* What the label shelf carries rides in field 23: 0 nothing, 1 the note raised on it,

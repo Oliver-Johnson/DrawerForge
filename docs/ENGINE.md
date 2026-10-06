@@ -274,6 +274,17 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   read 2 to 4 edges used four times. The audit probes every hole's centre down to the
   floor and the block beside the first one, so a block with its holes left solid, or no
   block, fails there however watertight it is.
+- **Finger slots** in the top of a wall are not cut either: they are built the way a
+  lowered wall is (`fingerSlots`). Each slot's profile points go into the shared split
+  lists of the wall's straights, so the outer and inner rings still pair index for index,
+  and the top of the wall is lowered at those points after `edgeHeights` has set it. The
+  profile's sides are 70 degrees, under the 75 the audit holds every wall's top edge to.
+  A slot takes the lip as a lowered wall does. A slot on the back takes the label shelf's
+  place. A slot on the front holds the scoop under its bottom. Holes across the floor are
+  laid out as if there were no slots, and the slots stop over their block, so nothing goes
+  round in a circle. A bin with no slots built gets the same split lists it always had, so
+  it is byte for byte what it was. The audit reads every slot's bottom and sides off the
+  mesh.
 - Every rounded square in a bin shares the corner-arc centre **17.00 mm**
   (`41.5/2 − 3.75`). That constant is what makes clearance uniform around the perimeter
   instead of binding at the corners. See [socket-clearance.md](socket-clearance.md) for

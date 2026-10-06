@@ -95,6 +95,7 @@ const BIN_DEFAULTS = {
   holesEvery: false,    // holes in every cell, rather than the bin's outer corners
   magnetD: 6,           // the magnet the pockets are for: diameter and thickness, mm
   magnetH: 2,
+  fingerSlots: null,    // {f,b,l,r}: a finger slot in the top of that wall, one per compartment
 };
 
 /* Scoop and label shelf.
@@ -240,7 +241,8 @@ function binHeights(cfg) {
   const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c), top = binTop(c);
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
-  const lipH = c.lip && allFull && !c.solid ? lipHeight(c.lipMin) : 0;
+  // nor over a finger slot, which takes the lip as a lowered wall does (fingerSlots)
+  const lipH = c.lip && allFull && !c.solid && !fingerSlotPlan(cfg).n ? lipHeight(c.lipMin) : 0;
   /* `top` is H unless a wall is lowered all round. The inside runs up to the tallest
      wall, which is `top` but for a bin with dividers: they stand it H tall whatever its
      walls do, but they are not what holds a part in it, and measured to them half walls
@@ -1285,9 +1287,15 @@ function spreadHoles(span, b, lo, hi) {
   return Array.from({ length: n }, (_, k) => (n > 1 ? lo + b / 2 + k * step : lo + room / 2));
 }
 /* The label shelf as buildBin builds it, { top, depth, raised }, or null for none: the
-   shelf sits at H, or with the note raised on it lower (noteOnShelf). The holes need it
-   to keep in front of it and under it. */
+   shelf sits at H, or with the note raised on it lower (noteOnShelf). A finger slot in
+   the back wall takes it away (fingerSlots). */
 function shelfFor(c, iw, id, H) {
+  if (c.fingerSlots && c.fingerSlots.b && fingerSlots(c).shelfOff) return null;
+  return shelfAsAsked(c, iw, id, H);
+}
+/* The shelf as it is asked for, finger slots aside. The holes across the floor keep in
+   front of this one and under it, so that a slot never moves them (see fingerSlots). */
+function shelfAsAsked(c, iw, id, H) {
   const eB = c.edges && c.edges.b !== undefined ? c.edges.b : 1;
   if (!(c.label > 0.05 && eB > 0.99)) return null;
   /* Limited by height as well as depth. The shelf's underside runs down at 45 degrees,
@@ -1324,7 +1332,7 @@ function holeLayout(c, iw, id, H) {
   const d = p.size + p.clr + extra;
   if (!isFullRect(c)) return { why: 'carved', p, d };
   if (builtSolid(c)) return { why: 'solid', p, d };
-  const shape = holeShape(p.shape, d), shelf = shelfFor(c, iw, id, H);
+  const shape = holeShape(p.shape, d), shelf = shelfAsAsked(c, iw, id, H);
   const floor = floorTop(c) + BLOAT;
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) => c.edges[k] === undefined || c.edges[k] >= 1);
   const side = c.lip && allFull ? Math.max(S.edge, LIP[0][1] - c.wall + S.lipClear) : S.edge;
@@ -1406,6 +1414,283 @@ function holeTiles(G, c, h, iw, id) {
   return polys;
 }
 
+/* Where the dividers of one direction cross the cavity, as spans of the axis they stand
+   on — a fixed divider is one span, a removable one the two rails either side of its
+   slot — merged wherever two meet. Packed as closely as the divider fields allow,
+   neighbours did meet: at the most dividers that fit, a wall of 4.15 mm put fixed ones
+   exactly side by side and a spacing of 1.2 mm put one rail's face on its neighbour's,
+   and two shells face to face cost 24 to 1616 edges used four times. A span that runs
+   into the next is one prism, so there is no face between them to coincide; at any
+   sensible count nothing meets and nothing changes. The finger slots ask it too, for
+   the compartments between. */
+function dividerSpans(c, n, inner) {
+  const t = c.wall / 2;
+  const slot = c.divT / 2 + c.divClr;            // inner face of each rail: the slot
+  const rail = slot + RAIL_T;                    // outer face of each rail
+  const out = [];
+  for (let k = 1; k <= n; k++) {
+    const p = -inner + (2 * inner) * k / (n + 1);
+    if (c.divRemovable) out.push([p - rail, p - slot], [p + slot, p + rail]);
+    else out.push([p - t, p + t]);
+  }
+  out.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const [lo, hi] of out) {
+    const last = merged[merged.length - 1];
+    if (last && lo <= last[1] + BLOAT) last[1] = Math.max(last[1], hi);
+    else merged.push([lo, hi]);
+  }
+  return merged;
+}
+
+/* ---------- finger slots ----------------------------------------------------
+ * A U-shaped dip in the top of a wall, for getting a finger in. Per wall, front, back,
+ * left and right, and one in each compartment along that wall, centred between its
+ * dividers, so a divider never lands in one.
+ *
+ * Built the way a lowered wall is, and nothing is cut. The wall's two rings take the
+ * slot's points on their straights from one shared list, so they still pair index for
+ * index (wallRing), and the top of the wall is lowered at those points after edgeHeights
+ * has set it. Between two points the top runs straight, so the slot is its profile to the
+ * vertex: 20 mm across the top, sides at 70 degrees, two 4 mm rounded corners at the
+ * bottom, and the bottom at half the wall's own height above the floor.
+ *
+ * The sides are steep enough to hold a finger and short of the 75 degrees the audit holds
+ * every wall's top edge to, which is what keeps a wall from ending in a square notch (see
+ * edgeHeights). Two sides at 70 degrees from a 20 mm top meet, rounded, 19.8 mm down, so
+ * in a wall more than about 40 mm over the floor (7 units and up) the slot stops there
+ * rather than half way. A narrower compartment takes a narrower slot, down to 13 mm
+ * across, kept a millimetre clear of whatever bounds it, so one under 15 mm gets none.
+ *
+ * Like a lowered wall it takes the stacking lip away: a lip over the dip would have
+ * nothing under it there. What else is on the wall gives way to it:
+ *   a lowered wall    the slot dips from that wall's own top, and keeps off the ramps at
+ *                     its ends; an open wall has no top to dip, so it gets none
+ *   the scoop         held under a front slot's bottom, as under a lowered front
+ *   the label shelf   left off with a back slot, and the note raised on it with it; a side
+ *                     slot keeps clear of the shelf's ends, and of the scoop's
+ *   holes in floor    laid out as they would be with no slots (shelfAsAsked), and each
+ *                     slot stops half a millimetre over the block they stand in, so a
+ *                     slot never moves a hole and the block never shows in a slot
+ * A carved shape's walls are panels cell by cell (carvedBody), with no rings to take the
+ * points, so it gets none; nor does a solid block. A half-size bin takes them where they
+ * fit: a side half a cell long has a 13 mm straight, too short for one.
+ */
+const FINGER = {
+  top: 20,          // across the top
+  angle: 70,        // its sides, degrees from horizontal
+  round: 4,         // the radius of its two bottom corners
+  share: 0.5,       // its bottom, as a share of the wall's own height above the floor
+  least: 13,        // the narrowest it is built, across the top
+  keep: 1,          // clear of a divider, a rail, a corner, a ramp, a scoop or a shelf
+  depthMin: 3,      // shallower than this it is not built
+  clear: 0.5,       // over the top of a block of holes across the floor
+  facets: 4,        // segments in each rounded corner
+};
+const FINGER_SIDES = ['f', 'b', 'l', 'r'];
+
+/* One slot's profile along its wall, from left to right as [along, z] in the outer
+   outline's frame: the top corners, each rounded corner bottom up, and the bottom between
+   them. `cx` is its centre along the wall, `a` half its width at the top, `T` the wall's
+   top and `D` how deep it goes, never past where its two rounded corners meet. */
+function fingerProfile(cx, a, T, D) {
+  const th = FINGER.angle * Math.PI / 180, R = FINGER.round, k = FINGER.facets;
+  const Z = T - D;
+  // where the side meets the bottom, and the centre of the corner R above the bottom
+  const corner = Math.max(0, a - D / Math.tan(th) - R * Math.tan(th / 2));
+  const right = [];
+  for (let i = 0; i <= k; i++) {
+    const p = -Math.PI / 2 + th * i / k;
+    right.push([corner + R * Math.cos(p), Z + R + R * Math.sin(p)]);
+  }
+  right.push([a, T]);
+  const left = right.slice().reverse().map(([u, z]) => [-u, z]);
+  // where the two corners meet in the middle, their bottom points are one point
+  const prof = left.concat(corner > 1e-6 ? right : right.slice(1));
+  return { c: cx, a, top: T, bottom: Z, prof: prof.map(([u, z]) => [cx + u, z]) };
+}
+// how high a slot leaves the wall at `x` along it, or Infinity where it is not
+function fingerZ(s, x) {
+  if (!(Math.abs(x - s.c) < s.a)) return Infinity;
+  const p = s.prof;
+  for (let i = 1; i < p.length; i++)
+    if (x <= p[i][0]) {
+      const [x0, z0] = p[i - 1], [x1, z1] = p[i];
+      return x1 - x0 < 1e-12 ? Math.min(z0, z1) : z0 + (z1 - z0) * (x - x0) / (x1 - x0);
+    }
+  return s.top;
+}
+
+/* Where a settled bin gets its finger slots, and what gives way to them. Pure, so the
+ * page asks it too (fingerSlotPlan). Returns
+ *   n         slots built, in all
+ *   built     the walls with any, in f, b, l, r order: 'fb'
+ *   sides     per wall asked for, { why, slots, narrow, held }: why is '' when it has
+ *             slots, else 'carved', 'solid', 'open', 'low' (under depthMin of wall to
+ *             dip), 'holes' (the block of holes leaves too little) or 'narrow' (no
+ *             compartment 15 mm across); narrow counts the compartments too narrow for
+ *             one, and held is 'holes' when the block held the slots above half way
+ *   shelfOff  a back slot is built where a label shelf would have been
+ *   scoop     the scoop a front slot holds it to, for buildBin to build, or null;
+ *   scoopWas  the radius it would have been built at without the slots, and
+ *   scoopNow  the one it is built at, 0 for none
+ *   area      the wall the slots take away, mm2 in the plane of the wall, for the page's
+ *             filament estimate
+ *   splits    the extra points for each straight of the wall rings, in roundRect's
+ *             order (back, left, front, right), as fractions of its length */
+function fingerSlots(c) {
+  const plan = { n: 0, built: '', sides: {}, shelfOff: false, scoop: null, scoopWas: 0, scoopNow: 0,
+                 area: 0, splits: [[], [], [], []] };
+  const asked = FINGER_SIDES.filter((k) => c.fingerSlots && c.fingerSlots[k]);
+  if (!asked.length) return plan;
+  const shape = !isFullRect(c) ? 'carved' : builtSolid(c) ? 'solid' : '';
+  for (const k of asked) plan.sides[k] = { why: shape, slots: [], narrow: 0, held: '' };
+  if (shape) return plan;
+
+  const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
+  const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+  const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+  const iw = hw - c.wall, id = hd - c.wall;
+  // the corner radii roundRect gives the two rings, so where each straight ends
+  const rO = Math.max(0.2, Math.min(SPEC.half - SPEC.centre, Math.min(hw, hd) - 0.01));
+  const rI = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(iw, id) - 0.01));
+  // as edgeHeights reads them
+  const frac = (k) => Math.max(0, Math.min(1, c.edges && c.edges[k] !== undefined ? c.edges[k] : 1));
+  const holes = holeLayout(c, iw, id, H), holesOn = !!holes.n;
+  const th = FINGER.angle * Math.PI / 180;
+  const deepest = (a) => (a - FINGER.round * Math.tan(th / 2)) * Math.tan(th);
+  /* Per wall: the outer straight's half-length, the inner one's, the cavity's half-width
+     along it, the dividers that meet it, the walls at its two ends, and how a point along
+     it is a fraction of its straight, which roundRect runs back and left from + to -. */
+  const SIDE = {
+    f: [hw - rO, iw - rI, iw, c.divX, 'l', 'r', 2, 1],
+    b: [hw - rO, iw - rI, iw, c.divX, 'l', 'r', 0, -1],
+    l: [hd - rO, id - rI, id, c.divY, 'f', 'b', 1, -1],
+    r: [hd - rO, id - rI, id, c.divY, 'f', 'b', 3, 1],
+  };
+  /* One wall, its compartments held to [lo0, hi0] across the cavity: the scoop's and the
+     shelf's ends, for a side wall. Settles plan.sides[k]. */
+  const wall = (k, lo0, hi0) => {
+    const s = plan.sides[k], e = frac(k);
+    if (!s) return;
+    if (!(e > 0)) { s.why = 'open'; return; }
+    const [S, Si, inner, nDiv, kLo, kHi, straight, dir] = SIDE[k];
+    const T = floorZ + e * (H - floorZ);
+    let D = FINGER.share * (T - floorZ);
+    if (D < FINGER.depthMin) { s.why = 'low'; return; }
+    if (holesOn && T - FINGER.clear - holes.top < D) { D = T - FINGER.clear - holes.top; s.held = 'holes'; }
+    if (D < FINGER.depthMin) { s.why = 'holes'; return; }
+    // the ramps where this wall climbs to a taller one (edgeHeights)
+    const ramp = rampLen(2 * S);
+    const lo = -S + (frac(kLo) > e + 1e-9 ? ramp : 0), hi = S - (frac(kHi) > e + 1e-9 ? ramp : 0);
+    /* Between dividers. A removable divider's two rails are one bound: the gap between
+       them is where its plate stands, not a compartment. */
+    const gap = c.divRemovable ? 2 * (c.divT / 2 + c.divClr) + 1e-6 : 0;
+    const bounds = [];
+    for (const [a, b] of dividerSpans(c, holesOn ? 0 : nDiv, inner)) {
+      const last = bounds[bounds.length - 1];
+      if (last && a - last[1] <= gap) last[1] = b;
+      else bounds.push([a, b]);
+    }
+    const room = [];
+    let from = -inner;
+    for (const [a, b] of bounds) { room.push([from, a]); from = b; }
+    room.push([from, inner]);
+    for (const [a0, b0] of room) {
+      /* On the inner ring's straight, then out to the outer one's: both take the same
+         fractions, and with a wall over 3.35 mm the inner straight is the shorter. */
+      const a = Math.max(a0, lo0, -Si), b = Math.min(b0, hi0, Si);
+      const x0 = (Si > 0 ? Math.max(a * S / Si, lo) : 0) + FINGER.keep;
+      const x1 = (Si > 0 ? Math.min(b * S / Si, hi) : 0) - FINGER.keep;
+      if (!(x1 - x0 >= FINGER.least - 1e-9)) { s.narrow++; continue; }
+      /* In the middle of the compartment, or as near it as the corner, a ramp, the scoop
+         or the shelf allow: the end compartments' middles are near the corners. */
+      const half = Math.min(FINGER.top, x1 - x0) / 2;
+      const mid = Si > 0 ? (a0 + b0) / 2 * S / Si : 0;
+      const at = Math.min(x1 - half, Math.max(x0 + half, mid));
+      const slot = fingerProfile(at, half, T, Math.min(D, deepest(half)));
+      s.slots.push(slot);
+      for (let i = 1; i < slot.prof.length; i++) {
+        const [xa, za] = slot.prof[i - 1], [xb, zb] = slot.prof[i];
+        plan.area += (xb - xa) * ((T - za) + (T - zb)) / 2;
+      }
+      for (const [x] of slot.prof) plan.splits[straight].push(dir > 0 ? (x + S) / (2 * S) : (S - x) / (2 * S));
+    }
+    if (!s.slots.length) s.why = 'narrow';
+  };
+
+  wall('f', -Infinity, Infinity);
+  wall('b', -Infinity, Infinity);
+  const front = plan.sides.f && plan.sides.f.slots.length ? plan.sides.f.slots : null;
+  const back = !!(plan.sides.b && plan.sides.b.slots.length);
+  /* The scoop under a front slot's bottom, nine tenths of the way up to it, as it is held
+     under a lowered front wall (buildBin). None is built beside holes across the floor. */
+  const eF = frac('f');
+  let scoop = 0;
+  if (c.scoop > 0.05 && eF > 0 && !holesOn) {
+    plan.scoopWas = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF));
+    scoop = plan.scoopWas;
+    if (front) {
+      const cap = 0.9 * (Math.min(...front.map((s) => s.bottom)) - floorZ);
+      if (cap < c.scoop) { plan.scoop = cap; scoop = Math.min(scoop, cap); }
+    }
+    if (!(scoop > 0.05)) scoop = 0;
+  }
+  plan.scoopNow = scoop;
+  const shelf = shelfAsAsked(c, iw, id, H);
+  plan.shelfOff = back && !!shelf;
+  /* A side slot keeps clear of the scoop's ends where the scoop stands higher than half
+     the wall, and of the shelf's, which stand at its top. Half the wall is as deep as the
+     slot goes; one held shallower by the holes or by its own width has its bottom higher,
+     so this keeps it further off the scoop than it needs to be, never nearer. The scoop
+     is a quarter round, so it stands h over the floor at sqrt(r² - (r - h)²) short of
+     its foot. */
+  for (const k of ['l', 'r']) {
+    if (!plan.sides[k]) continue;
+    const h = FINGER.share * frac(k) * (H - floorZ);
+    const sh = scoop > h ? -id + scoop - Math.sqrt(scoop * scoop - (scoop - h) * (scoop - h)) : -Infinity;
+    wall(k, sh, shelf && !back ? id - shelf.depth : Infinity);
+  }
+  for (const k of asked) {
+    const n = plan.sides[k].slots.length;
+    plan.n += n;
+    if (n) plan.built += k;
+  }
+  // with the existing points, sorted and as straightSplits keeps them apart
+  plan.splits = plan.splits.map((l) => l.filter((t) => t > 1e-6 && t < 1 - 1e-6));
+  return plan;
+}
+/* The rings' split lists with the slots' points added, each straight its own list now:
+   the slots on the front need not be where the ones at the back are. Both rings still
+   take the same lists, so they still pair. A bin without slots keeps the lists it had. */
+function fingerSplits(wsp, plan) {
+  if (!plan.n) return wsp;
+  return wsp.map((l, i) => l.concat(plan.splits[i]).sort((a, b) => a - b)
+    .filter((t, j, a) => j === 0 || t - a[j - 1] > 1e-4));
+}
+/* Lower the top of the wall where a slot dips it: zTop is edgeHeights' answer for each
+   vertex of the outer outline, and the inner ring takes the same height at the same
+   index. Only points on a straight can be in a slot; `r` is the outline's corner radius. */
+function fingerDip(plan, outline, zTop, hw, hd, r) {
+  const E = 1e-6;
+  outline.forEach(([x, y], i) => {
+    let k = '', along = 0;
+    if (Math.abs(x) <= hw - r + E && Math.abs(Math.abs(y) - hd) < E) { k = y < 0 ? 'f' : 'b'; along = x; }
+    else if (Math.abs(y) <= hd - r + E && Math.abs(Math.abs(x) - hw) < E) { k = x < 0 ? 'l' : 'r'; along = y; }
+    const s = k && plan.sides[k];
+    if (s) for (const slot of s.slots) zTop[i] = Math.min(zTop[i], fingerZ(slot, along));
+  });
+  return zTop;
+}
+/* fingerSlots for any bin, worked out without building it, for the page: what it says
+   in Checks, the lip and the heights it quotes, and the wall it weighs. */
+function fingerSlotPlan(cfg) {
+  const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg || {})));
+  c.floorT = builtFloorT(c);
+  if (isHalfSize(c)) c.cells = null;
+  return fingerSlots(c);
+}
+
 /* ---------- the bin ------------------------------------------------------- */
 
 /* The loose divider plate, for a bin built with removable dividers.
@@ -1482,14 +1767,17 @@ function lidSidesFrom(n) {
 }
 
 /* Holes in the feet, packed into one field: 1 magnet pockets, 2 screw holes, 4 in every
-   cell rather than the bin's outer corners. 8, 16, 32 and 64 are spoken for, by finger
-   slots in the front, back, left and right walls, so they stay clear here. A link from
-   before the field has none, which reads as 0 — no holes, the bin it always built — and
-   so does anything that is not a whole number the field could hold. */
-const feetBits = (b) => (b.magnets ? 1 : 0) | (b.screws ? 2 : 0) | (b.holesEvery ? 4 : 0);
+   cell rather than the bin's outer corners; and with them the finger slots, 8, 16, 32
+   and 64 for the front, back, left and right walls (FINGER_SIDES, in order). A link from
+   before the field has none, which reads as 0 — no holes and no slots, the bin it always
+   built — and so does anything that is not a whole number the field could hold. */
+const feetBits = (b) => (b.magnets ? 1 : 0) | (b.screws ? 2 : 0) | (b.holesEvery ? 4 : 0) |
+  FINGER_SIDES.reduce((n, k, i) => n | (b.fingerSlots && b.fingerSlots[k] ? 8 << i : 0), 0);
 function feetFrom(n) {
   const bits = Number.isInteger(n) && n >= 0 && n <= 127 ? n : 0;
-  return { magnets: !!(bits & 1), screws: !!(bits & 2), holesEvery: !!(bits & 4) };
+  const fingerSlots = {};
+  FINGER_SIDES.forEach((k, i) => { fingerSlots[k] = !!(bits & (8 << i)); });
+  return { magnets: !!(bits & 1), screws: !!(bits & 2), holesEvery: !!(bits & 4), fingerSlots };
 }
 
 function lidPart(G, cfg) {
@@ -1567,6 +1855,12 @@ function buildBin(G, cfg) {
   const polys = [];
   const mask = maskOf(c), full = isFullRect(c);
 
+  /* Finger slots, if any, settled before anything reads the walls (fingerSlots). A front
+     one holds the scoop under it, so the scoop asked for is held here; a back one takes
+     the label shelf away, which shelfFor asks for itself. */
+  const fingers = fingerSlots(c);
+  if (fingers.scoop !== null) c.scoop = fingers.scoop;
+
   /* Holes in the feet, if any: which sites, and what each site's column is made of. A
      cell with no site holed is built exactly as it always was. */
   const plan = holePlan(c);
@@ -1624,9 +1918,10 @@ function buildBin(G, cfg) {
 
   /* body */
   /* One split list, both loops. The ramp needs a vertex where it ends, and the two
-     rims only pair index for index if they are cut the same way. */
-  const wsp = wallSplits((c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink,
-                         (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink, SPEC.r);
+     rims only pair index for index if they are cut the same way. So do the finger
+     slots' points. */
+  const wsp = fingerSplits(wallSplits((c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink,
+                                      (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink, SPEC.r), fingers);
   const outer = outlineAt(c.u, c.v, SPEC.half, c.shrink, n, wsp);
   /* The foot reaches full width at 4.75, so that is where the body starts and there
      is no step in the silhouette between them. */
@@ -1636,10 +1931,11 @@ function buildBin(G, cfg) {
 
   /* Whether there is a lip has to be known before the body: a carved bin's wall
      panels carry their own lip, so the decision cannot wait until after. A lip over
-     a lowered edge would have nothing under it and nothing could seat on it. */
+     a lowered edge would have nothing under it and nothing could seat on it, and nor
+     would one over a finger slot. */
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
-  const hasLip = c.lip && allFull && !c.solid;
+  const hasLip = c.lip && allFull && !c.solid && !fingers.n;
   const lipH = hasLip ? lipHeight(c.lipMin) : 0;
   const lipSteps = hasLip ? LIP.concat([[lipH, c.lipMin]]) : null;
 
@@ -1703,6 +1999,7 @@ function buildBin(G, cfg) {
                            bodyBase + 1.4 * BLOAT,
                            floorZ - Math.min(1.0, Math.max(0.2, c.floorT)));
     const zTop = edgeHeights(outer, hw, hd, SPEC.r, c.edges, floorZ, H);
+    if (fingers.n) fingerDip(fingers, outer, zTop, hw, hd, SPEC.half - SPEC.centre);
     polys.push(...wallRing(G, outer, inner, zBase, zTop));
 
     /* scoop and label shelf — added shells, and only where there is a wall to
@@ -1741,33 +2038,7 @@ function buildBin(G, cfg) {
      * near the foot cones (ENGINE.md), and a slot is a subtraction. Two ribs with a gap
      * between them are the same slot made out of added material.
      */
-    const t = c.wall / 2;
-    const slot = c.divT / 2 + c.divClr;            // inner face of each rail: the slot
-    const rail = slot + RAIL_T;                    // outer face of each rail
-    /* Where the dividers of one direction cross the cavity, as spans of the axis they
-       stand on — a fixed divider is one span, a removable one the two rails either side
-       of its slot — merged wherever two meet. Packed as closely as the divider fields
-       allow, neighbours did meet: at the most dividers that fit, a wall of 4.15 mm put
-       fixed ones exactly side by side and a spacing of 1.2 mm put one rail's face on its
-       neighbour's, and two shells face to face cost 24 to 1616 edges used four times. A
-       span that runs into the next is one prism, so there is no face between them to
-       coincide; at any sensible count nothing meets and nothing changes. */
-    const spans = (n, inner) => {
-      const out = [];
-      for (let k = 1; k <= n; k++) {
-        const p = -inner + (2 * inner) * k / (n + 1);
-        if (c.divRemovable) out.push([p - rail, p - slot], [p + slot, p + rail]);
-        else out.push([p - t, p + t]);
-      }
-      out.sort((a, b) => a[0] - b[0]);
-      const merged = [];
-      for (const [lo, hi] of out) {
-        const last = merged[merged.length - 1];
-        if (last && lo <= last[1] + BLOAT) last[1] = Math.max(last[1], hi);
-        else merged.push([lo, hi]);
-      }
-      return merged;
-    };
+    const spans = (n, inner) => dividerSpans(c, n, inner);
     /* Across the cavity for a fixed divider, from wall to wall and BLOAT into each; for a
        removable one, a rail's depth out from each of the two walls the plate slides
        between, again BLOAT into the wall. The far rail used to stop exactly on the wall's
@@ -1810,6 +2081,8 @@ function buildBin(G, cfg) {
     screws: plan && plan.screws ? holeSites(c).length : 0,
     // and what stands in the holes across its floor, one each
     holes: holesBuilt,
+    // the finger slots, in all, and which walls have them
+    fingers: fingers.n, fingerWalls: fingers.built,
   };
   return { polys: G.clampZ(polys, 0), meta };
 }
@@ -1818,7 +2091,7 @@ function buildBin(G, cfg) {
    to say: noteOnShelf's answer, settled the way buildBin settles a bin. When there is no
    shelf for letters to stand on, why says which of the reasons buildBin has for building
    none: 'carved' (a carved shape gets no shelf), 'solid', 'back' (the back wall is
-   lowered) or 'noshelf' (none was asked for). `dropped` is every character of the note
+   lowered), 'slot' (a finger slot in the back wall) or 'noshelf' (none was asked for). `dropped` is every character of the note
    that cannot print, whatever the shelf. */
 function shelfNote(cfg) {
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg || {})));
@@ -1830,6 +2103,8 @@ function shelfNote(cfg) {
   if (!isFullRect(c)) return say({ why: 'carved' });
   if (builtSolid(c)) return say({ why: 'solid' });
   if (c.edges && c.edges.b !== undefined && !(c.edges.b > 0.99)) return say({ why: 'back' });
+  // a finger slot in the back wall takes the shelf's place, whether it was asked for or not
+  if (c.fingerSlots && c.fingerSlots.b && fingerSlots(c).built.includes('b')) return say({ why: 'slot' });
   if (!(c.label > 0.05)) return say({ why: 'noshelf' });
   const plan = holePlan(c), H = c.hUnits * SPEC.unitH;
   const iw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
@@ -1845,7 +2120,8 @@ function shelfNote(cfg) {
  * back with dividers it never had. Separators are now characters that cannot
  * occur in a plain non-negative decimal, and packBin writes every number as one.
  *
- * Field positions are the format. A bin is 21 fields, 22 when its feet have holes, 23
+ * Field positions are the format. A bin is 21 fields, 22 when its feet have holes or
+ * its walls finger slots, 23
  * when its label shelf carries its note, 25 when its floor has holes for what goes in
  * it, and everything after a change
  * shifts, so adding or removing one invalidates every link already in circulation.
@@ -1909,12 +2185,12 @@ function packBin(b) {
                 field rather than four: the sides are only meaningful when there is a
                 lid, and the format is positional so every field costs every link. */
              b.lid ? 1 : 0, lidSideBits(b.lidSides)])
-    /* Holes in the feet, and later the finger slots (see feetBits), only on a bin that
-       has some. Every bin had this field written as a 0, so a link made before it came
+    /* Holes in the feet, and the finger slots (see feetBits), only on a bin that has
+       some. Every bin had this field written as a 0, so a link made before it came
        back one field longer, which rewrote the address, the local save, saved drawers
        and the README link the first time it was opened, and the page then said the
-       link had replaced the layout. A bin without holes is 21 fields, exactly as it
-       was; unpackBin reads the absent 22nd as none. */
+       link had replaced the layout. A bin without holes or slots is 21 fields, exactly
+       as it was; unpackBin reads the absent 22nd as none of either. */
     .concat(feetBits(b) || b.labelMode || insertOf(b) ? [feetBits(b)] : [])
     /* What the label shelf carries, the 23rd field, and for the same reason only on a bin
        that has it set: one without it is the 21 or 22 fields it always was. It needs the
@@ -2035,5 +2311,5 @@ if (typeof module !== 'undefined') {
     isHalfSize, binFeet, feetHolesOff,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers, LINK_MAX, shelfNote, NOTE_CLEAR,
-    INSERTS, INSERT_SPEC, insertPlan };
+    INSERTS, INSERT_SPEC, insertPlan, FINGER, FINGER_SIDES, fingerSlotPlan };
 }

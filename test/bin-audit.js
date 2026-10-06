@@ -8,7 +8,7 @@ const path = require('path');
 const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
-        unpackBin, binFeet, shelfNote, NOTE_CLEAR, insertPlan } = require('../src/bins/bin.js');
+        unpackBin, binFeet, shelfNote, NOTE_CLEAR, insertPlan, fingerSlotPlan } = require('../src/bins/bin.js');
 const NOTE_TEXT = require('../src/bins/text.js');
 const HERSHEY = require('../src/bins/font.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
@@ -280,6 +280,55 @@ const CASES = [
   { name: '1x1x4-aa-smooth8', u: 1, v: 1, hUnits: 4, insert: 1, arcSegs: 8, holes: 4 },
   { name: '1x1x4-aa-smooth24', u: 1, v: 1, hUnits: 4, insert: 1, arcSegs: 24, holes: 4 },
   { name: '6x4x5-hex', u: 6, v: 4, hUnits: 5, insert: 4, holes: 558 },
+  /* Finger slots, a U-shaped dip in the top of a wall, one per compartment. At three
+     heights and the tallest, on each wall, between dividers and rails, beside a scoop, a
+     label shelf and a raised note, at both ends of the wall's range, on half-size bins,
+     over holes in the feet and across the floor, and on a lowered and an open wall.
+     `slots` is how many each wall should get, worked out here from the spec and not read
+     from the engine; the section on finger slots further down measures every one. */
+  { name: '1x1x2-slot-f', u: 1, v: 1, hUnits: 2, fingerSlots: { f: true }, slots: { f: 1 } },
+  { name: '1x1x3-slot-f', u: 1, v: 1, hUnits: 3, fingerSlots: { f: true }, slots: { f: 1 } },
+  { name: '1x1x6-slot-f', u: 1, v: 1, hUnits: 6, fingerSlots: { f: true }, slots: { f: 1 } },
+  // half way down is past where the two sides meet: it stops there
+  { name: '1x1x10-slot-f', u: 1, v: 1, hUnits: 10, fingerSlots: { f: true }, slots: { f: 1 } },
+  { name: '2x1x3-slot-fb', u: 2, v: 1, hUnits: 3, fingerSlots: { f: true, b: true }, slots: { f: 1, b: 1 } },
+  { name: '2x1x3-slot-lr', u: 2, v: 1, hUnits: 3, fingerSlots: { l: true, r: true }, slots: { l: 1, r: 1 } },
+  // the back slot takes the shelf, so nothing keeps the side ones off it
+  { name: '3x2x4-slot-all', u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12,
+    fingerSlots: { f: true, b: true, l: true, r: true }, slots: { f: 3, b: 3, l: 2, r: 2 } },
+  { name: '3x2x4-slot-lr-label', u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12,
+    fingerSlots: { l: true, r: true }, slots: { l: 2, r: 2 } },
+  { name: '3x2x4-slot-b-note', u: 3, v: 2, hUnits: 4, label: 12, labelMode: 1, note: 'M3 screws',
+    fingerSlots: { b: true }, slots: { b: 1 }, noNote: 'slot' },
+  { name: '3x2x5-slot-railed', u: 3, v: 2, hUnits: 5, divX: 2, divY: 1, divRemovable: true,
+    fingerSlots: { f: true, b: true, l: true, r: true }, slots: { f: 3, b: 3, l: 2, r: 2 } },
+  // a 12 mm scoop stands 6 mm over a 3-unit slot's bottom: the slot holds it under
+  { name: '2x1x3-slot-scoop', u: 2, v: 1, hUnits: 3, scoop: 12, fingerSlots: { f: true }, slots: { f: 1 } },
+  { name: '1x1x6-slot-scoop', u: 1, v: 1, hUnits: 6, scoop: 20, label: 12,
+    fingerSlots: { f: true, l: true, r: true }, slots: { f: 1, l: 1, r: 1 } },
+  { name: '2x1x3-slot-wall3', u: 2, v: 1, hUnits: 3, wall: 3, fingerSlots: { f: true, l: true },
+    slots: { f: 1, l: 1 } },
+  { name: '2x1x3-slot-wall0.4', u: 2, v: 1, hUnits: 3, wall: 0.4,
+    fingerSlots: { f: true, b: true, l: true, r: true }, slots: { f: 1, b: 1, l: 1, r: 1 } },
+  // a side half a cell long has a 13 mm straight: too short for one
+  { name: '0.5x1x3-slot-all', u: 0.5, v: 1, hUnits: 3,
+    fingerSlots: { f: true, b: true, l: true, r: true }, slots: { l: 1, r: 1 } },
+  { name: '1.5x1x3-slot-all', u: 1.5, v: 1, hUnits: 3, scoop: 8, label: 10,
+    fingerSlots: { f: true, b: true, l: true, r: true }, slots: { f: 1, b: 1, l: 1, r: 1 } },
+  { name: '2x2x3-slot-mag-scr', u: 2, v: 2, hUnits: 3, ...BOTH, fingerSlots: { f: true, r: true },
+    slots: { f: 1, r: 1 } },
+  // a slot stops half a millimetre over the block the holes are in
+  { name: '2x1x4-slot-hex', u: 2, v: 1, hUnits: 4, insert: 4, holes: 40, fingerSlots: { f: true, l: true },
+    slots: { f: 1, l: 1 } },
+  { name: '2x1x5-slot-aa-label', u: 2, v: 1, hUnits: 5, insert: 1, label: 12, holes: 4,
+    fingerSlots: { f: true, l: true }, slots: { f: 1, l: 1 } },
+  // from the lowered wall's own top, off its ramps
+  { name: '2x1x3-slot-low', u: 2, v: 1, hUnits: 3, edges: { f: 0.5 }, fingerSlots: { f: true, l: true },
+    slots: { f: 1, l: 1 } },
+  { name: '1x1x4-slot-low', u: 1, v: 1, hUnits: 4, edges: { f: 0.5, l: 0.75 },
+    fingerSlots: { f: true, l: true, b: true }, slots: { f: 1, l: 1, b: 1 } },
+  { name: '2x1x3-slot-open', u: 2, v: 1, hUnits: 3, edges: { f: 0 }, fingerSlots: { f: true, l: true },
+    slots: { l: 1 } },
 ];
 
 /* Every carved footprint builds one outer fillet per reflex corner, and every one of
@@ -349,7 +398,8 @@ for (const cs of CASES) {
      Losing the lip silently would make anything carved unstackable. A half-size bin
      is held to the same: it stacks on a half-size bin as a bin sits on a plate. */
   let lipOk = true;
-  if ((cs.cells || halfSize(cs)) && !cs.solid && !cs.edges) {
+  // a finger slot takes the lip, as a lowered wall does: the section on them checks that
+  if ((cs.cells || halfSize(cs)) && !cs.solid && !cs.edges && !cs.slots) {
     const expTotal = cs.hUnits * 7 + 3.95;
     lipOk = r.meta.hasLip === true && Math.abs(r.meta.totalH - expTotal) < 0.001;
     if (!lipOk) console.log(`${''.padEnd(14)}  LIP MISSING: hasLip ${r.meta.hasLip}, ` +
@@ -981,6 +1031,12 @@ console.log('\nwalls across the whole range the page accepts');
       ['1x1x3 holes', Object.assign({ u: 1, v: 1, hUnits: 3 }, BOTH), true],
       ['L-2x2 holes', { u: 2, v: 2, hUnits: 3, cells: cellsExcept(2, 2, [[1, 1]]), magnets: true, screws: true }, true],
       ['2x1x3 label holes', { u: 2, v: 1, hUnits: 3, label: 12, magnets: true, screws: true }, true],
+      // finger slots move points along every straight of both wall rings
+      ['2x1x3 finger slots', { u: 2, v: 1, hUnits: 3, fingerSlots: { f: true, b: true, l: true, r: true } }],
+      ['3x2x4 slots, everything', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12,
+                                    fingerSlots: { f: true, l: true, r: true } }],
+      ['1.5x1x4 slots, rails', { u: 1.5, v: 1, hUnits: 4, divX: 1, divRemovable: true, scoop: 8, label: 12,
+                                 fingerSlots: { f: true, b: true, l: true, r: true } }],
     ];
     const holeWalls = [lo, 0.4, 1.2, 3, 4.9, 5.1, 6.1, 6.3, 8, hi]
       .filter((w, i, a) => w >= lo && w <= hi && a.indexOf(w) === i);
@@ -1049,7 +1105,11 @@ for (const hUnits of [1, 3, 6]) {
                               ['rectangle, holes', { u: 2, v: 1, magnets: true, screws: true }],
                               ['L-2x2, holes', { u: 2, v: 2, cells: L3, magnets: true, screws: true }],
                               ['half-size, scoop + label', { u: 1.5, v: 0.5, scoop: H, label: 42 }],
-                              ['half-size, rails', { u: 0.5, v: 1.5, divY: 1, divRemovable: true }]])
+                              ['half-size, rails', { u: 0.5, v: 1.5, divY: 1, divRemovable: true }],
+                              ['rectangle, finger slots', { u: 2, v: 1, scoop: H, label: 42,
+                                                            fingerSlots: { f: true, b: true, l: true, r: true } }],
+                              ['rectangle, side slots + label', { u: 2, v: 2, scoop: H, label: 12,
+                                                                  fingerSlots: { l: true, r: true } }]])
     sweepReport(`${hUnits}u ${name}`, floors.map((floorT) =>
       [`floor ${floorT.toFixed(2)}`, Object.assign({ hUnits, floorT }, base)]));
 }
@@ -1185,7 +1245,13 @@ console.log('\nnotes raised on the label shelf');
     const r = buildBin(G, cs), at = prober(r.polys), s = shelfNote(cs), faults = [];
     const H = cs.hUnits * SPEC.unitH;
     const id = (cs.v - 1) * SPEC.pitch / 2 + SPEC.half - (cs.wall || BIN_DEFAULTS.wall);
-    if (!s.fit) faults.push(`NO LETTERS (${s.why})`);
+    if (cs.noNote) {
+      /* A finger slot in the back wall takes the shelf's place, and the letters with it:
+         nothing stands at the back but the floor, and the page is told why. */
+      const back = at(0, id - 3).pop();
+      if (s.fit || s.why !== cs.noNote) faults.push(`shelfNote says ${s.fit ? 'letters' : s.why}, not ${cs.noNote}`);
+      if (!(back < H / 2)) faults.push(`something at the back stands ${back.toFixed(2)} high`);
+    } else if (!s.fit) faults.push(`NO LETTERS (${s.why})`);
     else {
       const [x, y] = s.fit.segs[0][0];
       const top = at(x, y).pop(), shelf = at(0, id - s.depth + 0.3).pop();
@@ -1202,7 +1268,8 @@ console.log('\nnotes raised on the label shelf');
     }
     console.log(`  ${cs.name.padEnd(22)} ${s.fit ? (s.fit.cap.toFixed(2) + ' mm, ' + s.fit.lines.length +
       (s.fit.lines.length > 1 ? ' lines' : ' line') + (s.fit.cut ? ', cut' : '')).padEnd(20) : ''.padEnd(20)} ` +
-      (faults.length ? faults.join('; ') : 'letters at H - 0.4 on a shelf at H - 1.0'));
+      (faults.length ? faults.join('; ') : cs.noNote ? `no shelf and no letters: ${cs.noNote}`
+        : 'letters at H - 0.4 on a shelf at H - 1.0'));
     if (faults.length) bad++;
   }
 
@@ -1418,6 +1485,149 @@ console.log('\nholes across the floor');
   console.log(`  ${'links from before'.padEnd(20)} ` + (changed.length ? 'CHANGED: ' + changed.join('; ')
     : `${BEFORE.length} links, each the same STL to the byte`));
   if (changed.length) bad++;
+}
+
+/* Finger slots: a U-shaped dip in the top of a wall, one per compartment.
+ *
+ * Built, not merely closed: a bin whose slots were left out is just as watertight. So the
+ * top of every wall asked for one is read off the mesh, on its outer face, and every dip
+ * in it measured against the spec, written here: 20 mm across the top or the room the
+ * compartment has, never under 13; sides at 70 degrees; two 4 mm rounded corners at the
+ * bottom; the bottom half way down the wall's own height above the floor, or where the
+ * two corners meet if that is higher, or half a millimetre over the block of holes across
+ * the floor if that is higher still. A wall's top edge as a whole is held to the 75
+ * degrees every wall's is (see where a lowered wall meets a full-height one), and the
+ * stacking lip has to be gone, since a lip over a dip has nothing under it.
+ *
+ * Nothing inside may stand in a slot: along each one, just inside the wall, the highest
+ * thing is no higher than the top of the wall there. That is what keeps a slot off the
+ * dividers and rails, the scoop, the label shelf and the block of holes. */
+console.log('\nfinger slots');
+{
+  const F = { top: 20, angle: 70, round: 4, share: 0.5, least: 13, clear: 0.5 };
+  const tan = (d) => Math.tan(d * Math.PI / 180);
+  const deepest = (a) => (a - F.round * tan(F.angle / 2)) * tan(F.angle);
+  for (const cs of CASES.filter((c) => c.slots)) {
+    const r = buildBin(G, cs), at = prober(r.polys), faults = [];
+    const H = cs.hUnits * SPEC.unitH;
+    const wall = Math.max(0.4, cs.wall === undefined ? BIN_DEFAULTS.wall : cs.wall);
+    const floorT = cs.screws ? Math.max(BIN_DEFAULTS.floorT, HOLE.floor) : BIN_DEFAULTS.floorT;
+    const floorZ = SPEC.footH + floorT;
+    const hw = (cs.u - 1) * 21 + 20.75, hd = (cs.v - 1) * 21 + 20.75;
+    let zmax = -Infinity;
+    for (const p of r.polys) for (const w of p.verts) zmax = Math.max(zmax, w[2]);
+    if (r.meta.hasLip || r.meta.lipH || zmax > H + 1e-6) faults.push(`a lip: ${zmax.toFixed(2)} tall`);
+    const want = Object.entries(cs.slots);
+    const n = want.reduce((s, [, k]) => s + k, 0);
+    if (r.meta.fingers !== n) faults.push(`${r.meta.fingers} slots built, ${n} wanted`);
+    let worstSide = 0, narrowest = Infinity, bottoms = [];
+    for (const side of ['f', 'b', 'l', 'r']) {
+      const e = cs.edges && cs.edges[side] !== undefined ? cs.edges[side] : 1;
+      const T = floorZ + e * (H - floorZ);
+      // the top of the wall along its outer face, the highest point at each place along it
+      const across = side === 'f' || side === 'b';
+      const face = side === 'f' ? -hd : side === 'b' ? hd : side === 'l' ? -hw : hw;
+      const tops = new Map();
+      for (const p of r.polys) for (const w of p.verts) {
+        if (Math.abs(w[across ? 1 : 0] - face) > 1e-4 || w[2] < floorZ + 0.5) continue;
+        const k = (across ? w[0] : w[1]).toFixed(4);
+        tops.set(k, Math.max(tops.get(k) ?? -Infinity, w[2]));
+      }
+      const prof = [...tops].map(([k, z]) => [+k, z]).sort((a, b) => a[0] - b[0]);
+      const edgeAt = (x) => {
+        for (let i = 1; i < prof.length; i++)
+          if (x <= prof[i][0]) return prof[i - 1][1] + (prof[i][1] - prof[i - 1][1]) *
+            (x - prof[i - 1][0]) / (prof[i][0] - prof[i - 1][0]);
+        return prof[prof.length - 1][1];
+      };
+      // the whole top edge, ramps and all
+      let steep = 0;
+      for (let i = 1; i < prof.length; i++) {
+        const climb = Math.abs(prof[i][1] - prof[i - 1][1]);
+        if (climb >= 0.2) steep = Math.max(steep, Math.atan2(climb, prof[i][0] - prof[i - 1][0]) * 180 / Math.PI);
+      }
+      if (steep > 75) faults.push(`${side}: a cliff of ${steep.toFixed(1)} degrees`);
+      // each run below the wall's own top is a slot, from the top corner before it to the one after
+      const dips = [];
+      for (let i = 0; i < prof.length; i++) {
+        if (!(prof[i][1] < T - 1e-6)) continue;
+        let j = i;
+        while (j + 1 < prof.length && prof[j + 1][1] < T - 1e-6) j++;
+        if (i === 0 || j + 1 === prof.length) { dips.length = 0; break; }   // no top corner: not a slot
+        dips.push({ x0: prof[i - 1][0], x1: prof[j + 1][0], run: prof.slice(i - 1, j + 2) });
+        i = j;
+      }
+      if (dips.length !== (cs.slots[side] || 0)) {
+        faults.push(`${side}: ${dips.length} slots, ${cs.slots[side] || 0} wanted`);
+        continue;
+      }
+      for (const d of dips) {
+        const w = d.x1 - d.x0, mid = (d.x0 + d.x1) / 2;
+        const bottom = Math.min(...d.run.map(([, z]) => z));
+        let sides = 0;
+        for (let i = 1; i < d.run.length; i++) {
+          const climb = Math.abs(d.run[i][1] - d.run[i - 1][1]);
+          if (climb >= 0.2) sides = Math.max(sides, Math.atan2(climb, d.run[i][0] - d.run[i - 1][0]) * 180 / Math.PI);
+        }
+        // just inside the wall, at the slot's middle and along it
+        const inside = (x) => {
+          const q = across ? [x, side === 'f' ? -hd + wall + 0.3 : hd - wall - 0.3]
+                           : [side === 'l' ? -hw + wall + 0.3 : hw - wall - 0.3, x];
+          const zs = at(q[0], q[1]);
+          return zs.length ? zs[zs.length - 1] : -Infinity;
+        };
+        const block = cs.insert ? inside(mid) + F.clear : -Infinity;
+        const expect = Math.max(T - Math.min(F.share * (T - floorZ), deepest(w / 2)), block);
+        if (w > F.top + 1e-6 || w < F.least - 1e-6) faults.push(`${side}: ${w.toFixed(2)} across`);
+        if (Math.abs(sides - F.angle) > 0.5) faults.push(`${side}: sides at ${sides.toFixed(1)} degrees`);
+        if (Math.abs(bottom - expect) > 1e-3)
+          faults.push(`${side}: bottom at ${bottom.toFixed(3)}, not ${expect.toFixed(3)}`);
+        for (let x = d.x0 + 0.5; x <= d.x1 - 0.5; x += 0.5) {
+          const z = inside(x), edge = edgeAt(x) - (cs.insert ? F.clear : 0);
+          if (z > edge + 1e-3) { faults.push(`${side}: at ${x.toFixed(1)} something inside stands ${(z - edge).toFixed(2)} into the slot`); break; }
+        }
+        // with nothing to keep it off-centre, in the middle of the wall
+        if (!cs.divX && !cs.divY && !cs.label && !cs.scoop && !cs.edges && Math.abs(mid) > 1e-3)
+          faults.push(`${side}: ${mid.toFixed(2)} off the middle`);
+        worstSide = Math.max(worstSide, sides);
+        narrowest = Math.min(narrowest, w);
+        bottoms.push(bottom);
+      }
+    }
+    console.log(`  ${cs.name.padEnd(22)} ` + (faults.length ? 'WRONG: ' + faults.slice(0, 4).join('; ')
+      : `${String(n).padStart(2)} ${n > 1 ? 'slots' : 'slot '} ${narrowest.toFixed(2)}+ across, sides ` +
+        `${worstSide.toFixed(1)}°, bottom ${Math.min(...bottoms).toFixed(2)}${bottoms.some((b) => b !== bottoms[0]) ? ' to ' + Math.max(...bottoms).toFixed(2) : ''}, no lip`));
+    if (faults.length) bad++;
+  }
+
+  /* Opt-in, and only where one can be built: every other bin is built to the byte as it
+     was, whatever its slot settings say. Each row is a bin that has to come out the same
+     as without them, and the reason fingerSlotPlan gives the page for building none. */
+  const stl = (cfg) => Buffer.from(G.stlBinary(buildBin(G, cfg).polys, 'b')).toString('base64');
+  const one = { u: 1, v: 1, hUnits: 3 }, front = { fingerSlots: { f: true } };
+  const SAME = [
+    ['none asked for', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12 },
+     { fingerSlots: { f: false, b: false, l: false, r: false } }, null],
+    ['a 1-unit bin, too shallow', Object.assign({}, one, { hUnits: 1 }), front, 'low'],
+    ['a quarter-height front', Object.assign({}, one, { edges: { f: 0.25 } }), front, 'low'],
+    ['an open front', Object.assign({}, one, { edges: { f: 0 } }), front, 'open'],
+    ['four compartments in a 1x1', Object.assign({}, one, { divX: 3 }), front, 'narrow'],
+    ['half a cell square', { u: 0.5, v: 0.5, hUnits: 3 }, { fingerSlots: { f: true, b: true, l: true, r: true } }, 'narrow'],
+    ['carved', { u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) }, front, 'carved'],
+    ['solid', Object.assign({}, one, { solid: true }), front, 'solid'],
+    ['AA cells in a 1x1x3', Object.assign({}, one, { insert: 1 }), front, 'holes'],
+  ];
+  const moved = SAME.map(([name, cfg, extra, why]) => {
+    const withIt = Object.assign({}, cfg, extra), plan = fingerSlotPlan(withIt);
+    if (stl(cfg) !== stl(withIt)) return `${name}: BUILT DIFFERENTLY`;
+    if (buildBin(G, withIt).meta.fingers || plan.n) return `${name}: counts slots`;
+    const got = Object.values(plan.sides).map((s) => s.why);
+    return why === null ? (got.length ? `${name}: says ${got}` : '')
+      : got.length && got.every((g) => g === why) ? '' : `${name}: fingerSlotPlan says ${got}, not ${why}`;
+  }).filter(Boolean);
+  console.log(`  ${'bins with no slots'.padEnd(22)} ` + (moved.length ? 'FAILED: ' + moved.join('; ')
+    : `${SAME.length} kinds, each the same STL to the byte, and the page told why`));
+  if (moved.length) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');
