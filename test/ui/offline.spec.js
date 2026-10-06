@@ -209,8 +209,11 @@ test('a new deploy replaces the old cache rather than adding to it', async ({ pa
 
 /* The host lets the browser keep anything for ten minutes, so a new worker must not fill
    its cache from the browser's copies, which can be the deploy before. But a file the
-   server says has not changed need not be sent again, and most of what the worker caches
-   does not change from one deploy to the next. */
+   server says has not changed need not be sent again. On GitHub Pages a deploy changes
+   every file's ETag, so that is only ever a file asked for twice within one deploy: the
+   page the worker installs from and what it loaded, or a failed install tried again. The
+   server here hashes the file for its ETag, so the files this deploy leaves alone stand
+   in for those. */
 test('an install caches each file as the server has it now, without sending again what has not changed',
   async ({ page }) => {
     site.maxAge = 600;                  // as GitHub Pages

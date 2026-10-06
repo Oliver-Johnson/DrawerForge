@@ -44,7 +44,7 @@
    load from this site, and the app's icons and manifest, as paths from the root. VERSION
    is a hash of all of those files, names and bytes, and of this script as it is served,
    FILES filled in and everything else but VERSION itself. */
-const VERSION = "c23c4f3e989e";
+const VERSION = "f09e58d973e9";
 const FILES = [
   "./",
   "bins/",
@@ -93,8 +93,12 @@ self.addEventListener('install', (e) => {
        worker installed just after a deploy could fill its new cache with the previous
        deploy's files. Asking, rather than fetching everything again ('reload'), is just
        as fresh, and a file the server says has not changed comes back as a 304 and is
-       taken from the browser's copy — most of the 1.9 MB, in a deploy that changed one
-       page. */
+       taken from the browser's copy. That saves less than it might: GitHub Pages' ETag is
+       the deploy's time and the file's size, not the file's content, so a deploy changes
+       every file's ETag, changed or not, and every copy from before it is sent again. What
+       the 304s save is a second download within one deploy: the page that registered the
+       worker and the scripts it has just loaded, and what an install that failed had
+       already fetched, when it is tried again. */
     fetch(new Request(u, { cache: 'no-cache' })).then((r) => {
       if (!r.ok) throw new Error(u + ' answered ' + r.status);
       return plain(r).then((p) => cache.put(u, p));

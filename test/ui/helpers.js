@@ -143,6 +143,10 @@ const setField = async (page, id, value) => {
      maxAge  seconds; set it and every answer says the browser may keep it that long and
              carries an ETag, and a request that sends the ETag back is answered 304 with
              no body — what GitHub Pages does, with 600. Unset, nothing is cacheable.
+             The ETag here is a hash of what is sent, so a file a test leaves alone
+             keeps its ETag across a stand-in deploy. GitHub Pages' is the deploy's time
+             and the file's size, which every deploy changes, so there a 304 only ever
+             answers a file asked for twice within one deploy.
      log     every request answered, as { path, ifNoneMatch, status }
 
    The manifest's type is the one GitHub Pages sends for .webmanifest. */
