@@ -407,7 +407,8 @@ console.log('\nhalf-size bins stand on quarter feet, against the spec:');
       if (first(x, y) < SPEC.footH - 0.1)
         faults.push(`a foot reaches over the line between quarters at ${x},${y} from ${first(x, y).toFixed(2)}`);
     console.log(`  ${cs.name.padEnd(22)} ` + (faults.length ? 'WRONG: ' + faults.slice(0, 4).join('; ')
-      : `${xs.length * ys.length} quarter feet, open between, within ${worstFlat.toFixed(3)} on the flats ` +
+      : `${xs.length * ys.length} quarter ${xs.length * ys.length === 1 ? 'foot' : 'feet, open between,'} ` +
+        `within ${worstFlat.toFixed(3)} on the flats ` +
         `and ${worstRad.toFixed(3)} at the corners`));
     if (faults.length) bad++;
   }
