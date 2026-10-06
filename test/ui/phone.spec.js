@@ -208,6 +208,68 @@ test.describe('bins', () => {
       expect((await sheet(page)).cls).toBe(false);
     });
 
+  /* The sheet covers the foot of the screen, and the browser scrolls whatever Tab lands on
+     only far enough to be inside the window, which is under the sheet. Measured in the
+     October 2026 review: with it up, every one of the 25 stops after it (Checks, the layer
+     tabs, Fill and Clear, the downloads, the footer, the tip jar) was focused out of
+     sight. So each stop from the sheet's last control to the end of the page is checked
+     for being seen: clear of the sheet's box, and the thing actually at its centre. With
+     the sheet up and with it folded down to its bar, which covers less. */
+  for (const folded of [false, true]) {
+    test(`Tab past the ${folded ? 'folded ' : ''}sheet never lands on something it covers`,
+      async ({ page }) => {
+        await fingerDrag(page, [1, 1], [2, 2]);
+        expect((await sheet(page)).cls).toBe(true);
+        if (folded) {
+          await page.locator('#s-bin>h2>button').tap();
+          await expect(page.locator('#s-bin')).toHaveClass(/closed/);
+        }
+        /* The tip jar comes up on the first scroll, a layer under the sheet in the same
+           corner, so it is made to come up: it was one of the stops Tab hid. It waits while
+           the sheet is up, and is back once the sheet goes (at the end). */
+        await page.evaluate(() => { scrollBy(0, 1); scrollBy(0, -1); });
+        await expect(page.locator('#kofi')).not.toHaveAttribute('hidden', '');
+        await expect(page.locator('#kofi')).toBeHidden();
+        await page.evaluate(() => {
+          const all = [...document.querySelectorAll('#s-bin :is(a[href],button,input,select)')]
+            .filter((e) => e.getClientRects().length);
+          all[all.length - 1].focus();
+        });
+        const stops = [];
+        for (let i = 0; i < 80; i++) {
+          await page.keyboard.press('Tab');
+          const m = await page.evaluate(() => {
+            const a = document.activeElement;
+            if (!a || a === document.body || a.closest('header')) return null;
+            const s = document.getElementById('s-bin');
+            const r = a.getBoundingClientRect(), q = s.getBoundingClientRect();
+            /* the middle of each of its boxes, not of the box round them all: a link that
+               wraps onto a second line has its overall middle on the words beside it */
+            const seen = [...a.getClientRects()].every((b) => {
+              const at = document.elementFromPoint(
+                Math.min(Math.max(b.left + b.width / 2, 0), innerWidth - 1),
+                Math.min(Math.max(b.top + b.height / 2, 0), innerHeight - 1));
+              return !!at && (at === a || a.contains(at));
+            });
+            return { name: a.id || a.getAttribute('aria-label') || a.textContent.trim().slice(0, 24),
+                     inSheet: s.contains(a), sheet: getComputedStyle(s).position === 'fixed',
+                     clear: r.bottom <= q.top || r.top >= q.bottom,
+                     onScreen: r.top >= 0 && r.bottom <= innerHeight, seen };
+          });
+          if (!m) break;            // off the end of the page, or round to the top
+          stops.push(m);
+        }
+        const after = stops.filter((m) => !m.inSheet);
+        expect(after.length, 'fixture: Tab went on past the sheet').toBeGreaterThan(15);
+        expect(after.every((m) => m.sheet), 'and the sheet stayed up the whole way').toBe(true);
+        const hidden = after.filter((m) => !(m.clear && m.onScreen && m.seen)).map((m) => m.name);
+        expect(hidden, 'every stop after the sheet is in sight').toEqual([]);
+
+        await page.locator('#binSheetClose').evaluate((x) => x.click());
+        await expect(page.locator('#kofi'), 'the tip jar is back with the sheet gone').toBeVisible();
+      });
+  }
+
   test('single-bin mode takes the panel back from the sheet, and leaving it gives it back',
     async ({ page }) => {
       await fingerDrag(page, [1, 1], [2, 2]);
