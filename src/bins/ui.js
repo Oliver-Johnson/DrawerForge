@@ -185,9 +185,12 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
       has a wall across it and the other has rails and a loose plate. Without this they
       would share a type, and therefore one STL, and you would print the wrong one. */
    (b.divX || b.divY ? `-d${b.divX}.${b.divY}${b.divRemovable ? `r${state.divT}.${state.divClr}` : ''}` : '') +
-   (allFullEdges(b) ? '' : `-e${edgeSig(b)}`)) +
-  (b.scoop ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '') +
-  (b.cells ? `-c${maskBits(b)}` : '') +
+   (allFullEdges(b) ? '' : `-e${edgeSig(b)}`) +
+   /* A solid block has no cavity for a scoop or a shelf (buildBin builds neither), so
+      a solid with one is the same part as a solid without. */
+   (b.scoop ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '')) +
+  // a mask covering every cell (a hand-written link can say so) is no shape at all
+  (maskBits(b) ? `-c${maskBits(b)}` : '') +
   /* A holed bin is a different part from the plain one, and from one holed for another
      magnet: the magnet's size is the page's, so it goes in from state, as the rails'
      sizes do above. */
@@ -2193,15 +2196,22 @@ const binHasLip = (b) => !b.solid &&
    bins are not offered one, and the panel says why. */
 const lidFits = (b) => binHasLip(b) && !isCarved(b);
 const L_LID = (b) => lidPart(G, Object.assign({}, binCfg(b), { lidSides: b.lidSides }));
+/* Bin by bin, not type by type. A lid is not part of typeKey (the bin prints the same
+   with or without one), and reading it off a type's first bin and counting the whole
+   type left a lidded bin drawn after a plain one with no lid in any download, gave two
+   lids for one drawn the other way round, and made two lids with different sides one
+   kind, twice. Each lid is built once per type and set of sides. */
 function lidParts() {
-  const m = new Map();
-  for (const t of types()) {
-    if (!t.b.lid || !lidFits(t.b)) continue;
-    const L = L_LID(t.b);
-    const key = `${t.b.u}x${t.b.v}:${L.meta.sides.join('')}`;
+  const m = new Map(), built = new Map();
+  for (const t of types()) for (const b of t.bins) {
+    if (!b.lid || !lidFits(b)) continue;
+    const bk = `${t.key}:${lidSideBits(b.lidSides)}`;
+    if (!built.has(bk)) built.set(bk, L_LID(b));
+    const L = built.get(bk);
+    const key = `${b.u}x${b.v}:${L.meta.sides.join('')}`;
     // measured off the mesh this build already made, once per kind of lid
-    if (!m.has(key)) m.set(key, { key, b: t.b, meta: L.meta, vol: meshVolume(L.polys), qty: 0 });
-    m.get(key).qty += t.qty;
+    if (!m.has(key)) m.set(key, { key, b, meta: L.meta, vol: meshVolume(L.polys), qty: 0 });
+    m.get(key).qty++;
   }
   return [...m.values()].sort((a, b) => b.qty - a.qty);
 }
@@ -2237,9 +2247,10 @@ function types() {
        STL, and filtering it out there answers with an empty table and no download. */
     if (b.done && !focused) continue;
     const k = typeKey(b);
-    if (!m.has(k)) m.set(k, { key: k, b, qty: 0, notes: [] });
+    if (!m.has(k)) m.set(k, { key: k, b, qty: 0, notes: [], bins: [] });
     const t = m.get(k);
     t.qty++;
+    t.bins.push(b);   // for what is not part of the type: its lid (lidParts)
     /* What you wrote in the bin travels with its type, because "1x1x3 x 2" is the one
        thing a row of the download table cannot tell you: which of the four identical
        shapes on the plate is the one for drill bits. Notes are NOT part of typeKey — two
@@ -3039,23 +3050,31 @@ function typeName(t) {
 /* typeName leaves out the walls and floor, lowered walls, a carved shape, the scoop and
    the label shelf, so two kinds of bin could share a name: a scooped 1x1x3 and a plain
    one were both "bin-1x1x3-qty1.stl". The ZIP keeps the last file of a name, so one of
-   them was simply not in it. A name two kinds share is now told apart by what differs
-   between them, "bin-1x1x3-scoop8-qty1.stl" beside "bin-1x1x3-qty1.stl", and a number
-   when that is not enough (two different walls lowered). A name nothing shares stays
-   exactly as it was. */
+   them was simply not in it. Kinds whose names differ only in their count, or not at
+   all, are told apart by what differs between them: "bin-1x1x3-scoop8-qty2.stl" beside
+   "bin-1x1x3-qty1.stl". Each tag is the thing itself, so a name does not change with
+   the order bins were drawn in, and a default wall or floor is not named, so adding a
+   thicker one leaves the others' names alone. A number is the last resort, for two
+   kinds no tag tells apart. A name nothing shares stays exactly as it was. */
+const edgeOf = (b, k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1);
 const VARIANT_TAGS = [
-  (b) => (b.solid ? '' : `wall${b.wall}`),
-  (b) => (b.solid ? '' : `floor${builtFloorT(b)}`),
-  (b) => (b.solid || allFullEdges(b) ? '' : 'low-walls'),
-  (b) => (b.cells ? 'shaped' : ''),
-  (b) => (b.scoop ? `scoop${b.scoop}` : ''),
-  (b) => (b.label ? `label${b.label}` : ''),
+  (b) => (b.solid || b.wall === BIN_DEFAULTS.wall ? '' : `wall${b.wall}`),
+  (b) => (b.solid || builtFloorT(b) === builtFloorT(Object.assign({}, b, { floorT: BIN_DEFAULTS.floorT }))
+    ? '' : `floor${builtFloorT(b)}`),
+  // which walls, and how far: "low-f50" is the front at half height
+  (b) => (b.solid || allFullEdges(b) ? ''
+    : 'low-' + EDGES.filter((k) => edgeOf(b, k) < 1).map((k) => k + Math.round(edgeOf(b, k) * 100)).join('-')),
+  // the cells it keeps, as hex: the same shape is the same name wherever it is drawn
+  (b) => (maskBits(b) ? `shaped-${BigInt('0b' + maskBits(b)).toString(16)}` : ''),
+  (b) => (!b.solid && b.scoop ? `scoop${b.scoop}` : ''),
+  (b) => (!b.solid && b.label ? `label${b.label}` : ''),
   (b) => (!b.solid && b.divRemovable && (b.divX || b.divY) ? 'loose-dividers' : ''),
 ];
 function typeNames() {
   const groups = new Map();
+  const stemOf = (t) => { const n = typeName(t); return n.slice(0, n.lastIndexOf('-qty')); };
   for (const t of types()) {
-    const n = typeName(t);
+    const n = stemOf(t);
     if (!groups.has(n)) groups.set(n, []);
     groups.get(n).push(t);
   }
@@ -3064,7 +3083,7 @@ function typeNames() {
     const differ = group.length < 2 ? []
       : VARIANT_TAGS.filter((tag) => new Set(group.map((t) => tag(t.b))).size > 1);
     for (const t of group) {
-      const stem = n.slice(0, n.lastIndexOf('-qty')) +
+      const stem = n +
         differ.map((tag) => tag(t.b)).filter(Boolean).map((s) => '-' + s).join('');
       let name = `${stem}-qty${t.qty}`;
       for (let i = 2; used.has(name); i++) name = `${stem}-${i}-qty${t.qty}`;

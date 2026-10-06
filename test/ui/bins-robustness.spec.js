@@ -499,9 +499,6 @@ test('the bin ZIP, the plate ZIP and every 3MF are deflated, and unzip to the sa
     expect(errors).toEqual([]);
   });
 
-/* A bin too big for the bed is said, and leaves out only itself. The bins that fitted
-   were packed onto its plate, which no file carries, so they were in no download and
-   the plan said "0 bins packed". */
 /* A scooped 1x1x3 and a plain one were both "bin-1x1x3-qty1.stl": the file name leaves
    out the scoop, the label shelf and lowered walls. A ZIP keeps the last file of a name,
    so one of the two bins was not in it, and nothing said so. */
@@ -523,8 +520,8 @@ test('bins the file name used to call alike each get their own file in the ZIP',
     const files = (await JSZip.loadAsync(zip.buf)).files;
     expect(Object.keys(files).filter((n) => n.endsWith('.stl')).sort()).toEqual([
       'bin-1x1x3-label12-qty1.stl',
-      'bin-1x1x3-low-walls-2-qty1.stl',
-      'bin-1x1x3-low-walls-qty1.stl',
+      'bin-1x1x3-low-b50-qty1.stl',
+      'bin-1x1x3-low-f50-qty1.stl',
       'bin-1x1x3-qty1.stl',            // the plain one keeps the name it always had
       'bin-1x1x3-scoop8-qty1.stl',
       'bin-2x1x3-qty1.stl',
@@ -541,6 +538,62 @@ test('bins the file name used to call alike each get their own file in the ZIP',
     expect(errors).toEqual([]);
   });
 
+/* What tells two kinds of bin apart in their names is what they ARE, not the order
+   they were drawn in or what else is in the drawer: a default wall or floor is not
+   named, a lowered wall says which, a shape says which, and a solid block is not
+   named for a scoop or a shelf it has nowhere to put. A plain bin beside a scooped one
+   is told apart even when their counts already differ. */
+test('a bin\'s file name says how it differs, the same whatever order or company it keeps',
+  async ({ page }) => {
+    const names = async (bins) => {
+      await openAt(page, 'bl=' + bins.join('_'));
+      return page.evaluate(() => Object.fromEntries(types().map((t) => [t.key, typeNames().get(t.key)])));
+    };
+    const bin = (x, y, rest) => `${x}-${y}-1-1-3-${rest}`;
+    // a default wall stays unnamed beside a thicker one
+    expect(Object.values(await names([bin(0, 0, '1.2-1.2'), bin(1, 0, '1.6-1.2')])).sort())
+      .toEqual(['bin-1x1x3-qty1', 'bin-1x1x3-wall1.6-qty1']);
+    // two different walls lowered keep their names when the bins swap places
+    const f = bin(0, 0, '1.2-1.2-0-0-0-0.5-1-1-1'), b = bin(1, 0, '1.2-1.2-0-0-0-1-0.5-1-1');
+    const one = await names([f, b]), two = await names([b.replace(/^1-0/, '0-0'), f.replace(/^0-0/, '1-0')]);
+    expect(two).toEqual(one);
+    expect(Object.values(one).sort()).toEqual(['bin-1x1x3-low-b50-qty1', 'bin-1x1x3-low-f50-qty1']);
+    // a solid block with a scoop and one without are one part, so one file
+    const solid = await names([bin(0, 0, '1.2-1.2-0-0-1-1-1-1-1-8'), bin(1, 0, '1.2-1.2-0-0-1')]);
+    expect(Object.values(solid)).toEqual(['bin-1x1x3-solid-qty2']);
+    // counts that differ do not hide the difference
+    const q = await names([bin(0, 0, '1.2-1.2'), bin(1, 0, '1.2-1.2-0-0-0-1-1-1-1-8'),
+                           bin(2, 0, '1.2-1.2-0-0-0-1-1-1-1-8')]);
+    expect(Object.values(q).sort()).toEqual(['bin-1x1x3-qty1', 'bin-1x1x3-scoop8-qty2']);
+  });
+
+/* A lid is not part of a bin's type (the bin prints the same with or without one), and
+   the lids were counted per type: from the type's first bin, times the whole type. A
+   plain 1x1x3 drawn before a lidded one left the lid out of every download; drawn after
+   it, two lids for one; two lids with different sides came out as one kind, twice. */
+test('every lidded bin gets its own lid, whatever the bins beside it', async ({ page }) => {
+  const plain = '0-0-1-1-3', lid = (x, sides) => `${x}-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-1-${sides}`;
+  const lids = async (bins) => {
+    await openAt(page, 'bl=' + bins.join('_'));
+    return page.evaluate(() => lidParts().map((d) => [lidName(d), d.qty]));
+  };
+  expect(await lids([plain, lid(1, 15)])).toEqual([['lid-1x1-lrfb', 1]]);
+  expect(await lids([lid(0, 15), plain.replace(/^0-0/, '1-0')])).toEqual([['lid-1x1-lrfb', 1]]);
+  const two = await lids([lid(0, 15), lid(1, 3)]);
+  expect(two).toHaveLength(2);
+  expect(two.every(([, n]) => n === 1)).toBe(true);
+  // and the ZIP carries it
+  const errors = await openAt(page, 'bl=' + [plain, lid(1, 15)].join('_'));
+  await page.locator('#openExport').click();
+  const zip = await download(page, '#exFiles [data-ex="zip"]');
+  expect(Object.keys((await JSZip.loadAsync(zip.buf)).files).filter((n) => n.startsWith('lid-')))
+    .toEqual(['lid-1x1-lrfb.stl']);
+  expect(errors).toEqual([]);
+});
+
+/* A bin too big for the bed is said, and leaves out only itself. The bins that fitted
+   were packed onto its plate, which no file carries, so they were in no download and
+   the plan said "0 bins packed". */
 test('a bin too big for the bed takes none of the others with it', async ({ page }) => {
   const errors = await openAt(page, 'bw=180&bd=180&bl=0-0-5-1-3_0-1-1-1-3_1-1-1-1-3_2-1-1-1-3');
   await expect(page.locator('#plateSummary')).toContainText('3 bins packed');
