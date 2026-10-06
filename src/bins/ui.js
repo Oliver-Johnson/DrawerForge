@@ -2095,17 +2095,44 @@ function splitParts(at, n, k) {
   parts[0] += head; parts[k - 1] += tail;
   return parts;
 }
+/* That holds for each axis on its own, and is not enough for a piece. One piece across a
+   span with a half cell at BOTH ends keeps the two halves, and is a whole number of cells
+   standing on a half step: a 3 wide from column 1.5 is 0.5 + 2 + 0.5, all one piece. Cut
+   into rows, a 3 x 7.5 there gave a whole 3 x 4 at column 1.5, which Checks never
+   questioned and a reload put on whole cells, on top of the bin beside it. It is the one
+   case: a span cut in two or more gives its head to the first piece and its tail to the
+   last, and every piece between starts on a whole cell. So where it leaves a whole-size
+   piece, that span is cut in two instead, a half cell to each side (1.5 + 1.5), which
+   makes every piece half-size whatever the other axis does. The pieces only get smaller,
+   so the plan still fits the bed. Where every piece the other way is half-size anyway (a
+   3 x 2.5 at column 1.5 is fine there) the span stays one piece. */
+const wholeOnHalf = (x, y, u, v) => !isHalfSize({ u, v }) && !(onWhole(x) && onWhole(y));
+function piecesStand(x0, xs, y0, ys) {
+  for (let j = 0, y = y0; j < ys.length; y += ys[j++])
+    for (let i = 0, x = x0; i < xs.length; x += xs[i++])
+      if (wholeOnHalf(x, y, xs[i], ys[j])) return false;
+  return true;
+}
+const halvesAtBothEnds = (at, n, parts) => parts.length === 1 && !onWhole(at) && onWhole(n);
 // fewest pieces that each fit; ties broken towards squarer pieces
 function splitPlan(b) {
   let best = null;
   for (let nx = 1; nx <= Math.ceil(b.u); nx++)
     for (let ny = 1; ny <= Math.ceil(b.v); ny++) {
-      const xs = splitParts(b.x, b.u, nx), ys = splitParts(b.y, b.v, ny);
+      let xs = splitParts(b.x, b.u, nx), ys = splitParts(b.y, b.v, ny);
       if (!(Math.min(...xs) > 0 && Math.min(...ys) > 0)) continue;
+      if (!piecesStand(b.x, xs, b.y, ys)) {
+        if (halvesAtBothEnds(b.x, b.u, xs)) xs = splitParts(b.x, b.u, 2);
+        else if (halvesAtBothEnds(b.y, b.v, ys)) ys = splitParts(b.y, b.v, 2);
+        // never reached by the rule above, and refused all the same: no plan offered here
+        // may be one a reload would have to move
+        if (!piecesStand(b.x, xs, b.y, ys)) continue;
+      }
       const pu = Math.max(...xs), pv = Math.max(...ys);
       if (!fitsBed(pu, pv)) continue;
-      const n = nx * ny, ar = Math.max(pu, pv) / Math.min(pu, pv);
-      if (!best || n < best.n || (n === best.n && ar < best.ar)) best = { nx, ny, n, ar, pu, pv, xs, ys };
+      const n = xs.length * ys.length, ar = Math.max(pu, pv) / Math.min(pu, pv);
+      if (!best || n < best.n || (n === best.n && ar < best.ar))
+        best = { nx: xs.length, ny: ys.length, n, ar, pu, pv, xs, ys };
     }
   return best;
 }

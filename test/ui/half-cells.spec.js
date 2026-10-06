@@ -284,6 +284,46 @@ test('a half-size bin too big for the bed splits on whole cells', async ({ page 
   expect(await binsNow(page)).toEqual([[0.5, 0, 1.5, 2], [2, 0, 2, 2], [4, 0, 2, 2]]);
 });
 
+/* The cuts fall on whole cells, which keeps a piece whole-size only where it starts on
+   one. A span from a half column with ONE piece across keeps both its half cells: a 3
+   wide from column 1.5 is a whole 3 standing on a half step. Split into rows, a 3 x 7.5
+   there gave a whole 3 x 4 at column 1.5, which Checks never questioned; reloaded, the
+   link put it on whole cells, on top of the bin beside it. That one piece across is now
+   cut in two, a half cell in each, so every piece is half-size. */
+test('a split never leaves a whole-size piece on a half step, and a reload keeps it', async ({ page }) => {
+  for (const [hash, label, want] of [
+    ['bl=' + bin(0.5, 0, 3, 7.5) + '_' + bin(3.5, 0, 0.5, 4),
+     'Split into 1.5×4 + 1.5×4 + 1.5×3.5 + 1.5×3.5 to fit the bed',
+     [[3.5, 0, 0.5, 4], [0.5, 0, 1.5, 4], [2, 0, 1.5, 4], [0.5, 4, 1.5, 3.5], [2, 4, 1.5, 3.5]]],
+    // 5 wide from column 1.5 fits a 220 mm bed across, and 5.5 deep does not
+    ['bw=220&bd=220&bl=' + bin(0.5, 0, 5, 5.5),
+     'Split into 2.5×3 + 2.5×3 + 2.5×2.5 + 2.5×2.5 to fit the bed',
+     [[0.5, 0, 2.5, 3], [3, 0, 2.5, 3], [0.5, 3, 2.5, 2.5], [3, 3, 2.5, 2.5]]],
+  ]) {
+    await openAt(page, hash);
+    const i = await page.evaluate(() => B().findIndex((b) => !fitsBed(b.u, b.v)));
+    await select(page, i);
+    const said = await page.locator('#splitFit').textContent();
+    await page.click('#splitFit');
+    await settle(page);
+    const state = () => page.evaluate(() => ({
+      bins: B().map((b) => [b.x, b.y, b.u, b.v]),
+      whole: B().filter((b) => !isHalfSize(b) && !(Number.isInteger(b.x) && Number.isInteger(b.y))).length,
+      twice: layerClaims(cur).flat().filter(Array.isArray).length,
+      shared: /shares cells/.test($('warnings').textContent),
+    }));
+    const split = await state();
+    expect(split).toEqual({ bins: want, whole: 0, twice: 0, shared: false });
+    expect(said, 'and the button said so').toBe(label);
+
+    await page.waitForTimeout(600);                    // past the save's 400 ms
+    await page.reload();
+    await page.waitForFunction(() => typeof THREE !== 'undefined');
+    await settle(page);
+    expect(await state(), 'the same after a reload').toEqual(split);
+  }
+});
+
 test('an upper layer stands on half-size bins the way it stands on whole ones', async ({ page }) => {
   // a 3 x 1 lid of a layer over two 1.5 x 1 bins: level, so it sits; one of them taller, so it rocks
   await openAt(page, 'bl=' + bin(0, 0, 1.5, 1) + '_' + bin(1.5, 0, 1.5, 1) + '~' + bin(0, 0, 3, 1, 2));
