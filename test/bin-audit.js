@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const G = require('../src/core.js');
-const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits,
+const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE } = require('../src/bins/bin.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
@@ -25,6 +25,123 @@ const cellsExcept = (u, v, drop) => {
     if (!drop.some((d) => d[0] === x && d[1] === y)) out.push([x, y]);
   return out;
 };
+
+/* The page's own fields, from its template. The sweeps run a field from its min to its
+   max, so raising a cap there without the geometry to back it fails here rather than in
+   somebody's slicer. */
+const TEMPLATE = fs.readFileSync(path.join(__dirname, '..', 'src', 'bins', 'template.html'), 'utf8');
+const fieldAttr = (id, a) => {
+  const m = TEMPLATE.match(new RegExp(`id="${id}"[^>]*\\b${a}="([^"]+)"`));
+  return m ? Number(m[1]) : NaN;
+};
+
+/* ---- holes in the feet: what they should be, written here rather than read from bin.js,
+   so a change to the engine's numbers has to be a change to these as well ---- */
+const HOLE = {
+  off: 13,          // the spec's site, 13 mm from the cell centre on both axes
+  fit: 0.2,         // a pocket is its magnet plus 0.2 across
+  deeper: 0.4,      // and its thickness plus 0.4 deep: the spec's 2.4 for 6 x 2
+  screwR: 1.5,      // M3, 3 mm across, ending 6 mm up
+  screwTop: 6,
+  layer: 0.2,       // the two bridging layers over a pocket under a screw
+  floor: 1.85,      // the floor screws need: 0.6 over the hole's end
+};
+const BOTH = { magnets: true, screws: true, holesEvery: true };
+
+/* The four sites of each cell, and whether each should be holed: in every cell, or only
+   where the bin has an outer corner — where neither of the cell's neighbours along that
+   corner's two edges is in the bin. */
+function expectedSites(cfg) {
+  const has = (x, y) => x >= 0 && y >= 0 && x < cfg.u && y < cfg.v &&
+    (!cfg.cells || cfg.cells.some(([a, b]) => a === x && b === y));
+  const out = [];
+  for (let i = 0; i < cfg.u; i++)
+    for (let j = 0; j < cfg.v; j++) {
+      if (!has(i, j)) continue;
+      for (const sx of [1, -1])
+        for (const sy of [1, -1])
+          out.push({ x: (i - (cfg.u - 1) / 2) * 42 + HOLE.off * sx,
+                     y: (j - (cfg.v - 1) / 2) * 42 + HOLE.off * sy,
+                     holed: !!(cfg.magnets || cfg.screws) &&
+                            (!!cfg.holesEvery || (!has(i + sx, j) && !has(i, j + sy))) });
+    }
+  return out;
+}
+
+/* Every height at which a probe straight up from the bed at (x, y) meets the mesh,
+   lowest first. Overlapping shells put internal faces in the list, so only the first one
+   or two mean anything: the first surface above the bed is a hole's roof, and a point the
+   bed covers starts at 0. Bucketed on a 2 mm grid, because whole drawers of sites get
+   probed. */
+function prober(polys) {
+  const C = 2, cells = new Map();
+  for (const t of G.polysToTriangles(polys)) {
+    const xs = t.map((p) => p[0]), ys = t.map((p) => p[1]);
+    for (let gx = Math.floor(Math.min(...xs) / C); gx <= Math.floor(Math.max(...xs) / C); gx++)
+      for (let gy = Math.floor(Math.min(...ys) / C); gy <= Math.floor(Math.max(...ys) / C); gy++) {
+        const k = gx + ',' + gy;
+        if (!cells.has(k)) cells.set(k, []);
+        cells.get(k).push(t);
+      }
+  }
+  return (x, y) => {
+    const zs = [];
+    for (const [a, b, c] of cells.get(Math.floor(x / C) + ',' + Math.floor(y / C)) || []) {
+      const d = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
+      if (Math.abs(d) < 1e-12) continue;          // an upright face: the probe runs along it
+      const l1 = ((b[0] - x) * (c[1] - y) - (c[0] - x) * (b[1] - y)) / d;
+      const l2 = ((c[0] - x) * (a[1] - y) - (a[0] - x) * (c[1] - y)) / d;
+      if (l1 < -1e-9 || l2 < -1e-9 || 1 - l1 - l2 < -1e-9) continue;
+      zs.push(l1 * a[2] + l2 * b[2] + (1 - l1 - l2) * c[2]);
+    }
+    return zs.sort((p, q) => p - q).filter((z, i, s) => i === 0 || z - s[i - 1] > 1e-6);
+  };
+}
+
+/* The holes have to be BUILT, not merely closed: a foot with every hole left solid is
+   just as watertight and wound just as well. So every site of the bin is probed from the
+   bed. Where a hole was asked for, the first surface is its roof — the pocket's for
+   magnets alone, the screw's end where there is a screw — and the bed must not cover it.
+   Where none was, the bed covers the site and nothing above it is a roof until the slab:
+   an inner site of a corners-only bin is solid. On the first holed site the layers that
+   bridge a pocket under a screw are probed one by one, and the pocket's own size. The
+   pocket's polygon has a corner on each axis at the full radius, so it is open 0.02 mm
+   inside that and solid 0.02 mm outside: a fit of 0.25 instead of 0.2 fails. Returns
+   what is wrong. */
+function holeFaults(r, cfg) {
+  const at = prober(r.polys), out = [];
+  const D = isFinite(cfg.magnetD) ? cfg.magnetD : 6, T = isFinite(cfg.magnetH) ? cfg.magnetH : 2;
+  const rM = D / 2 + HOLE.fit / 2, depth = T + HOLE.deeper;
+  const roof = cfg.screws ? HOLE.screwTop : depth;
+  const sites = expectedSites(cfg), holed = sites.filter((s) => s.holed);
+  const near = (z, want) => z !== undefined && Math.abs(z - want) < 1e-3;
+  for (const s of sites) {
+    const z = at(s.x, s.y);
+    if (s.holed ? !near(z[0], roof) : !(near(z[0], 0) && z[1] >= SPEC.footH - 0.05 - 1e-6))
+      out.push(`${s.holed ? 'hole' : 'solid site'} at ${s.x.toFixed(0)},${s.y.toFixed(0)} reads ` +
+               z.slice(0, 2).map((v) => v.toFixed(2)).join(' then ') +
+               (s.holed ? `, roof wanted at ${roof}` : ', wanted the bed and then nothing below the slab'));
+  }
+  const first = holed[0];
+  if (first && cfg.magnets) {
+    const probes = [[rM - 0.02, 0, depth, 'just inside the pocket'],
+                    [rM + 0.02, 0, 0, 'just outside the pocket']];
+    if (cfg.screws)
+      probes.push([(HOLE.screwR + 0.9 * rM) / 2, 0, depth, 'beside the slot'],
+                  [0, HOLE.screwR + 0.15, depth + HOLE.layer, 'in the slot, past the square'],
+                  [HOLE.screwR - 0.1, HOLE.screwR - 0.1, depth + 2 * HOLE.layer, 'in the square, past the circle']);
+    for (const [dx, dy, want, what] of probes) {
+      const z = at(first.x + dx, first.y + dy)[0];
+      if (!near(z, want)) out.push(`${what}: ${z === undefined ? 'nothing' : z.toFixed(2)}, wanted ${want.toFixed(2)}`);
+    }
+  }
+  const nM = cfg.magnets ? holed.length : 0, nS = cfg.screws ? holed.length : 0;
+  if (r.meta.magnets !== nM || r.meta.screws !== nS)
+    out.push(`counts ${r.meta.magnets} magnets and ${r.meta.screws} screws, built ${nM} and ${nS}`);
+  if (cfg.screws && r.meta.floorZ < SPEC.footH + HOLE.floor - 1e-9)
+    out.push(`floor at ${r.meta.floorZ.toFixed(2)}, under the ${(SPEC.footH + HOLE.floor).toFixed(2)} screws need`);
+  return out.join('; ');
+}
 
 const outDir = process.argv[2] || path.join(__dirname, '..', 'out');
 fs.mkdirSync(outDir, { recursive: true });
@@ -58,6 +175,19 @@ const CASES = [
   { name: 'T-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[0, 0], [2, 0]]) },
   { name: 'staircase-3x3', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[1, 2], [2, 2], [2, 1]]) },
   { name: 'bigL-5x4', u: 5, v: 4, hUnits: 4, cells: cellsExcept(5, 4, [[3, 3], [4, 3], [4, 2]]) },
+  /* Holes in the feet. Each of the three bodies — a rectangle's slab, a solid block, a
+     carved shape's cell slabs — is split differently once screws reach up into it, so
+     each gets one. The section further down builds every hole set on every shape and
+     probes the holes; these are here so their STLs are written with the rest. */
+  { name: '1x1x3-mag', u: 1, v: 1, hUnits: 3, magnets: true },
+  { name: '2x2x3-mag-all', u: 2, v: 2, hUnits: 3, magnets: true, holesEvery: true },
+  { name: '1x1x3-mag-scr', u: 1, v: 1, hUnits: 3, magnets: true, screws: true },
+  { name: '3x2x4-mag-scr', u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12,
+    magnets: true, screws: true, holesEvery: true },
+  { name: 'solid-mag-scr', u: 1, v: 1, hUnits: 3, solid: true, magnets: true, screws: true },
+  { name: 'L-3x3-mag', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]), magnets: true },
+  { name: 'L-3x3-mag-scr', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]),
+    magnets: true, screws: true, holesEvery: true },
 ];
 
 /* Every carved footprint builds one outer fillet per reflex corner, and every one of
@@ -137,6 +267,10 @@ for (const cs of CASES) {
                 `${orientationNote(ori)}${orientQuarantine(cs, ori)}`);
   if (!ok || !wOk || !hOk || !lipOk) bad++;
   if (cs.orientQuarantine ? ori.ok : !ori.ok) bad++;
+  if (cs.magnets || cs.screws) {
+    const f = holeFaults(r, cs);
+    if (f) { console.log(`${''.padEnd(14)}  HOLES WRONG: ${f}`); bad++; }
+  }
 
   fs.writeFileSync(path.join(outDir, `bin-${cs.name}.stl`),
                    Buffer.from(G.stlBinary(r.polys, cs.name)));
@@ -161,21 +295,181 @@ function sectionExtents(polys, z) {
   }
   return { maxAbs, maxRad, hits };
 }
-console.log('\ncross-sections of the built 1x1x3 mesh vs the published spec:');
-console.log('   z    half-width  (exp)    corner reach  (exp)');
-{
-  const r = buildBin(G, { u: 1, v: 1, hUnits: 3 });
+/* A foot with holes in it is built from a dozen pieces rather than one sweep, and the
+   pieces that carry its outside are the same rings clipped. So the holed foot is sliced
+   too, against the spec and against the plain foot: holes are allowed to change what is
+   inside the foot and nothing else, and the plain one is the measure of "nothing". */
+const SLICES = [[0.4, 17.8 + 0.4], [1.5, 18.6], [2.5, 18.6], [3.5, 18.6 + 0.9], [4.6, 18.6 + 2.0]];
+const plainSections = SLICES.map(([z]) => sectionExtents(buildBin(G, { u: 1, v: 1, hUnits: 3 }).polys, z));
+for (const [what, holes] of [['', {}],
+                             [' with magnet and screw holes', { magnets: true, screws: true }]]) {
+  console.log(`\ncross-sections of the built 1x1x3 mesh${what} vs the published spec:`);
+  console.log('   z    half-width  (exp)    corner reach  (exp)');
+  const r = buildBin(G, Object.assign({ u: 1, v: 1, hUnits: 3 }, holes));
   const C = SPEC.centre;
-  for (const [z, expHalf] of [[0.4, 17.8 + 0.4], [1.5, 18.6], [2.5, 18.6],
-                              [3.5, 18.6 + 0.9], [4.6, 18.6 + 2.0]]) {
+  SLICES.forEach(([z, expHalf], k) => {
     const s = sectionExtents(r.polys, z);
     const expRad = C * Math.SQRT2 + (expHalf - C);
     const flatOk = Math.abs(s.maxAbs - expHalf) < 0.03;
     const radOk = Math.abs(s.maxRad - expRad) < 0.06;   // faceting slack
+    const p = plainSections[k];
+    const sameOk = Math.abs(s.maxAbs - p.maxAbs) < 1e-4 && Math.abs(s.maxRad - p.maxRad) < 1e-4;
     console.log(`  ${z.toFixed(2)}   ${s.maxAbs.toFixed(3)}   (${expHalf.toFixed(2)})   ` +
                 `${s.maxRad.toFixed(3)}   (${expRad.toFixed(2)})  ` +
-                `${flatOk && radOk ? 'ok' : 'MISMATCH'}`);
-    if (!(flatOk && radOk)) bad++;
+                `${flatOk && radOk ? (sameOk ? 'ok' : 'MOVED from the plain foot') : 'MISMATCH'}`);
+    if (!(flatOk && radOk && sameOk)) bad++;
+  });
+}
+
+/* Holes in the feet, every set on every shape that builds a foot or a slab differently.
+ *
+ * A holed foot is a dozen overlapping shells instead of one sweep, and with screws the
+ * slab above it is split the same way, in each of the three bodies. Each build has to be
+ * watertight, wound the right way and have its holes where holeFaults says. The number of
+ * holes in "corners" is written out by hand for each shape rather than worked out: a
+ * rectangle of any size has four outer corners, an L five, a U six. */
+console.log('\nholes in the feet');
+{
+  const SETS = [
+    ['magnets', { magnets: true }], ['magnets everywhere', { magnets: true, holesEvery: true }],
+    ['screws', { screws: true }], ['screws everywhere', { screws: true, holesEvery: true }],
+    ['both', { magnets: true, screws: true }], ['both everywhere', BOTH],
+  ];
+  const L2 = cellsExcept(2, 2, [[1, 1]]);
+  const SHAPES = [
+    ['1x1x1', { u: 1, v: 1, hUnits: 1 }, 4],
+    ['1x1x3', { u: 1, v: 1, hUnits: 3 }, 4],
+    ['2x2x3', { u: 2, v: 2, hUnits: 3 }, 4],
+    ['3x2x4 everything', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12 }, 4],
+    ['2x2x3 railed', { u: 2, v: 2, hUnits: 3, divX: 1, divY: 1, divRemovable: true }, 4],
+    ['2x1x3 half front', { u: 2, v: 1, hUnits: 3, edges: { f: 0.5 } }, 4],
+    ['L-2x2', { u: 2, v: 2, hUnits: 3, cells: L2 }, 5],
+    ['L-3x3', { u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) }, 5],
+    ['U-3x3', { u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[1, 2]]) }, 6],
+    ['1x1x3 solid', { u: 1, v: 1, hUnits: 3, solid: true }, 4],
+    ['L-2x2 solid', { u: 2, v: 2, hUnits: 3, solid: true, cells: L2 }, 5],
+  ];
+  const check = (cfg, want) => {
+    let r;
+    try { r = buildBin(G, cfg); } catch (e) { return 'build failed: ' + e.message; }
+    const m = G.checkManifold(r.polys), ori = checkOrientation(r.polys);
+    const n = cfg.magnets ? r.meta.magnets : r.meta.screws;
+    return [m.bad ? `${m.bad} bad edges` : '', ori.ok ? '' : orientationNote(ori),
+            n === want ? '' : `${n} holes where the bin has ${want}`, holeFaults(r, cfg)]
+      .filter(Boolean).join(', ');
+  };
+  for (const [name, base, corners] of SHAPES) {
+    const cells = base.cells ? base.cells.length : base.u * base.v, fails = [];
+    for (const [set, holes] of SETS) {
+      const f = check(Object.assign({}, base, holes), holes.holesEvery ? 4 * cells : corners);
+      if (f) fails.push(`${set}: ${f}`);
+    }
+    console.log(`  ${name.padEnd(18)} ` + (fails.length ? 'FAILED with ' + fails.join('; ')
+      : `${SETS.length} hole sets, all clean: ${corners} in the corners, ${4 * cells} in every cell`));
+    if (fails.length) bad++;
+  }
+
+  const shape = (n) => SHAPES.find((x) => x[0] === n);
+  /* The rings come from the smoothness setting and the sites do not, so the clipped bands
+     meet the arcs at different vertices at each one. One shape for each body. */
+  const SMOOTH = ['1x1x3', '2x1x3 half front', 'L-2x2', 'L-2x2 solid'].map(shape);
+  const SMOOTH_SETS = SETS.filter(([n]) => ['magnets', 'screws everywhere', 'both everywhere'].includes(n));
+  for (const arcSegs of [8, 24]) {
+    const fails = [];
+    for (const [name, base, corners] of SMOOTH)
+      for (const [set, holes] of SMOOTH_SETS) {
+        const cells = base.cells ? base.cells.length : base.u * base.v;
+        const f = check(Object.assign({ arcSegs }, base, holes), holes.holesEvery ? 4 * cells : corners);
+        if (f) fails.push(`${name} ${set}: ${f}`);
+      }
+    console.log(`  ${('smoothness ' + arcSegs).padEnd(18)} ` +
+                (fails.length ? 'FAILED with ' + fails.join('; ') : `${SMOOTH.length * SMOOTH_SETS.length} builds, all clean`));
+    if (fails.length) bad++;
+  }
+
+  /* Every magnet the fields take, from their min to their max. The pocket is probed for its
+     size and depth each time, so a field that lets through a magnet the engine builds
+     smaller fails here. The width sets the slot over the pocket and the thickness sets
+     how high the bridges go, so each is swept the whole way at both ends of the other. */
+  const dLo = fieldAttr('magnetD', 'min'), dHi = fieldAttr('magnetD', 'max');
+  const hLo = fieldAttr('magnetH', 'min'), hHi = fieldAttr('magnetH', 'max');
+  if (!(dLo > 0 && dHi > dLo && hLo > 0 && hHi > hLo)) {
+    console.log(`  the magnet fields have no usable min/max (${dLo}..${dHi}, ${hLo}..${hHi})`);
+    bad++;
+  } else {
+    const steps = (lo, hi) => {
+      const out = [];
+      for (let x = lo; x < hi - 1e-9; x += 0.5) out.push(+x.toFixed(2));
+      return out.concat([hi]);
+    };
+    const sizes = steps(dLo, dHi).flatMap((d) => [[d, hLo], [d, hHi]])
+      .concat(steps(hLo, hHi).flatMap((h) => [[dLo, h], [dHi, h]]))
+      .filter(([d, h], i, a) => a.findIndex(([e, k]) => e === d && k === h) === i);
+    const fails = [];
+    let n = 0;
+    /* Every size with screws, which is where the slot and the bridges are; magnets alone
+       and a carved solid at the four extremes. */
+    const ends = (d, h) => (d === dLo || d === dHi) && (h === hLo || h === hHi);
+    for (const [magnetD, magnetH] of sizes)
+      for (const [set, holes, name, base, corners] of [
+        ['both', { magnets: true, screws: true }, ...shape('1x1x3')],
+        ...(ends(magnetD, magnetH) ? [['magnets', { magnets: true }, ...shape('1x1x3')],
+                                      ['both', { magnets: true, screws: true }, ...shape('L-2x2 solid')]] : [])]) {
+        const f = check(Object.assign({ magnetD, magnetH }, base, holes), corners);
+        n++;
+        if (f) fails.push(`${magnetD} x ${magnetH} ${set} ${name}: ${f}`);
+      }
+    console.log(`  ${'magnet sizes'.padEnd(18)} ` + (fails.length ? 'FAILED at ' + fails.join('; ')
+      : `${dLo}–${dHi} across, ${hLo}–${hHi} thick: ${n} builds, all clean`));
+    if (fails.length) bad++;
+
+    /* A link can carry any number, and the engine holds it to the fields' limits. A size
+       past either limit builds exactly the bin at that limit, and a size that is not a
+       finite number builds the 6 x 2. */
+    const stl = (cfg) => Buffer.from(G.stlBinary(buildBin(G, Object.assign(
+      { u: 1, v: 1, hUnits: 3, magnets: true, screws: true }, cfg)).polys, 'b')).toString('base64');
+    const pairs = [[{ magnetD: dLo - 2 }, { magnetD: dLo }], [{ magnetD: 1e9 }, { magnetD: dHi }],
+                   [{ magnetH: -1 }, { magnetH: hLo }], [{ magnetH: 50 }, { magnetH: hHi }],
+                   [{ magnetD: NaN, magnetH: NaN }, { magnetD: 6, magnetH: 2 }],
+                   [{ magnetD: 'abc', magnetH: Infinity }, { magnetD: 6, magnetH: 2 }],
+                   [{}, { magnetD: 6, magnetH: 2 }]];
+    const off = pairs.filter(([a, b]) => stl(a) !== stl(b))
+      .map(([a]) => JSON.stringify(a, (k, v) => (typeof v === 'number' && !isFinite(v) ? String(v) : v)));
+    console.log(`  ${'sizes out of range'.padEnd(18)} ` +
+                (off.length ? 'NOT HELD to the limits: ' + off.join(', ') : `${pairs.length} sizes, each built at its limit`));
+    if (off.length) bad++;
+  }
+
+  /* With neither box ticked the other hole settings must change nothing at all: every
+     bin anyone has saved has them at their defaults, and none of them may move. */
+  {
+    const key = (cfg) => Buffer.from(G.stlBinary(buildBin(G, cfg).polys, 'b')).toString('base64');
+    const same = ['1x1x3', 'L-3x3', '1x1x3 solid'].map(shape)
+      .filter(([, base]) => key(base) !== key(Object.assign({ holesEvery: true, magnetD: 5, magnetH: 3 }, base)))
+      .map(([n]) => n);
+    console.log(`  ${'no holes ticked'.padEnd(18)} ` +
+                (same.length ? 'CHANGED by the hole settings: ' + same.join(', ') : '3 bins, byte for byte the bin without'));
+    if (same.length) bad++;
+  }
+
+  /* Screws raise the floor to 1.85 over the foot, and only screws: the plate that drops
+     between removable dividers stands on that floor, so it shortens with it. */
+  {
+    const H = 3 * SPEC.unitH, rows = [];
+    for (const [what, holes, floorT, want] of [
+      ['magnets', { magnets: true }, 1.2, 1.2], ['screws', { screws: true }, 1.2, HOLE.floor],
+      ['screws', { screws: true }, 0, HOLE.floor], ['screws', { screws: true }, 3, 3]]) {
+      const cfg = Object.assign({ u: 2, v: 2, hUnits: 3, divX: 1, divRemovable: true, floorT }, holes);
+      const fz = buildBin(G, cfg).meta.floorZ, plate = dividerPart(G, cfg, 'y').meta.tall;
+      const wantPlate = H - (SPEC.footH + want) - BIN_DEFAULTS.divClr;
+      const ok = Math.abs(fz - (SPEC.footH + want)) < 1e-9 && Math.abs(plate - wantPlate) < 1e-9;
+      rows.push(ok ? '' : `${what} on ${floorT}: floor at ${fz.toFixed(2)}, plate ${plate.toFixed(2)} tall, ` +
+                          `wanted ${(SPEC.footH + want).toFixed(2)} and ${wantPlate.toFixed(2)}`);
+    }
+    const fails = rows.filter(Boolean);
+    console.log(`  ${'floor under screws'.padEnd(18)} ` +
+                (fails.length ? 'WRONG: ' + fails.join('; ') : `${HOLE.floor} over the foot with screws, the asked floor without; divider plates to match`));
+    if (fails.length) bad++;
   }
 }
 
@@ -430,12 +724,7 @@ console.log('\na lid fits the lip it is made for');
  * geometry to back it fails here rather than in somebody's slicer. */
 console.log('\nwalls across the whole range the page accepts');
 {
-  const tpl = fs.readFileSync(path.join(__dirname, '..', 'src', 'bins', 'template.html'), 'utf8');
-  const attr = (id, a) => {
-    const m = tpl.match(new RegExp(`id="${id}"[^>]*\\b${a}="([^"]+)"`));
-    return m ? Number(m[1]) : NaN;
-  };
-  const lo = attr('wall', 'min'), hi = attr('wall', 'max');
+  const lo = fieldAttr('wall', 'min'), hi = fieldAttr('wall', 'max');
   if (!(lo >= 0 && hi > lo)) {
     console.log(`  the wall field has no usable min/max (${lo}..${hi}) — the page would accept anything`);
     bad++;
@@ -450,10 +739,19 @@ console.log('\nwalls across the whole range the page accepts');
       ['2x2x3 railed', { u: 2, v: 2, hUnits: 3, divX: 1, divY: 1, divRemovable: true }],
       ['2x1x3 open front', { u: 2, v: 1, hUnits: 3, edges: { f: 0.5 } }],
       ['L-3x3', { u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) }],
+      /* A wall past 6.2 mm reaches over the screw holes from inside, and a label shelf
+         on one past 5 mm: both stand above the screw's end, which the probes check. The
+         walls around the lip's base have nothing to do with the feet, so these take the
+         ends of the range and the walls either side of those two. */
+      ['1x1x3 holes', Object.assign({ u: 1, v: 1, hUnits: 3 }, BOTH), true],
+      ['L-2x2 holes', { u: 2, v: 2, hUnits: 3, cells: cellsExcept(2, 2, [[1, 1]]), magnets: true, screws: true }, true],
+      ['2x1x3 label holes', { u: 2, v: 1, hUnits: 3, label: 12, magnets: true, screws: true }, true],
     ];
-    for (const [name, base] of SHAPES) {
-      const fails = [];
-      for (const wall of walls) {
+    const holeWalls = [lo, 0.4, 1.2, 3, 4.9, 5.1, 6.1, 6.3, 8, hi]
+      .filter((w, i, a) => w >= lo && w <= hi && a.indexOf(w) === i);
+    for (const [name, base, holes] of SHAPES) {
+      const fails = [], these = holes ? holeWalls : walls;
+      for (const wall of these) {
         const r = buildBin(G, Object.assign({}, base, { wall }));
         const m = G.checkManifold(r.polys);
         const ori = checkOrientation(r.polys);
@@ -464,12 +762,13 @@ console.log('\nwalls across the whole range the page accepts');
         }
         const wOk = Math.abs(xmax - xmin - ((base.u - 1) * 42 + 41.5)) < 0.02 &&
                     Math.abs(ymax - ymin - ((base.v - 1) * 42 + 41.5)) < 0.02;
-        if (m.bad || !ori.ok || !wOk)
+        const holes = base.magnets || base.screws ? holeFaults(r, base) : '';
+        if (m.bad || !ori.ok || !wOk || holes)
           fails.push(`${wall}: ` + [m.bad ? `${m.bad} bad edges` : '', ori.ok ? '' : orientationNote(ori),
-                                    wOk ? '' : `footprint ${(xmax - xmin).toFixed(2)}`].filter(Boolean).join(', '));
+                                    wOk ? '' : `footprint ${(xmax - xmin).toFixed(2)}`, holes].filter(Boolean).join(', '));
       }
-      console.log(`  ${name.padEnd(18)} ${walls[0]}–${walls[walls.length - 1]} mm  ` +
-                  (fails.length ? 'FAILED at ' + fails.join('; ') : `${walls.length} walls, all clean`));
+      console.log(`  ${name.padEnd(18)} ${these[0]}–${these[these.length - 1]} mm  ` +
+                  (fails.length ? 'FAILED at ' + fails.join('; ') : `${these.length} walls, all clean`));
       if (fails.length) bad++;
     }
   }
@@ -487,7 +786,8 @@ const cleanBuild = (cfg) => {
   // nothing but the stacking lip may stand above the bin's own height
   const lipTop = H + (r.meta.hasLip ? r.meta.lipH : 0) + 0.001;
   return [m.bad ? `${m.bad} bad edges` : '', ori.ok ? '' : orientationNote(ori),
-          zmax > lipTop ? `${(zmax - lipTop).toFixed(2)} mm above the top` : '']
+          zmax > lipTop ? `${(zmax - lipTop).toFixed(2)} mm above the top` : '',
+          cfg.magnets || cfg.screws ? holeFaults(r, cfg) : '']
     .filter(Boolean).join(', ');
 };
 const sweepReport = (label, rows) => {
@@ -509,7 +809,10 @@ for (const hUnits of [1, 3, 6]) {
                               ['rectangle, rails', { u: 2, v: 2, divX: 1, divRemovable: true }],
                               ['rectangle, scoop + label', { u: 2, v: 1, scoop: H, label: 42 }],
                               ['L-2x2', { u: 2, v: 2, cells: L3 }],
-                              ['L-2x2, 3 mm walls', { u: 2, v: 2, cells: L3, wall: 3 }]])
+                              ['L-2x2, 3 mm walls', { u: 2, v: 2, cells: L3, wall: 3 }],
+                              // a floor under 1.85 is built at 1.85 with screws
+                              ['rectangle, holes', { u: 2, v: 1, magnets: true, screws: true }],
+                              ['L-2x2, holes', { u: 2, v: 2, cells: L3, magnets: true, screws: true }]])
     sweepReport(`${hUnits}u ${name}`, floors.map((floorT) =>
       [`floor ${floorT.toFixed(2)}`, Object.assign({ hUnits, floorT }, base)]));
 }
@@ -576,11 +879,15 @@ console.log('\nlabel shelves as deep as the bin\'s height allows');
                   : s.foot < SPEC.footH ? 'BELOW THE BASE, among the feet' : 'HELD UP off the base'));
     if (!ok) bad++;
   }
-  for (const [name, base] of [['1x1x3 at its limit', { u: 1, v: 1, hUnits: 3 }],
-                              ['2x2x2 at its limit', { u: 2, v: 2, hUnits: 2 }]]) {
+  const FLOORS = [0, 0.6, 1.05, 1.1, 1.2, 3];
+  /* With screws the shelf's foot stands on the screw's end instead, and every floor under
+     1.85 builds at 1.85, so two floors cover them. */
+  for (const [name, base, floors] of [['1x1x3 at its limit', { u: 1, v: 1, hUnits: 3 }, FLOORS],
+                                      ['2x2x2 at its limit', { u: 2, v: 2, hUnits: 2 }, FLOORS],
+                                      ['1x1x3 holes, at its limit', Object.assign({ u: 1, v: 1, hUnits: 3 }, BOTH), [0, 3]]]) {
     const rows = [], H = base.hUnits * SPEC.unitH;
     // a wall of 1.148 puts the shelf's back corners on vertices of the foot's and wall's arcs
-    for (const floorT of [0, 0.6, 1.05, 1.1, 1.2, 3]) for (const wall of [0.4, 1.148, 1.2, 2])
+    for (const floorT of floors) for (const wall of [0.4, 1.148, 1.2, 2])
       for (const label of [H - 7, H - 6, H - 5, 42])
         rows.push([`floor ${floorT} wall ${wall} label ${label}`, Object.assign({ floorT, wall, label }, base)]);
     sweepReport(name, rows);
