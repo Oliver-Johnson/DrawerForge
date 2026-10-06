@@ -5706,6 +5706,13 @@ const ERR_EL = { errDrawerW: () => $('errDrawerW'), errDrawerD: () => $('errDraw
   errMagnet: () => $('errMagnet'), errScrew: () => $('errScrew'), errConnClr: () => $('errConnClr') };
 
 const roundMm = (n) => +n.toFixed(2);
+/* The size a half cell is quoted at: half the pitch, rounded UP to the hundredth. Checks
+   rounds the room left over DOWN when it says there is no room for one, so the two figures
+   can never come out equal. Rounded to the nearest, a half with a third decimal in it
+   could: at a 42.01 mm pitch the page said "21 mm is left across … and a half cell needs
+   21 mm", which is a contradiction in the one line meant to explain the gap. The menu and
+   the README quote the same figure, so a half cell has one size wherever the page says it. */
+const halfCellMm = () => Math.ceil(state.pitch / 2 * 100 - 1e-6) / 100;
 /* The drawer's own measurements: the fields the unit switch in panel 01 converts. Every
    other number on the page — the bed, the pitch, magnet and screw sizes — stays in
    millimetres whatever the drawer was measured in, because millimetres are how every
@@ -5835,7 +5842,7 @@ function readControls() {
      whatever it was. Written only when it changes, so a screen reader is not told the
      menu changed on every keystroke elsewhere. */
   const halfOpt = $('marginMode').querySelector('option[value="half"]');
-  const halfText = `Fill with half cells where they fit (${roundMm(state.pitch / 2)} mm)`;
+  const halfText = `Fill with half cells where they fit (${halfCellMm()} mm)`;
   if (halfOpt && halfOpt.textContent !== halfText) halfOpt.textContent = halfText;
   $('magRow').style.display = state.magnets ? '' : 'none';
   $('screwRow').style.display = state.screws ? '' : 'none';
@@ -6042,10 +6049,10 @@ function warningsList() {
      whole-size bin does not fit one, and buildPiece cuts no mounting holes in them. */
   if (state.marginMode === 'half' && !tooSmall &&
       !fieldErrors.has('drawerW') && !fieldErrors.has('drawerD')) {
-    const half = roundMm(state.pitch / 2), down = (n) => Math.floor(n * 100 + 1e-6) / 100;
+    const down = (n) => Math.floor(n * 100 + 1e-6) / 100;
     if (!layout.hX && !layout.hY)
       out.push({ t: `No room for half cells: ${down(remX)} mm is left across and ` +
-        `${down(remY)} mm deep, and a half cell needs ${half} mm.` });
+        `${down(remY)} mm deep, and a half cell needs ${halfCellMm()} mm.` });
     else
       out.push({ t: 'Half cells take half-size bins only, and have no magnet or screw holes.' });
   }
@@ -7194,7 +7201,7 @@ function readmeText() {
   const [mL, mR, mF, mB] = solidMargins();
   lines.push(`Margins: L ${mL.toFixed(1)} R ${mR.toFixed(1)} F ${mF.toFixed(1)} B ${mB.toFixed(1)} mm`);
   if (layout.hX || layout.hY)
-    lines.push(`Half cells: ${halfStripText()} (${roundMm(state.pitch / 2)} mm), for ` +
+    lines.push(`Half cells: ${halfStripText()} (${halfCellMm()} mm), for ` +
                'half-size bins only; no magnet or screw holes in them');
   lines.push(`Split: ${splitName()} | Pieces: ${layout.pieces.length} in ${plural(rows, 'row band')}`);
   lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
