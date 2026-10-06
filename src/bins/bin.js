@@ -1109,10 +1109,15 @@ function bitsToCells(bits, u, v) {
    a tiny value, which String() writes in exponent form (1e-7). The throw landed in the
    save, the share link, the hand-over to baseplates and the README, so saving stopped
    without a word and those buttons died with it. No field can be negative, so a
-   negative is written as 0, and an exponent is spelled out in full instead. */
+   negative is written as 0, and an exponent is spelled out in full instead.
+   A value that is no number at all goes out as "NaN", which unpackBin reads back as
+   the field's default. Written as 0 it came back as a real value instead: a NaN wall
+   as no wall, a NaN edge as an open side. An empty field would not do, since
+   Number('') is 0. */
 const plainNum = (v) => {
   if (typeof v !== 'number') return v;     // the carve mask: already 0s and 1s
-  if (!(v > 0)) return 0;                  // negative, -0 and NaN alike
+  if (!isFinite(v)) return 'NaN';          // NaN and both infinities
+  if (!(v > 0)) return 0;                  // negative and -0
   const s = String(v);
   return s.includes('e') ? v.toFixed(20).replace(/\.?0+$/, '') : s;
 };

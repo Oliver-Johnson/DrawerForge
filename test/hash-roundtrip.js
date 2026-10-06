@@ -122,6 +122,32 @@ console.log('\nseparators cannot appear inside a value');
   if (!sidesOk) bad++;
 }
 
+/* A number that is not one. Nothing on the page is known to make a NaN, but one used to
+   be written as 0, and 0 is a real value for most fields: it came back as a bin with no
+   wall, no floor or an open side, where a field that says nothing should read as its
+   default, the way a missing one does. */
+console.log('\na value that is not a number comes back as the default');
+{
+  for (const [name, b, read, want] of [
+    ['a NaN wall', bin({ wall: NaN }), (x) => x.wall, BIN_DEFAULTS.wall],
+    ['a NaN floor', bin({ floorT: NaN }), (x) => x.floorT, BIN_DEFAULTS.floorT],
+    ['a NaN height', bin({ hUnits: NaN }), (x) => x.hUnits, BIN_DEFAULTS.hUnits],
+    ['a NaN front edge', bin({ edges: { f: NaN, b: 0.5, l: 1, r: 1 } }),
+      (x) => [x.edges.f, x.edges.b].join(' '), '1 0.5'],
+    ['an infinite wall', bin({ wall: Infinity }), (x) => x.wall, BIN_DEFAULTS.wall],
+    ['a floor of minus infinity', bin({ floorT: -Infinity }), (x) => x.floorT, BIN_DEFAULTS.floorT],
+  ]) {
+    let why = '';
+    try {
+      const packed = packBin(b);
+      if (packed.split('-').length !== 21) why = `shifted to ${packed.split('-').length} fields`;
+      else if (read(unpackBin(packed)) !== want) why = `read back as ${read(unpackBin(packed))}, not ${want}`;
+    } catch (e) { why = 'THREW: ' + e.message; }
+    console.log(`  ${name.padEnd(38)} ${why ? 'FAILED — ' + why : 'default'}`);
+    if (why) bad++;
+  }
+}
+
 /* A hash is in the address bar, so it gets hand-edited, truncated by a chat client and
    pasted back short. None of that may throw, and none of it may produce a bin the
    geometry cannot build — a white screen over a typo loses the whole layout, while a
