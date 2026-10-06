@@ -254,19 +254,38 @@ const orientQuarantine = (cs, r) => cs.orientQuarantine
   ? (r.ok ? '  ORIENTATION NOW CLEAN — take it out of quarantine' : `  known: ${cs.orientQuarantine}`)
   : '';
 
-/* How far a bin stands out through the spec's outline, rounded corners and all, above
-   the feet. The bounding box cannot see a corner: the scoop's square ends stood 1.06 mm
-   out through a 0.4 mm wall's corners with the box exactly right, and so did dividers
-   and rails packed up to one. Carved shapes have outlines of their own and are left to
-   the box. */
+/* How far a bin stands out through its outline above the feet: the spec's, rounded
+   corners and all, with the bin's extra clearance taken off every side, and each corner
+   the chords it is built from rather than the arc they stand for. The bounding box
+   cannot see a corner: the scoop's square ends stood 1.06 mm out through a 0.4 mm
+   wall's corners with the box exactly right, and so did dividers and rails packed up to
+   one. The arc could not see a poke under a chord's sagitta, 8 µm at the default 12
+   segments and 18 µm at 8, nor anything standing out by less than the clearance. So a
+   vertex is measured against each straight side and each chord, and the most it stands
+   out past any of them is how far it is outside: exact where a side is nearest, a little
+   short of it at a corner of the outline, and outside is outside either way.
+   The clearance moves every side in and keeps the corners' centres, so their radius is
+   the spec's less the clearance. That is the outline the feet are built to at their
+   top, which the body overlaps by a BLOAT. The body's own corners keep the spec's radius
+   about centres moved in, so they stand inside it, by 0.41 of the clearance on the
+   diagonal, and measured against those the feet's overlap would stand out by as much.
+   Carved shapes have outlines of their own and are left to the box. */
 function outsideBy(r, cfg) {
   if (cfg.cells) return 0;
-  const ox = ((cfg.u - 1) * 42 + 41.5) / 2 - 3.75, oy = ((cfg.v - 1) * 42 + 41.5) / 2 - 3.75;
+  const s = cfg.shrink || 0, n = cfg.arcSegs || 12, R = SPEC.r - s, seg = Math.PI / (2 * n);
+  const ox = ((cfg.u - 1) * 42 + 41.5) / 2 - SPEC.r, oy = ((cfg.v - 1) * 42 + 41.5) / 2 - SPEC.r;
+  const chords = [];
+  for (let k = 0; k < n; k++) {
+    const m = (k + 0.5) * seg, cx = Math.cos(m), cy = Math.sin(m);
+    chords.push([cx, cy, ox * cx + oy * cy + R * Math.cos(seg / 2)]);
+  }
   let out = 0;
   for (const p of r.polys) for (const v of p.verts) {
     if (v[2] <= 4.75 + 1e-6) continue;
-    const dx = Math.max(0, Math.abs(v[0]) - ox), dy = Math.max(0, Math.abs(v[1]) - oy);
-    out = Math.max(out, Math.hypot(dx, dy) - 3.75);
+    const x = Math.abs(v[0]), y = Math.abs(v[1]);
+    let o = Math.max(x - ox - R, y - oy - R);
+    for (const [cx, cy, h] of chords) o = Math.max(o, x * cx + y * cy - h);
+    out = Math.max(out, o);
   }
   return out;
 }
@@ -1127,6 +1146,37 @@ console.log('\ndivider boxes cut to the cavity\'s rounded corner');
     : `thinnest cap triangle ${(thin * 1000).toFixed(2)} µm${thin < 1e-3 ? ` (UNDER 1 µm: ${thinAt})` : ''}, ` +
       (lean ? `a side LEANING by ${(lean * 1000).toFixed(3)} µm: ${leanAt}` : 'no side leaning')));
   if (!ok) bad++;
+}
+
+console.log('\nthe outline at other smoothnesses and with extra clearance');
+/* outsideBy measures against the corners' chords at the bin's own smoothness and inside
+   its extra clearance, so it is held to seeing what the arc could not: a vertex on the
+   true arc halfway along a chord, and one standing out of the clearance but not the
+   spec. Then bins with everything that reaches a corner are built at both ends of the
+   smoothness the engine takes and with clearance, and must stand inside it. */
+{
+  const at = (x, y) => ({ polys: [{ verts: [[x, y, 10]] }] });
+  const C = SPEC.centre, sees = [];
+  for (const arcSegs of [8, 12]) {
+    const a = Math.PI / (4 * arcSegs), sag = SPEC.r * (1 - Math.cos(a));
+    const o = outsideBy(at(C + SPEC.r * Math.cos(a), C + SPEC.r * Math.sin(a)), { u: 1, v: 1, arcSegs });
+    sees.push([`under a chord at ${arcSegs}`, o, sag]);
+  }
+  sees.push(['0.2 mm into a 0.3 mm clearance', outsideBy(at(SPEC.half - 0.1, 0), { u: 1, v: 1, shrink: 0.3 }), 0.2]);
+  const blind = sees.filter(([, o, want]) => Math.abs(o - want) > 1e-9);
+  console.log('  ' + sees.map(([what, o]) => `${what}: ${(o * 1000).toFixed(1)} µm out`).join('; '));
+  if (blind.length) { console.log(`  outsideBy MISSED ${blind.map(([w]) => w).join(', ')}`); bad++; }
+  const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
+  const rows = [];
+  for (const [u, v] of [[1.5, 1], [0.5, 1]])
+    for (const arcSegs of [4, 8, 24, 48])
+      for (const shrink of [0.25, 0.5])
+        for (const divRemovable of [false, true]) {
+          const wall = 0.4, divX = most((u - 1) * 42 + 41.5 - 2 * wall, wall), divY = most((v - 1) * 42 + 41.5 - 2 * wall, wall);
+          rows.push([`${u}x${v} at ${arcSegs}, ${shrink} clear${divRemovable ? ', rails' : ''}`,
+                     { u, v, hUnits: 3, wall, arcSegs, shrink, divX, divY, divRemovable, scoop: 8, label: 10 }]);
+        }
+  sweepReport('packed, scoop and label', rows);
 }
 
 /* The label shelf's underside runs down at 45 degrees, so the deeper the shelf the
