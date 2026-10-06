@@ -52,7 +52,7 @@
    load from this site, and the app's icons and manifest, as paths from the root. VERSION
    is a hash of all of those files, names and bytes, and of this script as it is served,
    FILES filled in and everything else but VERSION itself. */
-const VERSION = "a654c06d1ee4";
+const VERSION = "d94c76816568";
 const FILES = [
   "./",
   "bins/",
@@ -177,10 +177,14 @@ const cameFrom = new Map();
    nothing else needs keeping to compare it with.
 
    A weak ETag (W/"…") is the same tag for this. A host marks it weak when it compresses
-   the file, and whether it compresses can differ from one request to the next. A host
-   whose ETag is a hash of the file rather than the deploy's time gives two equal ones
-   only for the same page, and the same page with the cache's scripts is what opening it
-   offline would give, so that is no mismatch either.
+   the file, and whether it compresses can differ from one request to the next.
+
+   This holds only because GitHub Pages' ETag is the deploy's. A host whose ETag is a
+   hash of the file's bytes gives a page the same one across a deploy that changed only
+   a script, so the page would pass for this cache's deploy when it is not: a script the
+   server could not give would come from the cache, an old three.js beside a new jszip.
+   On such a host this would have to compare something every deploy changes as well,
+   such as sw.js itself.
 
    With no ETag on either side there is nothing to tell by, and the answer is no: two
    missing tags are not two equal ones. A host that sends none keeps the server alone. */
