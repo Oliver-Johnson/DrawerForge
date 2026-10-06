@@ -155,21 +155,24 @@ test('plate numbering skips the plates that cannot be printed, not the numbers',
     good: goodPlates().length,
     firstGood: goodPlates()[0][1],
   }));
-  expect(plan.good, 'fixture: several printable plates').toBe(10);
+  /* Fourteen: the bins that fit are all on plates that print. It read ten while the
+     packer put four plates' worth of them on the overflow plates, where no file had
+     them. */
+  expect(plan.good, 'fixture: several printable plates').toBe(14);
   expect(plan.firstGood, 'fixture: unprintable plates must sort ahead of them')
     .toBeGreaterThan(0);
 
   await page.locator('#openExport').click();
   const labels = await page.locator('#exFiles [data-ex="plate"]')
     .evaluateAll((btns) => btns.map((b) => b.closest('.exrow').querySelector('.nm').textContent));
-  expect(labels).toEqual(Array.from({ length: 10 }, (_, i) => `Plate ${i + 1}`));
+  expect(labels).toEqual(Array.from({ length: 14 }, (_, i) => `Plate ${i + 1}`));
 
-  // the last row must be plate 10, not plate 14
+  // the last row must be plate 14, not plate 18
   const [last] = await Promise.all([
     page.waitForEvent('download'),
     page.locator('#exFiles [data-ex="plate"]').last().click(),
   ]);
-  expect(last.suggestedFilename()).toBe('bin-plate-10.3mf');
+  expect(last.suggestedFilename()).toBe('bin-plate-14.3mf');
 
   // and the zip has to agree with the buttons, entry for entry
   const [zipDl] = await Promise.all([
@@ -178,7 +181,7 @@ test('plate numbering skips the plates that cannot be printed, not the numbers',
   ]);
   const zip = await JSZip.loadAsync(fs.readFileSync(await zipDl.path()));
   expect(Object.keys(zip.files).sort()).toEqual(
-    Array.from({ length: 10 }, (_, i) => `bin-plate-${i + 1}.3mf`).sort());
+    Array.from({ length: 14 }, (_, i) => `bin-plate-${i + 1}.3mf`).sort());
 });
 
 /* "Everything, with a README" has to mean everything. The ZIP kept its own list of
