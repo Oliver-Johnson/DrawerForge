@@ -39,7 +39,10 @@ module.exports = [
     template: 'src/bins/template.html',
     out: 'bins/index.html',
     changefreq: 'weekly', priority: '0.9',
-    parts: { CSS, CHROME, CORE, WIDGETS, FIELDS, ESTIMATE, DRAWERS, BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
+    /* FONT and TEXT are the letters a bin's note can be printed in and how they fit its
+       shelf; bin.js uses them, so they come before it. This page only. */
+    parts: { CSS, CHROME, CORE, WIDGETS, FIELDS, ESTIMATE, DRAWERS, FONT: 'src/bins/font.js',
+             TEXT: 'src/bins/text.js', BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
     uiPart: 'UI',
   },
   {

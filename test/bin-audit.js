@@ -8,7 +8,9 @@ const path = require('path');
 const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
-        unpackBin, binFeet } = require('../src/bins/bin.js');
+        unpackBin, binFeet, shelfNote, NOTE_CLEAR } = require('../src/bins/bin.js');
+const NOTE_TEXT = require('../src/bins/text.js');
+const HERSHEY = require('../src/bins/font.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
 // the browser hand-assembles its own G; make sure core still exports everything
@@ -150,6 +152,13 @@ function holeFaults(r, cfg) {
 const outDir = process.argv[2] || path.join(__dirname, '..', 'out');
 fs.mkdirSync(outDir, { recursive: true });
 
+/* Every character the font draws, written down here rather than read from it: the 94
+   printable ASCII characters after the space, and the six past ASCII. In four notes of
+   25, one line each on a 4x1x3. */
+const ALL_GLYPHS = Array.from({ length: 94 }, (_, i) => String.fromCharCode(33 + i))
+  .concat(['µ', 'Ω', '°', '±', '×', 'Ø']);
+const NOTE_GLYPHS = [0, 1, 2, 3].map((k) => ALL_GLYPHS.slice(25 * k, 25 * k + 25).join(''));
+
 const CASES = [
   { name: '1x1x3', u: 1, v: 1, hUnits: 3 },
   { name: '1x1x6', u: 1, v: 1, hUnits: 6 },
@@ -208,6 +217,31 @@ const CASES = [
   { name: '1.5x1x3-scoop-label', u: 1.5, v: 1, hUnits: 3, scoop: 8, label: 10 },
   { name: '1.5x1x3-openfront', u: 1.5, v: 1, hUnits: 3, edges: { f: 0 } },
   { name: '3.5x2.5x5-everything', u: 3.5, v: 2.5, hUnits: 5, divX: 2, divY: 1, scoop: 6, label: 10 },
+  /* A bin's note raised on its label shelf: the shelf a millimetre lower and the letters
+     standing on it, every stroke a pile of convex shells (text.js). On one line and on
+     two, cut short, at both ends of the wall's range, on a half-size bin and over holes
+     in the feet, and every glyph the font has in the four after those. `fit` is what the
+     section on raised notes further down expects of each; it probes them all. */
+  { name: '1x1x3-note', u: 1, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '2x1x2-note', u: 2, v: 1, hUnits: 2, label: 12, labelMode: 1, note: 'Drill bits 1-6 mm',
+    fit: { lines: 1, cut: false } },
+  { name: '4x1x3-note', u: 4, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Assorted M3 M4 nuts, washers',
+    fit: { lines: 1, cut: false } },
+  { name: '1x1x3-note-2lines', u: 1, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Resistors 10k to 100k',
+    fit: { lines: 2, cut: false } },
+  { name: '1x1x3-note-cut', u: 1, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Assorted M3 M4 nuts, washers',
+    fit: { cut: true } },
+  { name: '1x1x3-note-wall0.4', u: 1, v: 1, hUnits: 3, wall: 0.4, label: 12, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '1x1x3-note-wall3', u: 1, v: 1, hUnits: 3, wall: 3, label: 12, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '0.5x1x3-note', u: 0.5, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'M2',
+    fit: { lines: 1, cut: false } },
+  { name: '2x1x3-note-mag-scr', u: 2, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Fuses 5A, 10A',
+    magnets: true, screws: true, fit: { lines: 1, cut: false } },
+  ...NOTE_GLYPHS.map((note, i) => ({ name: `4x1x3-glyphs-${i + 1}`, u: 4, v: 1, hUnits: 3, label: 12,
+                                      labelMode: 1, note, fit: { lines: 1, cut: false } })),
 ];
 
 /* Every carved footprint builds one outer fillet per reflex corner, and every one of
@@ -1096,6 +1130,117 @@ console.log('\nlinks from before half sizes build the same bytes');
   }).filter(Boolean);
   console.log('  ' + (moved.length ? 'CHANGED: ' + moved.join('; ')
     : `${OLD.length} links, each the same STL to the byte`));
+  if (moved.length) bad++;
+}
+
+/* A note raised on the label shelf (labelMode 1, text.js).
+ *
+ * Built, not merely closed: a bin with no letters on it is just as watertight. So every
+ * case above with a note is probed. Straight down through a point of a stroke, the first
+ * thing met is the top of the letters, at H - 0.4; through the strip the letters keep
+ * clear at the shelf's front, it is the shelf, at H - 1.0, a millimetre lower than a
+ * shelf with nothing on it. shelfNote is what the page says about the letters, so it
+ * has to agree with what was built: how many lines, and whether it was cut short. */
+console.log('\nnotes raised on the label shelf');
+{
+  for (const cs of CASES.filter((c) => c.labelMode === 1)) {
+    const r = buildBin(G, cs), at = prober(r.polys), s = shelfNote(cs), faults = [];
+    const H = cs.hUnits * SPEC.unitH;
+    const id = (cs.v - 1) * SPEC.pitch / 2 + SPEC.half - (cs.wall || BIN_DEFAULTS.wall);
+    if (!s.fit) faults.push(`NO LETTERS (${s.why})`);
+    else {
+      const [x, y] = s.fit.segs[0][0];
+      const top = at(x, y).pop(), shelf = at(0, id - s.depth + 0.3).pop();
+      if (Math.abs(top - (H - NOTE_CLEAR)) > 1e-6)
+        faults.push(`a letter's top at ${top.toFixed(3)}, not H - 0.4 = ${(H - 0.4).toFixed(2)}`);
+      if (Math.abs(shelf - (H - 1.0)) > 1e-6)
+        faults.push(`the shelf's top at ${shelf.toFixed(3)}, not H - 1.0 = ${(H - 1).toFixed(2)}`);
+      if (cs.fit.lines && s.fit.lines.length !== cs.fit.lines)
+        faults.push(`${s.fit.lines.length} lines, not ${cs.fit.lines}`);
+      if (s.fit.cut !== cs.fit.cut) faults.push(cs.fit.cut ? 'NOT CUT short' : 'CUT short');
+      // uncut, every character of the note is on the shelf
+      if (!s.fit.cut && s.fit.lines.join(' ') !== cs.note) faults.push(`printed "${s.fit.lines.join(' / ')}"`);
+      if (!s.fit.cut && s.fit.cap < NOTE_TEXT.NOTE_SPEC.capMin) faults.push(`only ${s.fit.cap.toFixed(2)} mm tall`);
+    }
+    console.log(`  ${cs.name.padEnd(22)} ${s.fit ? (s.fit.cap.toFixed(2) + ' mm, ' + s.fit.lines.length +
+      (s.fit.lines.length > 1 ? ' lines' : ' line') + (s.fit.cut ? ', cut' : '')).padEnd(20) : ''.padEnd(20)} ` +
+      (faults.length ? faults.join('; ') : 'letters at H - 0.4 on a shelf at H - 1.0'));
+    if (faults.length) bad++;
+  }
+
+  /* Each glyph alone, so a fault is pinned to the character that has it: watertight,
+     oriented, and every shell whole. A shell is one extrudePoly of a convex outline,
+     and earTriangulate gives up on a polygon silently, so each of its two caps has to be
+     the n - 2 triangles a convex n-gon is: one short is a hole a closed check may not see
+     if a neighbouring shell happens to cover it. */
+  const band = { x0: -18, x1: 18, y0: 8, y1: 18 };
+  const fails = [];
+  let shells = 0;
+  for (const ch of ALL_GLYPHS) {
+    const calls = [];
+    const rec = Object.assign({}, G, { extrudePoly: (pts, z0, z1) => {
+      const p = G.extrudePoly(pts, z0, z1);
+      calls.push({ n: pts.length, z1, polys: p });
+      return p;
+    } });
+    const polys = NOTE_TEXT.noteShells(rec, NOTE_TEXT.noteFit(ch, band).segs, 10, 10.6);
+    const m = G.checkManifold(polys), o = checkOrientation(polys);
+    const torn = calls.filter((c) => {
+      const caps = c.polys.filter((p) => p.verts.length === 3);
+      const up = caps.filter((p) => p.verts.every((w) => w[2] === c.z1)).length;
+      return up !== c.n - 2 || caps.length - up !== c.n - 2 || c.polys.length - caps.length !== c.n;
+    });
+    shells += calls.length;
+    if (!calls.length || m.bad || !o.ok || torn.length)
+      fails.push(`${JSON.stringify(ch)}: ${calls.length} shells, ${m.bad} bad edges, ${orientationNote(o)}` +
+                 (torn.length ? `, ${torn.length} with a cap short` : ''));
+  }
+  console.log(`  every glyph alone      ` + (fails.length ? 'FAILED: ' + fails.join('; ')
+    : `${ALL_GLYPHS.length} glyphs, ${shells} shells, each watertight, oriented, every cap n - 2 triangles`));
+  if (fails.length) bad++;
+
+  /* The font's data goes into the page inside a script tag, where a less-than sign and a
+     slash together could end the script. None of it may hold one, and the file may not
+     either. And the four notes above have to be every glyph the font draws, or "every
+     glyph" is not. */
+  const strings = HERSHEY.ascii.concat(Object.values(HERSHEY.more));
+  const fontFile = fs.readFileSync(path.join(__dirname, '..', 'src', 'bins', 'font.js'), 'utf8');
+  const dataOk = strings.every((t) => /^[ B-b]+$/.test(t)) && !fontFile.includes('</') &&
+    HERSHEY.ascii.length === 95 && Object.keys(HERSHEY.more).length === 6;
+  const drawn = ALL_GLYPHS.filter((ch) => NOTE_TEXT.noteGlyph(ch));
+  const covered = drawn.length === ALL_GLYPHS.length &&
+    Object.keys(HERSHEY.more).every((ch) => ALL_GLYPHS.includes(ch));
+  console.log(`  the font's data        ${dataOk ? 'spaces and B to b only, no </ anywhere in font.js' : 'UNSAFE IN A SCRIPT TAG, or not 95 + 6 glyphs'}` +
+              `${covered ? '' : '; NOT EVERY GLYPH IS IN THE NOTES ABOVE'}`);
+  if (!dataOk || !covered) bad++;
+
+  /* Opt-in, and only when there are letters to print: every other bin is built to the
+     byte as it was, whatever its note says. Each row is a bin that has to come out the
+     same as the bin beside it without labelMode or note, and the reason shelfNote gives
+     the page for printing nothing. */
+  const crypto = require('crypto');
+  const digest = (cfg) => crypto.createHash('sha256')
+    .update(Buffer.from(G.stlBinary(buildBin(G, cfg).polys, 'b'))).digest('hex');
+  const one = { u: 1, v: 1, hUnits: 3, label: 12 };
+  const SAME = [
+    ['not asked for', one, { labelMode: 0, note: 'M3 screws' }, 'off'],
+    ['an empty note', one, { labelMode: 1, note: '' }, 'empty'],
+    ['spaces only', one, { labelMode: 1, note: '   ' }, 'empty'],
+    ['nothing in it prints', one, { labelMode: 1, note: '\u{1F642}é' }, 'empty'],
+    ['a 1-unit bin, too shallow', Object.assign({}, one, { hUnits: 1 }), { labelMode: 1, note: 'M3' }, 'shallow'],
+    ['no shelf asked for', Object.assign({}, one, { label: 0 }), { labelMode: 1, note: 'M3' }, 'noshelf'],
+    ['back wall lowered', Object.assign({}, one, { edges: { b: 0.5 } }), { labelMode: 1, note: 'M3' }, 'back'],
+    ['solid', Object.assign({}, one, { solid: true }), { labelMode: 1, note: 'M3' }, 'solid'],
+    ['carved', { u: 3, v: 3, hUnits: 3, label: 12, cells: cellsExcept(3, 3, [[2, 2]]) },
+     { labelMode: 1, note: 'M3' }, 'carved'],
+  ];
+  const moved = SAME.map(([name, cfg, extra, why]) => {
+    const withIt = Object.assign({}, cfg, extra), got = shelfNote(withIt).why;
+    if (digest(cfg) !== digest(withIt)) return `${name}: BUILT DIFFERENTLY`;
+    return got === why ? '' : `${name}: shelfNote says ${got}, not ${why}`;
+  }).filter(Boolean);
+  console.log(`  bins with nothing to print ` + (moved.length ? 'FAILED: ' + moved.join('; ')
+    : `${SAME.length} kinds, each the same STL to the byte, and the page told why`));
   if (moved.length) bad++;
 }
 

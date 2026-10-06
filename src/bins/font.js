@@ -38,9 +38,10 @@
  * strokes become closed convex shells instead (text.js). And its terms allow any use with
  * the acknowledgements above, which is an attribution term the AGPL allows.
  *
- * No string here holds `</`, so the data is safe inside the page's inline script: every
- * character of the glyph strings is a space or one from B to b in ASCII, which has no
- * < or / in it. test/bin-audit.js checks.
+ * Nothing in this file is a less-than sign followed by a slash, the one thing that could
+ * end the page's inline script early: every character of the glyph strings is a space
+ * or one from B to b in ASCII, and neither sign is in that range. test/bin-audit.js
+ * checks both.
  */
 'use strict';
 
