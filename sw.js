@@ -33,7 +33,7 @@
 /* Filled in by build.js. FILES is every page in tools/manifest.js, everything those pages
    load from this site, and the app's icons and manifest, as paths from the root. VERSION
    is a hash of all of those files, names and bytes. */
-const VERSION = "7fad7ec2c5b0";
+const VERSION = "d0144cc6639e";
 const FILES = [
   "./",
   "bins/",
