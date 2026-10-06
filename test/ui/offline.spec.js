@@ -34,7 +34,7 @@ let site;
 test.beforeAll(async () => { site = await H.serveRoot(); });
 test.afterAll(() => site.close());
 // one server for the file, so a case that ends offline must not leave the next one offline
-test.afterEach(() => { site.down = false; site.files = {}; site.maxAge = 0; site.log = []; });
+test.afterEach(() => { site.down = false; site.cut = []; site.files = {}; site.maxAge = 0; site.log = []; });
 
 function watch(page) {
   const errors = [];
@@ -100,12 +100,21 @@ test('Bins opens offline, with the drawer in its address', async ({ page, contex
   await binsReady(page);
   expect(await binCount(page)).toBe(2);
   await controlled(page);
+  /* Bins writes its address back in full a moment after it opens: the short link becomes
+     every field of every bin. So the address to hold the reload to is the one it settles
+     on, and the reloaded page is read once it has settled too. Read straight away, it
+     was the short link if the worker took over first, and the reloaded page could have
+     written it out in full by the time it was checked. */
+  const settled = () => page.waitForFunction(() => location.hash === '#' + descString());
+  await settled();
   const hash = await page.evaluate(() => location.hash);
+  expect(hash).toContain('bl=0-0-1-1-3-');
 
   await offline(context);
   const res = await page.reload();
   expect(res.fromServiceWorker()).toBe(true);
   await binsReady(page);
+  await settled();
   expect(await page.evaluate(() => location.hash)).toBe(hash);
   expect(await binCount(page)).toBe(2);
 
@@ -192,6 +201,27 @@ test('online, a page and its scripts are what the server has now, even inside th
     await expect(page).toHaveTitle('page B, script B');
   });
 
+/* And a page from the server gets its scripts from the server alone. The cache may be
+   another deploy than the page, and the server's page with the cache's script is the same
+   mismatch as the other way round. So when one of them cannot be fetched — the connection
+   drops as the page loads — the script fails, as it would with no worker at all, and the
+   page can be opened again, page and scripts together, from the cache. */
+test('a page from the server whose script cannot be fetched does not get the cached one',
+  async ({ page, context }) => {
+    await cacheDeployA(page);
+    deploy('B');
+    site.cut = ['/vendor/jszip.min.js'];
+    await page.goto(site.base + 'guide/');
+    await expect(page).toHaveTitle('page B, script undefined');
+    // nor anything it asks for once the server has gone
+    await offline(context);
+    expect(await page.evaluate(() => fetch('../vendor/three.min.js').then((r) => r.text(), () => 'no answer')))
+      .toBe('no answer');
+    // and opened again, it is all deploy A
+    await page.reload();
+    await expect(page).toHaveTitle('page A, script A');
+  });
+
 /* The cache is named for a hash of what it holds, so a deploy that changes anything is a
    new worker, and when it takes over the old cache goes — a visitor's browser does not
    keep every version of a 600 KB three.js it has ever been sent. */
@@ -209,8 +239,11 @@ test('a new deploy replaces the old cache rather than adding to it', async ({ pa
 
 /* The host lets the browser keep anything for ten minutes, so a new worker must not fill
    its cache from the browser's copies, which can be the deploy before. But a file the
-   server says has not changed need not be sent again, and most of what the worker caches
-   does not change from one deploy to the next. */
+   server says has not changed need not be sent again. On GitHub Pages a deploy changes
+   every file's ETag, so that is only ever a file asked for twice within one deploy: the
+   page the worker installs from and what it loaded, or a failed install tried again. The
+   server here hashes the file for its ETag, so the files this deploy leaves alone stand
+   in for those. */
 test('an install caches each file as the server has it now, without sending again what has not changed',
   async ({ page }) => {
     site.maxAge = 600;                  // as GitHub Pages
