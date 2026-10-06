@@ -238,3 +238,55 @@ test('counts read as English, on the page and in the export dialog', async ({ pa
   // and it really is saying the singular somewhere, or the assertions above are empty
   expect(text).toMatch(/\b1 bin\b/);
 });
+
+/* Every word on the map inside the bin it belongs to.
+ *
+ * The labels were written at one size whatever the bin, so "3u · 21mm" ran out of every
+ * one-cell-wide bin and across its neighbour's label, a note did the same, and in a bin
+ * one cell deep the note hung below the bottom edge. Measured with getBBox in the map's
+ * own units against the bin's rectangle as the model has it, so the test is not asking
+ * the label code where it thinks it put things. */
+test("the map's labels stay inside the bins they label", async ({ page }) => {
+  // a narrow tall bin, a narrow one with a two-digit height and a note too long for it,
+  // a wide shallow one with a note, a plain 1x1, and a 2x2 with room for everything
+  await H.dragCells(page, [0, 0], [0, 2]);
+  await H.setField(page, 'note', 'drill bits');
+  await H.dragCells(page, [1, 0], [1, 0]);
+  await H.setField(page, 'hUnits', 12);
+  await H.setField(page, 'note', 'M3 socket screws');
+  await H.dragCells(page, [2, 0], [3, 0]);
+  await H.setField(page, 'note', 'washers');
+  await H.dragCells(page, [4, 0], [4, 0]);
+  await H.dragCells(page, [5, 0], [6, 1]);
+  await page.waitForTimeout(300);
+
+  const r = await page.evaluate(() => {
+    const svg = document.getElementById('fillmap');
+    const ny = svg.getAttribute('viewBox').split(' ').map(Number)[3] / 40;
+    const boxes = B().map((b) => ({ b: `${b.u}x${b.v}`,
+      x0: b.x * 40 + 2, x1: (b.x + b.u) * 40 - 2,
+      y0: (ny - b.y - b.v) * 40 + 2, y1: (ny - b.y) * 40 - 2 }));
+    return [...svg.querySelectorAll('text.blabel, text.bsub, text.bnote')].map((t) => {
+      const x = +t.getAttribute('x'), y = +t.getAttribute('y');
+      const home = boxes.find((k) => x > k.x0 && x < k.x1 && y > k.y0 && y < k.y1);
+      const bb = t.getBBox();
+      return { text: t.textContent, cls: t.getAttribute('class'), home,
+               bb: { x0: bb.x, x1: bb.x + bb.width, y0: bb.y, y1: bb.y + bb.height } };
+    });
+  });
+  expect(r.length, 'fixture: the labels must have been drawn').toBeGreaterThan(6);
+  for (const l of r) {
+    expect(l.home, `"${l.text}" is not over any bin`).toBeTruthy();
+    const where = `"${l.text}" (${l.cls}) in the ${l.home.b} bin`;
+    expect(l.bb.x0, `${where} spills out of the left side`).toBeGreaterThanOrEqual(l.home.x0);
+    expect(l.bb.x1, `${where} spills out of the right side`).toBeLessThanOrEqual(l.home.x1);
+    expect(l.bb.y0, `${where} spills out of the top`).toBeGreaterThanOrEqual(l.home.y0);
+    expect(l.bb.y1, `${where} spills out of the bottom`).toBeLessThanOrEqual(l.home.y1);
+  }
+  // shortened, not merely dropped: the one-wide bins still say how tall they are
+  expect(r.map((l) => l.text)).toContain('12u');
+  // a one-deep bin with a note keeps the note and lets the height go
+  expect(r.map((l) => l.text)).toContain('washers');
+  // and a bin with room for it keeps the whole line
+  expect(r.map((l) => l.text)).toContain('12u · 84mm');
+});

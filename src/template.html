@@ -18,9 +18,9 @@
 <meta property="og:site_name" content="Drawerforge">
 <meta property="og:title" content="Gridfinity Baseplate Generator for Any Drawer — Drawerforge">
 <meta property="og:description" content="Measure your drawer, get a Gridfinity baseplate split to fit your printer bed, joined with printable connectors and ready to print.">
-<meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Gridfinity Baseplate Generator for Any Drawer — Drawerforge">
 <meta name="twitter:description" content="Measure your drawer, get a Gridfinity baseplate split to fit your printer bed, joined with printable connectors and ready to print.">
+<!--__SHARE__-->
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebApplication","name":"Drawerforge",
 "url":"https://drawerforge.co.uk/","applicationCategory":"DesignApplication",
@@ -48,6 +48,14 @@
     <a id="navBins" href="bins/">Bins</a>
     <a id="navGuide" href="guide/">Guide</a>
   </nav>
+  <!-- Which saved drawer this is, and the way to the others. Under the nav rather than in
+       it: the nav is a row of pages, and an action sitting in it reads like a fourth one.
+       The name is the button, so the bar is one control wide — on a phone the bins page
+       fits it beside its quickstart rather than spending a row of the first screen. -->
+  <div class="drawerbar">
+    <span>Drawer</span>
+    <button type="button" class="ghost" id="drawersBtn" aria-haspopup="dialog"><b id="drawerName" class="none">not saved</b> <span aria-hidden="true">▾</span></button>
+  </div>
 </header>
 <!-- Only shown when the layout came back from this browser rather than from a link.
      Restoring in silence leaves you unsure whether you are looking at what you left or
@@ -63,12 +71,24 @@
   <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-drawer"><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></button></h2>
   <div class="body" id="b-drawer">
     <div class="row">
-      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" min="1" max="2000" value="306" aria-describedby="errDrawerW">
+      <label class="f"><b>Drawer width (<span data-unit>mm</span>)</b><input id="drawerW" type="number" step="0.5" min="1" max="2000" value="306" aria-describedby="errDrawerW">
         <span class="hint" id="errDrawerW" style="color:var(--red)" hidden></span></label>
-      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" min="1" max="2000" value="380" aria-describedby="errDrawerD">
+      <label class="f"><b>Drawer depth (<span data-unit>mm</span>)</b><input id="drawerD" type="number" step="0.5" min="1" max="2000" value="380" aria-describedby="errDrawerD">
         <span class="hint" id="errDrawerD" style="color:var(--red)" hidden></span></label>
     </div>
-    <div class="hint">Internal dimensions. Measure at the tightest point and subtract 1–2&nbsp;mm so the assembly slides in.</div>
+    <!-- Inches are a way of typing the drawer and nothing more: the fields show the unit
+         picked here and the model, the link and every export stay in millimetres. After
+         the size fields rather than before them, so Tab still reaches the drawer width
+         first, and beside them, because they are what it changes. The bins page has the
+         same switch and the same remembered choice. -->
+    <div class="row" style="align-items:center">
+      <span class="hint" id="unitLabel">Measure the drawer in</span>
+      <div class="seg" role="group" aria-labelledby="unitLabel">
+        <button type="button" id="unitMm" class="on" aria-pressed="true">mm</button>
+        <button type="button" id="unitIn" aria-pressed="false">inches</button>
+      </div>
+    </div>
+    <div class="hint">Internal dimensions. Measure at the tightest point and subtract 1–2&nbsp;mm (about 1/16&nbsp;in) so the assembly slides in.</div>
     <label class="f"><b>Leftover space (margins)</b>
       <select id="marginMode">
         <option value="auto">Fill with solid margin (alignment below)</option>
@@ -83,8 +103,8 @@
         <select id="alignY"><option value="center">Centre</option><option value="start">Back (margin front)</option><option value="end">Front (margin back)</option></select></label>
     </div>
     <div class="row" id="customMargins" style="display:none">
-      <label class="f"><b>Left / Right (mm)</b><div class="row"><input id="mLeft" type="number" step="0.5" value="0"><input id="mRight" type="number" step="0.5" value="0"></div></label>
-      <label class="f"><b>Front / Back (mm)</b><div class="row"><input id="mFront" type="number" step="0.5" value="0"><input id="mBack" type="number" step="0.5" value="0"></div></label>
+      <label class="f"><b>Left / Right (<span data-unit>mm</span>)</b><div class="row"><input id="mLeft" type="number" step="0.5" value="0"><input id="mRight" type="number" step="0.5" value="0"></div></label>
+      <label class="f"><b>Front / Back (<span data-unit>mm</span>)</b><div class="row"><input id="mFront" type="number" step="0.5" value="0"><input id="mBack" type="number" step="0.5" value="0"></div></label>
     </div>
     <div class="hint" id="gridSummary"></div>
     <label class="f"><b>Plate style</b>
@@ -101,20 +121,21 @@
 <section class="p" id="s-printer">
   <h2 class="ph"><button type="button" aria-expanded="true" aria-controls="b-printer"><span class="n">02</span> Printer <span class="caret">▾</span></button></h2>
   <div class="body" id="b-printer">
-    <label class="f"><b>Preset</b>
+    <!-- Printers by name, generated from tools/printers.js — the same list the bins page
+         and the split guide print, so the three cannot disagree. They did: this list
+         filed the 180 mm A1 mini under 220 mm while the guide said 180, and an A1 mini
+         owner who picked their own printer got pieces their bed could not take, with
+         every check on the page passing because the checks trust the bed. -->
+    <label class="f"><b>Printer</b>
       <select id="bedPreset">
-        <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu X1/P1)</option>
-        <option value="220,220,250">220 × 220 × 250 (Ender 3, A1 mini class)</option>
-        <option value="250,210,220">250 × 210 × 220 (Prusa MK4 class)</option>
-        <option value="300,300,300">300 × 300 × 300 (large format)</option>
-        <option value="180,180,180">180 × 180 × 180 (compact)</option>
-        <option value="custom">Custom…</option>
+<!--__PRINTERS__-->
       </select></label>
     <div class="row3">
-      <label class="f"><b>Bed width</b><input id="bedW" type="number" min="20" max="2000" value="256" aria-describedby="errBedW"></label>
-      <label class="f"><b>Bed depth</b><input id="bedD" type="number" min="20" max="2000" value="256" aria-describedby="errBedD"></label>
+      <label class="f"><b>Bed width (mm)</b><input id="bedW" type="number" min="20" max="2000" value="256" aria-describedby="errBedW"></label>
+      <label class="f"><b>Bed depth (mm)</b><input id="bedD" type="number" min="20" max="2000" value="256" aria-describedby="errBedD"></label>
       <label class="f"><b>Height (Z)</b><input id="bedH" type="number" min="20" max="2000" value="256" aria-describedby="errBedH"></label>
     </div>
+    <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
     <div class="hint">Only affects the material estimate, not the geometry. A baseplate is nearly all shell — the socket walls are a couple of perimeters wide and print solid whatever you set — so this moves the figure much less than it does for bins. It is the slab under a solid plate that the infill actually reaches.</div>
     <span class="hint" id="errBedW" style="color:var(--red)" hidden></span>
@@ -232,15 +253,31 @@
      computed anything yet; drawMap and drawPieceTable rewrite them from the real state
      on every draw, so they say what is actually there rather than what the markup
      guessed. -->
+<!-- The map and the preview share a row, the same .stagetop the bins page uses. Below
+     the map, the preview started 750 px down a 768 px window, so changing a setting at
+     a common laptop size changed nothing you could see. Side by side when there is
+     room, the preview underneath when the window is narrow or the drawer is wide —
+     drawMap decides, through the same DF.stageRow as the bins map. -->
+<div class="stagetop">
+
 <div class="stagecard">
   <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
   <div id="mapwrap"><svg id="cutmap" role="img" aria-label="Cut map, loading"></svg></div>
+  <!-- Under the map because the map is where the stray click happens: one click on a grid
+       line switches the whole split to Manual. They cover every setting on the page, not
+       just the cuts — the panels are a click away from here, the reverse is not. -->
+  <div class="row" style="padding:0 14px 10px">
+    <button type="button" class="ghost" id="undoBtn" disabled title="Undo (Ctrl+Z)" aria-keyshortcuts="Control+Z">Undo</button>
+    <button type="button" class="ghost" id="redoBtn" disabled title="Redo (Ctrl+Shift+Z)" aria-keyshortcuts="Control+Shift+Z Control+Y">Redo</button>
+  </div>
   <div id="warnings"></div>
 </div>
 
 <div class="stagecard">
   <h3>Preview <span class="tail"><label class="tog"><input type="checkbox" id="explode"> exploded</label></span></h3>
   <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the baseplate, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · middle-drag or shift-drag pan · wheel zoom</div></div>
+</div>
+
 </div>
 
 <div class="stagecard">
@@ -300,6 +337,33 @@
   </div>
 </dialog>
 
+<!-- Saved drawers. The same markup on both tools, because the same module drives it:
+     src/shared-ui/drawers.js fills in the list and the messages each time it opens. -->
+<dialog id="drawersDlg" class="sheet" aria-labelledby="drawersTitle">
+  <div class="sheethead">
+    <h2 id="drawersTitle">Your drawers</h2>
+    <button type="button" id="drawersClose" title="Close" aria-label="Close">×</button>
+  </div>
+  <div class="sheetbody">
+    <div class="exnote">Each saved drawer keeps its baseplate and its bins together, on this device only. The one that is open saves itself as you work, and opening another brings back both halves of it, on either page.</div>
+    <div class="exsum" id="drawersNow">—</div>
+    <form class="dwsave" id="drawersSaveForm">
+      <label class="f"><b>Save the design on screen as a new drawer</b>
+        <input id="drawersNewName" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Workbench, top drawer"></label>
+      <button type="submit" class="act">Save</button>
+    </form>
+    <div class="exfit" id="drawersMsg" role="status" hidden></div>
+    <div class="exfiles" id="drawersList" hidden></div>
+    <div class="exportrow">
+      <button type="button" class="ghost" id="drawersExport">Export this drawer</button>
+      <button type="button" class="ghost" id="drawersExportAll">Export every drawer</button>
+      <button type="button" class="ghost" id="drawersImportBtn">Import a design file…</button>
+      <input type="file" id="drawersImport" accept=".json,application/json" hidden>
+    </div>
+    <div class="exnote">A design file is a small JSON file of settings — no 3D models, which are rebuilt from the settings. Use one to move drawers to another device, to keep a backup, or to attach to a bug report.</div>
+  </div>
+</dialog>
+
 <script src="vendor/three.min.js"></script>
 <script src="vendor/jszip.min.js"></script>
 <script>
@@ -307,6 +371,12 @@
 </script>
 <script>
 /*__WIDGETS__*/
+</script>
+<script>
+/*__FIELDS__*/
+</script>
+<script>
+/*__DRAWERS__*/
 </script>
 <script>
 /*__UI__*/

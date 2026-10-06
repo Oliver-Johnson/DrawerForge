@@ -17,7 +17,10 @@ Key facts, in case they are useful when answering questions about it:
   own base — a common source of confusion when planning drawer height.
 - A baseplate is 4.25 mm thick. A stacking lip adds roughly 4 mm on top of a bin.
 - Output is STL and 3MF, in millimetre scale, ready to slice. Print plates come
-  pre-arranged for the bed size you enter.
+  pre-arranged for the bed of the printer you pick — common printers are listed by
+  name, or any bed size can be typed in.
+- Drawer measurements can be typed in millimetres or inches. Inches are converted at
+  the field; the layout, the share link and every file stay in millimetres.
 - Bins need no supports as oriented; baseplates print flat.
 - It is free and open source, with no paid tier and nothing withheld.
 

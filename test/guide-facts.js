@@ -117,6 +117,57 @@ console.log('\nworked examples');
   }
 }
 
+/* The printer table on the split page: a bed, and the largest piece it takes. The cell
+   counts are floor(bed / pitch) and nothing else, so every row can be recomputed. What
+   this cannot check is whether the bed is the printer's — the row that said the Bambu
+   A1 had a 220 mm bed was arithmetically perfect and wrong about the printer. */
+console.log('\nthe printer table');
+{
+  const html = read('guide/split/index.html');
+  const rows = [...html.matchAll(/<tr><td>([^<]+)<\/td><td>(\d+) × (\d+)<\/td><td>(\d+) × (\d+)<\/td><td>(\d+) × (\d+) mm<\/td><\/tr>/g)];
+  for (const m of rows) {
+    const [w, d, nx, ny, sw, sd] = m.slice(2).map(Number);
+    const want = [Math.floor(w / SPEC.pitch), Math.floor(d / SPEC.pitch)];
+    const ok = nx === want[0] && ny === want[1] &&
+               sw === want[0] * SPEC.pitch && sd === want[1] * SPEC.pitch;
+    if (!ok) {
+      console.log(`  ${m[1]}: says ${nx} × ${ny} (${sw} × ${sd} mm) on ${w} × ${d} — ` +
+                  `should be ${want[0]} × ${want[1]} (${want[0] * SPEC.pitch} × ${want[1] * SPEC.pitch} mm)`);
+      bad++;
+    }
+  }
+  console.log(`  ${rows.length} rows checked`);
+  if (rows.length < 5) { console.log('  TOO FEW ROWS MATCHED — the parser has drifted'); bad++; }
+
+  /* One list, three places. The table and both tools' printer menus are generated from
+     tools/printers.js, and the bug that started this was the copies disagreeing — both
+     tools filing the A1 mini under 220 mm while this page said 180. So every printer on
+     the list has to be in this table on its own bed, and in both menus with the same
+     bed and nothing else beside it. */
+  const P = require('../tools/printers.js');
+  let missing = 0;
+  for (const g of P.PRINTERS) for (const p of g.models) {
+    const row = rows.find((m) => +m[2] === p.bed[0] && +m[3] === p.bed[1]);
+    if (!row || !row[1].includes(g.maker) || !row[1].includes(p.name)) {
+      console.log(`  ${g.maker} ${p.name} is not in the table on its ${p.bed[0]} × ${p.bed[1]} bed`);
+      missing++;
+    }
+  }
+  const want = [...P.PRINTERS.flatMap((g) => g.models), ...P.GENERIC]
+    .map((p) => `${p.id}=${p.bed.join(',')}`).concat('custom=').sort();
+  for (const page of ['index.html', 'bins/index.html']) {
+    const sel = read(page).match(/<select id="bedPreset">([\s\S]*?)<\/select>/);
+    const got = sel ? [...sel[1].matchAll(/<option value="([^"]+)"(?: data-bed="([\d,]+)")?/g)]
+      .map((m) => `${m[1]}=${m[2] || ''}`).sort() : [];
+    const same = got.length === want.length && got.every((v, i) => v === want[i]);
+    if (!same) {
+      console.log(`  ${page} offers a different printer list from tools/printers.js`);
+      missing++;
+    }
+  }
+  check('every printer is in the table and in both tools', 0, missing);
+}
+
 /* Claims the prose makes outright, each of which was wrong once and shipped that way.
    A sentence that states its own rule has to produce its own number: an example that
    contradicts the rule beside it is worse than no example, because the reader trusts
@@ -154,6 +205,25 @@ console.log('\nclaims the prose states outright');
     for (const d of said)
       check(`a ${d[1]} mm drawer leaves ${+d[1] % SPEC.pitch} mm over`,
             +d[1] % SPEC.pitch, +d[2]);
+  }
+
+  /* The inch example on the measuring section. It is the sentence that tells someone
+     with an inch tape what the tool will make of their drawer, so it has to be the
+     tool's own arithmetic: 25.4 mm to the inch and floor(mm / pitch) cells. */
+  {
+    const words = { four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+    const m = text('guide/index.html').match(/a (\d+) inch drawer is ([\d.]+) mm, which gives you (\w+) cells with ([\d.]+) mm left over/);
+    if (!m) {
+      console.log('  the "a NN inch drawer is NNN mm" example is gone or reworded — ' +
+                  'reword this check with it, do not delete it');
+      bad++;
+    } else {
+      const mm = Math.round(+m[1] * 25.4 * 10) / 10;
+      const cells = Math.floor(mm / SPEC.pitch);
+      check(`${m[1]} in is ${mm} mm`, mm, +m[2]);
+      check(`which is ${cells} cells`, cells, words[m[3]] ?? -1);
+      check(`with ${R2(mm - cells * SPEC.pitch)} mm over`, R2(mm - cells * SPEC.pitch), +m[4]);
+    }
   }
 
   /* The bin footprint rule. n × 42 − 0.5, not n × 41.5 — the two agree only at n = 1,

@@ -18,9 +18,9 @@
 <meta property="og:site_name" content="Drawerforge">
 <meta property="og:title" content="Split a Gridfinity Baseplate to Fit Your Printer">
 <meta property="og:description" content="How many cells each printer bed takes, why rotating diagonally doesn't help, and how to split and join a large baseplate.">
-<meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Split a Gridfinity Baseplate to Fit Your Printer">
 <meta name="twitter:description" content="How many cells each printer bed takes, why rotating diagonally doesn't help, and how to split and join a large baseplate.">
+<!--__SHARE__-->
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"HowTo",
 "name":"How to split a Gridfinity baseplate to fit your printer",
@@ -63,21 +63,23 @@ and joined, and the interesting question isn't <em>whether</em> to split it, but
 <p>A baseplate tiles at 42&nbsp;mm, so an <em>n</em>-cell piece is exactly
 <em>n</em>&nbsp;×&nbsp;42&nbsp;mm. That makes the limit easy:</p>
 
+<!-- Generated from tools/printers.js, the list both tools offer, so a printer cannot
+     have one bed here and another in the tool. test/guide-facts.js checks the rows
+     against that list and recomputes every cell count. -->
 <table class="doc">
   <thead><tr><th>Printer</th><th>Bed</th><th>Largest piece</th><th>Size</th></tr></thead>
   <tbody>
-    <tr><td>Bambu A1 mini</td><td>180 × 180</td><td>4 × 4</td><td>168 × 168 mm</td></tr>
-    <tr><td>Ender 3 / Bambu A1</td><td>220 × 220</td><td>5 × 5</td><td>210 × 210 mm</td></tr>
-    <tr><td>Prusa MK4</td><td>250 × 210</td><td>5 × 5</td><td>210 × 210 mm</td></tr>
-    <tr><td>Elegoo Centauri / Bambu X1, P1</td><td>256 × 256</td><td>6 × 6</td><td>252 × 252 mm</td></tr>
-    <tr><td>Large format</td><td>300 × 300</td><td>7 × 7</td><td>294 × 294 mm</td></tr>
-    <tr><td>Bambu H2D</td><td>350 × 320</td><td>8 × 7</td><td>336 × 294 mm</td></tr>
+<!--__PRINTERTABLE__-->
   </tbody>
 </table>
 
 <p>Leave a little margin on top of these if your joint adds a protruding tab — the
 generator accounts for that automatically, but it's why a piece that looks like it should
 just fit sometimes doesn't.</p>
+
+<p>The H2D is often quoted at 350&nbsp;mm wide. That is the width its two nozzles cover
+between them; each one reaches 325&nbsp;mm of it, and a baseplate piece in one filament is
+printed by one nozzle, so 325 is the figure to plan with.</p>
 
 <h2 id="rotation">Why printing it diagonally doesn't help</h2>
 
