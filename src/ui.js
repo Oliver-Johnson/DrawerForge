@@ -480,6 +480,24 @@ function warningsList() {
   if (!heightFits())
     out.push({ err: true, t: `The plate is ${roundMm(plateHeightMm())} mm tall, more than ` +
       `your printer's ${state.bedH} mm build height — lower the extra floor, or check the bed height.` });
+  /* A key on each side of a piece one cell across, facing each other. Their housings run
+     into each other below about 14.35 mm and the plate leaks; keysMeet in core.js has the
+     measurements and why this is refused rather than built. Only a moved cut or a larger
+     pitch clears it. Not on a grid past the caps above, which is refused already and
+     would be thousands of housings to measure on every redraw. */
+  if (!overCap()) {
+    const meet = keysMeet(state, layout);
+    if (meet.length) {
+      const ids = meet.map((m) => m.id), one = ids.length === 1;
+      const needs = Math.ceil(Math.max(...meet.map((m) => m.needs)) * 100 - 1e-6) / 100;
+      const named = one ? `Piece ${ids[0]} is`
+        : `Pieces ${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]} are`;
+      out.push({ err: true, t: `${named} one cell across between two seams, and at this ` +
+        `${state.pitch} mm pitch the keys on ${one ? 'its' : 'their'} two sides are too close: ` +
+        'their housings run into each other, which leaves holes in the plate. Move a cut so ' +
+        `${one ? 'it is' : 'they are'} two cells across, or use a pitch of ${needs} mm or more.` });
+    }
+  }
   if (layout.pieces.some(pc => pc.nx*pc.ny === 1 && !pc.hR && !pc.hB))
     out.push({ t: 'A piece is a single cell — printable, but consider moving a cut for a sturdier layout.' });
   /* One axis at a time. It fired on either and then printed both, so a drawer narrower

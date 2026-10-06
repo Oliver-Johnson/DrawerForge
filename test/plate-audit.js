@@ -1130,7 +1130,7 @@ console.log('\na rounded corner beside a half cell keeps its rim:');
    touching. `beyond` is how far any piece reaches past its own footprint and the tabs or
    lobes buildPiece says stick out of it — the room the print plan packs it into, and the
    line the next piece starts at. */
-function buildAll(over) {
+function designCfg(over) {
   const cfg = Object.assign({}, G.DEFAULTS, {
     marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0,
     magnets: false, screws: false, arcSegs: 6 }, over);
@@ -1140,6 +1140,10 @@ function buildAll(over) {
     for (const j of ['tab', 'key', 'hclip', 'puzzle'])
       cfg[j] = Object.assign({}, G.DEFAULTS[j], { clr: fit[j] });
   }
+  return cfg;
+}
+function buildAll(over) {
+  const cfg = designCfg(over);
   const L = G.computeLayout(cfg);
   const built = L.pieces.map((pc) => G.buildPiece(cfg, L, pc));
   const pieces = built.map((r) => r.polys);
@@ -1324,13 +1328,29 @@ console.log('\nthe smallest pitch the page allows:');
     'snap top': { connector: 'snap', keyInsert: 'top' },
     skeleton: { connector: 'none', plateStyle: 'skeleton' },
   };
-  const LAYOUTS = PIECE_LAYOUTS;
+  /* And two layouts in which a piece is one cell deep between two seams, rows and then
+     columns, so that it takes a key from each side. Below about 14.3 mm the two housings
+     meet in the middle of it (keysMeet in core.js), and the page refuses the design: Checks
+     says why and nothing is built. Neither layout was here, and every keyed joint in the
+     floor leaked on both, as did a key in the wall put in from above. So a refused design
+     has to be one the engine really cannot build — open at this pitch — and at the first
+     pitch the page takes it again it has to come back clean. */
+  const LAYOUTS = Object.assign({}, PIECE_LAYOUTS, {
+    'rows one cell deep': (p) => ({ drawerW: 3 * p, drawerD: 3 * p, splitMode: 'manual',
+                                    rowCuts: [1, 2], colCuts: [[], [], []] }),
+    'columns one cell wide': (p) => ({ drawerW: 3 * p, drawerD: 3 * p, splitMode: 'manual',
+                                       rowCuts: [], colCuts: [[1, 2]] }),
+  });
   // the puzzle's own quarantine above, at this pitch too: the same edge, used 4 times
-  const QUARANTINE = { 'puzzle @ 2x2 pieces': 'lobe apex sits on a region boundary' };
+  const QUARANTINE = { 'puzzle @ 2x2 pieces': 'lobe apex sits on a region boundary',
+                       'puzzle @ rows one cell deep': 'lobe apex sits on a region boundary' };
+  const refused = [];
   for (const [ln, lay] of Object.entries(LAYOUTS)) {
     const leaks = [];
     for (const [cn, conf] of Object.entries(CONFIGS)) {
       const r = buildAll(Object.assign({ pitch: P }, lay(P), conf));
+      const meet = G.keysMeet(r.cfg, r.L);
+      if (meet.length) { refused.push({ cn, ln, r, meet }); continue; }
       const q = QUARANTINE[`${cn} @ ${ln}`];
       if (q) {
         console.log(`  ${cn} @ ${ln}: ${leakText(r)}` +
@@ -1338,9 +1358,30 @@ console.log('\nthe smallest pitch the page allows:');
         if (!r.bad || r.open) bad++;
       } else if (r.bad) leaks.push(`${cn} ${leakText(r)}`);
     }
-    console.log(`  ${P} mm, ${ln}: ${Object.keys(CONFIGS).length} configurations, ` +
+    const no = refused.filter((f) => f.ln === ln).length;
+    console.log(`  ${P} mm, ${ln}: ${Object.keys(CONFIGS).length} configurations` +
+                `${no ? `, ${no} refused (below)` : ''}, ` +
                 (leaks.length ? `LEAKING: ${leaks.join('; ')}` : 'every other one watertight'));
     bad += leaks.length;
+  }
+  for (const { cn, ln, r, meet } of refused) {
+    const needs = Math.max(...meet.map((m) => m.needs));
+    // up a hundredth at a time to the first pitch the page takes, which has to build clean
+    const meets = (p) => {
+      const c = designCfg(Object.assign({ pitch: p }, LAYOUTS[ln](p), CONFIGS[cn]));
+      return G.keysMeet(c, G.computeLayout(c)).length > 0;
+    };
+    let p = P;
+    while (meets(p)) p = Math.round((p + 0.01) * 100) / 100;
+    const ok = buildAll(Object.assign({ pitch: p }, LAYOUTS[ln](p), CONFIGS[cn]));
+    const earned = r.open > 0, clean = !ok.bad;
+    const many = meet.length > 1;
+    console.log(`  refused: ${cn} @ ${ln}, ${many ? 'pieces' : 'piece'} ` +
+                `${meet.map((m) => m.id).join(', ')} ${many ? 'need' : 'needs'} ` +
+                `${needs.toFixed(2)} mm: ${leakText(r)} at ${P}` +
+                `${earned ? '' : ' — NOT OPEN, SO THE REFUSAL COSTS A PLATE THAT BUILDS'}; ` +
+                `taken again at ${p}, ${leakText(ok)}${clean ? '' : '   FAIL'}`);
+    if (!earned || !clean) bad++;
   }
   // the step below: 13.3 opened the narrow pieces of four joints
   const below = Math.round((P - 0.2) * 10) / 10;

@@ -150,6 +150,35 @@ test.describe('ranges on the geometry fields', () => {
     await page.locator('#openExport').click();
     expect(await text(page, 'exFit')).toMatch(/24\.25 mm tall and your printer builds 20 mm high/);
   });
+
+  /* Three rows, each its own piece, so the middle one is one cell deep with a seam on
+     each side and a bowtie key from each, at the same place along both. Below 14.35 mm
+     the two housings overlap and that piece came out with 47 open edges; the page said
+     nothing and offered the download (test/plate-audit.js, the smallest pitch). */
+  const rows = (p, w) => `#pi=${p}&w=${w}&d=${w}&sp=manual&rc=1,2&cc=__&cn=bowtie`;
+  test('keys that meet across a piece one cell deep are a check, not a plate', async ({ page }) => {
+    const errors = await openAt(page, rows(13.5, 40.5));
+    expect(await page.evaluate(() => layout.pieces.map((pc) => `${pc.id} ${pc.nx}x${pc.ny}`)),
+      'fixture: three rows, one cell deep each').toEqual(['A1 3x1', 'A2 3x1', 'A3 3x1']);
+    expect(await text(page, 'warnings')).toMatch(new RegExp(
+      'Piece A2 is one cell across between two seams, and at this 13\\.5 mm pitch the keys ' +
+      'on its two sides are too close: their housings run into each other, which leaves ' +
+      'holes in the plate\\. Move a cut so it is two cells across, or use a pitch of ' +
+      '14\\.35 mm or more\\.'));
+    expect(await text(page, 'pieceTail')).toMatch(/not building/);
+    await page.locator('#openExport').click();
+    expect(await text(page, 'exFit')).toMatch(/Piece A2 is one cell across.*Nothing can be exported until that is fixed\./);
+    expect(errors).toEqual([]);
+  });
+
+  // and the pitch it names is enough: the same split builds, with nothing to say
+  test('at the pitch the check names, the same rows build', async ({ page }) => {
+    const errors = await openAt(page, rows(14.35, 43.05));
+    expect(await page.evaluate(() => layout.pieces.length)).toBe(3);
+    expect(await text(page, 'warnings')).not.toMatch(/between two seams/);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(errors).toEqual([]);
+  });
 });
 
 /* ---- limits no tighter than the geometry ------------------------------------------ */
