@@ -52,7 +52,7 @@ const cube = () => {
    none of it. Every line end is read as a newline, whatever was written (2.11). And an
    attribute's value is normalized (3.3.3): each raw tab, newline or return in it is
    read as a space, and only a character reference brings one through as itself. */
-const NOT_CHAR = /[^\t\n\r\x20-퟿-�\u{10000}-\u{10FFFF}]/u;
+const NOT_CHAR = /[^\t\n\r\x20-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
 const ENTITY = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 const hex = (c) => 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
 function tagsOf(xml) {
@@ -74,7 +74,7 @@ function tagsOf(xml) {
         .replace(/&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g, (ref, e) => {
           if (e[0] !== '#') return ENTITY[e];
           const n = e[1] === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-          const c = n <= 0x10FFFF ? String.fromCodePoint(n) : '￿';
+          const c = n <= 0x10FFFF ? String.fromCodePoint(n) : '\uFFFF';
           if (NOT_CHAR.test(c)) problems.push(`<${m[1]} ${a[1]}> refers to ${ref}, which is no character XML has`);
           return c;
         });
@@ -117,7 +117,7 @@ console.log('part names');
   const ODD = [
     ['tab\there', 'tab\there'], ['two\nlines', 'two\nlines'], ['cr\rand\r\nlf', 'cr\rand\r\nlf'],
     ['bell\u0007', 'bell'], ['\u0001start', 'start'], ['nul\u0000end', 'nulend'],
-    ['esc\u001b[0m', 'esc[0m'], ['not￾a￿char', 'notachar'],
+    ['esc\u001b[0m', 'esc[0m'], ['not\uFFFEa\uFFFFchar', 'notachar'],
     ['half \uD83D a pair', 'half  a pair'], ['tail \uDCE6', 'tail '],
     ['Größe 📦 ✓', 'Größe 📦 ✓'], ['del\u007F', 'del\u007F'],
   ];
@@ -127,7 +127,7 @@ console.log('part names');
     odd.problems.join('; '));
   const oddObjects = odd.tags.filter((t) => t.tag === 'object');
   // JSON escapes the C0 controls and lone surrogates but prints these raw, unseen
-  const say = (s) => JSON.stringify(s).replace(/[\u007F-\u009F￾￿]/g,
+  const say = (s) => JSON.stringify(s).replace(/[\u007F-\u009F\uFFFE\uFFFF]/g,
     (c) => '\\u' + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0'));
   for (const [i, [name, want]] of ODD.entries()) {
     const got = oddObjects[i] && oddObjects[i].attrs.name;
