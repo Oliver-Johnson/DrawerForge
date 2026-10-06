@@ -78,9 +78,44 @@ const GRID_MAX = Math.floor(DRAWER_MAX / SPEC.pitch);
 $('gridX').max = $('gridY').max = GRID_MAX;
 // the drawer size as typed, before the clamp; Checks names it when the two differ
 let drawerAsked = { w: 0, d: 0 };
+/* The margins the baseplate keeps, as the Baseplates page left them in the link.
+ *
+ * This page has no fields for them, and carries them through untouched in hashExtras,
+ * but they decide how many cells the plate has: custom margins take their room off the
+ * drawer before the cells are counted. A margin that does not read as a length is none,
+ * as the plate's own field reads it. The other two modes, a solid margin and a gap, pad
+ * the same grid and change no count. */
+function plateMargins() {
+  if (hashExtras.mm !== 'custom') return null;
+  const m = (k) => {
+    const x = Number(hashExtras[k]);
+    return isFinite(x) && x > 0 ? x : 0;
+  };
+  return { l: m('ml'), r: m('mr'), f: m('mf'), b: m('mb') };
+}
+/* The pitch the baseplate in the link was laid out at, or null when it is the standard
+   one or there is none. Spec bins are 42 mm and seat in nothing else — see warnings. */
+function platePitch() {
+  if (!Object.prototype.hasOwnProperty.call(hashExtras, 'pi')) return null;
+  const x = Number(hashExtras.pi);
+  return x === SPEC.pitch ? null : x;
+}
+/* The plate's cells, counted by the code that lays the plate out (gridCells in core.js),
+   at the 42 mm a spec bin is made to. It was the drawer over 42 and nothing else, so a
+   plate whose margins left it six cells wide arrived here as a map seven wide, and the
+   seventh column took bins with no sockets under them. At any other pitch the plate has
+   no cell a spec bin fits, so the grid is the 42 mm cells the plate's margins leave room
+   for, and Checks says why none of them will seat. */
 function grid() {
-  const nx = Math.max(1, Math.min(GRID_MAX, Math.floor(state.drawerW / SPEC.pitch)));
-  const ny = Math.max(1, Math.min(GRID_MAX, Math.floor(state.drawerD / SPEC.pitch)));
+  const pm = plateMargins();
+  // each held to the drawer, as the plate's fields hold them
+  const W = state.drawerW, D = state.drawerD;
+  const c = gridCells({ drawerW: W, drawerD: D, pitch: SPEC.pitch,
+    marginMode: pm ? 'custom' : 'auto',
+    mLeft: pm ? Math.min(pm.l, W) : 0, mRight: pm ? Math.min(pm.r, W) : 0,
+    mFront: pm ? Math.min(pm.f, D) : 0, mBack: pm ? Math.min(pm.b, D) : 0 });
+  const nx = Math.max(1, Math.min(GRID_MAX, c.nx));
+  const ny = Math.max(1, Math.min(GRID_MAX, c.ny));
   const avail = state.drawerH - state.plateH;
   return { nx, ny, avail, maxUnits: Math.max(1, Math.floor((avail - LIP_H) / SPEC.unitH)) };
 }
@@ -1728,6 +1763,13 @@ function warnings() {
   }
   if (drawerAsked.w > DRAWER_MAX || drawerAsked.d > DRAWER_MAX)
     out.push({ err: true, t: `A ${drawerAsked.w} × ${drawerAsked.d} mm drawer is bigger than the ${DRAWER_MAX} mm a side this tool lays out, so it is drawn as ${state.drawerW} × ${state.drawerD} mm — a ${g.nx} × ${g.ny} grid. Check the drawer size; split a drawer that really is this big into parts.` });
+  /* A baseplate at another pitch has no socket a spec bin seats in, and nothing else on
+     this page would say so: the map is drawn in 42 mm cells whatever the plate is. The
+     figure is the link's, so it is written as a number and only when it reads as one —
+     this goes into the panel as markup. */
+  const pp = platePitch();
+  if (pp !== null)
+    out.push({ err: true, t: `The baseplate in this design is laid out on a ${isFinite(pp) && pp > 0 ? `${+pp.toFixed(2)} mm` : 'non-standard'} grid. These bins are made to the standard's ${SPEC.pitch} mm, so they will not seat in it: set Grid pitch on the Baseplates page back to ${SPEC.pitch} mm.` });
   const tot = stackHeight();
   if (tot > g.avail + 0.001)
     out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate.` });
@@ -2789,12 +2831,16 @@ function saveBlobAsync(blob, name) {
    the shared link are built on — a second stored dimension could disagree with the
    first — so these write it and then let everything recompute from there. A drawer of
    exactly n × 42 mm grids to n cells, which is what someone who owns an n-cell
-   baseplate is telling us they have. */
+   baseplate is telling us they have. Plus the margins that baseplate keeps, when the
+   link carries custom ones: those come off the drawer before the cells are counted (see
+   grid), so n cells and nothing else would come back as fewer than were typed. */
 for (const [id, field] of [['gridX', 'drawerW'], ['gridY', 'drawerD']])
   $(id).addEventListener('input', () => {
     const n = parseInt($(id).value, 10);
     if (!isFinite(n) || n < 1) return;      // mid-edit: an empty box is not a request
-    FIELDS.setLength($(field), n * SPEC.pitch, unit);   // in whatever unit it is showing
+    const pm = plateMargins();
+    const keep = !pm ? 0 : field === 'drawerW' ? pm.l + pm.r : pm.f + pm.b;
+    FIELDS.setLength($(field), n * SPEC.pitch + keep, unit);   // in whatever unit it is showing
     schedule();
   });
 $('bedPreset').addEventListener('change', () => {

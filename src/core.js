@@ -874,9 +874,14 @@ function pieceColumn(s) {
     out = String.fromCharCode(65 + (n - 1) % 26) + out;
   return out;
 }
-/* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
-   splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
-function computeLayout(p) {
+/* How many cells the drawer holds, and the margins left around them: the first thing a
+   layout decides, and the one thing the Bins page has to decide the same way. That page
+   counted its own cells as the drawer over 42 and nothing else, so a plate with custom
+   margins six cells wide arrived there as a map seven wide, and the seventh column took
+   bins with no sockets under them. Both pages ask here now. Needs drawerW, drawerD,
+   pitch, marginMode, and the four margins when it is 'custom' or the alignment when it
+   is not. */
+function gridCells(p) {
   const pitch = p.pitch;
   let nx, ny, mL, mR, mF, mB;
   if (p.marginMode === 'custom') {
@@ -894,6 +899,13 @@ function computeLayout(p) {
     mF = p.alignY === 'start' ? remY : p.alignY === 'end' ? 0 : remY/2;
     mB = remY - mF;
   }
+  return { nx, ny, mL, mR, mF, mB };
+}
+/* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
+   splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
+function computeLayout(p) {
+  const pitch = p.pitch;
+  const { nx, ny, mL, mR, mF, mB } = gridCells(p);
   const maxCellsX = Math.max(1, Math.floor(p.bedW / pitch));
   const maxCellsY = Math.max(1, Math.floor(p.bedD / pitch));
 
@@ -2641,7 +2653,7 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, gridCells, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
