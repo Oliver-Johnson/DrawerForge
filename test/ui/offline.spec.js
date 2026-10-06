@@ -131,6 +131,67 @@ test('online, a page and its files are what the server has now, not the cached c
       .toContain('<!-- new -->');
   });
 
+/* A page and the scripts it loads have to be one deploy: vendor/three.min.js keeps its
+   name across upgrades, so a page from one deploy running another's would fail with
+   nothing to say why. There are three places a page or a script can come from — the
+   server, the worker's cache, and the copy the browser keeps of what it was last sent,
+   which GitHub Pages lets it use for ten minutes without asking — and the browser's copy
+   can be a deploy the worker's cache is not: one the visitor saw since, whose own worker
+   failed to install or has not finished.
+
+   Two tiny deploys of the guide stand in for the site here, each page saying which deploy
+   its script came from. The worker's cache is filled with A; a visit after B is deployed
+   leaves the browser holding B for ten minutes, as if B's worker had failed. Each page
+   also has a second script it loads only when asked, later(), for a page still loading
+   when the connection comes back. */
+const deploy = (d) => {
+  site.files['/guide/'] = '<!doctype html><title>-</title><script src="../vendor/jszip.min.js"></script>' +
+    `<script>document.title = 'page ${d}, script ' + self.deploy;\n` +
+    'window.later = () => new Promise((done) => { const s = document.createElement("script");' +
+    ` s.src = "../vendor/three.min.js"; s.onload = () => done("page ${d}, script " + self.later);` +
+    ' document.head.append(s); });</script>';
+  site.files['/vendor/jszip.min.js'] = `self.deploy = '${d}';`;
+  site.files['/vendor/three.min.js'] = `self.later = '${d}';`;
+};
+async function cacheDeployA(page) {
+  deploy('A');
+  await page.goto(site.base + 'guide/');
+  await page.evaluate(() => navigator.serviceWorker.register('../sw.js'));
+  await controlled(page);
+}
+
+test('offline, a page from the cache gets its scripts from the cache, not the browser\'s copies',
+  async ({ page, context }) => {
+    await cacheDeployA(page);
+    deploy('B');
+    site.maxAge = 600;   // as GitHub Pages
+    await page.goto(site.base + 'guide/');
+    await expect(page).toHaveTitle('page B, script B');
+
+    await offline(context);
+    await page.reload();
+    await expect(page).toHaveTitle('page A, script A');
+    // a page opened offline comes from the cache too, never from the browser's copy
+    await page.goto(site.base + 'guide/');
+    await expect(page).toHaveTitle('page A, script A');
+    // and if the connection comes back while it loads, the rest it loads is still deploy A
+    await context.setOffline(false);
+    site.down = false;
+    expect(await page.evaluate(() => window.later())).toBe('page A, script A');
+  });
+
+/* And online, both come from the server now, even while the browser holds copies it is
+   allowed to use: a page from the server with a script the browser kept would be the
+   same mismatch the other way round. */
+test('online, a page and its scripts are what the server has now, even inside the ten minutes',
+  async ({ page }) => {
+    site.maxAge = 600;
+    await cacheDeployA(page);
+    deploy('B');
+    await page.goto(site.base + 'guide/');
+    await expect(page).toHaveTitle('page B, script B');
+  });
+
 /* The cache is named for a hash of what it holds, so a deploy that changes anything is a
    new worker, and when it takes over the old cache goes — a visitor's browser does not
    keep every version of a 600 KB three.js it has ever been sent. */
