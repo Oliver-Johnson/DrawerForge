@@ -120,8 +120,10 @@ test.describe('bins', () => {
       expect(after.length).toBe(2);
       expect(await page.evaluate(() => [selected, B()[selected].x, B()[selected].y]))
         .toEqual([1, 4, 5]);
+      expect([after[1].u, after[1].v], 'two cells across, and one deep: no further').toEqual([2, 1]);
       expect((await sheet(page)).cls, 'still a sheet, now for the new bin').toBe(true);
       await expect(page.locator('#u')).toHaveValue('2');
+      await expect(page.locator('#v')).toHaveValue('1');
 
       // and what is typed into the sheet goes to the bin on the map
       await H.setField(page, 'hUnits', 6);
@@ -129,13 +131,63 @@ test.describe('bins', () => {
       expect(await page.evaluate(() => B()[0].hUnits), 'and only to it').toBe(3);
     });
 
+  /* Drawn up or down the map, the drag above crosses rows, and a row is where it went
+     wrong: pressing on an empty cell lets go of the selection, which put the sheet away,
+     and panel 03 dropping back into the column above the map moved the map 58 px down
+     under a finger that was still on it. A drag from row 3 to row 5 made a bin four rows
+     deep at 390 × 844, and five at 320 × 568, where the cells are smaller. Sideways, the
+     rows the finger crossed were all one row and it never showed. */
+  for (const vp of [{ width: 390, height: 844 }, { width: 320, height: 568 }]) {
+    test.describe(`at ${vp.width} × ${vp.height}`, () => {
+      test.use({ viewport: vp });
+
+      test('a bin drawn down the map above the sheet covers the cells the finger crossed',
+        async ({ page }) => {
+          await fingerDrag(page, [1, 1], [2, 2]);
+          const s = await sheet(page);
+          expect(s.cls).toBe(true);
+          const a = await cellNow(page, 4, 3), b = await cellNow(page, 4, 5);
+          expect(a.y, 'fixture: the cells are above the sheet').toBeLessThan(s.top);
+          expect(b.y, 'and below the section bar').toBeGreaterThan(s.bar);
+          await fingerPath(page, a, b);
+          const placed = await H.bins(page);
+          expect(placed.length).toBe(2);
+          expect([placed[1].x, placed[1].y, placed[1].u, placed[1].v],
+            'rows 3 to 5, one cell across').toEqual([4, 3, 1, 3]);
+          expect((await sheet(page)).cls, 'the sheet stays up, for the new bin').toBe(true);
+          await expect(page.locator('#v')).toHaveValue('3');
+          // and the map is where it was when the finger came down, now the drag is over
+          expect((await cellNow(page, 4, 3)).y).toBeCloseTo(a.y, 0);
+        });
+
+      /* A drag that ends over a bin places nothing, and with nothing selected the sheet
+         goes, as the X puts it away: the panel goes back into the column above the map,
+         and the map is held where it was rather than moved down by the panel's header. */
+      test('a drag that places nothing puts the sheet away without moving the map',
+        async ({ page }) => {
+          await fingerDrag(page, [1, 1], [2, 2]);
+          const a = await cellNow(page, 3, 1), b = await cellNow(page, 2, 1);
+          expect(a.y, 'fixture: the cells are above the sheet').toBeLessThan((await sheet(page)).top);
+          await fingerPath(page, a, b);
+          expect((await H.bins(page)).length, 'fixture: the drag ended over the bin').toBe(1);
+          const s = await sheet(page);
+          expect(s.cls).toBe(false);
+          expect(s.position).toBe('static');
+          expect((await cellNow(page, 3, 1)).y).toBeCloseTo(a.y, 0);
+        });
+    });
+  }
+
   test('the X lets go of the bin and puts the sheet away, folded back into the page',
     async ({ page }) => {
       await fingerDrag(page, [1, 1], [2, 2]);
+      const was = await cellNow(page, 1, 1);
       await page.locator('#binSheetClose').tap();
       await page.waitForTimeout(200);
       const s = await sheet(page);
       expect(await page.evaluate(() => selected)).toBe(-1);
+      // the bin you were looking at is where it was, not 58 px further down
+      expect((await cellNow(page, 1, 1)).y).toBeCloseTo(was.y, 0);
       expect(s.cls).toBe(false);
       expect(s.position).toBe('static');
       expect(s.open, 'back in the column, folded as the page first showed it').toBe(false);
