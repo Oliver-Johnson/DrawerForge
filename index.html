@@ -3345,8 +3345,19 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const WALL = 0.2;
   const rMax = Math.max(0, ((cfg.topCutoff + cfg.socketRadius) * Math.SQRT2
                             - cfg.socketRadius - WALL) / (Math.SQRT2 - 1));
+  /* A corner holding a half cell (see halfStrips) is capped by that cell's socket. Its
+     short side is a quarter pitch, and roundedRectRing holds the top ring's corner to
+     that side less the cutoff: below a pitch of about 17.6 mm the ring's corner shrinks,
+     the socket's corner comes out towards the plate's, and the whole cell's cap let the
+     arc fold through the rim (pitch 14, radius 4.5: six coplanar folds at the three
+     corners with half cells). The same sum with the ring's own radius; at 42 mm it is
+     the whole cell's number. */
+  const rcHalf = Math.min(cfg.socketRadius, pitch / 4 - cfg.topCutoff - 0.01);
+  const rMaxHalf = Math.max(0, Math.min(rMax, ((cfg.topCutoff + rcHalf) * Math.SQRT2
+                                               - rcHalf - WALL) / (Math.SQRT2 - 1)));
+  const halfAt = { ll: false, lr: !!piece.hR, ur: !!(piece.hR || piece.hB), ul: !!piece.hB };
   const rOf = (k) => Math.max(0, Math.min(rr[k] !== undefined ? rr[k] : cfg.outerRadius,
-                                          rMax, half));
+                                          halfAt[k] ? rMaxHalf : rMax, half));
   const NARC = 10;
   /* A corner of the WHOLE plate, not of the piece: only the piece that owns it gets the
      arc, and the other three of its corners stay square so it still butts up against its
@@ -3391,17 +3402,21 @@ function buildPiece(cfg, layout, piece, onStatus) {
      margin. The margin after it is what mR or mB holds beyond the strip, and gets a
      region of its own only when there is any, as a plate's margin always has. */
   const hxR = piece.hR ? 1 : 0, hyB = piece.hB ? 1 : 0;
+  /* A margin past a strip thinner than this joins the half cell instead: built as a
+     region of its own, a sliver under two BLOATs thick put the shells either side of it
+     face to face. The half cell's rim is that much wider on its far side. */
+  const STRIP_SLIVER = 0.1;
   const xs = [0]; if (piece.mL > 0.01) xs.push(piece.mL);
   for (let i = 1; i <= piece.nx; i++) xs.push(gx0 + i*pitch);
   if (hxR) {
     xs.push(gx0 + piece.nx*pitch + half);
-    if (piece.mR - half > 0.01) xs.push(W); else xs[xs.length-1] = W;
+    if (piece.mR - half > STRIP_SLIVER) xs.push(W); else xs[xs.length-1] = W;
   } else if (piece.mR > 0.01) xs.push(W); else xs[xs.length-1] = W;
   const ys = [0]; if (piece.mF > 0.01) ys.push(piece.mF);
   for (let j = 1; j <= piece.ny; j++) ys.push(gy0 + j*pitch);
   if (hyB) {
     ys.push(gy0 + piece.ny*pitch + half);
-    if (piece.mB - half > 0.01) ys.push(D); else ys[ys.length-1] = D;
+    if (piece.mB - half > STRIP_SLIVER) ys.push(D); else ys[ys.length-1] = D;
   } else if (piece.mB > 0.01) ys.push(D); else ys[ys.length-1] = D;
   const cellXi = piece.mL > 0.01 ? 1 : 0;         // index offset of first cell column
   const cellYi = piece.mF > 0.01 ? 1 : 0;
