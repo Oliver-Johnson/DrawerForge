@@ -672,6 +672,23 @@ function placeDividers() {
 }
 PHONE.addEventListener('change', placeDividers);
 placeDividers();
+/* The Steps switch goes in the drawer map's heading on a wider window, and beside the
+   layer tabs on a phone, moved the same way and for the same reason. Beside the tabs,
+   the map's card had to be as wide as two layers' tabs and the switch, which came out of
+   the preview, and from a third layer the switch took a row of its own: at 1366 × 768
+   that put the coverage bar 21 px under the window, with the map already at its 40 px
+   cells and nothing left to give. The heading row is there anyway, so in it the switch
+   costs the map no height and the tabs have their row to themselves, as they did before
+   it. A phone's heading has no room for it beside the title, and a 40 px button is
+   taller than the heading, so there it stays on the tabs' row. drawMap is run again on
+   the change, which comes after the resize that already drew it. */
+function placeSteps() {
+  const card = $('s-layout'), steps = card.querySelector('.steps');
+  const home = card.querySelector(PHONE.matches ? '.maptools' : 'h3');
+  if (steps.parentNode !== home) home.appendChild(steps);
+}
+PHONE.addEventListener('change', () => { placeSteps(); drawMap(); });
+placeSteps();
 function closeSheet() {
   const inside = $('s-bin').contains(document.activeElement);
   /* What was typed a moment ago is still waiting for its redraw (schedule, below), and
@@ -1599,45 +1616,29 @@ function drawMap() {
      The 52 px cell and 720 px caps are for a 1080-line window and grow with a taller
      one (row.big): at 1440 a cell may be 69 px rather than staying 52 while the screen
      round it got a third bigger. The labels scale with the cells, so they stay legible.
-     Paired, the card is the map's width, and no narrower than the row above the map
-     needs to stay on one line: the layer tabs and the Steps switch. "Above" is measured
-     with the columns taken away (stageRow), where the card is as wide as that row asks;
-     paired at the map's width alone, a 1366 × 768 window had no room for the switch
-     beside two layers' tabs, it dropped to a row of its own after the height was
-     settled, and the map, its front marker and the coverage bar went 38 px under the
-     window. Measuring the extra row would not have saved them: there the map is within
-     about 20 px of its 40 px cells. So the preview gives up the difference instead.
-     And the map is sized again once paired, as the baseplates page's cut map is, should
-     anything above it wrap all the same: with more layers than the row can hold.
-     The row is two layers' tabs and the switch, and no more. Measured with every tab,
-     the card grew a tab's width, about 70 px, out of the preview with each layer, and
-     in a drawer of whole bins as much as in one of half: four layers left a 1366 × 768
-     preview 391 px wide where it had been 587, beside a map centred in an empty card.
-     With a third layer the switch takes a row of its own under the tabs instead, the
-     map is sized again for it, and the preview keeps what two layers left it. At
-     1366 × 768 that row takes the coverage bar 21 px under the window, the map being at
-     its 40 px cells already, as a fifth layer's wrapped tabs took it 14 px under before
-     the switch: a little scrolling with three layers or more, for a preview that no
-     longer shrinks with every one.
-     And each tab is counted as wide as the widest. The tabs share their row equally
-     (.seg), so the row's own max-content, which adds each tab's width, left the tab in
-     use, which is bold, 3 px short of its label: it wrapped to two lines, and the map
-     lost 15 px of height to it. */
-  let toolsW = 0;
-  if (twoCol) {
-    const tools = $('s-layout').querySelector('.maptools'), tabs = $('layerTabs');
-    const each = [...tabs.children];
-    tools.style.width = 'max-content';
-    for (const b of each) b.style.flex = 'none';             // each tab its own width
-    const widest = Math.max(...each.map((b) => b.getBoundingClientRect().width));
-    const rest = tools.getBoundingClientRect().width - tabs.getBoundingClientRect().width;
-    for (const b of each) b.style.flex = '';
-    tools.style.width = '';
-    // n tabs and the line between each two, the tabs' border, the switch and the
-    // padding round them; up to the next pixel, which a rounded offsetWidth was not
-    // (385.4 px in 385 wraps); and the card's border
-    const n = Math.min(2, each.length);
-    toolsW = Math.ceil(n * widest + (n - 1) + 2 + rest) + 2;
+     Paired, the card is the map's width, and no narrower than its heading needs for the
+     title and the Steps switch, which is in the heading on any window wide enough to
+     pair (placeSteps). The switch was first beside the layer tabs, and the card kept as
+     wide as that row: paired at the map's width alone, a 1366 × 768 window had no room
+     for the switch beside two layers' tabs, it dropped to a row of its own after the
+     height was settled, and the map, its front marker and the coverage bar went 38 px
+     under the window. Kept that wide, each layer took a tab's width, about 70 px, out of
+     the preview, in a drawer of whole bins as much as in one of half; held at two
+     layers' width, the switch's own row from a third layer still put the bar 21 px under
+     the window, the map there being within a pixel of its 40 px cells. In the heading it
+     costs no height, the tabs have their row to themselves as they did before it, and
+     the heading asks about as much width as the map's card has anyway.
+     "Above" is measured with the columns taken away (stageRow), and the map is sized
+     again once paired, as the baseplates page's cut map is, should anything above it
+     wrap all the same: the tabs' labels do, with five layers or more. */
+  let headW = 0;
+  const steps = twoCol && $('s-layout').querySelector('h3 .steps');
+  if (steps) {
+    const title = $('s-layout').querySelector('h3 > span');
+    // the heading's padding, the title, a gap, the switch and the card's border, up to
+    // the next pixel, which a rounded offsetWidth was not: 385.4 px in 385 overlaps
+    headW = Math.ceil(14 + title.getBoundingClientRect().width + 12 +
+                      steps.getBoundingClientRect().width + 14) + 2;
   }
   const chrome = () => svg.getBoundingClientRect().top - top.getBoundingClientRect().top + 41;
   const size = (fixed) => {
@@ -1645,7 +1646,7 @@ function drawMap() {
     const sc = Math.min(availW / W, availH / H, Math.round(CELL_PX * row.big) / S);
     svg.setAttribute('width', Math.round(W * sc));
     svg.setAttribute('height', Math.round(H * sc));
-    if (twoCol) DF.pairColumns(top, Math.min(availW + 30, Math.max(Math.round(W * sc) + 30, toolsW)), PREVIEW_MIN);
+    if (twoCol) DF.pairColumns(top, Math.min(availW + 30, Math.max(Math.round(W * sc) + 30, headW)), PREVIEW_MIN);
   };
   const fixed = chrome();
   size(fixed);

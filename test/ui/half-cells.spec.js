@@ -609,44 +609,59 @@ test('a reason under the map stays on the front marker\'s line, at any window si
   inView(m, 'a long reason');
 });
 
-/* Beside the preview the map's card is kept wide enough for the Steps switch beside the
-   layer tabs (drawMap). It was measured as wide as every tab and the switch together,
-   so each layer took a tab's width, about 70 px, off the preview: four layers left it
-   391 px at 1366 x 768 rather than 587, with the map centred in an empty card, and in a
-   drawer of whole bins too, which has no use for half steps. The card is now wide
-   enough for two layers' tabs beside the switch, which is the cost of having the switch
-   there; with more, the switch takes a row of its own under the tabs and the map is
-   sized again for it. One layer's preview stands in for the old page's: there the card
-   is the map's width, as it was for any number of layers before the switch. */
-test('more layers than two do not take any more of the preview\'s width', async ({ page }) => {
+/* The Steps switch was first beside the layer tabs, and the map's card was kept as wide
+   as that row. Measured with every tab, each layer took a tab's width, about 70 px, off
+   the preview: four layers left it 391 px at 1366 x 768 rather than 587, beside a map
+   centred in an empty card, in a drawer of whole bins too. Held at two layers' width,
+   the switch took a row of its own from a third layer, and at 1366 x 768 that put the
+   coverage bar 21 px under the window, where the old page kept it in view up to four.
+   On a wider window the switch is now in the card's heading (placeSteps), so the tabs
+   have their row as before and the number of layers costs the preview nothing; on a
+   phone it stays on the tabs' row, where it was. */
+test('more layers take none of the preview\'s width, and at 1366 x 768 keep the bar in view', async ({ page }) => {
   const one = bin(0, 0, 1, 1);
   const look = () => page.evaluate(() => {
     const card = $('s-layout').getBoundingClientRect();
     const inCard = [...document.querySelectorAll('#layerTabs button, .steps')]
       .every((el) => { const r = el.getBoundingClientRect(); return r.left >= card.left && r.right <= card.right; });
+    const why = $('stepWhy'), bottom = (el) => el.getBoundingClientRect().bottom;
     return { preview: Math.round($('threewrap').getBoundingClientRect().width), inCard,
-             tabs: Math.round($('layerTabs').getBoundingClientRect().height) };
+             tabs: Math.round($('layerTabs').getBoundingClientRect().height),
+             steps: document.querySelector('#s-layout .steps').parentElement.matches('h3') ? 'heading' : 'tabs',
+             low: Math.max(bottom($('fillmap')), bottom(why.previousElementSibling), bottom(why),
+                           bottom(document.querySelector('#s-layout .covbar'))),
+             fold: innerHeight, scrolled: document.querySelector('.stage').scrollTop };
   });
-  for (const [w, h] of [[1366, 768], [1920, 1080]]) {
+  for (const [w, h, inView] of [[1366, 768, 4], [1920, 1080, 6]]) {
     await page.setViewportSize({ width: w, height: h });
     const seen = {};
-    for (const n of [1, 2, 4, 6]) {
+    for (const n of [1, 2, 3, 4, 6]) {
       await openAt(page, 'bl=' + Array(n).fill(one).join('~'));
-      seen[n] = await look();
-      expect(seen[n].inCard, `${w} x ${h}, ${n} layers: every tab and the switch inside the card`).toBe(true);
+      const m = seen[n] = await look();
+      const at = `${w} x ${h}, ${n} layers`;
+      expect(m.steps, `${at}: the switch in the heading`).toBe('heading');
+      expect(m.inCard, `${at}: every tab and the switch inside the card`).toBe(true);
+      expect(m.preview, `${at}: no narrower than with one`).toBeGreaterThanOrEqual(seen[1].preview - 2);
+      if (n <= inView) {
+        expect(m.low, `${at}: the map, its front, the reason and the bar inside the window`)
+          .toBeLessThanOrEqual(m.fold);
+        expect(m.scrolled, `${at}: nothing scrolled`).toBe(0);
+      }
     }
-    expect(seen[2].preview, `${w} x ${h}: two layers cost the switch's room and no more`)
-      .toBeGreaterThanOrEqual(seen[1].preview - 100);
-    for (const n of [4, 6])
-      expect(seen[n].preview, `${w} x ${h}, ${n} layers: no narrower than with two`)
-        .toBeGreaterThanOrEqual(seen[2].preview - 2);
-    // and the room is enough: two layers' tabs, the one in use in bold, each on one line
+    // two layers' tabs, the one in use in bold, each on one line
     expect(seen[2].tabs, `${w} x ${h}: two layers' tabs each on one line`).toBe(seen[1].tabs);
   }
-  // on a phone the tabs have a row of their own, and many of them still fit the card
+  /* On a phone the switch is on the tabs' row, as it was, and many tabs still fit the
+     card. Taken there by a narrower window, and brought back by a wider one. */
   await page.setViewportSize({ width: 390, height: 844 });
+  await settle(page);
+  expect((await look()).steps, 'narrowed to a phone').toBe('tabs');
   await openAt(page, 'bl=' + Array(6).fill(one).join('~'));
-  expect((await look()).inCard, 'six layers\' tabs on a phone').toBe(true);
+  const phone = await look();
+  expect([phone.steps, phone.inCard], 'six layers on a phone').toEqual(['tabs', true]);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await settle(page);
+  expect((await look()).steps, 'widened again').toBe('heading');
 });
 
 /* A size the selected bin refuses is left in the field while it is being typed, and put
