@@ -37,10 +37,11 @@ test('units stay the default, and the line beside the field says what they come 
   await expect(page.locator('#hMode')).toHaveValue('units');
   await expect(page.locator('#hUnits')).toBeVisible();
   await expect(page.locator('#hMm')).toBeHidden();
-  // 3 units: 21 mm to the top of the walls, a 3.95 mm lip above, and 21 - (4.75 + 1.2) inside
-  expect(await result(page)).toBe('3 units · 21 mm overall + 3.95 mm lip · 15.05 mm inside');
+  /* 3 units: 21 mm to the top of the walls, a 3.95 mm lip above, and inside, 21 less the
+     4.75 mm foot, the 1.2 mm floor and the 0.05 mm the slab runs past it: 15 mm. */
+  expect(await result(page)).toBe('3 units · 21 mm overall + 3.95 mm lip · 15 mm inside');
   await H.setField(page, 'hUnits', 6);
-  expect(await result(page)).toBe('6 units · 42 mm overall + 3.95 mm lip · 36.05 mm inside');
+  expect(await result(page)).toBe('6 units · 42 mm overall + 3.95 mm lip · 36 mm inside');
 });
 
 test('overall millimetres round to the nearest unit', async ({ page }) => {
@@ -73,43 +74,55 @@ test('inside depth rounds up, so the part fits', async ({ page }) => {
   await oneBin(page);
   await page.selectOption('#hMode', 'inside');
   await expect(page.locator('#hMmLabel')).toHaveText('Inside depth (mm)');
-  await expect(page.locator('#hMm')).toHaveValue('15.05');
+  await expect(page.locator('#hMm')).toHaveValue('15');
 
-  await typeHeight(page, 36.05);          // exactly 6 units' worth on a 1.2 mm floor
+  await typeHeight(page, 36);             // exactly 6 units' worth on a 1.2 mm floor
   expect(await units(page)).toBe(6);
-  await typeHeight(page, 36.06);          // a hundredth more needs the next unit
+  /* A hundredth more needs the next unit. 36.01 to 36.05 used to be quoted as 6 units,
+     measured from floorZ rather than from the top of the slab a BLOAT above it, and
+     came out 0.05 mm shallower than was typed. */
+  await typeHeight(page, 36.01);
   expect(await units(page)).toBe(7);
-  await typeHeight(page, 30);             // 6 units gives 36.05 — the smallest that holds 30
+  await typeHeight(page, 36.05);
+  expect(await units(page)).toBe(7);
+  await typeHeight(page, 30);             // 6 units gives 36 — the smallest that holds 30
   expect(await units(page)).toBe(6);
-  expect(await result(page)).toBe('6 units · 42 mm overall + 3.95 mm lip · 36.05 mm inside');
+  expect(await result(page)).toBe('6 units · 42 mm overall + 3.95 mm lip · 36 mm inside');
   await leave(page);
-  await expect(page.locator('#hMm')).toHaveValue('36.05');
+  await expect(page.locator('#hMm')).toHaveValue('36');
 
   /* The floor is part of the sum. A 3 mm floor takes 1.8 mm more of the inside, so the
      depth that was 6 units on the default floor is 7 on this one. */
   await H.setField(page, 'floorT', 3);
-  await expect(page.locator('#hMm')).toHaveValue('34.25');
-  await typeHeight(page, 36.05);
+  await expect(page.locator('#hMm')).toHaveValue('34.2');
+  await typeHeight(page, 36);
   expect(await units(page)).toBe(7);
 });
 
 /* Not a hand-kept constant: the floor, the lip and the stacking height quoted beside the
    field are the ones buildBin builds, for a plain bin, a thick floor, a lowered wall
-   (no lip) and a solid block (nothing inside). */
+   (no lip), a solid block (nothing inside) and a floor thin enough to meet its clamp.
+   The floor is found in the mesh itself, not in buildBin's meta: it is the first face
+   above the feet that looks straight up, which in a bin with its walls standing is the
+   top of the slab — the surface a part stands on. */
 test('the heights it quotes are the ones the engine builds', async ({ page }) => {
   page.__errors = await H.openBins(page);
   const rows = await page.evaluate(() => [
     { hUnits: 6 }, { hUnits: 4, floorT: 3 }, { hUnits: 5, edges: { f: 0.5 } },
-    { hUnits: 2, solid: true }, { hUnits: 1, floorT: 0.02 },
+    { hUnits: 2, solid: true }, { hUnits: 1, floorT: 0.02 }, { hUnits: 3, floorT: 1.25 },
   ].map((c) => {
-    const q = binHeights(c), m = buildBin(G, Object.assign({ u: 1, v: 1 }, c)).meta;
-    return { q, m: { H: m.H, floorZ: m.floorZ, lipH: m.lipH, cavity: c.solid ? 0 : m.cavity } };
+    const q = binHeights(c), built = buildBin(G, Object.assign({ u: 1, v: 1 }, c)), m = built.meta;
+    const flatUp = built.polys.filter((p) => p.plane.n[2] > 0.999 &&
+      p.verts.every((v) => Math.abs(v[2] - p.verts[0][2]) < 1e-9)).map((p) => p.verts[0][2]);
+    const slab = Math.min(...flatUp.filter((z) => z > SPEC.footH + 0.06));
+    return { c, q, m: { H: m.H, floorZ: m.floorZ, lipH: m.lipH, slab } };
   }));
-  for (const { q, m } of rows) {
+  for (const { c, q, m } of rows) {
     expect(q.H).toBe(m.H);
     expect(q.floorZ).toBe(m.floorZ);
     expect(q.lipH).toBe(m.lipH);
-    expect(q.inside).toBeCloseTo(m.cavity, 9);
+    if (c.solid) { expect(q.inside).toBe(0); continue; }
+    expect(q.inside, JSON.stringify(c)).toBeCloseTo(m.H - m.slab, 9);
   }
   // and the inverse agrees with it: the units it picks hold the depth, one fewer does not
   const ok = await page.evaluate(() => {
@@ -128,7 +141,7 @@ test('a bin with a lowered wall has no lip to quote, and a solid one no inside',
   await oneBin(page);
   await page.selectOption('#edgeF', '0.5');
   await page.waitForTimeout(300);
-  expect(await result(page)).toBe('3 units · 21 mm overall · 15.05 mm inside');
+  expect(await result(page)).toBe('3 units · 21 mm overall · 15 mm inside');
   await page.selectOption('#edgeF', '1');
   await page.locator('#solid').check();
   await page.waitForTimeout(300);

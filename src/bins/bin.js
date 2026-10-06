@@ -140,22 +140,27 @@ const floorTop = (c) => SPEC.footH + Math.max(c.floorT, 2 * BLOAT);
    the top of the walls, which is where the feet of a bin stacked on this one come to
    rest — and the lip stands above it. The inside depth runs from the floor to that same
    top, because a part standing any taller is in the way of the bin above it, or of a
-   lid. A solid bin has no inside, and a bin with a lowered wall has no lip. */
+   lid. A solid bin has no inside, and a bin with a lowered wall has no lip.
+
+   The floor a part stands on is not floorZ itself. buildBin runs the slab a BLOAT past
+   it, so the wall ring that starts below floorZ is buried in the slab instead of meeting
+   it face to face, and the surface left inside the bin is that BLOAT higher. Measured
+   from floorZ, every inside depth was quoted 0.05 mm deeper than the bin is. */
 function binHeights(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
   const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
   const lipH = c.lip && allFull && !c.solid ? lipHeight(c.lipMin) : 0;
-  return { H, floorZ, lipH, inside: c.solid ? 0 : Math.max(0, H - floorZ) };
+  return { H, floorZ, lipH, inside: c.solid ? 0 : Math.max(0, H - (floorZ + BLOAT)) };
 }
 /* The fewest whole units that give at least `depth` mm inside. Rounded up, not to the
    nearest: someone typing the inside depth is sizing a bin for a part, and a bin a
-   millimetre short of the part is a bin the part does not fit. The epsilon keeps an
-   exact fit exact — 36.05 mm on a 1.2 mm floor is 6 units, not 7 because the division
-   came out at 6.000000000000001. */
+   millimetre short of the part is a bin the part does not fit. Measured from the top of
+   the slab, as binHeights is. The epsilon keeps an exact fit exact — 36 mm on a 1.2 mm
+   floor is 6 units, not 7 because the division came out at 6.000000000000001. */
 const unitsForInside = (depth, cfg) => Math.max(1, Math.ceil(
-  (depth + floorTop(Object.assign({}, BIN_DEFAULTS, cfg || {}))) / SPEC.unitH - 1e-9));
+  (depth + floorTop(Object.assign({}, BIN_DEFAULTS, cfg || {})) + BLOAT) / SPEC.unitH - 1e-9));
 
 /* There is one base: the spec foot, 4.75 mm, under the spec lip. Truncated feet
  * were offered for a while and are gone. They bought 1.70 mm of usable depth, and

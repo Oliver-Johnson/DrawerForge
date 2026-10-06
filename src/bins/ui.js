@@ -3007,8 +3007,8 @@ const unitsFor = (mm, b) => fieldClamp('hUnits', hMode === 'inside'
   ? unitsForInside(mm, { floorT: b.floorT })
   : Math.max(1, Math.round(mm / SPEC.unitH)));
 /* What the typing came to, said beside the field. Millimetres to the hundredth because
-   the inside depth is genuinely fractional — 36.05 on the default floor — and rounding
-   it to 36.1 would quote a bin deeper than the one you get. */
+   the inside depth is genuinely fractional — 35.95 on a 1.25 mm floor — and rounding
+   it to 36 would quote a bin deeper than the one you get. */
 function heightText(b) {
   const h = heightsOf(b);
   const mm = (x) => `${Math.round(x * 100) / 100} mm` + (unit === 'in' ? ` / ${FIELDS.inchText(x)} in` : '');
@@ -3017,8 +3017,8 @@ function heightText(b) {
     (b.solid ? ' · solid, nothing inside' : ` · ${mm(h.inside)} inside`);
 }
 /* Called from refresh(), so it follows every change of bin, floor or unit. The length
-   field is rewritten with the height actually built — 43.05 after typing 40 inside —
-   but never under the caret, where it would turn "4" into "43.05" before the 0 lands. */
+   field is rewritten with the height actually built — 43 after typing 40 inside —
+   but never under the caret, where it would turn "4" into "43" before the 0 lands. */
 function drawHeight() {
   const b = heightSrc(), inMm = hMode !== 'units';
   $('hUnitsRow').style.display = inMm ? 'none' : '';
