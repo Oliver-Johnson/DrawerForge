@@ -3525,27 +3525,54 @@ function buildPiece(cfg, layout, piece, onStatus) {
   /* A strip of half cells (piece.hR, piece.hB; see halfStrips) is one more cut, half a
      pitch past the last whole cell, and the region it closes off is a cell rather than
      margin. The margin after it is what mR or mB holds beyond the strip, and gets a
-     region of its own only when there is any, as a plate's margin always has. */
+     region of its own only when there is room for one, as a plate's margin does (below). */
   const hxR = piece.hR ? 1 : 0, hyB = piece.hB ? 1 : 0;
-  /* A margin past a strip thinner than this joins the half cell instead: built as a
-     region of its own, a sliver under two BLOATs thick put the shells either side of it
-     face to face. The half cell's rim is that much wider on its far side. */
-  const STRIP_SLIVER = 0.1;
-  const xs = [0]; if (piece.mL > 0.01) xs.push(piece.mL);
-  for (let i = 1; i <= piece.nx; i++) xs.push(gx0 + i*pitch);
-  if (hxR) {
-    xs.push(gx0 + piece.nx*pitch + half);
-    if (piece.mR - half > STRIP_SLIVER) xs.push(W); else xs[xs.length-1] = W;
-  } else if (piece.mR > 0.01) xs.push(W); else xs[xs.length-1] = W;
-  const ys = [0]; if (piece.mF > 0.01) ys.push(piece.mF);
-  for (let j = 1; j <= piece.ny; j++) ys.push(gy0 + j*pitch);
-  if (hyB) {
-    ys.push(gy0 + piece.ny*pitch + half);
-    if (piece.mB - half > STRIP_SLIVER) ys.push(D); else ys[ys.length-1] = D;
-  } else if (piece.mB > 0.01) ys.push(D); else ys[ys.length-1] = D;
-  const cellXi = piece.mL > 0.01 ? 1 : 0;         // index offset of first cell column
-  const cellYi = piece.mF > 0.01 ? 1 : 0;
   const BLOAT = 0.05;
+  /* Where a margin's region meets the cells beside it. Both are built BLOAT past the cut
+   * so the two shells overlap, and that is only an overlap while the band it makes holds
+   * no vertex of the outline: a vertex inside it is inside both regions, both shells put
+   * an edge of the plate's side wall up through it, and that edge is used four times — two
+   * closed shells touching where they were meant to overlap.
+   *
+   * The cut was made wherever the margin ended, and only a margin under 0.01 mm joined
+   * its cells. Under a BLOAT that puts the plate's own corner in the band, and with it the
+   * side wall either side of it, 68 edges on one cell; and beside a rounded corner the
+   * arc's vertices are spread over the first millimetre of each edge, so a 0.15, 0.4 or
+   * 0.75 mm margin beside a 4 mm corner put one of them there, an edge a side. So the cut
+   * moves out towards the plate's edge until it is two BLOATs clear of every vertex, the
+   * plate edge counted as one — the margin's region takes less and the cell's rim that
+   * much more, which is plastic either way — and a margin with no such room left joins
+   * its cells and has no region at all. Two BLOATs rather than one so that where a cut
+   * crosses the arc, each region's clip lands a BLOAT clear of the arc's vertices too
+   * rather than a hair from one. It is also what a margin past a strip of half cells was
+   * already held to, and that margin is cut the same way now. Cuts between cells never
+   * come near the outline's vertices: the arc is never wider than half a cell. */
+  const CLEAR = 2 * BLOAT;
+  const clearCut = (c, edge, vs) => {
+    const toward = edge < c ? -1 : 1;
+    vs = vs.concat(edge);
+    for (;;) {
+      const hit = vs.filter((v) => Math.abs(v - c) <= CLEAR + 1e-9);
+      if (!hit.length) return c;
+      c = toward < 0 ? Math.min(...hit) - CLEAR - 1e-6 : Math.max(...hit) + CLEAR + 1e-6;
+      if (toward < 0 ? c <= edge : c >= edge) return null;
+    }
+  };
+  const outX = outline.map((p) => p[0]), outY = outline.map((p) => p[1]);
+  const cutL = clearCut(piece.mL, 0, outX), cutF = clearCut(piece.mF, 0, outY);
+  // the last cell's far side, a strip of half cells' when there is one
+  const cutR = clearCut(hxR ? gx0 + piece.nx*pitch + half : gx0 + piece.nx*pitch, W, outX);
+  const cutB = clearCut(hyB ? gy0 + piece.ny*pitch + half : gy0 + piece.ny*pitch, D, outY);
+  const xs = [0]; if (cutL !== null) xs.push(cutL);
+  for (let i = 1; i <= piece.nx; i++) xs.push(gx0 + i*pitch);
+  if (hxR) xs.push(gx0 + piece.nx*pitch + half);
+  if (cutR !== null) { xs[xs.length-1] = cutR; xs.push(W); } else xs[xs.length-1] = W;
+  const ys = [0]; if (cutF !== null) ys.push(cutF);
+  for (let j = 1; j <= piece.ny; j++) ys.push(gy0 + j*pitch);
+  if (hyB) ys.push(gy0 + piece.ny*pitch + half);
+  if (cutB !== null) { ys[ys.length-1] = cutB; ys.push(D); } else ys[ys.length-1] = D;
+  const cellXi = cutL !== null ? 1 : 0;           // index offset of first cell column
+  const cellYi = cutF !== null ? 1 : 0;
 
   /* Shells, kept apart rather than poured into one soup, because the top-insert pass
      below has to subtract from each one on its own — a subtraction is only defined
