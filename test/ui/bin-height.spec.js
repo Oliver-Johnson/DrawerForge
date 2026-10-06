@@ -99,6 +99,26 @@ test('inside depth rounds up, so the part fits', async ({ page }) => {
   expect(await units(page)).toBe(7);
 });
 
+/* Enter commits a number field: change fires there and then, under the caret, where the
+   field is left as typed. Leaving it afterwards fired nothing at all, so "40" stayed in
+   the box over a bin 43 deep inside until something else redrew the panel. */
+test('Enter, then Tab, still shows the height that will be built', async ({ page }) => {
+  await oneBin(page);
+  await page.selectOption('#hMode', 'inside');
+  await typeHeight(page, 40);
+  await page.locator('#hMm').press('Enter');
+  await page.waitForTimeout(300);
+  expect(await units(page)).toBe(7);
+  await expect(page.locator('#hMm')).toHaveValue('40');      // still under the caret
+  await leave(page);
+  await expect(page.locator('#hMm')).toHaveValue('43');
+  // and coming back to it and leaving again changes nothing
+  await page.locator('#hMm').focus();
+  await leave(page);
+  await expect(page.locator('#hMm')).toHaveValue('43');
+  expect(await units(page)).toBe(7);
+});
+
 /* Not a hand-kept constant: the floor, the lip and the stacking height quoted beside the
    field are the ones buildBin builds, for a plain bin, a thick floor, a lowered wall
    (no lip), a solid block (nothing inside) and a floor thin enough to meet its clamp.

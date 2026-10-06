@@ -3050,6 +3050,12 @@ $('hMm').addEventListener('input', () => {
   schedule();
 });
 $('hMm').addEventListener('change', () => schedule());
+/* Leaving the field is when it is put right, and leaving does not always fire change:
+   Enter fires it while the caret is still in the box, and then Tab fires nothing, so the
+   "40" typed stayed over a bin 43 deep. Through schedule, not a redraw here and now, so
+   a value typed a moment ago has reached the bin before the field is rewritten from it;
+   and back in the box before the 180 ms are up, it is under the caret and left alone. */
+$('hMm').addEventListener('blur', () => schedule());
 function applyHMode(m) {
   hMode = H_MODES.includes(m) ? m : 'units';
   $('hMode').value = hMode;
