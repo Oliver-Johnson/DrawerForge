@@ -190,6 +190,14 @@ test('removable dividers are held to as many as leave every slot room for a plat
   await page.locator('#divRemovable').uncheck();
   await settle(page);
   expect(await most()).toBe(31);
+  /* A thin plate with little clearance comes down further than its slots need: spaced
+     only for them, 17 on a 1x1 with a 0.4 mm wall, the end plates' corners stood in the
+     cavity's rounded corners. 12 leave them clear. */
+  await page.locator('#divRemovable').check();
+  await H.setField(page, 'wall', 0.4);
+  await H.setField(page, 'divT', 0.8);
+  await H.setField(page, 'divClr', 0.1);
+  expect(await most()).toBe(12);
   expect(errors).toEqual([]);
 });
 

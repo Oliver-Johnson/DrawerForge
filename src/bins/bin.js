@@ -1288,13 +1288,41 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
  * 1x1 where past 10 no slot took its plate at the usual 1.6 mm plate and 0.25 mm
  * clearance. Exactly that far apart, two neighbours' rails are one rail between their
  * slots, and both plates go in.
+ *
+ * The end ones must clear the cavity's rounded corners as well. Spaced so, the plate
+ * nearest an end wall stands a slot and a rail from it less half a plate, which with a
+ * thin plate and little clearance is inside the corner's radius: 1.8 mm out at 0.8 mm
+ * and 0.1, where the corner's radius is up to 3.35. Its plate spans to the clearance
+ * from the side walls, so its corner stood up to 0.26 mm into the wall at smoothness 8,
+ * and the plate could not go in. The rails were never the trouble there: spaced so,
+ * the outer one keeps at least 0.7 mm of its 1.2 inside the cavity. So the count comes
+ * down until the end plates' corners are inside the cavity's outline as built, chords
+ * and all, or on it. Fewer dividers rather than end plates cut to the corner, because
+ * every plate is then the same part, and goes in any slot.
  */
 function railedMost(cfg, axis) {
   const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg));
-  const cells = axis === 'x' ? c.u : c.v;
-  const inner = (cells - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
+  const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
+  const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
+  const inner = axis === 'x' ? hw : hd;
   const pitch = c.divT + 2 * c.divClr + RAIL_T;
-  return Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0;
+  let most = Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0;
+  // the cavity's corner as roundRect builds it, and whether a point stands out through it
+  const r = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(hw, hd) - 0.01));
+  const n = c.arcSegs, seg = Math.PI / (2 * n);
+  const outside = (x, y) => {
+    const dx = Math.abs(x) - (hw - r), dy = Math.abs(y) - (hd - r);
+    if (dx <= 0 || dy <= 0) return Math.max(dx, dy) > r + 1e-9;
+    const a = Math.atan2(dy, dx), mid = (Math.min(n - 1, Math.floor(a / seg)) + 0.5) * seg;
+    return Math.hypot(dx, dy) > r * Math.cos(seg / 2) / Math.cos(a - mid) + 1e-9;
+  };
+  // the corner of the end plate nearest its wall: its face, at the end of its span
+  const endOut = (k) => {
+    const face = -inner + (2 * inner) / (k + 1) - c.divT / 2;
+    return axis === 'x' ? outside(face, hd - c.divClr) : outside(hw - c.divClr, face);
+  };
+  while (most > 0 && endOut(most)) most--;
+  return most;
 }
 /* The dividers a bin is built with: as many as it asks for, bar removable ones past the
    most that fit. What a bin asks for is left as it is, in the link and everywhere it is

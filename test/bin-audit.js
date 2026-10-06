@@ -1183,7 +1183,9 @@ console.log('\nremovable dividers: every plate goes into its slot');
 /* A removable divider is a slot between two rails on each wall it runs between, and the
    plate dividerPart makes, dropped into it. It goes in only if nothing stands where it
    stands. Spaced closer than a slot and a rail apart, a neighbour's rail ran across the
-   slot: the fields allowed 31 on a 1x1, and past 10 no slot would take its plate. So
+   slot: the fields allowed 31 on a 1x1, and past 10 no slot would take its plate. With a
+   thin plate and little clearance the end plates' corners stood in the cavity's rounded
+   corners, up to 0.26 mm into the wall at a 0.8 mm plate and 0.1 clearance. So
    each plate a bin is built for is set in its slot, as wide, thick and tall as
    dividerPart makes it and standing on the floor, and the bin's triangles must keep out
    of it, to a micron either way; and on both faces at both ends a rail must stand from
@@ -1191,7 +1193,8 @@ console.log('\nremovable dividers: every plate goes into its slot');
    is nothing to hold it. Asked for as many as the fields allow, a bin is built with as
    many as fit, and one more would not: set out the same way against the same bin with
    no dividers, the plates of one more must crowd a neighbour's slot or meet the wall.
-   The lip is left off. Its chamfer stands over the top of every plate's ends, which is
+   That is done at both ends of the plate and the clearance the page takes, and at its
+   three smoothnesses, which set the corners' chords. The lip is left off. Its chamfer stands over the top of every plate's ends, which is
    a matter of the lip and not of where the dividers stand. */
 {
   const triBox = (c, h, t) => {
@@ -1279,8 +1282,8 @@ console.log('\nremovable dividers: every plate goes into its slot');
     return { out, plates };
   };
   const rows = [];
-  for (const [divT, divClr] of [[1.6, 0.25]])
-    for (const arcSegs of [12])
+  for (const [divT, divClr] of [[1.6, 0.25], [0.8, 0], [0.8, 0.1], [0.8, 1], [5, 0], [5, 1]])
+    for (const arcSegs of [8, 12, 24])
       for (const [a, b] of [[0.5, 1], [1, 1], [1.5, 1], [2, 1], [3, 1]])
         for (const wall of [0.4, 0.8, 1.2, 2, 3.5, 5])
           for (const key of ['divX', 'divY']) {
