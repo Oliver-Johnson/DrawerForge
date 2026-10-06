@@ -45,7 +45,7 @@
      the two copies are the same lines. -->
 <script>
 try {
-  if (['plates', 'bins', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
+  if (['used', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
     document.documentElement.classList.add('returning');
 } catch (e) { /* storage blocked: the full header */ }
 </script>
@@ -206,12 +206,13 @@ header .privacy::before,footer .privacy::before{content:"● ";color:var(--cyan)
    The title, a two-line pitch and the privacy line took 202 px of a 1080 px window on
    Baseplates and 245 on Bins, and on a phone 304 and 287 of 844 — every visit, to say
    what the visitor already knew. The inline script in each tool's <head> puts
-   `returning` on <html> once this browser holds a saved layout or drawer, before the
-   header is laid out, so a returning visit is drawn short from the first frame rather
-   than drawn long and then collapsed. The pitch and the privacy line go (the privacy
-   line is in the footer, word for word); the name, the pages, the drawer and the bins
-   page's way in to a single bin stay, on one row wherever the window is wide enough
-   for them. Only the tools carry the script, so the guide pages keep their header. */
+   `returning` on <html> once this browser has changed a design on either tool or saved
+   a drawer, before the header is laid out, so a returning visit is drawn short from the
+   first frame rather than drawn long and then collapsed. The pitch and the privacy line
+   go (the privacy line is in the footer, word for word); the name, the pages, the drawer
+   and the bins page's way in to a single bin stay, on one row wherever the window is
+   wide enough for them. Only the tools carry the script, so the guide pages keep their
+   header. */
 html.returning header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;
   padding:10px 26px}
 html.returning header>p,html.returning header>.privacy{display:none}
@@ -9676,6 +9677,12 @@ const writeKey = (k, v) => {
   catch (err) { /* private mode: the guard and the backup go, the page does not */ }
 };
 let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* Set the first time anyone changes a design on either tool, and never cleared. The
+   template's <head> reads it, with the saved drawers, to draw the one-line header for a
+   browser that has used the tools rather than only opened them: the save above is written
+   within moments of any visit, so its being there said nothing, and a first visit that went
+   from one tool to the other arrived at the second with its header already shortened. */
+const USED_KEY = 'drawerforge:used:v1';
 /* What an untouched page saves, and what this one held when the boot finished — null
    from the first change on. Until that change a stalled page saves nothing: saving the
    defaults it stands in with put them over the layout it declined, and one more reload
@@ -9744,6 +9751,7 @@ function saveNow() {
       bootDesc = null; $('setAside').style.display = 'none';
       // what a stalled page goes on from is its defaults, not the link it declined
       if (stalled) writeKey(LINKED_KEY, '');
+      writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
   try { history.replaceState(null, '', '#' + h); }
