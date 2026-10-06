@@ -769,7 +769,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .jumpbar button{flex:1 1 0;min-width:0;background:var(--panel2);color:var(--ink);
     border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px;cursor:pointer}
   .jumpbar button:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
-  html{scroll-padding-top:60px}
+  /* only where there is a bar: the guide pages share this stylesheet and have none, and
+     there it stopped the skip link, and whatever Tab scrolled to, 60 px short of the top
+     of the window to clear a bar that is not on the page */
+  html:has(#jumpbar){scroll-padding-top:60px}
   /* in single-bin mode there is no drawer map, and a carve grid only while carving */
   body.binfocus:not(.focuscarve) #jumpMap{display:none}
 }
@@ -821,6 +824,15 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   body.binsheet #binSheetClose:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
 }
 @keyframes sheetup{from{transform:translateY(100%)}}
+/* On paper. A page printed is narrower than 980 px, so it gets the phone's layout, and a
+   box fixed to the window is printed on every page, over whatever that page has there: the
+   bar, once the header had scrolled away, and the sheet with its bin's settings. Both are
+   ways round a screen, with nothing to read on paper, so neither is printed, nor the room
+   the sheet keeps at the page's foot. Printed wider the panel is the rail's, and stays. */
+@media print and (max-width:980px){
+  .jumpbar,body.binsheet #s-bin{display:none}
+  body.binsheet,body.binsheet:has(#s-bin.closed){padding-bottom:0}
+}
 
 /* ---- reduced motion -------------------------------------------------------
    Every transition on the site, in one place, at the end of the file. It has to be
