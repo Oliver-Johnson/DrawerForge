@@ -112,15 +112,18 @@ function platePitch() {
    seventh column took bins with no sockets under them. At any other pitch the plate has
    no cell a spec bin fits, so the grid is the 42 mm cells the plate's margins leave room
    for, and Checks says why none of them will seat. A W × D drawer, so the cell fields can
-   ask it of the largest drawer there is (see readControls). */
+   ask it of the largest drawer there is (see readControls). The margins around the
+   cells come too, custom or where the plate's alignment puts the leftover: they are
+   where the plate sits in the drawer (see drawerBox). */
 function plateCells(W, D) {
   const pm = plateMargins();
   // each held to the drawer, as the plate's fields hold them
   const c = gridCells({ drawerW: W, drawerD: D, pitch: SPEC.pitch,
-    marginMode: pm ? 'custom' : 'auto',
+    marginMode: pm ? 'custom' : 'auto', alignX: hashExtras.ax, alignY: hashExtras.ay,
     mLeft: pm ? Math.min(pm.l, W) : 0, mRight: pm ? Math.min(pm.r, W) : 0,
     mFront: pm ? Math.min(pm.f, D) : 0, mBack: pm ? Math.min(pm.b, D) : 0 });
-  return { nx: Math.max(1, Math.min(GRID_MAX, c.nx)), ny: Math.max(1, Math.min(GRID_MAX, c.ny)) };
+  return { nx: Math.max(1, Math.min(GRID_MAX, c.nx)), ny: Math.max(1, Math.min(GRID_MAX, c.ny)),
+           mL: c.mL, mR: c.mR, mF: c.mF, mB: c.mB };
 }
 function grid() {
   const { nx, ny } = plateCells(state.drawerW, state.drawerD);
@@ -2436,8 +2439,17 @@ function drawerBox() {
      the bins and the picture is a lie in the other direction. */
   const W = Math.max(state.drawerW, g.nx * SPEC.pitch);
   const D = Math.max(state.drawerD, g.ny * SPEC.pitch);
+  /* The plate is drawn at the origin, and the drawer goes where the plate sits in it:
+     its margins, custom or from its alignment, off the plate's edges (plateCells). It
+     was centred whatever they said, so a plate with 20 mm on its left and 76 on its
+     right was drawn with 48 each side. Held to the room there is, for the same reason
+     as the clamp above: margins with no room for a cell would put walls through it. */
+  const c = plateCells(state.drawerW, state.drawerD);
+  const hold = (v, room) => Math.max(-room, Math.min(room, v));
+  const dx = hold((c.mR - c.mL) / 2, (W - g.nx * SPEC.pitch) / 2);
+  const dz = hold((c.mF - c.mB) / 2, (D - g.ny * SPEC.pitch) / 2);   // front is +z
   const side = Math.max(0, state.drawerH);
-  return { W, D, side,
+  return { W, D, dx, dz, side,
            // 0 means "same as the sides" — one fewer number to keep in step
            front: state.drawerFrontH > 0 ? state.drawerFrontH : side,
            floor: -state.plateH };   // y = 0 is the top of the baseplate
@@ -2445,7 +2457,7 @@ function drawerBox() {
 
 function syncDrawer() {
   const b = drawerBox();
-  const key = shellOn() ? [b.W, b.D, b.side, b.front, b.floor].join('/') : '';
+  const key = shellOn() ? [b.W, b.D, b.dx, b.dz, b.side, b.front, b.floor].join('/') : '';
   // Built when its inputs change and never otherwise: render() runs on every drag
   // frame and every pinch, and showScene() runs on every edit to a bin.
   if (key === drawerKey) return;
@@ -2473,7 +2485,7 @@ function syncDrawer() {
     if (h <= 0) return;
     const geo = new THREE.BoxGeometry(w, h, d);
     const m = new THREE.Mesh(geo, drawerMat);
-    m.position.set(x, yBase + h / 2, z);
+    m.position.set(b.dx + x, yBase + h / 2, b.dz + z);   // laid out about the drawer's centre
     drawerGroup.add(m);
     const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo), drawerEdgeMat);
     e.position.copy(m.position);

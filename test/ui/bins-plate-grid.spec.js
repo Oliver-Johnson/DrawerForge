@@ -236,3 +236,43 @@ test('margins that leave no room for a cell are called out in Checks', async ({ 
   }
   expect(errors).toEqual([]);
 });
+
+/* "Show the drawer" draws the drawer around the plate, and it drew the plate in the
+   middle of it whatever the plate's margins or alignment said. A plate with 20 mm on
+   the left and 76 on the right was drawn with 48 on each side. The gaps between the
+   plate and the drawer's inside walls are the plate's margins, as Baseplates lays them
+   out; and when the margins leave no room at all, the plate is still drawn inside. */
+test('the drawer is drawn where the plate sits in it', async ({ page }) => {
+  const errors = watch(page);
+  const gaps = async (hash) => {
+    await page.goto('about:blank');
+    await page.goto(site.base + 'bins/#' + hash);
+    await binsReady(page);
+    await page.evaluate(() => {
+      const e = document.getElementById('showDrawer');
+      e.checked = true;
+      e.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForTimeout(300);
+    // world boxes: the shell's outer faces are DRAWER_T outside the drawer's inside
+    return page.evaluate(() => {
+      const d = new THREE.Box3().setFromObject(drawerGroup);
+      const p = new THREE.Box3().setFromObject(plateMesh);
+      const r = (v) => Math.round(v * 1000) / 1000;
+      return { left: r(p.min.x - (d.min.x + DRAWER_T)), right: r(d.max.x - DRAWER_T - p.max.x),
+               front: r(d.max.z - DRAWER_T - p.max.z), back: r(p.min.z - (d.min.z + DRAWER_T)) };
+    });
+  };
+  // 306 less 20 and 60 is five cells, 210 mm, so the right margin is 76; 380 likewise
+  expect(await gaps('w=306&d=380&mm=custom&ml=20&mr=60&mf=10&mb=50'))
+    .toEqual({ left: 20, right: 76, front: 10, back: 76 });
+  // no custom margins: where the alignment puts the leftover (gridCells in core.js)
+  expect(await gaps('w=306&d=380&mm=auto&ax=end&ay=start'))
+    .toEqual({ left: 0, right: 12, front: 2, back: 0 });
+  expect(await gaps('w=306&d=380')).toEqual({ left: 6, right: 6, front: 1, back: 1 });
+  /* Margins with no room for a cell: the one cell is drawn against the wall, not through
+     it. (Custom margins hand what the cells leave to the right and the back.) */
+  expect(await gaps('w=306&d=380&mm=custom&ml=300'))
+    .toEqual({ left: 264, right: 0, front: 0, back: 2 });
+  expect(errors).toEqual([]);
+});
