@@ -385,23 +385,31 @@ function volumeMm3(c) {
   // the floor as built: screw holes raise a thin one
   const floorT = builtFloorT(c);
   const H = c.hUnits * SPEC.unitH, floorZ = SPEC.footH + floorT;
-  // a carved bin has fewer feet and less floor than its bounding box implies
-  const cells = binCells(c).length;
   const infill = Math.max(0, Math.min(1, (state.infill === undefined ? 15 : state.infill) / 100));
 
-  /* base block: the feet plus the solid floor slab above them */
-  let footV = 0, footLat = 0;
-  const N = 60;
-  for (let i = 0; i < N; i++) {
-    const h = footProfileHalf(SPEC.footH * (i + 0.5) / N);
-    footV += areaRR(h, h, h - C) * (SPEC.footH / N);
-    footLat += perimRR(h, h, h - C) * (SPEC.footH / N);
+  /* base block: the feet plus the solid floor slab above them.
+     The feet are the ones the engine builds, added up foot by foot (binFeet): a carved
+     bin has fewer than its bounding box implies, and a half-size bin stands on quarter
+     feet, 10.5 mm in on every side — counted a whole foot per cell, a 1.5 x 1 had two
+     whole feet where it has six quarter ones. Feet of one size are summed together, so a
+     whole bin's figures come out exactly as they did. */
+  const sizes = new Map();                       // how far in from a whole foot -> how many
+  for (const f of binFeet(c)) sizes.set(f.inset, (sizes.get(f.inset) || 0) + 1);
+  let footV = 0, footLat = 0, botA = 0;
+  const N = 60, h0 = SPEC.prof[0][1];
+  for (const [inset, count] of sizes) {
+    let v = 0, lat = 0;
+    for (let i = 0; i < N; i++) {
+      const h = footProfileHalf(SPEC.footH * (i + 0.5) / N);
+      v += areaRR(h - inset, h - inset, h - C) * (SPEC.footH / N);
+      lat += perimRR(h - inset, h - inset, h - C) * (SPEC.footH / N);
+    }
+    footV += v * count; footLat += lat * count;
+    botA += count * areaRR(h0 - inset, h0 - inset, h0 - C);
   }
-  footV *= cells; footLat *= cells;
   const slabH = (c.solid || floorZ >= H - 0.2) ? (H - SPEC.footH) : floorT;
   const baseRaw = footV + areaRR(hwO, hdO, SPEC.r) * slabH;
   const baseLat = footLat + perimRR(hwO, hdO, SPEC.r) * slabH;
-  const botA = cells * areaRR(SPEC.prof[0][1], SPEC.prof[0][1], SPEC.prof[0][1] - C);
   const baseShell = baseLat * SHELL_T + (botA + areaRR(hwO, hdO, SPEC.r)) * SKIN_T;
   const baseFil = Math.min(baseRaw, baseShell + infill * Math.max(0, baseRaw - baseShell));
 
@@ -3837,13 +3845,26 @@ function shareLink() {
 function designLink() {
   return location.origin + location.pathname + '#' + descString(VIEW_KEYS);
 }
+/* The link format takes half cells now (unpackBin), and this page does not yet: its map,
+   its occupancy and its drag all count whole cells, and a bin at y 0.5 threw in the map
+   and left the page dead. So a layout read here is put on whole cells the way a page from
+   before half cells reads it, 1.5 up to 2, until the map learns half steps. No page has
+   written a half yet, so this only meets a link typed by hand. */
+function onWholeCells(ls) {
+  for (const L of ls)
+    for (const b of L.bins) {
+      b.u = Math.max(1, Math.round(b.u)); b.v = Math.max(1, Math.round(b.v));
+      b.x = Math.round(b.x); b.y = Math.round(b.y);
+    }
+  return ls;
+}
 function loadFromHash(src) {
   const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
   if (!h) return;
   const q = parseHash(h);
   for (const [k, val] of Object.entries(q)) {
     if (k === 'v') continue;
-    if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
+    if (k === 'bl') { const ls = onWholeCells(unpackLayers(val)); if (ls.length) layers = ls; continue; }
     // a menu takes only a value it offers; anything else leaves it blank and reads NaN
     if (k === 'bseg') {
       if ([...$('arcSegs').options].some((o) => o.value === val)) $('arcSegs').value = val;
@@ -4184,7 +4205,7 @@ updateUndoButtons();
    you did not want to look at. Indices are safe to trust here because the same hash
    carried the layout they point into. */
 if (pendingScratch) {
-  const ls = unpackLayers(pendingScratch);
+  const ls = onWholeCells(unpackLayers(pendingScratch));
   const b = ls[0] && ls[0].bins[0];
   if (b) {
     scratch = b;
