@@ -517,3 +517,115 @@ test('without WebGL the page still builds, and says the preview is unavailable',
       await browser.close();
     }
   });
+
+/* ---- half cells, arriving by link (#16) ------------------------------------------- */
+/* Half cells are a value of the margin key the link already had, `mm=half`, so they come
+   the way every other design does — and a page from before them meets the value too. */
+test.describe('half cells from a link', () => {
+  /* The page's own drawer: 12 mm over across and 2 mm deep. Asked for half cells, it has
+     room for none, and the plate is the solid-margin one — test/plate-audit.js holds it
+     to the same bytes. The check says so in the drawer's figures, and is a note, not an
+     error: there is nothing wrong with the design. */
+  test('no room for half cells is a note with the real figures, and a solid margin',
+    async ({ page }) => {
+      const errors = await openAt(page, '#mm=half');
+      const s = await page.evaluate(() => ({
+        mode: state.marginMode, strips: [layout.hX, layout.hY],
+        margins: [layout.mL, layout.mR, layout.mF, layout.mB],
+        summary: document.getElementById('gridSummary').textContent,
+      }));
+      expect(s.mode).toBe('half');
+      expect(s.strips).toEqual([0, 0]);
+      expect(s.margins).toEqual([6, 6, 1, 1]);
+      expect(s.summary).not.toContain('half');
+      const w = page.locator('#warnings .w');
+      await expect(w.filter({ hasText: 'No room for half cells' })).toHaveText(
+        'No room for half cells: 12 mm is left across and 2 mm deep, and a half cell needs 21 mm.');
+      await expect(w.filter({ hasText: 'No room for half cells' })).not.toHaveClass(/err/);
+      await expect(w.filter({ hasText: 'Half cells take' })).toHaveCount(0);
+      expect(await exportOff(page)).toBe(false);
+      expect(await text(page, 'pieceTail')).toMatch(/ready/);
+      expect(errors).toEqual([]);
+    });
+
+  /* The strips go right and back whatever the alignment says; the alignment places what
+     is left. 199 mm is four cells, a half column and 10 mm: "Right (margin left)" puts
+     the 10 mm on the left, and "Front (margin back)" puts the depth's behind the half
+     row. The menus come back as the link left them, and the link says the same again. */
+  test('a link keeps its half cells, and its alignment places the rest', async ({ page }) => {
+    const errors = await openAt(page, '#w=199&d=199&mm=half&ax=start&ay=end');
+    const s = await page.evaluate(() => ({
+      menus: ['marginMode', 'alignX', 'alignY'].map((id) => document.getElementById(id).value),
+      strips: [layout.hX, layout.hY],
+      summary: document.getElementById('gridSummary').textContent,
+      link: shareLink(),
+    }));
+    expect(s.menus).toEqual(['half', 'start', 'end']);
+    expect(s.strips).toEqual([1, 1]);
+    expect(s.summary).toContain('plus a half column on the right and a half row at the back');
+    expect(s.summary).toContain('margins L 10.0 / R 0.0 / F 0.0 / B 10.0 mm');
+    expect(s.link).toMatch(/[#&]mm=half(&|$)/);
+    expect(s.link).toMatch(/[#&]ax=start(&|$)/);
+    expect(errors).toEqual([]);
+  });
+
+  /* A half cell is half the pitch. The menu said 21 mm whatever panel 06 held, and the
+     check would have measured a 30 mm grid's leftover against a 42 mm grid's half cell. */
+  test('a half cell is half the pitch, in the menu and in the check', async ({ page }) => {
+    await openAt(page, '#pi=30&w=310&d=325&mm=half');
+    expect(await page.evaluate(() =>
+      document.querySelector('#marginMode option[value="half"]').textContent))
+      .toBe('Fill with half cells where they fit (15 mm)');
+    await expect(page.locator('#warnings .w').filter({ hasText: 'No room for half cells' }))
+      .toHaveCount(0);
+    expect(await page.evaluate(() => [layout.hX, layout.hY])).toEqual([0, 1]);
+    await openAt(page, '#pi=30&w=310&d=310&mm=half');
+    await expect(page.locator('#warnings .w').filter({ hasText: 'No room for half cells' }))
+      .toHaveText('No room for half cells: 10 mm is left across and 10 mm deep, and a half cell needs 15 mm.');
+  });
+
+  /* What is left is rounded down. Rounded to the nearest, 20.996 mm read as the 21 mm a
+     half cell needs, in the line saying there was no room for one. */
+  test('the room left is never rounded up to a half cell', async ({ page }) => {
+    await openAt(page, '#w=398.996&d=314.996&mm=half');
+    await expect(page.locator('#warnings .w').filter({ hasText: 'No room for half cells' }))
+      .toHaveText('No room for half cells: 20.99 mm is left across and 20.99 mm deep, and a half cell needs 21 mm.');
+  });
+
+  /* A piece of 1½ × 1½ cells is not a single cell, and the note suggesting a cut be moved
+     for a sturdier layout said it was. A whole single cell still gets it. */
+  test('a piece with half cells on it is not a single cell', async ({ page }) => {
+    const note = (p) => p.locator('#warnings .w').filter({ hasText: 'A piece is a single cell' });
+    await openAt(page, '#w=63&d=63&mm=half');
+    expect(await page.evaluate(() => layout.pieces.map((pc) => [pc.nx, pc.ny, !!pc.hR, !!pc.hB])))
+      .toEqual([[1, 1, true, true]]);
+    await expect(note(page)).toHaveCount(0);
+    await openAt(page, '#w=63&d=63');
+    await expect(note(page)).toHaveCount(1);
+  });
+
+  /* A link made here, opened in a page from before half cells: a stale tab, or a saved
+     copy. That page's menu has no 'half', and set() in loadFromHash takes only a value its
+     menu offers, so the menu stays where it was and the plate gets a solid margin rather
+     than anything half-built. This page's loader is that same code, unchanged, so taking
+     the option out of the menu is the old page as far as this link can tell. */
+  test('a page without the option reads a half-cell link as a solid margin', async ({ page }) => {
+    const errors = await openAt(page, '');
+    const s = await page.evaluate(() => {
+      // optional, so that main's page, which has no such option, runs this test as well
+      const opt = document.querySelector('#marginMode option[value="half"]');
+      if (opt) opt.remove();
+      loadFromHash('w=400&d=330&mm=half');
+      recomputeLayout();
+      return { menu: document.getElementById('marginMode').value, mode: state.marginMode,
+               strips: [layout.hX, layout.hY], link: descriptor().mm,
+               margins: [layout.mL, layout.mR, layout.mF, layout.mB] };
+    });
+    expect(s.menu).toBe('auto');
+    expect(s.mode).toBe('auto');
+    expect(s.link, 'the link it writes back says what it built').toBe('auto');
+    expect(s.strips).toEqual([0, 0]);
+    expect(s.margins).toEqual([11, 11, 18, 18]);
+    expect(errors).toEqual([]);
+  });
+});

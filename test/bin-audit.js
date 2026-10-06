@@ -175,6 +175,16 @@ const CASES = [
   { name: '2x1x6-low-scoop', u: 2, v: 1, hUnits: 6, scoop: 12, under: 0.05,
     edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 } },
   { name: '2x1x3-label', u: 2, v: 1, hUnits: 3, label: 12 },
+  /* A thin wall under a scoop and a shelf. Both ran square into the side walls, and a
+     wall under about 1.15 mm left their ends standing out through the rounded outer
+     corners: 1.06 mm at 0.4, which the outline check below now catches. The lowered one
+     is a 0.09 mm scoop, whose arc never rose a thousandth above the floor before it was
+     welded flat. */
+  { name: '1x1x3-wall0.4-scoop-label', u: 1, v: 1, hUnits: 3, wall: 0.4, scoop: 8, label: 12 },
+  { name: '2x1x4-wall1-scoop-label', u: 2, v: 1, hUnits: 4, wall: 1, scoop: 8, label: 10 },
+  { name: '0.5x1x3-wall0.4-scoop-label', u: 0.5, v: 1, hUnits: 3, wall: 0.4, scoop: 8, label: 10 },
+  { name: '1x1x1-wall0.4-low-scoop', u: 1, v: 1, hUnits: 1, wall: 0.4, scoop: 8, under: 0.05,
+    edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 }, magnets: true, screws: true, holesEvery: true },
   /* A shelf deeper than the cavity is tall: its 45 degree underside used to run down
      through the floor and out among the feet, 4 open edges from 8 mm on a 1-unit bin. */
   { name: '1x1x1-label12', u: 1, v: 1, hUnits: 1, label: 12 },
@@ -269,6 +279,20 @@ for (const cs of CASES) {
      and 0.1 mm over on the flats. */
   const tol = 0.02;
   const wOk = Math.abs((xmax - xmin) - expW) < tol && Math.abs((ymax - ymin) - expD) < tol;
+  /* ...and inside the spec's outline, rounded corners and all, above the feet. The
+     bounding box cannot see a corner: the scoop's square ends stood 1.06 mm out through
+     a 0.4 mm wall's corners with the box exactly right. Carved shapes have outlines of
+     their own and are left to the box. */
+  let out = 0;
+  if (!cs.cells) {
+    const ox = expW / 2 - 3.75, oy = expD / 2 - 3.75;
+    for (const p of r.polys) for (const v of p.verts) {
+      if (v[2] <= 4.75 + 1e-6) continue;
+      const dx = Math.max(0, Math.abs(v[0]) - ox), dy = Math.max(0, Math.abs(v[1]) - oy);
+      out = Math.max(out, Math.hypot(dx, dy) - 3.75);
+    }
+  }
+  const oOk = out < 0.001;
   /* The stacking PITCH is always hUnits*7 — that is what a bin occupies in a stack.
      The real height can be less: a tray with every wall open is just its floor, so
      compare zmax against meta.totalH and check the pitch separately. */
@@ -280,6 +304,7 @@ for (const cs of CASES) {
               `${zmin.toFixed(3).padStart(6)} ${zmax.toFixed(3).padStart(6)}  ` +
               `${ok ? 'watertight' : man.bad + ' BAD EDGES'}`.padStart(12) +
               `${wOk ? '' : '  FOOTPRINT MISMATCH exp ' + expW + 'x' + expD}` +
+              `${oOk ? '' : '  OUTSIDE THE OUTLINE by ' + out.toFixed(3) + ' mm'}` +
               `${hOk ? '' : '  HEIGHT MISMATCH: zmax ' + zmax.toFixed(2) + ' vs totalH ' + r.meta.totalH.toFixed(2) + ', pitch ' + r.meta.H}`);
   /* A carved shape is still a bin: it takes a stacking lip like any other, so it
      must report one and stand the same height as the rectangle of the same units.
@@ -295,7 +320,7 @@ for (const cs of CASES) {
   if (!ori.ok || cs.orientQuarantine)
     console.log(`${''.padEnd(14)}  ${ori.shells} shells, ${ori.volume.toFixed(1)} mm3   ` +
                 `${orientationNote(ori)}${orientQuarantine(cs, ori)}`);
-  if (!ok || !wOk || !hOk || !lipOk) bad++;
+  if (!ok || !wOk || !oOk || !hOk || !lipOk) bad++;
   if (cs.orientQuarantine ? ori.ok : !ori.ok) bad++;
   if (cs.magnets || cs.screws) {
     const f = holeFaults(r, cs);

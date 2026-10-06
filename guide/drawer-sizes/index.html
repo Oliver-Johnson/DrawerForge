@@ -375,6 +375,7 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
 #mapwrap{padding:10px 14px 14px;overflow-x:auto}
 #cutmap{display:block;margin:0 auto;max-width:100%}
 #cutmap .gridline{stroke:var(--line);stroke-width:1}
+#cutmap .halfcell{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 3}
 #cutmap .cutline{stroke:var(--cyan);stroke-width:2.5}
 #cutmap .hitline{stroke:transparent;stroke-width:11;cursor:pointer}
 #cutmap .hitline:hover{stroke:rgba(79,195,232,.28)}
@@ -1046,6 +1047,15 @@ another cell, which is nearly a whole wasted column.</p>
 <p>Margins can be set per side, so the grid doesn't have to sit centred. Pushing it to the
 back and keeping the slack at the front, where you reach in, is usually the more useful
 arrangement.</p>
+
+<p>From 21&nbsp;mm up there is a fourth way: put half cells in it. Pick <strong>Fill with
+half cells where they fit</strong> under Leftover space, and the baseplate gets a 21&nbsp;mm
+column of them along the right side, a row along the back, or both, wherever the leftover
+has room for one; whatever is left after that becomes margin, placed by the alignment
+menus as before. A half cell takes half-size bins only, the kind with small feet that also
+fit any standard baseplate; a whole-size bin won't go in one, and there are no magnet or
+screw holes in it. The 18" drawer above, 37.2&nbsp;mm over, gets a column of half cells
+with 16.2&nbsp;mm of margin to spare.</p>
 
 <h2 id="height">Don't forget the height</h2>
 

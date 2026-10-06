@@ -394,6 +394,7 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
 #mapwrap{padding:10px 14px 14px;overflow-x:auto}
 #cutmap{display:block;margin:0 auto;max-width:100%}
 #cutmap .gridline{stroke:var(--line);stroke-width:1}
+#cutmap .halfcell{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 3}
 #cutmap .cutline{stroke:var(--cyan);stroke-width:2.5}
 #cutmap .hitline{stroke:transparent;stroke-width:11;cursor:pointer}
 #cutmap .hitline:hover{stroke:rgba(79,195,232,.28)}
@@ -2127,10 +2128,17 @@ function extrudePoly(pts2d, z0, z1) {
 }
 
 function roundedSquareRing(cx, cy, half, r, n) {
+  return roundedRectRing(cx, cy, half, half, r, n);
+}
+/* The same ring with a half size of its own on each axis, for the half cells along a
+   plate's right side and back (see halfStrips): a 21 × 42 or 21 × 21 socket. Same
+   vertices in the same order as the square one, so a square ring is the bytes it was,
+   and its corner radius is held by the shorter side, as the square's is by its one. */
+function roundedRectRing(cx, cy, hx, hy, r, n) {
   n = n || 6;
-  r = Math.max(0.3, Math.min(r, half - 0.01));
+  r = Math.max(0.3, Math.min(r, Math.min(hx, hy) - 0.01));
   const pts = [];
-  const cs = [[half-r, half-r, 0], [-half+r, half-r, 90], [-half+r, -half+r, 180], [half-r, -half+r, 270]];
+  const cs = [[hx-r, hy-r, 0], [-hx+r, hy-r, 90], [-hx+r, -hy+r, 180], [hx-r, -hy+r, 270]];
   for (const [ox, oy, a0] of cs) {
     for (let k = 0; k < n; k++) {
       const a = (a0 + 90*k/n) * Math.PI/180;
@@ -2424,10 +2432,18 @@ function pieceColumn(s) {
    margins six cells wide arrived there as a map seven wide, and the seventh column took
    bins with no sockets under them. Both pages ask here now. Needs drawerW, drawerD,
    pitch, marginMode, and the four margins when it is 'custom' or the alignment when it
-   is not. */
+   is not.
+ *
+ * marginMode 'half' is 'auto' with a strip of half cells laid in the leftover first (see
+ * halfStrips): hX and hY say whether there is a half column and a half row, and the
+ * alignment places what is left after them. The strips are counted INTO mR and mB, so to
+ * everything that sizes a piece — the bed check, the split search, the outline — they are
+ * margin, which is the width they take; only buildPiece and the cut map look inside. A
+ * caller quoting the solid margin takes them back out. hX and hY are 0 in every other
+ * mode, and that mode's numbers are the ones it always gave. */
 function gridCells(p) {
   const pitch = p.pitch;
-  let nx, ny, mL, mR, mF, mB;
+  let nx, ny, mL, mR, mF, mB, hX = 0, hY = 0;
   if (p.marginMode === 'custom') {
     mL = p.mLeft; mR = p.mRight; mF = p.mFront; mB = p.mBack;
     nx = Math.max(1, Math.floor((p.drawerW - mL - mR) / pitch + 1e-6));
@@ -2437,19 +2453,49 @@ function gridCells(p) {
   } else {
     nx = Math.max(1, Math.floor(p.drawerW / pitch + 1e-6));
     ny = Math.max(1, Math.floor(p.drawerD / pitch + 1e-6));
-    const remX = p.drawerW - nx*pitch, remY = p.drawerD - ny*pitch;
+    let remX = p.drawerW - nx*pitch, remY = p.drawerD - ny*pitch;
+    if (p.marginMode === 'half') {
+      ({ hX, hY } = halfStrips(remX, remY, pitch));
+      remX -= hX * pitch/2; remY -= hY * pitch/2;
+    }
     mL = p.alignX === 'start' ? remX : p.alignX === 'end' ? 0 : remX/2;
     mR = remX - mL;
     mF = p.alignY === 'start' ? remY : p.alignY === 'end' ? 0 : remY/2;
     mB = remY - mF;
+    // added only where there is a strip, so a plate without one keeps its exact margins
+    if (hX) mR += pitch/2;
+    if (hY) mB += pitch/2;
   }
-  return { nx, ny, mL, mR, mF, mB };
+  return { nx, ny, mL, mR, mF, mB, hX, hY };
+}
+/* Whether the leftover past the whole cells takes a half cell: a column of them on the
+ * right if remX is half a pitch or more, a row along the back if remY is. Each answer is
+ * 0 or 1 — a second strip would be a whole cell, and the whole cells already took those.
+ *
+ * Always the right and the back, whatever the alignment says, and the alignment then
+ * places what is left. A bin is placed in cells from the front left corner, so a strip
+ * there would move every bin on the Bins page when this switched on or off; at the right
+ * and back it sits past the last whole cell (x = nx, y = ny) and nothing else moves. The
+ * front also stays free for the slack the drawer-size guide says to keep where you reach
+ * in.
+ *
+ * A half cell takes half-size bins only, whose quarter feet seat in a corner of a whole
+ * socket with a whole foot's clearance (ENGINE.md §4) — so the socket here is the spec
+ * profile on a 21 × 42 or 21 × 21 rounded rectangle, the same distance in from every
+ * side. The 1e-6 is gridCells' own floor tolerance: a 357 mm drawer is 8 cells and
+ * exactly a half, and must say so. The Bins page is to ask it the same way, through
+ * gridCells with the plate's `mm` from the link, so both maps put the strip in the same
+ * place; until it does, it reads 'half' as a solid margin, as any page from before
+ * half cells does. */
+function halfStrips(remX, remY, pitch) {
+  const fits = (rem) => rem >= pitch/2 - 1e-6 ? 1 : 0;
+  return { hX: fits(remX), hY: fits(remY) };
 }
 /* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
    splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
 function computeLayout(p) {
   const pitch = p.pitch;
-  const { nx, ny, mL, mR, mF, mB } = gridCells(p);
+  const { nx, ny, mL, mR, mF, mB, hX, hY } = gridCells(p);
   const maxCellsX = Math.max(1, Math.floor(p.bedW / pitch));
   const maxCellsY = Math.max(1, Math.floor(p.bedD / pitch));
 
@@ -2546,6 +2592,10 @@ function computeLayout(p) {
         nx: segEnds[s] - segStarts[s], ny: bandEnds[b] - bandStarts[b],
         mL: segStarts[s] === 0 ? mL : 0, mR: segEnds[s] === nx ? mR : 0,
         mF: bandStarts[b] === 0 ? mF : 0, mB: bandEnds[b] === ny ? mB : 0,
+        /* The piece that owns a strip of half cells, which its mR or mB includes (see
+           gridCells): every piece along the right edge carries its stretch of the half
+           column, and every piece along the back its stretch of the half row. */
+        hR: segEnds[s] === nx && hX === 1, hB: bandEnds[b] === ny && hY === 1,
       });
     }
   }
@@ -2573,7 +2623,7 @@ function computeLayout(p) {
       }
     }
   }
-  return { nx, ny, mL, mR, mF, mB, rowCuts, colCuts, pieces, seams,
+  return { nx, ny, mL, mR, mF, mB, hX, hY, rowCuts, colCuts, pieces, seams,
            bands: nBands, gridW: nx*pitch, gridD: ny*pitch,
            maxCellsX, maxCellsY };
 }
@@ -3262,7 +3312,13 @@ function annulusStrip(outerLoop, innerLoop, cx, cy, z, up) {
   return polys;
 }
 
-function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
+/* `half` is the cell's half size on each axis, [hx, hy]: left out, a whole cell at the
+   profile's pitch. A half cell passes its own (see halfStrips) and gets the same socket,
+   the same distance in from each of its sides, on a rounded rectangle: the strip around
+   the socket, the rim on top and the floor cap all follow the ring, and annulusStrip
+   pairs the cell outline against it by angle about the centre as it does a square, both
+   loops being star-shaped about that point. */
+function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half) {
   const polys = [];
   const { pts: oc } = earTriangulate(clipped);
   const n = oc.length;
@@ -3272,11 +3328,12 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
                         [oc[j][0], oc[j][1], H], [oc[i][0], oc[i][1], H]]);
     if (p) polys.push(p);
   }
+  const [hx, hy] = half || [prof.pitchHalf, prof.pitchHalf];
   const zs = prof.zs.slice(1, 5), ds = prof.ds.slice(1, 5);
   const rings = zs.map((z, i) => {
     const d = ds[i];
     const r = prof.rTop - (d - ds[ds.length-1]);
-    return roundedSquareRing(cx, cy, prof.pitchHalf - d, r, arcSegs).map(p => [p[0], p[1], z]);
+    return roundedRectRing(cx, cy, hx - d, hy - d, r, arcSegs).map(p => [p[0], p[1], z]);
   });
   const rn = rings[0].length;
   for (let i = 0; i < rings.length - 1; i++) {
@@ -3502,8 +3559,19 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const WALL = 0.2;
   const rMax = Math.max(0, ((cfg.topCutoff + cfg.socketRadius) * Math.SQRT2
                             - cfg.socketRadius - WALL) / (Math.SQRT2 - 1));
+  /* A corner holding a half cell (see halfStrips) is capped by that cell's socket. Its
+     short side is a quarter pitch, and roundedRectRing holds the top ring's corner to
+     that side less the cutoff: below a pitch of about 17.6 mm the ring's corner shrinks,
+     the socket's corner comes out towards the plate's, and the whole cell's cap let the
+     arc fold through the rim (pitch 14, radius 4.5: six coplanar folds at the three
+     corners with half cells). The same sum with the ring's own radius; at 42 mm it is
+     the whole cell's number. */
+  const rcHalf = Math.min(cfg.socketRadius, pitch / 4 - cfg.topCutoff - 0.01);
+  const rMaxHalf = Math.max(0, Math.min(rMax, ((cfg.topCutoff + rcHalf) * Math.SQRT2
+                                               - rcHalf - WALL) / (Math.SQRT2 - 1)));
+  const halfAt = { ll: false, lr: !!piece.hR, ur: !!(piece.hR || piece.hB), ul: !!piece.hB };
   const rOf = (k) => Math.max(0, Math.min(rr[k] !== undefined ? rr[k] : cfg.outerRadius,
-                                          rMax, half));
+                                          halfAt[k] ? rMaxHalf : rMax, half));
   const NARC = 10;
   /* A corner of the WHOLE plate, not of the piece: only the piece that owns it gets the
      arc, and the other three of its corners stay square so it still butts up against its
@@ -3543,12 +3611,27 @@ function buildPiece(cfg, layout, piece, onStatus) {
   if (onStatus) onStatus('outline');
 
   // ---- region grid: x cuts and y cuts ----
+  /* A strip of half cells (piece.hR, piece.hB; see halfStrips) is one more cut, half a
+     pitch past the last whole cell, and the region it closes off is a cell rather than
+     margin. The margin after it is what mR or mB holds beyond the strip, and gets a
+     region of its own only when there is any, as a plate's margin always has. */
+  const hxR = piece.hR ? 1 : 0, hyB = piece.hB ? 1 : 0;
+  /* A margin past a strip thinner than this joins the half cell instead: built as a
+     region of its own, a sliver under two BLOATs thick put the shells either side of it
+     face to face. The half cell's rim is that much wider on its far side. */
+  const STRIP_SLIVER = 0.1;
   const xs = [0]; if (piece.mL > 0.01) xs.push(piece.mL);
   for (let i = 1; i <= piece.nx; i++) xs.push(gx0 + i*pitch);
-  if (piece.mR > 0.01) xs.push(W); else xs[xs.length-1] = W;
+  if (hxR) {
+    xs.push(gx0 + piece.nx*pitch + half);
+    if (piece.mR - half > STRIP_SLIVER) xs.push(W); else xs[xs.length-1] = W;
+  } else if (piece.mR > 0.01) xs.push(W); else xs[xs.length-1] = W;
   const ys = [0]; if (piece.mF > 0.01) ys.push(piece.mF);
   for (let j = 1; j <= piece.ny; j++) ys.push(gy0 + j*pitch);
-  if (piece.mB > 0.01) ys.push(D); else ys[ys.length-1] = D;
+  if (hyB) {
+    ys.push(gy0 + piece.ny*pitch + half);
+    if (piece.mB - half > STRIP_SLIVER) ys.push(D); else ys[ys.length-1] = D;
+  } else if (piece.mB > 0.01) ys.push(D); else ys[ys.length-1] = D;
   const cellXi = piece.mL > 0.01 ? 1 : 0;         // index offset of first cell column
   const cellYi = piece.mF > 0.01 ? 1 : 0;
   const BLOAT = 0.05;
@@ -3566,12 +3649,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
       const clipped = clipToRect(outline, x0, y0, x1, y1);
       if (!clipped) continue;
       const ci = ix - cellXi, cj = iy - cellYi;
-      const isCell = ci >= 0 && ci < piece.nx && cj >= 0 && cj < piece.ny;
+      const isCell = ci >= 0 && ci < piece.nx + hxR && cj >= 0 && cj < piece.ny + hyB;
       if (!isCell) {                                 // margin / corner: plain extrusion
         shells.push(extrudePoly(clipped, 0, H));
         continue;
       }
-      const cx = gx0 + ci*pitch + half, cy = gy0 + cj*pitch + half;
+      // in the half column, the half row, or both (the quarter cell at the back right)
+      const halfX = ci === piece.nx, halfY = cj === piece.ny;
+      const cx = gx0 + ci*pitch + (halfX ? half/2 : half);
+      const cy = gy0 + cj*pitch + (halfY ? half/2 : half);
       /* Skeleton only where there is nothing that needs the material back.
        *
        * The shell removes the bulk below z 2.5 — which is exactly the wall band every
@@ -3585,7 +3671,8 @@ function buildPiece(cfg, layout, piece, onStatus) {
        * that skeleton mode does not build.
        */
       // cells are built bloated by BLOAT per side, so a whole one measures (pitch+0.1)^2;
-      // anything the piece boundary has cut into measures less than pitch^2
+      // anything the piece boundary has cut into measures less than pitch^2 — and so does
+      // a half cell, which stays solid: skeletonCellRegion's rings are square
       const fullCell = Math.abs(polyArea2D(clipped)) >= pitch * pitch - 0.5;
       const onEdge = ci === 0 || cj === 0 || ci === piece.nx - 1 || cj === piece.ny - 1;
       const jointed = cfg.connector && cfg.connector !== 'none';
@@ -3594,7 +3681,8 @@ function buildPiece(cfg, layout, piece, onStatus) {
       let region = skel
         ? skeletonCellRegion(clipped, prof, cx, cy, H, cfg.arcSegs || 6,
                              Math.max(0.4, cfg.skin || 0.8))
-        : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6);
+        : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6,
+                           halfX || halfY ? [halfX ? half/2 : half, halfY ? half/2 : half] : undefined);
       /* Small convex cutters local to this cell, batched by feature and subtracted one
        * batch at a time.
        *
@@ -3666,7 +3754,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
           ...extrudePoly(puzzleShape(pn.edge, pn.e, pn.s, cfg.puzzle, cfg.puzzle.clr, true),
                          -0.5, pad - 0.4));
       }
-      if (cellFastener) {
+      /* None in a half cell. A half-size bin's quarter feet carry no holes (feetHolesOff
+         in bins/bin.js), and where a half socket's would go is not settled: a whole
+         cell's four sites are holeOffset (13 mm) from its centre each way, past the
+         middle of a 21 mm cell, so they cannot simply be kept, and moving them is a
+         choice for magnets in bins that do not have any. Checks on the page says so, so
+         a plate with magnets does not look short of holes by mistake. The corner bosses
+         below are laid out over the whole cells only, so half cells get none of those
+         either. */
+      if (cellFastener && !halfX && !halfY) {
         const off = cfg.holeOffset;
         for (const sx of [-1, 1]) for (const sy of [-1, 1])
           cuts.fastener.push(...movePolys(cellFastener, cx + sx*off, cy + sy*off));
@@ -3691,6 +3787,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
       cfg.magnets ? cfg.magnetH + 0.8 : 0,
       cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
     const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
+    // whole cells only: a half cell has no mounting sites (see the fastener cut above)
     for (let i = 0; i < piece.nx; i++) for (let j = 0; j < piece.ny; j++) {
       const ccx = gx0 + i*pitch + half, ccy = gy0 + j*pitch + half;
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
@@ -4209,11 +4306,11 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, gridCells, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
-    makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
+    makePoly, triangulateRing, earTriangulate, roundedSquareRing, roundedRectRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };
 }
 
@@ -5779,6 +5876,127 @@ function labelPrism(G, hwI, hdI, H, depth, t) {
   return G.profilePrism(prof, -hwI - BLOAT, hwI + BLOAT, (u, v) => [v, u]);
 }
 
+/* ...which suits a wall of the usual thickness and nothing much thinner. The prisms end
+   square, a BLOAT into the side walls, and the bin's outer corner is an arc of SPEC.r:
+   a wall under about 1.15 mm leaves those square ends standing out through the rounded
+   corners, 1.06 mm at the 0.4 minimum and 0.21 at 1.0. Such a bin builds the scoop and
+   the shelf over the cavity's own rounded outline instead, grown a BLOAT into the wall
+   all round, so their ends follow the corners. The usual wall keeps the prisms, and with
+   them the same bytes. `arcInside` is how far in the outline's chords come from the arc. */
+function cornersPoke(hw, hd, hwI, hdI, n) {
+  const arcInside = SPEC.r * Math.cos(Math.PI / (4 * n));
+  return Math.hypot(hwI + BLOAT - (hw - SPEC.r), hdI + BLOAT - (hd - SPEC.r)) > arcInside - 1e-6;
+}
+
+/* A solid standing over a convex outline in plan, between a bottom and a top that
+   depend on y alone and run straight between consecutive `stations`. Cut at the
+   stations, every band of it has a flat top and a flat bottom, so it is built as flat
+   faces: the outline's sides, and each band's top and bottom fanned from its middle.
+
+   Nothing in it is closer than WELD to anything else. checkManifold, and a slicer, weld
+   vertices a micron or so apart, and a scoop's arc runs into the floor at a tangent: a
+   0.09 mm scoop on a lowered front had stations 0.0004 mm apart and a top that never
+   rose a thousandth above its bottom, and welded, its faces folded onto each other. So
+   stations closer than ten times WELD are thinned out, a vertex that close to a station
+   is moved onto it, and the bottom stays a little way under the top's lowest point. */
+const WELD = 0.002;
+function bandSolid(G, ring, ylo, yhi, stations, zTop, zBot) {
+  const clip = (pts, y0, keep) => {                 // the part with keep * (y - y0) >= 0
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const da = keep * (a[1] - y0), db = keep * (b[1] - y0);
+      if (da >= 0) out.push(a);
+      if (da * db < 0) out.push([a[0] + (b[0] - a[0]) * da / (da - db), y0]);
+    }
+    return out;
+  };
+  const pts = clip(clip(ring, ylo, 1), yhi, -1);
+  let lo = Infinity, hi = -Infinity;
+  for (const p of pts) { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }
+  const cuts = [];
+  for (const s of stations.slice().sort((a, b) => a - b))
+    if (s > lo + 10 * WELD && s < hi - 10 * WELD && !(s - cuts[cuts.length - 1] < 10 * WELD)) cuts.push(s);
+  // a vertex wherever a station crosses the outline, and any vertex near one moved onto it
+  const rim = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const near = cuts.find((s) => Math.abs(a[1] - s) < WELD);
+    rim.push(near === undefined ? a : [a[0], near]);
+    const on = cuts.filter((s) => (s - a[1]) * (s - b[1]) < 0);
+    if (b[1] < a[1]) on.reverse();
+    for (const s of on) rim.push([a[0] + (b[0] - a[0]) * (s - a[1]) / (b[1] - a[1]), s]);
+  }
+  const vs = [];
+  for (const p of rim) {
+    const q = vs[vs.length - 1];
+    if (!q || Math.hypot(p[0] - q.x, p[1] - q.y) >= WELD)
+      vs.push({ x: p[0], y: p[1], t: zTop(p[1]), b: zBot(p[1]) });
+  }
+  while (vs.length > 1 && Math.hypot(vs[0].x - vs[vs.length - 1].x, vs[0].y - vs[vs.length - 1].y) < WELD)
+    vs.pop();
+  const polys = [];
+  const add = (verts) => { const p = G.makePoly(verts); if (p) polys.push(p); };
+  for (let i = 0; i < vs.length; i++) {             // sides, outwards: the outline is CCW
+    const a = vs[i], b = vs[(i + 1) % vs.length];
+    add([[a.x, a.y, a.b], [b.x, b.y, b.b], [b.x, b.y, b.t], [a.x, a.y, a.t]]);
+  }
+  /* Each band takes the outline's edges that lie in it. An edge along a station belongs
+     to the band the outline's inside is on: above it when the edge runs +x, as it does
+     anticlockwise along the bottom. */
+  const edges = [lo].concat(cuts, [hi]);
+  for (let k = 0; k + 1 < edges.length; k++) {
+    const y0 = edges[k], y1 = edges[k + 1];
+    const mine = vs.map((a, i) => {
+      const b = vs[(i + 1) % vs.length], m = (a.y + b.y) / 2;
+      if (a.y === b.y && (a.y === y0 || a.y === y1)) return a.y === (b.x > a.x ? y0 : y1);
+      return m > y0 && m < y1;
+    });
+    const band = vs.filter((v, i) => mine[i] || mine[(i - 1 + vs.length) % vs.length]);
+    const cx = band.reduce((s, v) => s + v.x, 0) / band.length;
+    const cy = band.reduce((s, v) => s + v.y, 0) / band.length;
+    for (let i = 0; i < band.length; i++) {
+      const a = band[i], b = band[(i + 1) % band.length];
+      add([[cx, cy, zTop(cy)], [a.x, a.y, a.t], [b.x, b.y, b.t]]);
+      add([[cx, cy, zBot(cy)], [b.x, b.y, b.b], [a.x, a.y, a.b]]);
+    }
+  }
+  return polys;
+}
+
+// straight between the points of a profile [[y, z], ...] sorted by y, flat beyond it
+function piecewise(prof) {
+  return (y) => {
+    if (y <= prof[0][0]) return prof[0][1];
+    for (let k = 1; k < prof.length; k++)
+      if (y <= prof[k][0]) {
+        const [y0, z0] = prof[k - 1], [y1, z1] = prof[k];
+        return y === y1 ? z1 : z0 + (z1 - z0) * (y - y0) / (y1 - y0);
+      }
+    return prof[prof.length - 1][1];
+  };
+}
+
+// the cavity's outline grown a BLOAT into the wall, without the straights' split points
+function cavityRing(hwI, hdI, wall, n) {
+  return roundRect(hwI + BLOAT, hdI + BLOAT, Math.max(0.4, SPEC.r - wall) + BLOAT, n,
+                   [[], [], [], []]);
+}
+function scoopRounded(G, hwI, hdI, wall, floorZ, r, segs, n) {
+  const y0 = -hdI, prof = [];
+  for (let k = segs; k >= 0; k--) {                 // the same arc, from the wall down
+    const a = (k / segs) * Math.PI / 2;
+    prof.push([y0 + r - r * Math.sin(a), floorZ + r - r * Math.cos(a)]);
+  }
+  return bandSolid(G, cavityRing(hwI, hdI, wall, n), -Infinity, y0 + r,
+                   prof.map(([y]) => y), piecewise(prof), () => floorZ - BLOAT / 2);
+}
+function labelRounded(G, hwI, hdI, wall, H, depth, t, n) {
+  const yb = hdI;
+  return bandSolid(G, cavityRing(hwI, hdI, wall, n), yb - depth, Infinity, [],
+                   () => H, piecewise([[yb - depth, H - t], [yb + BLOAT, H - t - depth]]));
+}
+
 /* Stacking lip.
  *
  * The lip's inner surface is a baseplate socket: a bin stacks on a bin exactly as
@@ -7115,14 +7333,15 @@ function buildBin(G, cfg) {
        attach them to (an open front has no corner to fill). */
     const eF = c.edges && c.edges.f !== undefined ? c.edges.f : 1;
     const eB = c.edges && c.edges.b !== undefined ? c.edges.b : 1;
-    const iw = hw - c.wall, id = hd - c.wall;
+    const iw = hw - c.wall, id = hd - c.wall, poke = cornersPoke(hw, hd, iw, id, n);
     if (c.scoop > 0.05 && eF > 0) {
       /* No taller than the front wall it fills the corner of. With the front lowered,
          a scoop held only to the full height stood above the wall, and above the
          height binTop quotes: a 2x1x4 with every wall at a quarter and an 8.5 mm scoop
          was 14.45 mm built and 11.5 quoted, to its README and the bed check. */
       const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF));
-      if (r > 0.05) polys.push(...scoopPrism(G, iw, id, floorZ, r, Math.max(4, n)));
+      if (r > 0.05) polys.push(...(poke ? scoopRounded(G, iw, id, c.wall, floorZ, r, Math.max(4, n), n)
+                                        : scoopPrism(G, iw, id, floorZ, r, Math.max(4, n))));
     }
     if (c.label > 0.05 && eB > 0.99) {
       /* Limited by height as well as depth. The shelf's underside runs down at 45
@@ -7138,7 +7357,8 @@ function buildBin(G, cfg) {
          wall ring does: behind a wall over 5 mm thick it reaches in over a hole. */
       const footAt = plan && plan.screws ? FOOT_HOLES.screwTop + BLOAT : bodyBase + BLOAT;
       const d = Math.min(c.label, id * 0.8, H - c.labelT - footAt);
-      if (d > 0.05) polys.push(...labelPrism(G, iw, id, H, d, c.labelT));
+      if (d > 0.05) polys.push(...(poke ? labelRounded(G, iw, id, c.wall, H, d, c.labelT, n)
+                                        : labelPrism(G, iw, id, H, d, c.labelT)));
     }
 
     /* Dividers — separate overlapping shells, never unioned.
@@ -7536,8 +7756,13 @@ function platePitch() {
 function plateCells(W, D) {
   const pm = plateMargins();
   // each held to the drawer, as the plate's fields hold them
+  /* A plate with half cells in its leftover (see halfStrips in core.js) has the same
+     whole cells, and its margins take the strip on the right and the back: asked as
+     'auto', the drawer was drawn up to half a cell off where the plate sits in it. The
+     strip is not offered to bins here yet, so to this page it is margin. */
   const c = gridCells({ drawerW: W, drawerD: D, pitch: SPEC.pitch,
-    marginMode: pm ? 'custom' : 'auto', alignX: hashExtras.ax, alignY: hashExtras.ay,
+    marginMode: pm ? 'custom' : hashExtras.mm === 'half' ? 'half' : 'auto',
+    alignX: hashExtras.ax, alignY: hashExtras.ay,
     mLeft: pm ? Math.min(pm.l, W) : 0, mRight: pm ? Math.min(pm.r, W) : 0,
     mFront: pm ? Math.min(pm.f, D) : 0, mBack: pm ? Math.min(pm.b, D) : 0 });
   return { nx: Math.max(1, Math.min(GRID_MAX, c.nx)), ny: Math.max(1, Math.min(GRID_MAX, c.ny)),
