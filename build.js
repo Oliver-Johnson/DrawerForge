@@ -66,6 +66,14 @@ function syntaxCheck(rel, source) {
   }
 }
 
+/* Tags that would make the visitor's browser fetch something from another origin. Read
+   by check 4 on the template and again on the finished page. A canonical or alternate
+   link names a URL without fetching it, so those are exempt. */
+const thirdParty = (html) =>
+  [...html.matchAll(/<(script|link|img|iframe)\b[^>]*\b(?:src|href)\s*=\s*["'](https?:)?\/\/[^"']+["'][^>]*>/gi)]
+    .filter((m) => !/rel\s*=\s*["'](canonical|alternate)["']/i.test(m[0]))
+    .map((m) => m[0].slice(0, 110));
+
 const MARK = (name) => new RegExp(`[ \\t]*\\r?\\n?/\\*__${name}__\\*/[ \\t]*\\r?\\n?`);
 let stale = 0;
 
@@ -109,9 +117,7 @@ for (const tool of TOOLS) {
      cdnjs, so a third party saw every visitor's IP on load. The libraries are
      vendored now, and this stops a CDN URL coming back by habit and quietly making
      the promise untrue again. Links are fine — a link is the visitor's choice. */
-  const external = [...template.matchAll(/<(script|link|img|iframe)\b[^>]*\b(?:src|href)\s*=\s*["'](https?:)?\/\/[^"']+["'][^>]*>/gi)]
-    .filter((m) => !/rel\s*=\s*["'](canonical|alternate)["']/i.test(m[0]))
-    .map((m) => m[0].slice(0, 110));
+  const external = thirdParty(template);
   if (external.length)
     fail(`[${tool.name}] ${external.length} third-party subresource(s) in ${tool.template}`,
          external.concat(['vendor it under vendor/ and reference it relatively']));
@@ -120,10 +126,20 @@ for (const tool of TOOLS) {
   let out = template;
   for (const marker of Object.keys(tool.parts))
     out = out.replace(MARK(marker), () => sources[marker]);
-  /* The generated content -- the FAQ markup and the joint diagrams -- is applied by
-     tools/generated.js, which test/ci-sim.js also calls. Two lists of build steps kept
-     in two places is what made ci-sim report a stale page three separate times. */
-  out = generated(out, require('./src/core.js'));
+  /* The generated content -- the icon and link-preview tags, the FAQ markup and the
+     joint diagrams -- is applied by tools/generated.js, which test/ci-sim.js also
+     calls. Two lists of build steps kept in two places is what made ci-sim report a
+     stale page three separate times. */
+  try { out = generated(out, require('./src/core.js'), tool); } catch (e) { fail(e.message); }
+
+  /* The same audit again, on the page as it will ship. The template is not the whole
+     page: generated() adds tags of its own, and the spliced scripts can write markup at
+     runtime, and a third-party URL arriving by either route would be just as much a
+     request the privacy line on every page says is not made. */
+  const shipped = thirdParty(out);
+  if (shipped.length)
+    fail(`[${tool.name}] ${shipped.length} third-party subresource(s) in the built ${tool.out}`,
+         shipped);
 
   const outPath = path.join(ROOT, tool.out);
   if (checkOnly) {

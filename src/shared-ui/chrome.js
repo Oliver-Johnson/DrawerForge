@@ -61,13 +61,35 @@
      one dispatch covers them. */
   var wrap = document.getElementById('threewrap');
   if (wrap) {
+    /* Fit, beside it. Once you have zoomed into a corner or panned the drawer half out of
+       view there was no way back but zooming out by feel or reloading the page. The
+       button only announces itself — each tool listens for 'previewfit' and frames its
+       own camera, since the two keep their cameras differently and this file is shared
+       with pages that have none. Fit keeps the angle you are looking from: it answers
+       "show me all of it", not "start again". */
+    var row = document.createElement('div');
+    row.className = 'previewbtns';
+    var fit = document.createElement('button');
+    fit.className = 'fitbtn';
+    fit.type = 'button';
+    fit.title = 'Fit the whole design in the view';
+    fit.setAttribute('aria-label', fit.title);
+    fit.textContent = 'Fit';
+    fit.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      wrap.dispatchEvent(new CustomEvent('previewfit'));
+    });
+    row.appendChild(fit);
+
     var btn = document.createElement('button');
     btn.className = 'previewbtn';
     btn.type = 'button';
     btn.title = 'Expand the preview';
     btn.setAttribute('aria-label', 'Expand the preview');
     btn.textContent = 'Expand';
-    wrap.appendChild(btn);
+    row.appendChild(btn);
+    wrap.appendChild(row);
 
     var setExpanded = function (on) {
       wrap.classList.toggle('expanded', on);

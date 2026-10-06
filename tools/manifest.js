@@ -19,6 +19,9 @@ const CSS = 'src/shared-ui/style.css';
 const CHROME = 'src/shared-ui/chrome.js';
 const CORE = 'src/core.js';
 const WIDGETS = 'src/shared-ui/widgets.js';
+// the unit switch and the printer list, which panels 01 and 02 share between the tools
+const FIELDS = 'src/shared-ui/fields.js';
+const DRAWERS = 'src/shared-ui/drawers.js';
 
 module.exports = [
   {
@@ -26,7 +29,7 @@ module.exports = [
     template: 'src/template.html',
     out: 'index.html',
     changefreq: 'weekly', priority: '1.0',
-    parts: { CSS, CHROME, CORE, WIDGETS, UI: 'src/ui.js' },
+    parts: { CSS, CHROME, CORE, WIDGETS, FIELDS, DRAWERS, UI: 'src/ui.js' },
     uiPart: 'UI',
   },
   {
@@ -34,7 +37,7 @@ module.exports = [
     template: 'src/bins/template.html',
     out: 'bins/index.html',
     changefreq: 'weekly', priority: '0.9',
-    parts: { CSS, CHROME, CORE, WIDGETS, BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
+    parts: { CSS, CHROME, CORE, WIDGETS, FIELDS, DRAWERS, BIN: 'src/bins/bin.js', UI: 'src/bins/ui.js' },
     uiPart: 'UI',
   },
   {

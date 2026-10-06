@@ -18,9 +18,9 @@
 <meta property="og:site_name" content="Drawerforge">
 <meta property="og:title" content="Gridfinity Bin Generator and Drawer Planner — Drawerforge">
 <meta property="og:description" content="Plan a whole drawer of Gridfinity bins, stack them in layers, and export print-ready plates.">
-<meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Gridfinity Bin Generator and Drawer Planner — Drawerforge">
 <meta name="twitter:description" content="Plan a whole drawer of Gridfinity bins, stack them in layers, and export print-ready plates.">
+<!--__SHARE__-->
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebApplication","name":"Drawerforge Bins",
 "url":"https://drawerforge.co.uk/bins/","applicationCategory":"DesignApplication",
@@ -49,6 +49,14 @@
     <a id="navBins" href="./" class="on">Bins</a>
     <a id="navGuide" href="../guide/">Guide</a>
   </nav>
+  <!-- Which saved drawer this is, and the way to the others. Under the nav rather than in
+       it, for the same reason as the quickstart below: the nav is a row of pages. The name
+       is the button, so the bar is one control wide, and on a phone it shares the
+       quickstart's row: a row of its own pushed the drawer map below the fold. -->
+  <div class="drawerbar">
+    <span>Drawer</span>
+    <button type="button" class="ghost" id="drawersBtn" aria-haspopup="dialog"><b id="drawerName" class="none">not saved</b> <span aria-hidden="true">▾</span></button>
+  </div>
   <!-- Under the nav rather than in it. The nav is a row of page links and carries the
        layout across them; this is a mode switch, and an action sitting in that row reads
        like a fourth page. Plenty of people arrive wanting one bin that fits one thing,
@@ -119,8 +127,21 @@
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-drawer"><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></button></h2>
   <div class="body" id="b-drawer">
     <div class="row">
-      <label class="f"><b>Drawer width (mm)</b><input id="drawerW" type="number" step="0.5" min="1" max="2000" value="306"></label>
-      <label class="f"><b>Drawer depth (mm)</b><input id="drawerD" type="number" step="0.5" min="1" max="2000" value="380"></label>
+      <label class="f"><b>Drawer width (<span data-unit>mm</span>)</b><input id="drawerW" type="number" step="0.5" min="1" max="2000" value="306"></label>
+      <label class="f"><b>Drawer depth (<span data-unit>mm</span>)</b><input id="drawerD" type="number" step="0.5" min="1" max="2000" value="380"></label>
+    </div>
+    <!-- Inches are a way of typing the drawer and nothing more: the four drawer
+         measurements show the unit picked here, and the model, the link and every export
+         stay in millimetres. After the size fields so Tab still reaches the drawer width
+         first. The baseplates page has the same switch and the same remembered choice;
+         the baseplate height stays in millimetres, because it is a spec figure and not a
+         measurement anyone takes. -->
+    <div class="row" style="align-items:center">
+      <span class="hint" id="unitLabel">Measure the drawer in</span>
+      <div class="seg" role="group" aria-labelledby="unitLabel">
+        <button type="button" id="unitMm" class="on" aria-pressed="true">mm</button>
+        <button type="button" id="unitIn" aria-pressed="false">inches</button>
+      </div>
     </div>
     <!-- The same grid, counted rather than measured. Someone who already owns baseplates
          knows the cells and not the millimetres, and was left doing 4 × 42 in their head
@@ -130,13 +151,13 @@
       <label class="f"><b>or grid width (cells)</b><input id="gridX" type="number" step="1" min="1" value="7"></label>
       <label class="f"><b>or grid depth (cells)</b><input id="gridY" type="number" step="1" min="1" value="9"></label>
     </div>
-    <div class="hint">Count the cells of the baseplate you already have and these fill the millimetres in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
+    <div class="hint">Count the cells of the baseplate you already have and these fill the drawer size in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
     <div class="row">
-      <label class="f"><b>Usable height (mm)</b><input id="drawerH" type="number" step="0.5" min="1" max="2000" value="84"></label>
+      <label class="f"><b>Usable height (<span data-unit>mm</span>)</b><input id="drawerH" type="number" step="0.5" min="1" max="2000" value="84"></label>
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
     <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
-    <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (mm)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
+    <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (<span data-unit>mm</span>)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
     <div class="hint" id="drawerViewHint" style="display:none">Draws the real drawer in the preview — floor and four walls, translucent so the bins still show through. The sides stand at the usable height you gave above, because that is the number the fit check already uses and a second side measurement could only disagree with it. The front panel is often taller or lower than the sides, so it gets its own figure; leave it at 0 to match them. The walls sit at the drawer's inside dimensions, so the gap between them and the baseplate is the space the grid cannot reach. It is a view only — nothing you download changes.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
     <div class="hint">Only affects the material estimate, not the geometry. Thin parts — walls, floor, dividers, lip — print solid whatever you set; the feet are thick enough to be infilled, and they dominate. Assumes 2 perimeters and 4 solid top/bottom layers.</div>
@@ -148,20 +169,20 @@
 <section class="p closed" id="s-printer">
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-printer"><span class="n">02</span> Printer <span class="caret">▾</span></button></h2>
   <div class="body" id="b-printer">
-    <label class="f"><b>Preset</b>
+    <!-- Printers by name, generated from tools/printers.js — the same list the
+         baseplates page and the split guide print, so the three cannot disagree. They
+         did: this list filed the 180 mm A1 mini under 220 mm, and an A1 mini owner who
+         picked their own printer was told bins would fit a bed that cannot take them. -->
+    <label class="f"><b>Printer</b>
       <select id="bedPreset">
-        <option value="256,256,256">256 × 256 × 256 (Elegoo CC/CC2, Bambu X1/P1)</option>
-        <option value="220,220,250">220 × 220 × 250 (Ender 3, A1 mini class)</option>
-        <option value="250,210,220">250 × 210 × 220 (Prusa MK4 class)</option>
-        <option value="300,300,300">300 × 300 × 300 (large format)</option>
-        <option value="180,180,180">180 × 180 × 180 (compact)</option>
-        <option value="custom">Custom…</option>
+<!--__PRINTERS__-->
       </select></label>
     <div class="row3">
       <label class="f"><b>Bed width (mm)</b><input id="bedW" type="number" min="1" max="2000" value="256"></label>
       <label class="f"><b>Bed depth (mm)</b><input id="bedD" type="number" min="1" max="2000" value="256"></label>
       <label class="f"><b>Height (Z)</b><input id="bedH" type="number" min="1" max="2000" value="256"></label>
     </div>
+    <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Gap between parts (mm)</b><input id="gap" type="number" step="0.5" value="3"></label>
     <div class="hint">Bins print upright, so a bin's own height has to clear your Z. A tall drawer will happily let you ask for a bin taller than the printer can make.</div>
   </div>
@@ -268,7 +289,7 @@
     <button class="act" id="focusBin" style="display:none">Edit this bin on its own</button>
     <div class="hint" id="focusBinHint" style="display:none">Hides the drawer, the layers and the map, and gives this one bin the whole page. Everything here still works and the bin stays exactly where it is — this only changes what you are shown.</div>
     <button class="act" id="carveMode" style="display:none">Carve this bin into a shape</button>
-    <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. Alt-click does the same thing without turning the mode on. Press Escape or the button again when you are done.</div>
+    <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. <span class="haskeys">Alt-click does the same thing without turning the mode on. </span>Press <span class="haskeys">Escape or </span>the button again when you are done.</div>
     <button class="act" id="mergeBins" style="display:none">Merge into one bin</button>
     <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</div>
     <div class="row" id="selActions" style="display:none">
@@ -311,7 +332,10 @@
          layout is sound, so a good design pays nothing for it. -->
     <div class="exfit bad" id="mapChecks" style="display:none"><div id="mapChecksList"></div></div>
     <div class="mono" id="coverage">—</div>
-    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</div>
+    <!-- Carving was taught as Alt-click only, and a touch screen has no Alt key, so on a
+         phone the one sentence about L and U shapes described something impossible.
+         The Carve button in panel 03 is the route there, and the touch wording names it. -->
+    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <span class="haskeys"><b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</span><span class="hastouch">To make an L or a U, tap a bin, press <b>Carve this bin into a shape</b> in panel 03, then tap the cells to cut out — tap a gap to put one back.</span></div>
     <div class="row3">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>
@@ -419,6 +443,33 @@
   </div>
 </dialog>
 
+<!-- Saved drawers. The same markup on both tools, because the same module drives it:
+     src/shared-ui/drawers.js fills in the list and the messages each time it opens. -->
+<dialog id="drawersDlg" class="sheet" aria-labelledby="drawersTitle">
+  <div class="sheethead">
+    <h2 id="drawersTitle">Your drawers</h2>
+    <button type="button" id="drawersClose" title="Close" aria-label="Close">×</button>
+  </div>
+  <div class="sheetbody">
+    <div class="exnote">Each saved drawer keeps its baseplate and its bins together, on this device only. The one that is open saves itself as you work, and opening another brings back both halves of it, on either page.</div>
+    <div class="exsum" id="drawersNow">—</div>
+    <form class="dwsave" id="drawersSaveForm">
+      <label class="f"><b>Save the design on screen as a new drawer</b>
+        <input id="drawersNewName" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Workbench, top drawer"></label>
+      <button type="submit" class="act">Save</button>
+    </form>
+    <div class="exfit" id="drawersMsg" role="status" hidden></div>
+    <div class="exfiles" id="drawersList" hidden></div>
+    <div class="exportrow">
+      <button type="button" class="ghost" id="drawersExport">Export this drawer</button>
+      <button type="button" class="ghost" id="drawersExportAll">Export every drawer</button>
+      <button type="button" class="ghost" id="drawersImportBtn">Import a design file…</button>
+      <input type="file" id="drawersImport" accept=".json,application/json" hidden>
+    </div>
+    <div class="exnote">A design file is a small JSON file of settings — no 3D models, which are rebuilt from the settings. Use one to move drawers to another device, to keep a backup, or to attach to a bug report.</div>
+  </div>
+</dialog>
+
 <script src="../vendor/three.min.js"></script>
 <script src="../vendor/jszip.min.js"></script>
 <script>
@@ -426,6 +477,12 @@
 </script>
 <script>
 /*__WIDGETS__*/
+</script>
+<script>
+/*__FIELDS__*/
+</script>
+<script>
+/*__DRAWERS__*/
 </script>
 <script>
 /*__BIN__*/

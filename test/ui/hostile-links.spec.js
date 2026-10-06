@@ -221,12 +221,12 @@ test('changing a linked layout takes the offer to put yours back away', async ({
 
 test('the printer menu names the bed a link brings', async ({ page }) => {
   await arrive(page, H.PLATES_URL + '#bw=220&bd=220&bh=250');
-  expect(await page.inputValue('#bedPreset')).toBe('220,220,250');
+  expect(await page.inputValue('#bedPreset')).toBe('bed-220');
   await arrive(page, H.PLATES_URL + '#bw=200&bd=210&bh=220');
   expect(await page.inputValue('#bedPreset')).toBe('custom');
   await H.setField(page, 'bedH', '230');
   expect(await page.inputValue('#bedPreset')).toBe('custom');
-  await page.selectOption('#bedPreset', '300,300,300');
+  await page.selectOption('#bedPreset', 'bed-300');
   await H.setField(page, 'bedW', '299');
   expect(await page.inputValue('#bedPreset')).toBe('custom');
 });
@@ -248,10 +248,12 @@ test('the pages do not need Object.hasOwn', async ({ page }) => {
 test('a note that is not a string does not stop the bins page', async ({ page }) => {
   const errors = watch(page);
   await arrive(page, H.BINS_URL + '#bl=0-0-2-2-3&bnotes=%5B%5B5%5D%5D');
-  expect(await page.evaluate(() => B()[0].note)).toBe('5');
+  expect(await page.evaluate(() => B()[0].note || '')).toBe('');   // left out, not drawn
   expect(errors).toEqual([]);
 });
 
+/* 28 as the note field and a design file count them, so a note that arrives in a link
+   can be saved to a file and opened again. */
 test('notes from a link are one clean line of at most 28 characters', async ({ page }) => {
   const notes = encodeURIComponent(JSON.stringify([['one\ntwo\u0007three', '🙂'.repeat(40)]]));
   await arrive(page, H.BINS_URL + '#bl=0-0-1-1-3_2-0-1-1-3&bnotes=' + notes);
@@ -259,7 +261,7 @@ test('notes from a link are one clean line of at most 28 characters', async ({ p
   expect(a).not.toMatch(/[\u0000-\u001f\u007f]/);
   expect(a).toContain('one');
   expect(a).toContain('three');
-  expect(b).toBe('🙂'.repeat(28));       // whole emoji, never half of one
+  expect(b).toBe('🙂'.repeat(14));       // whole emoji, never half of one
 });
 
 test('a fractional position is rounded rather than thrown on', async ({ page }) => {
@@ -721,7 +723,7 @@ test('a drawer too big for the page, from a link, is said in Checks', async ({ p
 
 test('the bins printer menu names the bed a link brings', async ({ page }) => {
   await arrive(page, H.BINS_URL + '#bw=220&bd=220&bh=250');
-  expect(await page.inputValue('#bedPreset')).toBe('220,220,250');
+  expect(await page.inputValue('#bedPreset')).toBe('bed-220');
   await arrive(page, H.BINS_URL + '#bw=200&bd=210&bh=220');
   expect(await page.inputValue('#bedPreset')).toBe('custom');
 });

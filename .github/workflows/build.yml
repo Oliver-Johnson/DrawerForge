@@ -31,6 +31,9 @@ jobs:
       - run: node test/plate-audit.js
       # A layout travels in the URL hash; it must survive the round trip byte for byte.
       - run: node test/hash-roundtrip.js
+      # A saved-drawers file comes from another device or another person, so the
+      # importer is tested on the files it must refuse as well as the ones it reads.
+      - run: node test/drawers-file.js
       - run: node test/seo-check.js
       # The guides quote real numbers. Nothing connected them to the code they came
       # from, so a change to SPEC would leave three pages quietly lying.

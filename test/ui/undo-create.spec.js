@@ -100,3 +100,27 @@ test('a drag that lands on an occupied cell files no undo entry', async ({ page 
   expect(await H.bins(page), 'the single Undo reaches the bin that was really placed').toEqual([]);
   expect(errors).toEqual([]);
 });
+
+/* The Drawers dialog sits over the drawer, and Ctrl+Z on one of its buttons used to take
+   back a step of the layout behind it, which the dialog's Save would then have stored. */
+test('Ctrl+Z with a dialog open leaves the drawer behind it alone', async ({ page }) => {
+  const errors = await H.openBins(page);
+  await H.dragCells(page, [1, 1], [2, 2]);
+  expect(await H.bins(page)).toHaveLength(1);
+
+  await page.locator('#drawersBtn').click();
+  await expect(page.locator('#drawersDlg')).toBeVisible();
+  await page.locator('#drawersClose').focus();          // a button in it, not a field
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(150);
+  expect(await H.bins(page), 'the bin behind the dialog was undone').toHaveLength(1);
+
+  // closed again, the shortcut is the drawer's as it was
+  await page.locator('#drawersClose').click();
+  await expect(page.locator('#drawersDlg')).toBeHidden();
+  await page.locator('#undoBtn').focus();
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(150);
+  expect(await H.bins(page)).toEqual([]);
+  expect(errors).toEqual([]);
+});

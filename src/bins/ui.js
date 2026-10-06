@@ -25,12 +25,9 @@ for (const fn of REQUIRED_CORE)
 const PLA_DENSITY = 1.24;   // g/cm3
 const S = 40;               // map cell size, svg units
 
-/* Counted things, written the way a person would say them. The page carried eleven
-   "bin(s)" and "layer(s)", including one line that managed both "1 bin(s)" and
-   "1 bins" in eleven words — a form nobody says out loud, and the clearest sign that
-   the text was written for the person who already knew what it meant. Irregulars pass
-   their own plural; everything here so far takes an s. */
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
+/* Counted things, written the way a person would say them — see DF.plural, which both
+   tools share now that baseplates needed the same fix. */
+const plural = DF.plural;
 
 const state = {};           // drawer + defaults for new bins
 let layers = [{ bins: [] }];
@@ -406,22 +403,33 @@ function applyFocus() {
      the measurement it left behind has to go with it, or the preview stays pinned to a
      column shaped like a map that is no longer on the page. */
   const top = document.querySelector('.stagetop');
-  if (top) { top.style.gridTemplateColumns = ''; top.classList.remove('wide'); }
+  if (top) {
+    top.style.gridTemplateColumns = '';
+    top.classList.remove('wide', 'paired');   // see DF.stageRow for what .paired does
+  }
 }
-/* Frame the bin, not the drawer. dist is sized for a 300 mm layout, which would put a
-   1×1 bin in the middle distance as a speck — the mode looking broken at the exact
-   moment it opens. */
+/* Frame the bin, not the drawer. The drawer's framing would put a 1×1 bin in the
+   middle distance as a speck — the mode looking broken at the exact moment it opens.
+
+   The framing itself is done by autoFrame() on the next draw, because the bin is the
+   subject of the frame key in focus and the key has just changed. All this has to do is
+   put the drawer's view somewhere safe and let the page frame again, whatever had been
+   done to the drawer's view: a zoom into one corner of the drawer means nothing for a
+   bin on its own. The angle carries over, as it always did. What comes back on the way
+   out is the whole view, including whose it was — a drawer view you had zoomed stays
+   yours, and one the page framed is framed again if the canvas changed shape meanwhile,
+   which leaving focus does, since the map comes back and takes its column. */
 function restoreView() {
   if (!savedView) return;
   theta = savedView.theta; phi = savedView.phi; dist = savedView.dist;
-  panX = savedView.panX; panZ = savedView.panZ;
+  panX = savedView.panX; panZ = savedView.panZ; lookY = savedView.lookY;
+  viewOwned = savedView.owned; framedKey = savedView.key;
   savedView = null;
 }
-function frameBin(b) {
-  savedView = savedView || { theta, phi, dist, panX, panZ };
-  panX = 0; panZ = 0;
-  dist = Math.max(150, 2.4 * Math.max(b.u * SPEC.pitch, b.v * SPEC.pitch,
-                                      b.hUnits * SPEC.unitH + LIP_H));
+function frameBin() {
+  savedView = savedView ||
+    { theta, phi, dist, panX, panZ, lookY, owned: viewOwned, key: framedKey };
+  viewOwned = false;
 }
 /* Where a loose bin would go if you added it now: the first free spot on the layer you
    were last editing, scanned front-left first because that is the corner the map draws
@@ -451,7 +459,7 @@ function enterFocus() {
   selExtra.clear();          // focus is one bin; a companion selection means nothing here
   focused = true; carving = false; scratch = null;
   const b = B()[selected];
-  frameBin(b);
+  frameBin();
   setPanel('s-bin', true);
   $('focusSay').textContent =
     `Editing the ${b.u} by ${b.v} bin on its own. The drawer, the layers and the map are hidden.`;
@@ -487,7 +495,7 @@ function startScratch() {
               edges: Object.assign({}, state.edges) };
   sUndoStack.length = 0; sRedoStack.length = 0;
   focused = true; carving = false;
-  frameBin(scratch);
+  frameBin();
   setPanel('s-bin', true);
   $('focusSay').textContent =
     `Designing a ${scratch.u} by ${scratch.v} bin on its own. There is no drawer and no map.`;
@@ -531,13 +539,25 @@ $('focusExit').addEventListener('click', () => leaveFocus());
 $('focusUndo').addEventListener('click', () => undo());
 $('focusRedo').addEventListener('click', () => redo());
 
+/* The drawer's own measurements: the fields the unit switch in panel 01 converts. The
+   baseplate height is not one — it is a spec figure the baseplates page hands across,
+   not something anyone measures — and neither is anything about the printer or a bin,
+   all of which are quoted in millimetres whatever the drawer was measured in.
+   FIELDS.lengthOf hands back millimetres from either unit, so `state` and everything
+   downstream of it never learn which one was typed. */
+const LENGTH_IDS = ['drawerW', 'drawerD', 'drawerH', 'drawerFrontH'];
+let unit = 'mm';   // what the length fields are showing; the saved choice is applied at boot
+
 /* A typed value held to its field's own min and max, so each limit is written in one
    place and the spinner stops where the clamp does. The limits are the ones a shared
    link is held to, so nothing can be typed that the page's own link would not carry
    back. A negative floor used to reach the geometry and the link, and a 100 mm wall
-   built inside out and weighed -430 g. */
+   built inside out and weighed -430 g. A drawer length is clamped in millimetres: its
+   field shows its limits in inches too when it does, and keeps the millimetres beside
+   them (FIELDS.convert). */
 function fieldClamp(id, x) {
-  const lo = parseFloat($(id).min), hi = parseFloat($(id).max);
+  const el = $(id), mm = (k, attr) => parseFloat(k in el.dataset ? el.dataset[k] : el[attr]);
+  const lo = mm('minMm', 'min'), hi = mm('maxMm', 'max');
   return Math.min(isFinite(hi) ? hi : Infinity, Math.max(isFinite(lo) ? lo : -Infinity, x));
 }
 const BIN_FIELDS = ['u', 'v', 'hUnits', 'wall', 'floorT', 'divX', 'divY', 'scoop', 'label'];
@@ -561,14 +581,15 @@ function readControls() {
   const int = (id, d) => { const x = parseInt($(id).value, 10); return isFinite(x) ? x : d; };
   /* Counts are rounded, not truncated: parseInt read "2.7" dividers as 2 and "1e3" as 1. */
   const count = (id, d) => fieldClamp(id, Math.round(num(id, d)));
-  const mm = (id, d) => fieldClamp(id, num(id, d));
-  drawerAsked = { w: num('drawerW', 306), d: num('drawerD', 380) };
+  const len = (id, d) => { const x = FIELDS.lengthOf($(id), unit); return isFinite(x) ? x : d; };
+  const mm = (id, d) => fieldClamp(id, len(id, d));
+  drawerAsked = { w: len('drawerW', 306), d: len('drawerD', 380) };
   state.drawerW = mm('drawerW', 306);
   state.drawerD = mm('drawerD', 380);
   state.drawerH = mm('drawerH', 84);
   state.plateH = num('plateH', 4.25);
   state.showDrawer = $('showDrawer').checked;
-  state.drawerFrontH = num('drawerFrontH', 0);
+  state.drawerFrontH = len('drawerFrontH', 0);
   state.arcSegs = int('arcSegs', 12);
   state.infill = num('infill', 15);
   /* Page-level, not per bin: how thick a divider plate is and how much slack its slot
@@ -868,15 +889,60 @@ function drawFocusMap() {
      six cells adrift in an empty card. applyFocus() clears this on every pass — which
      is right, because the default focus view has no map at all — so it is re-stated
      here, and only while carving. Asking the element how many tracks it actually got
-     keeps the 1280 px breakpoint in the stylesheet, where drawMap leaves it too. */
+     keeps the 1280 px breakpoint in the stylesheet, where drawMap leaves it too — the
+     same DF.stageRow, which also tells the preview how much stage it has when it is
+     alone in the row, as it is for the rest of focus. */
   const top = document.querySelector('.stagetop');
-  if (top) {
-    top.style.gridTemplateColumns = '';
-    const twoCol = carving &&
-      getComputedStyle(top).gridTemplateColumns.trim().split(/\s+/).length > 1;
-    if (twoCol)
-      top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(320px, 1fr)`;
+  if (DF.stageRow(top, stage).two && carving)
+    DF.pairColumns(top, Math.round(W * sc) + 30, 320);
+}
+/* The lines written on a bin on the map, cut to fit the bin.
+ *
+ * They were written at a fixed size whatever the bin, so the height line "3u · 21mm" —
+ * about 51 map units wide — spilled out of every one-cell-wide bin, which is 36 wide,
+ * and across its neighbours' labels. A note did the same at seven characters a cell,
+ * and in a bin one cell deep the note sat below the bottom edge altogether.
+ *
+ * So each line is measured against the room the bin has. The height line drops to "3u"
+ * when the whole of it will not fit, and a note is cut to what will, with an ellipsis.
+ * Lines are stacked and centred, and when there are more than the bin is tall — a note
+ * in a one-deep bin — the height goes first: the size says which bin this is and the
+ * note is what you wrote on it, while the height is in the hover text and the preview.
+ *
+ * Measured by character count, not by asking the browser. The map font is monospace,
+ * and getComputedTextLength() answers 0 for a map that is not on screen, which would
+ * hand every bin the long form the next time it appeared. CH, ASC and DESC are a little
+ * wider and taller than any monospace in --mono actually is, so the estimate errs into
+ * the margin rather than out of the bin. Sizes are the stylesheet's #fillmap ones.
+ *
+ * Returns [{ cls, text, dy }], dy being each baseline's offset from the bin's centre. */
+const LABEL = { CH: 0.62, ASC: 0.95, DESC: 0.27, GAP: 1.5,
+                size: { blabel: 12, bsub: 9.5, bnote: 9 } };
+function binLabels(b) {
+  const roomW = b.u * S - 10, roomH = b.v * S - 8;   // the rect's 2 inset, plus clearance
+  const fits = (str, cls) => str.length * LABEL.CH * LABEL.size[cls] <= roomW;
+  const lines = [{ cls: 'blabel', text: `${b.u}×${b.v}`, rank: 0 }];
+  const full = `${b.hUnits}u · ${b.hUnits * SPEC.unitH}mm`, short = `${b.hUnits}u`;
+  const ht = fits(full, 'bsub') ? full : fits(short, 'bsub') ? short : null;
+  if (ht) lines.push({ cls: 'bsub', text: ht, rank: 2 });
+  if (b.note) {
+    const max = Math.floor(roomW / (LABEL.CH * LABEL.size.bnote));
+    const note = b.note.length <= max ? b.note : max >= 3 ? b.note.slice(0, max - 1) + '…' : '';
+    if (note) lines.push({ cls: 'bnote', text: note, rank: 1 });
   }
+  const tall = (ls) => ls.reduce((a, l) => a + (LABEL.ASC + LABEL.DESC) * LABEL.size[l.cls], 0) +
+                       LABEL.GAP * (ls.length - 1);
+  // drop the least important line until the stack fits the bin's height
+  let keep = lines.slice();
+  while (keep.length > 1 && tall(keep) > roomH)
+    keep = keep.filter((l) => l.rank !== Math.max(...keep.map((k) => k.rank)));
+  let y = -tall(keep) / 2;
+  return keep.map((l) => {
+    const fs = LABEL.size[l.cls];
+    const dy = y + LABEL.ASC * fs;
+    y += (LABEL.ASC + LABEL.DESC) * fs + LABEL.GAP;
+    return { cls: l.cls, text: l.text, dy };
+  });
 }
 function drawMap() {
   /* In focus there is no drawer map to draw, and drawing it would be worse than
@@ -895,7 +961,7 @@ function drawMap() {
      would make the thing you actually work in smaller — the opposite of the point. */
   const top = document.querySelector('.stagetop');
   const wide = g.nx / g.ny > 1.15;
-  if (top) top.classList.toggle('wide', wide);
+  top.classList.toggle('wide', wide);
 
   /* Size from the STAGE, never from the map's own container. The column width is set
      from the map below, so measuring the container here would make each depend on the
@@ -905,27 +971,55 @@ function drawMap() {
      Cells get a comfortable fixed size rather than filling whatever room exists;
      available space is a ceiling, not a target. */
   const CELL_PX = 52, PREVIEW_MIN = 320;
-  const stage = document.querySelector('.stage');
-  const stageW = (stage ? stage.clientWidth : 900) - 44;
-  const availW = Math.max(180, wide ? stageW : stageW - PREVIEW_MIN - 44);
-  const availH = Math.min(720, (window.innerHeight || 900) * 0.66);
-  const sc = Math.min(availW / W, availH / H, CELL_PX / S);
-  svg.setAttribute('width', Math.round(W * sc));
-  svg.setAttribute('height', Math.round(H * sc));
   /* Sizing the two columns from the map is only meaningful where there ARE two
      columns. The stylesheet collapses .stagetop to one column below 1280 px, and an
      inline style beats a media query — so on a phone this pinned a 320 px preview
      beside the map and hung the whole card off the right edge of the screen.
      Clearing the inline style and asking the element how many tracks it ended up with
      keeps that breakpoint in one place, the stylesheet, instead of repeating the
-     number here where the two could drift apart. */
-  if (top) {
-    top.style.gridTemplateColumns = '';
-    const twoCol = !wide &&
-      getComputedStyle(top).gridTemplateColumns.trim().split(/\s+/).length > 1;
-    if (twoCol)
-      top.style.gridTemplateColumns = `${Math.round(W * sc) + 30}px minmax(${PREVIEW_MIN}px, 1fr)`;
-  }
+     number here where the two could drift apart.
+
+     It is asked FIRST, because the answer decides how wide the map may be. It used to
+     be asked after the size was settled, and the size always took the preview's 320 px
+     share out of the stage — including in one column, where the preview is underneath
+     and takes no width at all. A phone got a 180 px map of 26 px cells in a card with
+     room for 45, and a 1024 px tablet a 216 px one. DF.stageRow does the asking, the
+     same way for the baseplates page's cut map.
+
+     The width is the row's own, not the stage's guessed at: .stagetop is as wide as
+     the stage's content box whatever its columns hold, so measuring it is not the loop
+     described above. The 30 is the card's chrome around the map — #fillwrap's 14 px of
+     padding each side and the border — which is also what the column below adds back.
+     The old "stage minus 44" over-counted it by 26 px on one column, enough for the
+     max-width:100% clamp to letterbox the grid inside its own box. */
+  const stage = document.querySelector('.stage');
+  const row = DF.stageRow(top, stage);
+  const twoCol = !wide && row.two;
+  const availW = Math.max(180, twoCol ? row.width - row.gap - PREVIEW_MIN - 30 : row.width - 30);
+  /* The height ceiling is the part of the stage you can see. Two thirds of the window
+     stood in for that while the stage ran off the bottom of the page anyway; now the
+     stage is exactly the window under the header and is the thing that scrolls, so at
+     1280×720 that guess was a 468 px map in 513 px of stage — the front row, the
+     coverage bar and the errors about the layout (#mapChecks) always just out of view,
+     at the very moment they were the point. The map, its front marker and the
+     coverage bar now fit together with the stage scrolled to the top.
+     Above the map is measured rather than assumed, because the layer tabs wrap as
+     layers are added: the card's heading and tabs (row.room has already lost the
+     stage's top padding). Below it the marker and the bar are a fixed 41 px. Stacked,
+     the stage is as tall as its content and it is the window that scrolls, so there
+     the window is the room — see DF.stageRow.
+     Fitting the height never takes a cell under 40 px, the size the phone pass set as
+     the smallest thing a finger can hit: on a short window with the "picked up your
+     layout" banner showing, a map that scrolls a little beats one too fine to use.
+     The 52 px cell and 720 px caps are for a 1080-line window and grow with a taller
+     one (row.big): at 1440 a cell may be 69 px rather than staying 52 while the screen
+     round it got a third bigger. The labels scale with the cells, so they stay legible. */
+  const above = svg.getBoundingClientRect().top - top.getBoundingClientRect().top;
+  const availH = Math.max(H * 40 / S, Math.min(720 * row.big, row.room - above - 41));
+  const sc = Math.min(availW / W, availH / H, Math.round(CELL_PX * row.big) / S);
+  svg.setAttribute('width', Math.round(W * sc));
+  svg.setAttribute('height', Math.round(H * sc));
+  if (twoCol) DF.pairColumns(top, Math.round(W * sc) + 30, PREVIEW_MIN);
 
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const el = (n, a) => { const e = document.createElementNS(SVGNS, n);
@@ -981,21 +1075,17 @@ function drawMap() {
       }
     }
     const cx = (b.x + b.u / 2) * S, cy = sy(b.y, b.v) + b.v * S / 2;
-    const t1 = el('text', { class: 'blabel', x: cx, y: cy - 2, 'text-anchor': 'middle' });
-    t1.textContent = `${b.u}×${b.v}`;
-    const t2 = el('text', { class: 'bsub', x: cx, y: cy + 12, 'text-anchor': 'middle' });
-    t2.textContent = `${b.hUnits}u · ${b.hUnits * SPEC.unitH}mm`;
-    svg.appendChild(t1); svg.appendChild(t2);
-    // hovering a bin says what you decided goes in it
+    for (const t of binLabels(b)) {
+      const e = el('text', { class: t.cls, x: cx, y: cy + t.dy, 'text-anchor': 'middle' });
+      e.textContent = t.text;
+      svg.appendChild(e);
+    }
+    // hovering a bin says what you decided goes in it — and the whole of it, which is
+    // what makes it safe for the labels to shorten or drop a line in a small bin
     const tip = document.createElementNS(SVGNS, 'title');
     tip.textContent = (b.note ? b.note + ' — ' : '') +
       `${b.u}×${b.v}, ${b.hUnits} units (${b.hUnits * SPEC.unitH} mm)`;
     r.appendChild(tip);
-    if (b.note) {
-      const t3 = el('text', { class: 'bnote', x: cx, y: cy + 25, 'text-anchor': 'middle' });
-      t3.textContent = b.note.length > b.u * 7 ? b.note.slice(0, b.u * 7 - 1) + '…' : b.note;
-      svg.appendChild(t3);
-    }
     if (issues.length) {
       const warn = el('text', { class: 'bwarn', x: b.x * S + 13, y: sy(b.y, b.v) + 20 });
       warn.textContent = '⚠';
@@ -1794,9 +1884,17 @@ function refresh() {
   const zUnits = Math.max(1, Math.floor((state.bedH - LIP_H) / SPEC.unitH));
   const capUnits = Math.min(g.maxUnits, zUnits);
   const capBy = zUnits < g.maxUnits ? 'your printer' : 'the drawer';
+  /* With inches on, the lengths here are given in both: the millimetres are what the
+     grid and every download are made of, the inches are what the drawer was measured
+     in and what a tape measure will be held against. */
+  const inch = unit === 'in';
+  const also = (mm) => inch ? ` / ${FIELDS.inchText(mm)} in` : '';
+  const gw = g.nx * SPEC.pitch, gd = g.ny * SPEC.pitch;
   $('gridSummary').textContent =
-    `Grid: ${g.nx} × ${g.ny} cells · ${g.avail.toFixed(1)} mm above the baseplate · ` +
-    `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm + lip), limited by ${capBy}`;
+    `Grid: ${g.nx} × ${g.ny} cells` +
+    (inch ? ` (${gw} × ${gd} mm, ${FIELDS.inchText(gw)} × ${FIELDS.inchText(gd)} in)` : '') +
+    ` · ${g.avail.toFixed(1)} mm${also(g.avail)} above the baseplate · ` +
+    `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`;
   const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
@@ -1825,13 +1923,16 @@ function refresh() {
 
   const ts = types();
   let vol = 0;
+  /* The table is built as markup and a note is text someone typed, so a note goes in
+     escaped: a "<" in a note is a "<" on the screen, not the start of a tag. */
+  const asText = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   $('typeRows').innerHTML = ts.map((t) => {
     const gm = geomFor(t.b);
     vol += gm.vol * t.qty;
     return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${t.b.divX || t.b.divY ? ` · ${(t.b.divX + 1) * (t.b.divY + 1)} comp` : ''}` +
       /* what it is for, beside what it is — the row is how you tell four identical
          shapes apart when they come off the plate */
-      `${t.notes && t.notes.length ? `<span class="tnote">${t.notes.join(', ')}</span>` : ''}</td>` +
+      `${t.notes && t.notes.length ? `<span class="tnote">${asText(t.notes.join(', '))}</span>` : ''}</td>` +
       `<td class="mono">${gm.meta.W.toFixed(1)} × ${gm.meta.D.toFixed(1)} × ${gm.meta.totalH.toFixed(1)}</td>` +
       `<td class="mono">${t.qty}</td>` +
       `<td class="mono">${(gm.vol * t.qty / 1000 * PLA_DENSITY).toFixed(0)} g</td>` +
@@ -1961,6 +2062,8 @@ let scene, camera, renderer, group, drawerGroup;
    that out until the drawer shell arrived and its tall front panel appeared at the
    back. Same elevation and distance, same view, just from the side you open. */
 let theta = 0.9, phi = 0.95, dist = 600, dragging = null;
+/* Who is in charge of the framing: see autoFrame(). */
+let viewOwned = false, framedKey = '', fitDist = 0;
 /* Where the camera is looking, on the drawer floor. Orbit alone always swung about the
    middle of the grid, so a bin in a far corner of a nine-cell drawer could not be
    brought to the middle of the view to be looked at — you could only get further away.
@@ -1968,6 +2071,14 @@ let theta = 0.9, phi = 0.95, dist = 600, dragging = null;
    from the start and now takes the middle button too, so the two previews answer to the
    same hands. */
 let panX = 0, panZ = 0, panning = false;
+/* The height of that point. It was a fixed 20 mm, which is about right for the middle of
+   a drawer of 3-unit bins and wrong for anything else — a drawer shell 150 mm tall had
+   its pivot near the floor. Framing sets it to the middle of what is drawn. */
+let lookY = 20;
+/* The wheel's limits. The outer one follows the drawer, because a fixed 4000 mm would
+   sit inside the fitted distance for a big enough drawer in a narrow enough canvas, and
+   the first wheel tick OUT would then jump the camera in. */
+const clampDist = (d) => Math.min(Math.max(4000, fitDist * 2), Math.max(80, d));
 function initThree() {
   const canvas = $('three');
   /* No WebGL — disabled by policy, blocklisted GPU, a remote desktop. The renderer's
@@ -2044,7 +2155,8 @@ function initThree() {
     if (pts.size >= 2) {
       const g = gap();
       if (pinch > 0 && g > 0) {
-        dist = Math.min(4000, Math.max(80, dist * (pinch / g)));
+        dist = clampDist(dist * (pinch / g));
+        viewOwned = true;
         render();
       }
       pinch = g;
@@ -2059,6 +2171,7 @@ function initThree() {
         const k = dist * 0.0011;
         panX -= (dx * Math.sin(theta) + dy * Math.cos(theta)) * k;
         panZ += (dx * Math.cos(theta) - dy * Math.sin(theta)) * k;
+        if (dx || dy) viewOwned = true;
       } else {
         theta -= dx * 0.01;
         phi = Math.min(3.11, Math.max(0.03, phi - dy * 0.01));
@@ -2097,10 +2210,19 @@ function initThree() {
   });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    dist = Math.min(4000, Math.max(80, dist * (1 + Math.sign(e.deltaY) * 0.12)));
+    dist = clampDist(dist * (1 + Math.sign(e.deltaY) * 0.12));
+    viewOwned = true;
     render();
   }, { passive: false });
   window.addEventListener('resize', () => { drawMap(); render(); });
+  /* chrome.js owns the button, because it owns Expand beside it and runs on both tools;
+     it says "fit" with an event rather than calling in, so it needs to know nothing of
+     how either tool keeps its camera. */
+  $('threewrap').addEventListener('previewfit', () => {
+    viewOwned = false;
+    framedKey = '';           // whatever the key says, frame now
+    render();
+  });
 }
 /* The one place the model axes are mapped to the scene: model (x, y, z) becomes
    (x, z, -y), so model z is up and model y runs into the screen. The parts beside the
@@ -2414,17 +2536,72 @@ function sceneLabel(empty, shell, g) {
          `on a ${g.nx} by ${g.ny} cell baseplate, ` +
          `tallest stack ${stackHeight().toFixed(1)} millimetres.`;
 }
+/* Fitting the view to what is drawn.
+ *
+ * The camera stood 600 mm away whatever the drawer and whatever the canvas, which at
+ * 1366 px — where the preview is a tall narrow column beside the map — showed one
+ * corner of the default drawer, and at 1920 ran it off two edges. DF.frame works out
+ * the real distance from the field of view and the canvas's shape.
+ *
+ * When it runs is the other half. The key is the SUBJECT — the drawer's footprint, the
+ * shell if it is shown, or in focus the one bin's size — plus the canvas's size. While
+ * that holds still the view is left alone, so placing a bin, changing a wall or
+ * switching layer never moves the camera under you. When it changes, the view is
+ * re-framed from the angle it is already at, unless you have zoomed or panned: those
+ * say what you want to look at, and re-framing would overrule it. Rotating does not
+ * count, because the angle survives a re-frame anyway. Fit hands control back — it
+ * frames now, and lets the page frame again from then on.
+ *
+ * Bins are deliberately not in the key. The frame is taken from the meshes when it
+ * happens, so a stack that is already there is in it; but re-framing because a taller
+ * bin went in would move the camera on the edit itself, which is the thing above that
+ * must not happen. Fit is one press away, and an empty drawer is framed with room for a
+ * bin of the size you would draw next. */
+function frameKey(w, h) {
+  const b = fBin();
+  const subject = b ? ['bin', b.u, b.v, b.hUnits]
+    : ['drawer', state.drawerW, state.drawerD,
+       shellOn() ? `${state.drawerH}x${state.drawerFrontH}` : 'open'];
+  return subject.concat([w, h]).join('/');
+}
+function sceneBox() {
+  // drawerGroup is empty when the shell is off, and an empty box unions to nothing
+  const box = new THREE.Box3().setFromObject(group)
+    .union(new THREE.Box3().setFromObject(drawerGroup));
+  if (box.isEmpty()) {
+    const g = grid(), hw = g.nx * SPEC.pitch / 2, hd = g.ny * SPEC.pitch / 2;
+    box.set(new THREE.Vector3(-hw, -state.plateH, -hd),
+            new THREE.Vector3(hw, state.hUnits * SPEC.unitH + LIP_H, hd));
+  }
+  return box;
+}
+function fitView(w, h) {
+  const box = sceneBox();
+  const f = DF.frame({ min: box.min.toArray(), max: box.max.toArray() },
+    [Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)],
+    [0, 1, 0], camera.fov, w / h, 0.08);
+  [panX, lookY, panZ] = f.target;
+  dist = fitDist = f.dist;
+  camera.far = Math.max(8000, fitDist * 4);
+}
+function autoFrame(w, h) {
+  const key = frameKey(w, h);
+  if (key === framedKey) return;
+  framedKey = key;
+  if (!viewOwned) fitView(w, h);
+}
 function render() {
   if (!renderer) return;
   const wrap = $('threewrap');
   const w = wrap.clientWidth, h = wrap.clientHeight || 380;
+  if (w > 0) autoFrame(w, h);
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(w, h, false);
   camera.aspect = w / h; camera.updateProjectionMatrix();
   camera.position.set(panX + dist * Math.sin(phi) * Math.cos(theta),
-                      30 + dist * Math.cos(phi),
+                      lookY + dist * Math.cos(phi),
                       panZ + dist * Math.sin(phi) * Math.sin(theta));
-  camera.lookAt(panX, 20, panZ);
+  camera.lookAt(panX, lookY, panZ);
   renderer.render(scene, camera);
 }
 
@@ -2617,16 +2794,48 @@ for (const [id, field] of [['gridX', 'drawerW'], ['gridY', 'drawerD']])
   $(id).addEventListener('input', () => {
     const n = parseInt($(id).value, 10);
     if (!isFinite(n) || n < 1) return;      // mid-edit: an empty box is not a request
-    $(field).value = (n * SPEC.pitch).toFixed(1).replace(/\.0$/, '');
+    FIELDS.setLength($(field), n * SPEC.pitch, unit);   // in whatever unit it is showing
     schedule();
   });
 $('bedPreset').addEventListener('change', () => {
-  const v = $('bedPreset').value;
-  if (v === 'custom') return;
-  const [w, d, h] = v.split(',');
-  $('bedW').value = w; $('bedD').value = d; if (h) $('bedH').value = h;
+  const bed = FIELDS.bedOf($('bedPreset').selectedOptions[0]);   // null for Custom
+  /* Custom keeps the bed it had, so there is nothing to rebuild, but the choice is
+     still part of the design: without a save a reload put the printer's name back. */
+  if (!bed) { rememberState(); return; }
+  [$('bedW').value, $('bedD').value, $('bedH').value] = bed;
   schedule();
 });
+const bedNow = () => [+$('bedW').value, +$('bedD').value, +$('bedH').value];
+for (const id of ['bedW', 'bedD', 'bedH'])
+  $(id).addEventListener('input', () => FIELDS.followBed($('bedPreset'), bedNow()));
+
+/* ---------- the drawer's unit ----------
+   Converts what the length fields show and nothing else, so it goes through refresh()
+   and not schedule(): schedule throws away every cached bin mesh, and a unit switch
+   changes no measurement. The comparison is a guard, not an expected path: FIELDS keeps
+   the exact millimetres behind each field, so nothing should move — but if a conversion
+   ever did move a value, the page has to recompute as for any edit rather than go on
+   showing bins sized from the old number. */
+function applyUnit(to) {
+  if (to === unit) return;
+  FIELDS.convert(LENGTH_IDS.map((id) => $(id)), unit, to, $('b-drawer'));
+  unit = to;
+  $('unitMm').classList.toggle('on', to === 'mm');
+  $('unitMm').setAttribute('aria-pressed', String(to === 'mm'));
+  $('unitIn').classList.toggle('on', to === 'in');
+  $('unitIn').setAttribute('aria-pressed', String(to === 'in'));
+}
+function chooseUnit(to) {
+  if (to === unit) return;
+  const before = LENGTH_IDS.map((id) => state[id]);
+  applyUnit(to);
+  FIELDS.saveUnit(to);
+  readControls();
+  if (LENGTH_IDS.some((id, i) => state[id] !== before[i])) schedule();
+  else refresh();
+}
+$('unitMm').addEventListener('click', () => chooseUnit('mm'));
+$('unitIn').addEventListener('click', () => chooseUnit('in'));
 
 /* ---------- the download dialog -------------------------------------------
    Built fresh every time it opens. A column of buttons tells you nothing about what
@@ -2780,6 +2989,8 @@ const VIEW_KEYS = ['dv', 'dfh', 'bf'];
 function descriptor() {
   const o = Object.assign({}, hashExtras, { v: 2 });
   for (const [k, id] of Object.entries(KEYS)) o[k] = state[id];
+  // which printer, as well as its bed: several share one — see FIELDS.presetFor
+  o.pr = $('bedPreset').value;
   o.dv = state.showDrawer ? 1 : 0;
   /* Not a VIEW key, unlike bf beside it: a loose bin is not a way of looking at the
      design, it IS the design while it is open, and it is what the download contains.
@@ -2829,9 +3040,16 @@ function parseHash(h) {
 /* A note from a link is one short line of text, as the field would have made it. Notes
    reach the README, which is plain text read at the printer: a number in their place
    threw ".trim is not a function" on every refresh, and a line break let a link write
-   lines of its own into the file. Cut by code point, so an emoji is never halved. */
-const cleanNote = (n) => [...String(n == null ? '' : n)
-  .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ')].slice(0, 28).join('');
+   lines of its own into the file. Cut to the 28 characters the field takes, counted the
+   way the field and a design file count them, and never halfway through an emoji. */
+function cleanNote(n) {
+  let out = '';
+  for (const ch of String(n).replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ')) {
+    if (out.length + ch.length > 28) break;
+    out += ch;
+  }
+  return out;
+}
 /* Keep the address bar holding the current design, so a reload does not throw it away.
  *
  * The tool has no accounts and no server, which is the point of it — but it also meant
@@ -2983,24 +3201,42 @@ $('tryAnyway').addEventListener('click', tryAnyway);
 function rememberState() {
   if (!hashReady) return;
   clearTimeout(hashSaveT);
-  hashSaveT = setTimeout(() => {
-    const h = descString();
-    if (!h) return;
-    /* The first change is the moment the banner stops being true: "put my layout back"
-       would now also throw away the edit, so it goes. */
-    if (bootDesc !== null) {
-      if (sameDesign(h, bootDesc)) { if (stalled) return; }
-      else {
-        bootDesc = null; $('setAside').style.display = 'none';
-        // what a stalled page goes on from is its defaults, not the link it declined
-        if (stalled) writeKey(LINKED_KEY, '');
-      }
+  addEventListener('beforeunload', dropSave);
+  hashSaveT = setTimeout(saveNow, 400);
+}
+function saveNow() {
+  clearTimeout(hashSaveT);
+  removeEventListener('beforeunload', dropSave);
+  const h = descString();
+  if (!h) return;
+  /* The first change is the moment the banner stops being true: "put my layout back"
+     would now also throw away the edit, so it goes. */
+  if (bootDesc !== null) {
+    if (sameDesign(h, bootDesc)) { if (stalled) return; }
+    else {
+      bootDesc = null; $('setAside').style.display = 'none';
+      // what a stalled page goes on from is its defaults, not the link it declined
+      if (stalled) writeKey(LINKED_KEY, '');
     }
-    try { history.replaceState(null, '', '#' + h); }
-    catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
-                     worth an exception that stops the rest of the page working */ }
-    saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
-  }, 400);
+  }
+  try { history.replaceState(null, '', '#' + h); }
+  catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
+                   worth an exception that stops the rest of the page working */ }
+  saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
+  drawers.wrote(h);   // and into the saved drawer this is, if it is one
+}
+/* A reload takes the address as it stands when it starts, and the page runs on until the
+   new one arrives. A save still waiting would land in that gap and record in the saved
+   drawer a design the reloaded page did not arrive with, and the page came back unsaved.
+   So a save still waiting when the page starts to go is dropped: the change it held is in
+   neither the address nor the drawer, and the page comes back as both have it. The
+   listener is there only while a save waits, because some browsers keep no page that
+   listens for beforeunload in the back-forward cache. The page's own links to the other
+   tool and the guide save first instead (leave, below), so a change made just before
+   one is kept for Back. */
+function dropSave() {
+  clearTimeout(hashSaveT);
+  removeEventListener('beforeunload', dropSave);
 }
 function shareLink() {
   return location.origin + location.pathname + '#' + descString();
@@ -3028,6 +3264,7 @@ function loadFromHash(src) {
     if (k === 'bnotes') { pendingNotes = val; continue; }
     if (k === 'bf') { pendingFocus = val; continue; }
     if (k === 'bs') { pendingScratch = val; continue; }
+    if (k === 'pr') continue;             // applied below, once the bed is in
     // not Object.hasOwn, which Safari only has from 15.4
     const id = Object.prototype.hasOwnProperty.call(KEYS, k) ? KEYS[k] : '';
     if (!id) { hashExtras[k] = val; continue; }
@@ -3035,15 +3272,55 @@ function loadFromHash(src) {
     if (val === '' || !isFinite(x) || x < 0 || (x === 0 && NEEDS_SIZE.has(k))) continue;
     /* Not the drawer: readControls holds it to the field's limit and Checks says so, as
        for a typed one. Cut down here, a 5 m drawer from a link was drawn 2 m wide with
-       nothing said. */
+       nothing said. The link is millimetres, always; a drawer length is written into its
+       field in whatever unit the field is showing. */
     const max = k === 'w' || k === 'd' ? Infinity : KEY_MAX[k] || 2000;
-    if ($(id)) $(id).value = String(Math.min(x, max));
+    if (LENGTH_IDS.includes(id)) FIELDS.setLength($(id), Math.min(x, max), unit);
+    else if ($(id)) $(id).value = String(Math.min(x, max));
   }
+  // the list follows the bed: a link with a 180 mm bed must not reopen naming a 256 one
+  $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
+}
+/* Saved drawers live in src/shared-ui/drawers.js, shared with the baseplates page. What
+   this page tells it is which keys of the design string are its own to write: exactly the
+   ones loadFromHash above takes for itself rather than parking in hashExtras, so if one is
+   added there it belongs here too. */
+const BINS_OWN = new Set(['v', ...Object.keys(KEYS), 'pr', 'dv', 'bl', 'bseg', 'bdt', 'bdc',
+                          'bnotes', 'bf', 'bs']);
+const drawers = DRAWERS.create({
+  tool: 'bins',
+  owns: (k) => BINS_OWN.has(k),
+  design: () => encodeDesc(descriptor()),
+  stop: () => { clearTimeout(hashSaveT); hashReady = false; },
+  els: {
+    name: $('drawerName'), button: $('drawersBtn'), dialog: $('drawersDlg'),
+    close: $('drawersClose'), form: $('drawersSaveForm'), input: $('drawersNewName'),
+    list: $('drawersList'), now: $('drawersNow'), msg: $('drawersMsg'),
+    exportOne: $('drawersExport'), exportAll: $('drawersExportAll'),
+    importBtn: $('drawersImportBtn'), importInput: $('drawersImport'),
+  },
+});
+/* Each hand-over leaves one note in this tab for the page at the other end to read once
+   (handoff in drawers.js, which also tells the saved drawer, if this is one, so that page
+   recognises the design it arrives with as that drawer — see attach there). A design
+   arriving from the other tool may carry a drawer or bed changed there, and that is the
+   same layout moving on, not a link replacing it. The guide passes the address through
+   untouched, so going by way of it is the same.
+   The note names any drawer, bed and infill settings still at someone's link's values:
+   those are not yours to carry over, and the other page compares them as a link's, so
+   they do not replace yours there without setting it aside. Left out of the comparison,
+   they did, after any edit at all.
+   A change still waiting to be saved is saved now, not dropped as the page goes: Back
+   comes to this page's address, and that and the drawer must both have the change. */
+function leave(href) {
+  if (hashReady) saveNow();
+  drawers.handoff(href.slice(href.indexOf('#') + 1), linkKeys(descString(), heldLink));
+  location.href = href;
 }
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  handOff('../guide/#' + descString());
+  leave('../guide/#' + descString());
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
@@ -3053,33 +3330,8 @@ $('shareBtn').addEventListener('click', () => {
 });
 // the whole bins descriptor travels; baseplates re-emits what it doesn't own
 function platesHref() { return '../#' + descString(); }
-/* The hand-over is marked as one, in this tab, for the page at the other end to read
-   once: a design arriving from the other tool may carry a drawer or bed changed there,
-   and that is the same layout moving on, not a link replacing it. The guide passes the
-   address through untouched, so going by way of it is marked the same.
-   The mark names any drawer, bed and infill settings still at someone's link's values:
-   those are not yours to carry over, and the other page compares them as a link's, so
-   they do not replace yours there without setting it aside. Left out of the comparison,
-   they did, after any edit at all. */
-const HANDOFF_KEY = 'drawerforge:handoff';
-function handOff(href) {
-  try {
-    const h = href.slice(href.indexOf('#') + 1);
-    const link = linkKeys(descString(), heldLink);
-    sessionStorage.setItem(HANDOFF_KEY, JSON.stringify({ h, link }));
-  } catch (err) { /* unmarked, the other page takes it all for a link and sets yours aside */ }
-  location.href = href;
-}
-function takeHandOff() {
-  try {
-    const m = sessionStorage.getItem(HANDOFF_KEY) || '';
-    sessionStorage.removeItem(HANDOFF_KEY);
-    const o = JSON.parse(m);
-    return o && typeof o.h === 'string' && Array.isArray(o.link) ? o : null;
-  } catch (err) { return null; }
-}
 for (const id of ['toPlates', 'navPlates'])
-  $(id).addEventListener('click', (e) => { e.preventDefault(); handOff(platesHref()); });
+  $(id).addEventListener('click', (e) => { e.preventDefault(); leave(platesHref()); });
 
 /* ---------- boot ---------------------------------------------------------- */
 let timer = null;
@@ -3152,9 +3404,15 @@ function duplicateSelected() {
     }
 }
 
+/* None of these keys reach the drawer while a dialog is open. The drawer behind it is
+   not what you are working on: Ctrl+Z on a button in the Drawers dialog took back a
+   step of the layout out of sight, and the dialog's Save then stored the layout as it
+   was a step before. Delete and the arrows would have removed or moved the selected bin
+   just as invisibly. */
 document.addEventListener('keydown', (e) => {
   const t = e.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+  if (document.querySelector('dialog[open]')) return;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
@@ -3185,15 +3443,15 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-/* The printer menu names the bed in the fields below it, or says Custom. Only choosing
-   from it ever set it, so a bed from a link, from the baseplates page or typed in kept
-   showing whichever printer was picked last. */
-function syncBedPreset() {
-  const v = ['bedW', 'bedD', 'bedH'].map((id) => +$(id).value).join(',');
-  $('bedPreset').value = [...$('bedPreset').options].some((o) => o.value === v) ? v : 'custom';
+/* The remembered unit goes on before anything is loaded, so a drawer from a link or a
+   save lands in the unit the fields show. It converts the markup's own millimetres, not
+   whatever is in the fields: a browser that refills a form on reload refills it in the
+   unit it was showing, and converting those figures as millimetres would turn a 12 in
+   drawer into 0.47 in. The link or the save then writes the real values. */
+if (FIELDS.savedUnit() !== unit) {
+  for (const id of LENGTH_IDS) $(id).value = $(id).defaultValue;
+  applyUnit(FIELDS.savedUnit());
 }
-for (const id of ['bedW', 'bedD', 'bedH']) $(id).addEventListener('input', syncBedPreset);
-
 /* Whether two saves hold the same bins, compared setting by setting on what this page
    owns. Compared as strings, the baseplates page handing the drawer back — its keys in
    its own order, with its own extras — was a link that had replaced your layout, on
@@ -3202,8 +3460,9 @@ for (const id of ['bedW', 'bedD', 'bedH']) $(id).addEventListener('input', syncB
    layout, unless the other page still had them from someone's link. A link from someone
    keeps them, since a drawer of another size is exactly what one brings. The view keys
    are left out always: how the design is looked at is not what it is. */
-const SHARED_KEYS = new Set(['w', 'd', 'bw', 'bd', 'bh', 'if']);
-const OWN_KEYS = [...Object.keys(KEYS), 'bl', 'bs', 'bseg', 'bdt', 'bdc', 'bnotes']
+// the drawer, the bed and its printer, and the infill: drawers.js keeps the same list
+const SHARED_KEYS = new Set([...DRAWERS.SHARED].filter((k) => k !== 'v'));
+const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bseg', 'bdt', 'bdc', 'bnotes']
   .filter((k) => k !== 'ph' && !VIEW_KEYS.includes(k));
 function sameDesign(a, b, skip = []) {
   const p = parseHash(a), q = parseHash(b);
@@ -3216,6 +3475,7 @@ let linkedNow = false;   // this page holds a link's layout, not yet changed by 
 let linkNew = false;     // ...one that arrived on this visit, so is recorded afresh
 let linkKept = '';       // the link this page last opened, unless a hand-over came since
 let notLinked = [];      // settings a link arrived with that were yours on the other page
+let arrivedWith = '';    // the design string this page was opened with
 {
   const fromLink = isLayoutHash(incomingHash);
   const saved = readLocal();
@@ -3226,14 +3486,20 @@ let notLinked = [];      // settings a link arrived with that were yours on the 
   readControls();
   pristine = descString();
   stalled = src && readKey(LOADING_KEY) === src ? src : '';
-  const mark = takeHandOff();                                       // read every time
-  const handOver = fromLink && mark && mark.h === incomingHash ? mark : null;
+  /* The tab's note of what this page arrives with, if it is this design: the other tool
+     or the guide handing it over, or a saved drawer opened. Read every time, so a stale
+     note never lingers. */
+  const note = drawers.arrival(incomingHash);
+  const handOver = fromLink ? note : null;
+  // a saved drawer opened from the list is yours, whatever it replaces
+  const opened = !!handOver && handOver.open;
   // your own drawer, bed and infill settings, as the other page had them
   const yours = handOver ? [...SHARED_KEYS].filter((k) => !handOver.link.includes(k)) : [];
   // the other page had nothing of anyone's link: your own layout come back
-  const handedOver = !!handOver && !handOver.link.length;
+  const handedOver = !!handOver && (opened || !handOver.link.length);
   notLinked = handOver ? yours : [];
-  const replaces = fromLink && (saved.length <= 2 || !sameDesign(saved, src, yours));
+  const replaces = fromLink && !opened &&
+    (saved.length <= 2 || !sameDesign(saved, src, yours));
   const linked = readKey(LINKED_KEY);
   linkKept = handedOver ? '' : linked;
   /* Compared on what the record holds: one made without the settings that came with
@@ -3266,16 +3532,20 @@ let notLinked = [];      // settings a link arrived with that were yours on the 
       : fromLink ? replaces || (savedLinked && sameDesign(saved, src))
       : savedLinked;
     linkNew = fromLink && replaces && !handedOver;
+    arrivedWith = src;
   }
-  syncBedPreset();
 }
-if (pendingNotes) {                       // applied after the layout so indices line up
-  try {
-    const all = JSON.parse(pendingNotes);
-    (Array.isArray(all) ? all : []).forEach((ns, k) => (Array.isArray(ns) ? ns : []).forEach((n, i) => {
-      if (layers[k] && layers[k].bins[i]) layers[k].bins[i].note = cleanNote(n);
-    }));
-  } catch (err) { /* a mangled link should not stop the tool loading */ }
+/* Applied after the layout so indices line up, and only in the shape descriptor writes:
+   a list per layer of notes. A note that is not a string is left out, and one that is
+   is cleaned to what the field could have made. A number where a note should be
+   stopped the map's labels drawing, and a mangled link should not stop the tool
+   loading. */
+if (pendingNotes) {
+  let all = null;
+  try { all = JSON.parse(pendingNotes); } catch (err) { /* left out whole */ }
+  (Array.isArray(all) ? all : []).forEach((ns, k) => (Array.isArray(ns) ? ns : []).forEach((n, i) => {
+    if (typeof n === 'string' && layers[k] && layers[k].bins[i]) layers[k].bins[i].note = cleanNote(n);
+  }));
 }
 readControls();
 hashReady = true;                         // loadFromHash has had its say; ours may start
@@ -3297,7 +3567,7 @@ if (pendingScratch) {
   if (b) {
     scratch = b;
     focused = true;
-    frameBin(scratch);
+    frameBin();
     setPanel('s-bin', true);
     writeControls(scratch);
     readControls(); drawMap(); refresh();
@@ -3328,6 +3598,8 @@ if (!stalled) {
   writeKey(LINKED_KEY, keep);
   heldLink = keep;
 }
+// after focus is restored too, so the design it compares against is the one on screen
+drawers.attach(arrivedWith);
 
 /* Applied straight to the selection rather than through readControls, for the reason
    given where doneRow is hidden: readControls also writes `state`, the template for the

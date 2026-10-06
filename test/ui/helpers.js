@@ -7,6 +7,8 @@
  * clicks. getScreenCTM is the only mapping that accounts for it.
  */
 'use strict';
+const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
@@ -125,5 +127,31 @@ const setField = async (page, id, value) => {
   await page.waitForTimeout(250);
 };
 
+/* The site's own files over HTTP, for tests that go from one page to the other the way
+   a visitor does. The header links point at directories ("bins/", "../"), which a
+   file:// URL does not resolve to their index.html, and what one page stores for the
+   next is only dependable on a real origin: from file:// pages the CI browser has now
+   and then opened the second page with the first page's localStorage write missing,
+   through reloads. The server listens on a port the system picks, so there is no port
+   to collide on. Resolves to { base, close }. */
+async function serveRoot() {
+  const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
+                  '.svg': 'image/svg+xml', '.png': 'image/png' };
+  const server = http.createServer((req, res) => {
+    let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (p.endsWith('/')) p += 'index.html';
+    const f = path.join(ROOT, p);
+    if (!f.startsWith(ROOT + path.sep)) { res.writeHead(403); res.end(); return; }
+    fs.readFile(f, (err, buf) => {
+      if (err) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' });
+      res.end(buf);
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  return { base: `http://127.0.0.1:${server.address().port}/`,
+           close: () => new Promise((r) => server.close(r)) };
+}
+
 module.exports = { openBins, openPlates, cellPoint, dragCells, clickCell, bins, setField,
-                   forgetSaved, SAVE_KEYS, BINS_URL, PLATES_URL, CELL, ROOT };
+                   forgetSaved, serveRoot, SAVE_KEYS, BINS_URL, PLATES_URL, CELL, ROOT };

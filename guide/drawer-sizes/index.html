@@ -18,9 +18,18 @@
 <meta property="og:site_name" content="Drawerforge">
 <meta property="og:title" content="Drawer Size to Gridfinity Grid: How Many Cells Fit">
 <meta property="og:description" content="Reference tables for metric and inch drawers, what to do with the leftover millimetres, and how to check height.">
-<meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Drawer Size to Gridfinity Grid: How Many Cells Fit">
 <meta name="twitter:description" content="Reference tables for metric and inch drawers, what to do with the leftover millimetres, and how to check height.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../../apple-touch-icon.png">
+<meta property="og:image" content="https://drawerforge.co.uk/og-image.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Drawerforge: a drawer of Gridfinity bins in its 3D preview, beside the line “Gridfinity baseplates and bins, built to the drawer you actually have.”">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://drawerforge.co.uk/og-image.png">
+<meta name="twitter:image:alt" content="Drawerforge: a drawer of Gridfinity bins in its 3D preview, beside the line “Gridfinity baseplates and bins, built to the drawer you actually have.”">
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later
  * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
@@ -126,6 +135,38 @@ a{color:var(--cyan)}
 .restored button{background:none;border:1px solid var(--line);color:var(--cyan);
   border-radius:6px;padding:3px 11px;font:inherit;cursor:pointer}
 .restored button:hover{border-color:var(--cyan)}
+/* ---- saved drawers (src/shared-ui/drawers.js) ----
+   One control in the header on both tools: the open drawer's name, which opens the list.
+   Small on a desktop, and a full 40 px target on a phone, where the blanket control rule
+   further down applies to it like everything else. */
+header .drawerbar{display:flex;gap:8px;align-items:center;margin-top:10px;
+  font-size:12px;color:var(--dim)}
+header .drawerbar button{display:inline-flex;gap:6px;align-items:center;padding:4px 11px;max-width:100%}
+header .drawerbar b{font-family:var(--mono);font-weight:500;font-size:12.5px;
+  max-width:32ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header .drawerbar b.none{color:var(--dim);font-family:var(--sans);font-weight:400}
+header .drawerbar b.fail{color:var(--red)}
+/* On a phone the bar and the bins page's quickstart share one row. As two rows they cost
+   the first screen 50 px, and that was the difference between the drawer map showing
+   and not (on-screen.spec.js measures it). The word "Drawer" goes to make the room; the
+   button still says it to a screen reader. The sibling selector is for specificity: the
+   quickstart's own display rule comes later in this file, and a media query adds none. */
+@media(max-width:980px){
+  header .drawerbar,header .drawerbar~.quickstart{display:inline-flex;vertical-align:middle}
+  header .drawerbar{margin-right:8px}
+  header .drawerbar>span{display:none}
+  header .drawerbar b{max-width:13ch}
+}
+.dwsave{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
+/* Flex rather than the file rows' two-column grid: a long name beside three buttons
+   squeezed to a letter a line on a phone, so here the buttons wrap under the name instead. */
+.exrow.dwrow{display:flex;flex-wrap:wrap;gap:8px 12px}
+.dwrow>div:first-child{flex:1 1 200px;min-width:0}
+.dwrow.on{box-shadow:inset 3px 0 0 var(--cyan)}
+.dwrow .nm{overflow-wrap:anywhere}
+.dwacts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
+.dwacts button{padding:5px 10px;font-size:12px}
+.dwrename input{width:100%}
 .j-plate{fill:#2b3947}
 .jointfig svg.joint>.j-plate:first-of-type{fill:#334353}
 .j-seam{stroke:var(--bg);stroke-width:.5}
@@ -142,12 +183,48 @@ header h1 .tm{color:var(--cyan)}
 header p{color:var(--dim);margin-top:5px;max-width:640px}
 header .privacy{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:7px}
 header .privacy::before{content:"● ";color:var(--cyan)}
-.app{display:grid;grid-template-columns:400px 1fr;gap:0;min-height:calc(100vh - 96px)}
-@media(max-width:980px){.app{grid-template-columns:1fr}}
-.rail{border-right:1px solid var(--line);padding:14px 16px 40px;overflow-y:auto;max-height:calc(100vh - 96px)}
-@media(max-width:980px){.rail{max-height:none;border-right:none}}
-.stage{padding:16px 20px 60px;overflow-y:auto;max-height:calc(100vh - 96px)}
-@media(max-width:980px){.stage{max-height:none}}
+/* The working area is exactly the window below the header.
+   It was `calc(100vh - 96px)` on .app, the rail and the stage, and 96 was nobody's
+   header: the real one is 164 px on Baseplates, 207 px on Bins (the quickstart row),
+   and another 40 or so whenever the "picked up your layout" banner is showing. So the
+   page scrolled 70-110 px plus the footer on top of the rail and the stage scrolling
+   inside it — three scrollbars, and the bottom of both columns parked below the fold.
+
+   No number replaces it. On a tool page the body becomes a grid exactly one window
+   tall: header and banner take what they need, .app takes the rest, and the footer
+   sits in a zero-height last row with align-self:start, so it overflows the body
+   rather than claiming any of the window — the page still scrolls down to it, by its
+   own height and no more. Whatever changes the header (the banner coming and going,
+   focus mode dropping the quickstart, a narrow window wrapping the nav) re-solves
+   with no script watching it, and it is right on the first frame, before either
+   tool's first drawMap measures the stage.
+   minmax(420px) is the floor for a short window: past it the page scrolls instead of
+   the work area collapsing to a sliver. minmax(0,1fr) on the column stops a wide
+   table's min-content stretching the whole page sideways, which a plain auto track
+   would allow. :has() scopes it to the tools — the guide pages share this sheet and
+   keep their ordinary flow; a browser without :has() gets that flow too, the page
+   scrolling as a whole, which is the stacked layout's behaviour and not a broken one.
+
+   Inside .app, row 1 is the bins focus bar (display:none, so zero, everywhere else)
+   and row 2 the rail and the stage. They are placed there explicitly so the bar can
+   take row 1 without pushing them into an implicit, unsized row; each is a scroll
+   container, so its automatic minimum height is zero and it fits the row and scrolls
+   rather than stretching it. */
+body:has(> .app){display:grid;grid-template-columns:minmax(0,1fr);
+  grid-template-rows:auto auto minmax(420px,1fr) 0;height:100vh;height:100dvh}
+body:has(> .app) > header{grid-row:1}
+body:has(> .app) > .restored{grid-row:2}
+body:has(> .app) > .app{grid-row:3}
+body:has(> .app) > footer{grid-row:4;align-self:start}
+.app{display:grid;grid-template-columns:400px 1fr;grid-template-rows:auto minmax(0,1fr);gap:0}
+.app > .rail,.app > .stage{grid-row:2}
+.rail{border-right:1px solid var(--line);padding:14px 16px 40px;overflow-y:auto}
+.stage{padding:16px 20px 60px;overflow-y:auto}
+/* Stacked, the page is the one scroller again, as it always was on a phone. */
+@media(max-width:980px){
+  body:has(> .app){display:block;height:auto}
+  .rail{border-right:none}
+}
 
 /* Stacked layout.
    The rail comes before the stage in the document, which is right side by side and
@@ -265,15 +342,19 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
    the largest thing on the page. An empty preview should look deliberately empty. */
 #threeempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   padding:0 24px;text-align:center;color:var(--dim);font-size:13px;pointer-events:none}
-.previewbtn{position:absolute;top:8px;right:8px;z-index:3;
+/* Fit and Expand, top right. The row is what is positioned, so the two cannot overlap
+   when Expand becomes Close and changes width. */
+.previewbtns{position:absolute;top:8px;right:8px;z-index:3;display:flex;gap:6px}
+.previewbtn,.fitbtn{
   background:rgba(12,17,22,.78);color:var(--cyan);border:1px solid var(--line);
   border-radius:6px;padding:7px 12px;font:inherit;font-size:12px;cursor:pointer}
-.previewbtn:hover{border-color:var(--cyan)}
+.previewbtn:hover,.fitbtn:hover{border-color:var(--cyan)}
 #threewrap.expanded{position:fixed;inset:0;z-index:200;height:100dvh;width:100vw;
   margin:0;border-radius:0;background:var(--bg)}
 #threewrap.expanded canvas{width:100%;height:100%;touch-action:none}
-#threewrap.expanded .previewbtn{top:max(10px,env(safe-area-inset-top));
-  right:max(10px,env(safe-area-inset-right));padding:10px 16px;font-size:14px}
+#threewrap.expanded .previewbtns{top:max(10px,env(safe-area-inset-top));
+  right:max(10px,env(safe-area-inset-right));gap:8px}
+#threewrap.expanded .previewbtn,#threewrap.expanded .fitbtn{padding:10px 16px;font-size:14px}
 body.previewlock{overflow:hidden}
 #three{width:100%;height:100%;display:block;border-radius:0 0 8px 8px;cursor:grab}
 #three:active{cursor:grabbing}
@@ -358,13 +439,63 @@ article.doc .cta{margin-top:34px;padding-top:18px;border-top:1px solid var(--lin
 /* Map beside the 3D view. The grid is usually portrait, so the map never uses the
    full stage width on its own — and you want to watch the result while drawing. */
 .stagetop{display:grid;grid-template-columns:auto minmax(340px,1fr);gap:14px;
-  align-items:stretch}   /* stretch, so the shorter card does not leave dead space */
+  align-items:stretch;   /* stretch, so the shorter card does not leave dead space */
+  margin-bottom:14px}    /* its cards give up their own margin, so the row keeps one */
 @media(max-width:1280px){.stagetop{grid-template-columns:1fr}}
 .stagetop > .stagecard{margin-bottom:0;display:flex;flex-direction:column}
-/* the 3D view takes whatever height the taller card sets, rather than leaving a hole */
+/* The preview's height.
+   It was a fixed 380 px wherever it was not stretched beside a map, which was too
+   short on a tall window and, on Baseplates, sat under the cut map below the fold.
+   Now it comes from the space there is:
+     - beside the map (.paired, which DF.stageRow sets with the columns) the row
+       decides: the 3D view takes whatever height the taller card sets, rather than
+       leaving a hole. flex-basis 0 so it is the MAP card that sets the row — a preview
+       that brought its own height would stretch the map's card into an empty slab;
+     - alone in the row (under the map, or the whole row in single-bin focus) it is
+       the stage you can see, --room, less its card's heading and a little of the next
+       card showing, so scrolling to it shows all of it. 420 is the floor it always had.
+   :not(.expanded) because the expanded preview's own height is set by an equally
+   specific rule earlier in the sheet, and these would otherwise win it back. */
 .stagetop #threewrap{flex:1 1 auto;min-height:420px}
+.stagetop #threewrap:not(.expanded){height:clamp(420px,calc(var(--room,520px) - 58px),1400px)}
+/* --pmin (DF.pairColumns) is the floor that stops a wide column and a short map card
+   making the preview a letterbox: never more than 2.5 times as wide as it is tall. */
+.stagetop.paired #threewrap:not(.expanded){flex-basis:0;height:auto;
+  min-height:max(420px,var(--pmin,0px))}
 /* A wide drawer's map needs the whole stage; the 3D view drops beneath it. */
 .stagetop.wide{grid-template-columns:1fr}
+
+/* Form controls in a stage card. The stage is as wide as the window less the rail,
+   and a .row or .row3 shares all of it out: at 3440 px the print plan's three number
+   fields were about a thousand pixels each, for values like "4". A row stops at a
+   width that still reads as one line of settings, and a field on its own stops well
+   short of the stage, wherever the next one put it. */
+.stagecard .row,.stagecard .row3{max-width:720px}
+.stagecard input:not([type=checkbox]),.stagecard select{max-width:480px}
+
+/* ---- very wide stages -----------------------------------------------------
+   Past 2400 px the stage has room for a third column, and it was spending it on
+   width nothing could use: tables and forms stretched three thousand pixels and the
+   print plan sat a screen below a preview you could not see it beside. So everything
+   after the map-and-preview row — print plan, pieces and export on Baseplates; the
+   bins to print, print plan and export on Bins — moves into a column beside it, all
+   in view at once, and the row keeps the main column, capped at 2400 px and centred,
+   so a 5120 window gets a margin rather than a preview the width of a room.
+   The row spans every grid row and the last of them is 1fr: an item spanning a
+   flexible track gives its height to that track alone, so the tall row cannot push
+   the cards beside it apart. Eight auto rows is room for eight cards; there are three.
+   With nothing left below the row, a preview beside the map may also take the whole
+   visible height of the stage instead of matching the map card. DF.stageRow measures
+   the row itself, which is the main column here, so the maps size to it unchanged. */
+@media(min-width:2400px){
+  .stage{display:grid;grid-template-columns:minmax(0,2400px) clamp(440px,24vw,720px);
+    grid-template-rows:repeat(8,auto) 1fr;column-gap:14px;justify-content:center;
+    align-items:start}
+  .stage > .stagetop{grid-column:1;grid-row:1 / -1;margin-bottom:0}
+  .stage > .stagecard{grid-column:2}
+  .stagetop.paired #threewrap:not(.expanded){
+    min-height:max(420px,var(--pmin,0px),calc(var(--room,520px) - 58px))}
+}
 
 /* Hover tooltip for the 3D view, and stop the map's labels being text-selected
    mid-drag — dragging a bin should move it, not highlight its caption. */
@@ -526,7 +657,12 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   #warnings .w{font-size:12.5px}
   #status{font-size:12px}
   #threehint{font-size:12px}
-  .previewbtn{font-size:13px;min-height:40px}
+  /* Stacked, the window is the room, and a preview the height of a phone screen is a
+     screen's worth of page to scroll past (the canvas has to let a finger scroll the
+     page, so it is never trapped there, but it is still a long way). It stays at the
+     floor; Expand is the way to see it big. */
+  .stagetop #threewrap:not(.expanded){height:420px}
+  .previewbtn,.fitbtn{font-size:13px;min-height:40px}
   footer{font-size:13px}
   footer .mono{font-size:12px}
   .kofi b{font-size:13px}
@@ -682,8 +818,9 @@ a drawer can be generous one way and awkward the other.</p>
 
 <h2 id="inches">Inch drawers</h2>
 
-<p>The grid is metric, so imperial drawers rarely land neatly. Convert once and work in
-millimetres from there:</p>
+<p>The grid is metric, so imperial drawers rarely land neatly. Both tools take the drawer
+in inches — switch <strong>Measure the drawer in</strong> to inches under the drawer size —
+but the cells are still 42&nbsp;mm, so this is where the common sizes land:</p>
 
 <table class="doc">
   <thead><tr><th>Drawer</th><th>Millimetres</th><th>Cells</th><th>Left over</th></tr></thead>
@@ -830,13 +967,35 @@ items, is a perfectly good design and uses far less filament.</p>
      one dispatch covers them. */
   var wrap = document.getElementById('threewrap');
   if (wrap) {
+    /* Fit, beside it. Once you have zoomed into a corner or panned the drawer half out of
+       view there was no way back but zooming out by feel or reloading the page. The
+       button only announces itself — each tool listens for 'previewfit' and frames its
+       own camera, since the two keep their cameras differently and this file is shared
+       with pages that have none. Fit keeps the angle you are looking from: it answers
+       "show me all of it", not "start again". */
+    var row = document.createElement('div');
+    row.className = 'previewbtns';
+    var fit = document.createElement('button');
+    fit.className = 'fitbtn';
+    fit.type = 'button';
+    fit.title = 'Fit the whole design in the view';
+    fit.setAttribute('aria-label', fit.title);
+    fit.textContent = 'Fit';
+    fit.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      wrap.dispatchEvent(new CustomEvent('previewfit'));
+    });
+    row.appendChild(fit);
+
     var btn = document.createElement('button');
     btn.className = 'previewbtn';
     btn.type = 'button';
     btn.title = 'Expand the preview';
     btn.setAttribute('aria-label', 'Expand the preview');
     btn.textContent = 'Expand';
-    wrap.appendChild(btn);
+    row.appendChild(btn);
+    wrap.appendChild(row);
 
     var setExpanded = function (on) {
       wrap.classList.toggle('expanded', on);
