@@ -99,6 +99,21 @@ test('inside depth rounds up, so the part fits', async ({ page }) => {
   expect(await units(page)).toBe(7);
 });
 
+/* Screw holes in the feet raise the floor to 1.85 mm, so the hole stays closed, and the
+   inside is quoted from that floor: 0.65 mm less than on the default 1.2 mm one. It was
+   quoted from the floor as set, a depth the bin did not have, and 15 mm typed inside
+   gave 3 units that hold 14.35. */
+test('screw holes raise the floor, and the inside is quoted from it', async ({ page }) => {
+  await oneBin(page);
+  await page.locator('#screws').check();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => B()[0].screws)).toBe(true);
+  expect(await result(page)).toBe('3 units · 21 mm overall + 3.95 mm lip · 14.35 mm inside');
+  await page.selectOption('#hMode', 'inside');
+  await typeHeight(page, 15);
+  expect(await units(page)).toBe(4);
+});
+
 /* Enter commits a number field: change fires there and then, under the caret, where the
    field is left as typed. Leaving it afterwards fired nothing at all, so "40" stayed in
    the box over a bin 43 deep inside until something else redrew the panel. */
@@ -121,20 +136,22 @@ test('Enter, then Tab, still shows the height that will be built', async ({ page
 
 /* Not a hand-kept constant: the floor, the lip and the stacking height quoted beside the
    field are the ones buildBin builds, for a plain bin, a thick floor, a lowered wall
-   (no lip), a solid block (nothing inside) and a floor thin enough to meet its clamp.
-   The floor is found in the mesh itself, not in buildBin's meta: it is the first face
-   above the feet that looks straight up, which in a bin with its walls standing is the
-   top of the slab — the surface a part stands on. */
+   (no lip), a solid block (nothing inside), a floor thin enough to meet its clamp, and
+   one raised by screw holes in the feet. The floor is found in the mesh itself, not in
+   buildBin's meta: it is the first face above the feet that looks straight up, which in
+   a bin with its walls standing is the top of the slab — the surface a part stands on.
+   With screws, above the screws' ends, where the layer the holes run through stops. */
 test('the heights it quotes are the ones the engine builds', async ({ page }) => {
   page.__errors = await H.openBins(page);
   const rows = await page.evaluate(() => [
     { hUnits: 6 }, { hUnits: 4, floorT: 3 }, { hUnits: 5, edges: { f: 0.5 } },
     { hUnits: 2, solid: true }, { hUnits: 1, floorT: 0.02 }, { hUnits: 3, floorT: 1.25 },
+    { hUnits: 3, screws: true },
   ].map((c) => {
     const q = binHeights(c), built = buildBin(G, Object.assign({ u: 1, v: 1 }, c)), m = built.meta;
     const flatUp = built.polys.filter((p) => p.plane.n[2] > 0.999 &&
       p.verts.every((v) => Math.abs(v[2] - p.verts[0][2]) < 1e-9)).map((p) => p.verts[0][2]);
-    const slab = Math.min(...flatUp.filter((z) => z > SPEC.footH + 0.06));
+    const slab = Math.min(...flatUp.filter((z) => z > (c.screws ? FOOT_HOLES.screwTop : SPEC.footH) + 0.06));
     return { c, q, m: { H: m.H, floorZ: m.floorZ, lipH: m.lipH, slab } };
   }));
   for (const { c, q, m } of rows) {

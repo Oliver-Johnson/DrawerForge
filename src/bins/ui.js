@@ -110,18 +110,43 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                             rides state like arcSegs. Whether a bin HAS removable
                             dividers is per bin, so that comes off b. */
                          divRemovable: b.divRemovable, divT: state.divT, divClr: state.divClr,
+                         // holes in the feet are per bin, the magnet they fit is the page's
+                         magnets: b.magnets, screws: b.screws, holesEvery: b.holesEvery,
+                         magnetD: state.magnetD, magnetH: state.magnetH,
                          arcSegs: state.arcSegs });
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
+/* Whether "every cell" puts more holes in this bin than "corners" does: not on a 1x1,
+   whose four sites are all corners. Where it does not, the two are one part. */
+const everyMatters = (b) => !!b.holesEvery && (b.magnets || b.screws) &&
+  holeSites(Object.assign(binCfg(b), { holesEvery: false })).length !==
+  holeSites(binCfg(b)).length;
+/* What a bin's feet take, for the rows, the README and the panel. */
+const holeCounts = (b) => {
+  const n = b.magnets || b.screws ? holeSites(binCfg(b)).length : 0;
+  return { magnets: b.magnets ? n : 0, screws: b.screws ? n : 0 };
+};
+const holesText = (b) => {
+  const h = holeCounts(b);
+  return [h.magnets ? plural(h.magnets, 'magnet') : '', h.screws ? plural(h.screws, 'screw') : '']
+    .filter(Boolean).join(', ');
+};
 const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
-  (b.solid ? '-solid' : `-w${b.wall}-f${b.floorT}` +
+  /* The floor as built: screws raise a thinner one to the same 1.85, so two bins that
+     differ only below that are one part. Without screws it is the floor as asked. */
+  (b.solid ? '-solid' : `-w${b.wall}-f${builtFloorT(b)}` +
    /* A railed bin and a fixed-divider bin of the same size are DIFFERENT parts — one
       has a wall across it and the other has rails and a loose plate. Without this they
       would share a type, and therefore one STL, and you would print the wrong one. */
    (b.divX || b.divY ? `-d${b.divX}.${b.divY}${b.divRemovable ? `r${state.divT}.${state.divClr}` : ''}` : '') +
    (allFullEdges(b) ? '' : `-e${edgeSig(b)}`)) +
   (b.scoop ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '') +
-  (b.cells ? `-c${maskBits(b)}` : '');
+  (b.cells ? `-c${maskBits(b)}` : '') +
+  /* A holed bin is a different part from the plain one, and from one holed for another
+     magnet: the magnet's size is the page's, so it goes in from state, as the rails'
+     sizes do above. */
+  (b.magnets || b.screws ? `-h${feetBits({ magnets: b.magnets, screws: b.screws })}` +
+    (everyMatters(b) ? 'e' : '') + (b.magnets ? `m${state.magnetD}.${state.magnetH}` : '') : '');
 
 function occupancyOf(k) {
   const g = grid();
@@ -311,7 +336,9 @@ function volumeMm3(c) {
   const C = SPEC.centre;
   const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half;
   const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half;
-  const H = c.hUnits * SPEC.unitH, floorZ = SPEC.footH + c.floorT;
+  // the floor as built: screw holes raise a thin one
+  const floorT = builtFloorT(c);
+  const H = c.hUnits * SPEC.unitH, floorZ = SPEC.footH + floorT;
   // a carved bin has fewer feet and less floor than its bounding box implies
   const cells = binCells(c).length;
   const infill = Math.max(0, Math.min(1, (state.infill === undefined ? 15 : state.infill) / 100));
@@ -325,7 +352,7 @@ function volumeMm3(c) {
     footLat += perimRR(h, h, h - C) * (SPEC.footH / N);
   }
   footV *= cells; footLat *= cells;
-  const slabH = (c.solid || floorZ >= H - 0.2) ? (H - SPEC.footH) : c.floorT;
+  const slabH = (c.solid || floorZ >= H - 0.2) ? (H - SPEC.footH) : floorT;
   const baseRaw = footV + areaRR(hwO, hdO, SPEC.r) * slabH;
   const baseLat = footLat + perimRR(hwO, hdO, SPEC.r) * slabH;
   const botA = cells * areaRR(SPEC.prof[0][1], SPEC.prof[0][1], SPEC.prof[0][1] - C);
@@ -583,6 +610,7 @@ function startScratch() {
               wall: state.wall, floorT: state.floorT,
               divX: state.divX, divY: state.divY, solid: state.solid,
               scoop: state.scoop, label: state.label, note: '',
+              magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
               edges: Object.assign({}, state.edges) };
   sUndoStack.length = 0; sRedoStack.length = 0;
   focused = true; carving = false;
@@ -652,6 +680,17 @@ function fieldClamp(id, x) {
   return Math.min(isFinite(hi) ? hi : Infinity, Math.max(isFinite(lo) ? lo : -Infinity, x));
 }
 const BIN_FIELDS = ['u', 'v', 'hUnits', 'wall', 'floorT', 'divX', 'divY', 'scoop', 'label'];
+/* The magnet size nobody has set: the baseplate's, when the link brought one, since the
+   magnets bought for the plate are the ones going into the bins; else 6 x 2. Held to the
+   fields' limits, as a typed size is. The link carries the bins' own size only when it
+   differs from this, so until someone sets one the bins follow the plate. */
+function magnetDefault() {
+  const pick = (k, id, d) => {
+    const v = hashExtras[k], x = Number(v);
+    return fieldClamp(id, v !== undefined && v !== '' && isFinite(x) ? x : d);
+  };
+  return { d: pick('md', 'magnetD', 6), h: pick('mh', 'magnetH', 2) };
+}
 /* The most dividers that fit across a bin `cells` wide: as many as leave every
    compartment at least one wall thick, never counting a wall as thinner than a 1.2 mm
    rail. The link uses the same rule. */
@@ -692,6 +731,13 @@ function readControls() {
      removable dividers is per bin and rides `t` above. */
   state.divT = Math.max(0.8, Math.min(5, num('divT', 1.6)));
   state.divClr = Math.max(0, Math.min(1, num('divClr', 0.25)));
+  /* Page-level too: one drawer, one kind of magnet. Held to the fields' limits, which
+     are what the engine builds, and the box shows the size in use once it is left. */
+  const md = magnetDefault();
+  state.magnetD = fieldClamp('magnetD', num('magnetD', md.d));
+  state.magnetH = fieldClamp('magnetH', num('magnetH', md.h));
+  for (const id of ['magnetD', 'magnetH'])
+    if (document.activeElement !== $(id) && parseFloat($(id).value) !== state[id]) $(id).value = state[id];
   state.bedW = mm('bedW', 256);
   state.bedD = mm('bedD', 256);
   state.bedH = mm('bedH', 256);
@@ -707,6 +753,8 @@ function readControls() {
     note: [...$('note').value].slice(0, 28).join(''),
     divRemovable: $('divRemovable').checked,
     lid: $('lid').checked,
+    magnets: $('magnets').checked, screws: $('screws').checked,
+    holesEvery: $('holesWhere').value === 'every',
     lidSides: { f: $('lidF').checked, b: $('lidB').checked,
                 l: $('lidL').checked, r: $('lidR').checked },
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
@@ -788,6 +836,19 @@ function readControls() {
   $('lidNoLip').style.display = !t.solid && !lipOk && $('lid').checked ? '' : 'none';
   $('lidCarved').style.display = !t.solid && lipOk && carvedNow && $('lid').checked ? '' : 'none';
   $('lidHint').style.display = !t.solid && lipOk && !carvedNow && $('lid').checked ? '' : 'none';
+  /* The feet. "Where" and the count only mean something once there are holes, and each
+     hint says what its holes are for, so each shows with its box. */
+  const holes = t.magnets || t.screws;
+  $('holesWhereRow').style.display = holes ? '' : 'none';
+  $('magnetHint').style.display = t.magnets ? '' : 'none';
+  $('screwHint').style.display = t.screws ? '' : 'none';
+  $('magnetSize').textContent = `${state.magnetD} x ${state.magnetH}`;
+  const holed = target || Object.assign({}, state, t);
+  $('holeCount').style.display = holes ? '' : 'none';
+  $('holeCount').textContent = !holes ? ''
+    : (!target ? `A new ${holed.u} by ${holed.v} bin takes `
+       : sel.length > 1 && !scratch ? 'The first of these bins takes ' : 'This bin takes ') +
+      holesText(holed) + '.';
   // the front measurement is only worth asking for once the drawer is being drawn
   $('drawerFrontRow').style.display = state.showDrawer ? '' : 'none';
   $('drawerViewHint').style.display = state.showDrawer ? '' : 'none';
@@ -851,6 +912,8 @@ function writeControls(src) {
   $('done').checked = !!src.done;
   $('divRemovable').checked = !!src.divRemovable;
   $('lid').checked = !!src.lid;
+  $('magnets').checked = !!src.magnets; $('screws').checked = !!src.screws;
+  $('holesWhere').value = src.holesEvery ? 'every' : 'corners';
   for (const [id, k] of [['lidF', 'f'], ['lidB', 'b'], ['lidL', 'l'], ['lidR', 'r']])
     $(id).checked = !src.lidSides || src.lidSides[k] !== false;
   $('note').value = src.note || '';
@@ -1375,6 +1438,7 @@ function initMap() {
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
                    solid: state.solid, scoop: state.scoop, label: state.label,
                    note: '',
+                   magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
                    edges: Object.assign({}, state.edges) });
         selected = B().length - 1;
         writeControls(B()[selected]);
@@ -1404,6 +1468,7 @@ $('fillRest').addEventListener('click', () => {
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
                    solid: state.solid, scoop: state.scoop, label: state.label,
                  note: '',
+                 magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
                  edges: Object.assign({}, state.edges) });
         break;
       }
@@ -1491,6 +1556,7 @@ $('applyAll').addEventListener('click', () => {
   for (const b of B()) Object.assign(b, {
     hUnits: s.hUnits, wall: s.wall, floorT: s.floorT,
     divX: s.divX, divY: s.divY, solid: s.solid, scoop: s.scoop, label: s.label,
+    magnets: !!s.magnets, screws: !!s.screws, holesEvery: !!s.holesEvery,
     edges: Object.assign({}, s.edges) });
   drawMap(); refresh();
 });
@@ -1537,7 +1603,8 @@ const edgeAt = (o, k) => (o.edges && o.edges[k] !== undefined ? o.edges[k] : 1);
 function settingsChange(b, t, nu, nv) {
   if (nu !== undefined && (nu !== b.u || nv !== b.v)) return 'size';
   for (const k of ['hUnits', 'wall', 'floorT', 'divX', 'divY']) if (!sameNum(t[k], b[k])) return k;
-  for (const k of ['solid', 'divRemovable', 'lid']) if (!!t[k] !== !!b[k]) return k;
+  for (const k of ['solid', 'divRemovable', 'lid', 'magnets', 'screws', 'holesEvery'])
+    if (!!t[k] !== !!b[k]) return k;
   for (const k of ['scoop', 'label']) if (!sameNum(t[k] || 0, b[k] || 0)) return k;
   if ((t.note || '') !== (b.note || '')) return 'note';
   if (lidSideBits(t.lidSides) !== lidSideBits(b.lidSides)) return 'lidSides';
@@ -1784,6 +1851,12 @@ function binIssues(b, k, claims) {
        open shell, so the file holds more wall than the field says; say so. */
     out.push(`${b.wall} mm walls are thinner than two perimeters at a 0.4 mm nozzle` +
              (b.wall < WALL_MIN ? `; they are built at ${WALL_MIN} mm, a single line, since nothing thinner prints` : ''));
+  /* A note, because the bin prints fine: the floor field goes on saying what was typed,
+     and the floor that gets built is thicker, which is worth knowing before measuring
+     what fits inside. */
+  if (b.screws && !b.solid && builtFloorT(b) > b.floorT)
+    out.push({ note: true, t: `has screw holes, so its floor is built ${builtFloorT(b)} mm thick rather than ` +
+      `${b.floorT} mm, to keep a skin over the end of each hole` });
   /* Past the stacking lip's base a thicker wall buys nothing at the top edge — the lip
      already stands on it — and every tenth of a millimetre comes out of the inside on
      both sides. Worth saying, because the inside is what the bin is for; not a fault,
@@ -1905,7 +1978,8 @@ function drawWarnings() {
    filesystem-safe — a note with a slash in it has no business in a filename. */
 const B_DIV = (b, axis) => dividerPart(G, binCfg(b), axis);
 const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
-  (t.b.solid ? ' solid' : '') + (t.qty > 1 ? ` × ${t.qty}` : '') +
+  (t.b.solid ? ' solid' : '') + (holesText(t.b) ? `, ${holesText(t.b)} each` : '') +
+  (t.qty > 1 ? ` × ${t.qty}` : '') +
   (t.notes && t.notes.length ? ` — ${t.notes.join(', ')}` : '');
 
 /* The loose divider plates a layout needs.
@@ -2045,6 +2119,7 @@ function refresh() {
     const gm = geomFor(t.b);
     const g = gramsOf(gm.vol * t.qty);
     return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${t.b.divX || t.b.divY ? ` · ${(t.b.divX + 1) * (t.b.divY + 1)} comp` : ''}` +
+      `${holesText(t.b) ? ` · ${asText(holesText(t.b))}` : ''}` +
       /* what it is for, beside what it is — the row is how you tell four identical
          shapes apart when they come off the plate */
       `${t.notes && t.notes.length ? `<span class="tnote">${asText(t.notes.join(', '))}</span>` : ''}</td>` +
@@ -2754,15 +2829,34 @@ function saveBlob(buf, name) {
   a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
+/* A holed bin and a plain one are different prints, so they arrive as different files:
+   "bin-2x1x3-magnets-screws-qty4.stl" beside "bin-2x1x3-qty2.stl". */
+const holeTag = (b) => (!b.magnets && !b.screws ? ''
+  : '-' + [b.magnets ? 'magnets' : '', b.screws ? 'screws' : ''].filter(Boolean).join('-') +
+    (everyMatters(b) ? '-every-cell' : ''));
 function typeName(t) {
   return `bin-${t.b.u}x${t.b.v}x${t.b.hUnits}${t.b.solid ? '-solid' : ''}` +
-         `${t.b.divX || t.b.divY ? `-${t.b.divX}x${t.b.divY}div` : ''}-qty${t.qty}`;
+         `${t.b.divX || t.b.divY ? `-${t.b.divX}x${t.b.divY}div` : ''}${holeTag(t.b)}-qty${t.qty}`;
 }
 /* One bin type as an STL. Two places offer this — the row in "Bins to print" and the
    row in the download dialog — and they are the one pair that could give you two
    differently named files for the same click. */
 function downloadType(t) {
   saveBlob(G.stlBinary(geomFor(t.b).polys, 'bin'), typeName(t) + '.stl');
+}
+/* What to buy for the feet, and how many: the drawer's totals, with what each hole is
+   for. Counted off the same holeSites the engine builds from. */
+function holesReadme(ts) {
+  let mags = 0, screws = 0;
+  for (const t of ts) {
+    const h = holeCounts(t.b);
+    mags += h.magnets * t.qty; screws += h.screws * t.qty;
+  }
+  const out = [];
+  if (mags) out.push(`Magnets: ${mags}, ${state.magnetD} x ${state.magnetH} mm. Press one into each pocket ` +
+                     'under the feet, all the same face down.');
+  if (screws) out.push(`Screws: ${screws} M3, driven up through the baseplate. Each hole in a bin is 6 mm deep.`);
+  return out;
 }
 function layoutReadme() {
   const g = grid(), ts = types();
@@ -2782,6 +2876,7 @@ function layoutReadme() {
     if (b.divX || b.divY) L.push(`Compartments: ${(b.divX + 1) * (b.divY + 1)}` +
       (b.divRemovable ? '  (removable divider plates, printed loose)' : ''));
     if (b.lid && lidFits(b)) L.push('Lid: yes — prints upside down, no supports.');
+    L.push(...holesReadme([{ b, qty: 1 }]));
     const job = jobEstimate();
     L.push(`Material: about ${job.grams.toFixed(0)} g of PLA at ${state.infill}% infill` +
            (looseParts() ? `, ${looseParts()} included` : '') + `${readmeCost(job.grams)}.`);
@@ -2814,12 +2909,15 @@ function layoutReadme() {
       `${t.b.solid ? '  solid' : ''}${t.b.divX || t.b.divY ? `  ${(t.b.divX + 1) * (t.b.divY + 1)} compartments` : ''}` +
       // the README is read beside a pile of printed parts, which is exactly when
       // "1x1x3" stops being enough to tell them apart
-      `${t.notes && t.notes.length ? `  — ${t.notes.join(', ')}` : ''}`);
+      `${t.notes && t.notes.length ? `  — ${t.notes.join(', ')}` : ''}` +
+      `${holesText(t.b) ? `  ${holesText(t.b)} each` : ''}`);
   }
   L.push('');
   const job = jobEstimate();
   L.push(`Total: ${plural(scoped().length, 'bin')}` + (looseParts() ? ` plus ${looseParts()}` : '') +
          `, about ${job.grams.toFixed(0)} g of PLA${readmeCost(job.grams)}.`);
+  const fix = holesReadme(ts);
+  if (fix.length) L.push(...fix);
   L.push('');
   layers.forEach((Ly, k) => {
     L.push(`LAYER ${k + 1} (front of the drawer at the bottom):`);
@@ -3012,8 +3110,9 @@ const saveHMode = (m) => {
 };
 // the bin the height field is describing: the one on its own, the selected one, or the next
 const heightSrc = () => scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
-// everything about a bin its heights depend on, bar the units being worked out
-const heightCfg = (b) => ({ floorT: b.floorT, solid: b.solid, edges: b.edges });
+/* everything about a bin its heights depend on, bar the units being worked out. Screws
+   are among them: their holes raise the floor. */
+const heightCfg = (b) => ({ floorT: b.floorT, screws: b.screws, solid: b.solid, edges: b.edges });
 const heightsOf = (b) => binHeights(Object.assign(heightCfg(b), { hUnits: b.hUnits }));
 /* Which length the field takes for this bin. Inside depth when that is the menu's choice
    and the bin has an inside; a solid block has none at any height, nor has a tray open
@@ -3271,6 +3370,10 @@ function descriptor() {
   o.bl = packLayers(layers);
   o.bseg = state.arcSegs;
   o.bdt = state.divT; o.bdc = state.divClr;
+  // only a size someone set: an unset one follows the baseplate's (magnetDefault)
+  const md = magnetDefault();
+  if (state.magnetD !== md.d) o.bmd = state.magnetD;
+  if (state.magnetH !== md.h) o.bmh = state.magnetH;
   const notes = layers.map((L) => L.bins.map((b) => b.note || ''));
   if (notes.some((L) => L.some((n) => n))) o.bnotes = JSON.stringify(notes);
   return o;
@@ -3528,6 +3631,7 @@ function loadFromHash(src) {
     }
     if (k === 'bdt') { $('divT').value = val; continue; }
     if (k === 'bdc') { $('divClr').value = val; continue; }
+    if (k === 'bmd' || k === 'bmh') continue;     // below, once the plate's size is known
     // a checkbox, so it cannot ride the generic .value path below
     if (k === 'dv') { $('showDrawer').checked = val === '1'; continue; }
     if (k === 'bnotes') { pendingNotes = val; continue; }
@@ -3549,13 +3653,21 @@ function loadFromHash(src) {
   }
   // the list follows the bed: a link with a 180 mm bed must not reopen naming a 256 one
   $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
+  /* The magnet: the bins' own size if the link has one, else the baseplate's, else 6 x 2.
+     Anything that is not a number is not a size; readControls holds the rest to the
+     fields' limits, so a link asking for a 1e9 mm magnet gets the widest a foot takes. */
+  const md = magnetDefault();
+  for (const [k, id, d] of [['bmd', 'magnetD', md.d], ['bmh', 'magnetH', md.h]]) {
+    const x = Number(q[k]);
+    $(id).value = String(q[k] !== undefined && q[k] !== '' && isFinite(x) ? x : d);
+  }
 }
 /* Saved drawers live in src/shared-ui/drawers.js, shared with the baseplates page. What
    this page tells it is which keys of the design string are its own to write: exactly the
    ones loadFromHash above takes for itself rather than parking in hashExtras, so if one is
    added there it belongs here too. */
 const BINS_OWN = new Set(['v', ...Object.keys(KEYS), 'pr', 'dv', 'bl', 'bseg', 'bdt', 'bdc',
-                          'bnotes', 'bf', 'bs']);
+                          'bmd', 'bmh', 'bnotes', 'bf', 'bs']);
 const drawers = DRAWERS.create({
   tool: 'bins',
   owns: (k) => BINS_OWN.has(k),
@@ -3615,12 +3727,14 @@ for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', '
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
                   'edgeF', 'edgeB', 'edgeL', 'edgeR', 'scoop', 'label', 'note',
                   'divRemovable', 'divT', 'divClr',
-                  'lid', 'lidF', 'lidB', 'lidL', 'lidR'])
+                  'lid', 'lidF', 'lidB', 'lidL', 'lidR',
+                  'magnets', 'screws', 'holesWhere', 'magnetD', 'magnetH'])
   $(id).addEventListener('input', schedule);
 /* The bin's number fields too: leaving one is when a value typed past its limit is put
    back to the one in use, and leaving fires change, not input. */
 for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable',
-                  'lid', 'lidF', 'lidB', 'lidL', 'lidR', ...BIN_FIELDS])
+                  'lid', 'lidF', 'lidB', 'lidL', 'lidR',
+                  'magnets', 'screws', 'holesWhere', 'magnetD', 'magnetH', ...BIN_FIELDS])
   $(id).addEventListener('change', schedule);
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
@@ -3733,7 +3847,7 @@ applyHMode(savedHMode());
    are left out always: how the design is looked at is not what it is. */
 // the drawer, the bed and its printer, and the infill: drawers.js keeps the same list
 const SHARED_KEYS = new Set([...DRAWERS.SHARED].filter((k) => k !== 'v'));
-const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bseg', 'bdt', 'bdc', 'bnotes']
+const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bseg', 'bdt', 'bdc', 'bmd', 'bmh', 'bnotes']
   .filter((k) => k !== 'ph' && !VIEW_KEYS.includes(k));
 function sameDesign(a, b, skip = []) {
   const p = parseHash(a), q = parseHash(b);
