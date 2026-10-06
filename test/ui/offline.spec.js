@@ -34,7 +34,7 @@ let site;
 test.beforeAll(async () => { site = await H.serveRoot(); });
 test.afterAll(() => site.close());
 // one server for the file, so a case that ends offline must not leave the next one offline
-test.afterEach(() => { site.down = false; site.files = {}; });
+test.afterEach(() => { site.down = false; site.files = {}; site.maxAge = 0; site.log = []; });
 
 function watch(page) {
   const errors = [];
@@ -146,6 +146,34 @@ test('a new deploy replaces the old cache rather than adding to it', async ({ pa
   await expect.poll(() => versions(page), { timeout: 30000 }).toEqual(['0123456789ab']);
 });
 
+/* The host lets the browser keep anything for ten minutes, so a new worker must not fill
+   its cache from the browser's copies, which can be the deploy before. But a file the
+   server says has not changed need not be sent again, and most of what the worker caches
+   does not change from one deploy to the next. */
+test('an install caches each file as the server has it now, without sending again what has not changed',
+  async ({ page }) => {
+    site.maxAge = 600;                  // as GitHub Pages
+    await page.goto(site.base + 'guide/');
+    await controlled(page);             // and the browser now holds its own copy of every file
+    const sw = fs.readFileSync(path.join(H.ROOT, 'sw.js'), 'utf8');
+    const version = sw.match(/const VERSION = "([0-9a-f]+)";/)[1];
+    site.files['/sw.js'] = sw.replace(`"${version}"`, '"0123456789ab"');
+    site.files['/favicon.svg'] = '<svg xmlns="http://www.w3.org/2000/svg"><!-- deployed since --></svg>';
+    site.log = [];
+    await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r.update()));
+    await expect.poll(() => versions(page), { timeout: 30000 }).toEqual(['0123456789ab']);
+    const cached = (rel) => page.evaluate((u) => caches.match(u).then((r) => r.text()), site.base + rel);
+
+    // three.js had not changed: the server was asked, said so, and sent none of it...
+    expect(site.log.filter((l) => l.path === '/vendor/three.min.js').map((l) => [!!l.ifNoneMatch, l.status]))
+      .toEqual([[true, 304]]);
+    // ...and the new cache holds all of it, from the browser's copy
+    expect((await cached('vendor/three.min.js')).length)
+      .toBe(fs.readFileSync(path.join(H.ROOT, 'vendor/three.min.js'), 'utf8').length);
+    // the favicon had changed, and the new cache has the new one, not the browser's copy
+    expect(await cached('favicon.svg')).toContain('<!-- deployed since -->');
+  });
+
 /* A deploy whose worker never installs: its list names a file the server does not have,
    so one fetch fails while the rest are coming in. The browser keeps the worker it has,
    and the cache the failed one had begun to fill goes with it rather than sitting in the
@@ -170,7 +198,7 @@ test('a failed install leaves no cache behind, and the worker before it still op
         r.update().catch(() => {});
       })));
     expect(state).toBe('redundant');
-    expect((await page.evaluate(() => caches.keys())).map((k) => k.split(' ').pop())).toEqual([version]);
+    expect(await versions(page)).toEqual([version]);
 
     await offline(context);
     const res = await page.reload();

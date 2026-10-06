@@ -65,10 +65,14 @@ self.addEventListener('install', (e) => {
      the next visit. A half-filled cache would open a tool offline with no three.js in it,
      which is worse than the browser's own message that it is offline. */
   e.waitUntil(caches.open(CACHE).then((cache) => Promise.all(URLS.map((u) =>
-    /* cache: 'reload' goes past the browser's HTTP cache. GitHub Pages lets anything be
-       cached for ten minutes, so without it a worker installed just after a deploy could
-       fill its new cache with the previous deploy's files. */
-    fetch(new Request(u, { cache: 'reload' })).then((r) => {
+    /* cache: 'no-cache' asks the server about every file, however recently the browser
+       stored it. GitHub Pages lets anything be cached for ten minutes, so without it a
+       worker installed just after a deploy could fill its new cache with the previous
+       deploy's files. Asking, rather than fetching everything again ('reload'), is just
+       as fresh, and a file the server says has not changed comes back as a 304 and is
+       taken from the browser's copy — most of the 1.9 MB, in a deploy that changed one
+       page. */
+    fetch(new Request(u, { cache: 'no-cache' })).then((r) => {
       if (!r.ok) throw new Error(u + ' answered ' + r.status);
       return plain(r).then((p) => cache.put(u, p));
     }))))
