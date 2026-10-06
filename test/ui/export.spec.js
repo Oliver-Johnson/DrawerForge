@@ -409,8 +409,9 @@ test('half-size bins download under their own sizes, with no holes they cannot h
    occupancy under it and the README all had to come out unchanged.
 
    Each digest is the first 16 hex digits of the SHA-256, recorded from the page as it
-   was before half-size bins reached the bins page. A change that MEANS to alter these
-   will fail here: check that it should, then put in the digests this prints. */
+   was before half-size bins reached the bins page (the README since it gained print
+   cost and time). A change that MEANS to alter these will fail here: check that it
+   should, then put in the digests this prints. */
 test('a link from before half sizes downloads the same files, byte for byte', async ({ page }) => {
   const crypto = require('crypto');
   const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
@@ -436,7 +437,7 @@ test('a link from before half sizes downloads the same files, byte for byte', as
   }
   got.link = sha(await page.evaluate(() => descString()));
   expect(got).toEqual({
-    'README.txt': '81669f99abb031cd',
+    'README.txt': 'ccd56de89186e081',
     'bin-2x1x3-qty1.stl': '4f879f2b46d2fef3',
     'bin-2x1x4-qty1.stl': '4b028774e7cab92a',
     'bin-2x2x2-qty1.stl': 'aa35a25aa8f07fe3',
