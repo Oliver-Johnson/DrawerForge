@@ -224,11 +224,13 @@
          preference of the person, remembered on this device like the mm/inch switch.
          The length takes any step: it shows the height built to the hundredth, and a
          step of 0.5 made most of those figures ones the browser called invalid, and had
-         the arrow keys snap to the next half instead of stepping from what is there. -->
+         the arrow keys snap to the next half instead of stepping from what is there.
+         The menu is "Entered as", not "in": beside "Inside depth (in)" that read as the
+         inch unit. -->
     <div class="row">
       <label class="f" id="hUnitsRow"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
       <label class="f" id="hMmRow" style="display:none"><b id="hMmLabel">Height overall (mm)</b><input id="hMm" type="number" step="any" min="0" max="2000"></label>
-      <label class="f"><b>in</b><select id="hMode" aria-label="Height entered in">
+      <label class="f"><b>Entered as</b><select id="hMode" aria-label="Height entered as">
         <option value="units">7 mm units</option>
         <option value="overall">overall mm</option>
         <option value="inside">inside depth</option>

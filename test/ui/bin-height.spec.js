@@ -412,3 +412,10 @@ test('the height line is only rewritten when what it says changes', async ({ pag
   await H.setField(page, 'hUnits', 4);
   expect(await page.evaluate(() => window.__said)).toBeGreaterThan(0);
 });
+
+// beside "Inside depth (in)", a menu labelled "in" read as the inch unit
+test('the menu beside the field is not labelled like a unit', async ({ page }) => {
+  await oneBin(page);
+  await expect(page.locator('label:has(#hMode) > b')).toHaveText('Entered as');
+  await expect(page.getByRole('combobox', { name: 'Height entered as' })).toBeVisible();
+});
