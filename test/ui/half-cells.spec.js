@@ -314,6 +314,17 @@ test('a carved bin made half-size says its shape has gone, and Undo brings it ba
   await expect(page.locator('#stepWhy'), 'and Undo takes this one away too').toHaveText('');
 });
 
+/* The hint under the size fields gives the half cell's length in the drawer's unit, as
+   the grid summary gives its own: millimetres always, and inches beside them. */
+test('the half cell under the size fields is given in inches too, with inches on', async ({ page }) => {
+  await openAt(page, '');
+  await expect(page.locator('#sizeHalfHint')).toHaveText(/^A half cell is 21 mm\. /);
+  await page.evaluate(() => $('unitIn').click());
+  await expect(page.locator('#sizeHalfHint')).toHaveText(/^A half cell is 21 mm \/ 0\.83 in\. /);
+  await page.evaluate(() => $('unitMm').click());
+  await expect(page.locator('#sizeHalfHint')).toHaveText(/^A half cell is 21 mm\. /);
+});
+
 test('carve and merge are greyed for a half-size bin, with the reason', async ({ page }) => {
   await openAt(page, 'bl=' + bin(0, 0, 1.5, 1) + '_' + bin(2, 0, 2, 2));
   await select(page, 1);

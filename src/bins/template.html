@@ -258,9 +258,10 @@ try {
          when the map cannot show it — a whole size for a bin standing on a half step. It
          is always there, empty when there is nothing to say, so that a screen reader
          hears what comes into it; the two share one grid item, or the empty one would
-         still open a gap of the panel's spacing under the hint. -->
+         still open a gap of the panel's spacing under the hint. The half cell's length
+         is written in the drawer's unit by refresh(). -->
     <div>
-      <div class="hint" id="sizeHalfHint">A half cell is 21 mm. Half-size bins have small feet that fit any Gridfinity baseplate, two to a socket.</div>
+      <div class="hint" id="sizeHalfHint">A half cell is <span id="halfCellLen">21 mm</span>. Half-size bins have small feet that fit any Gridfinity baseplate, two to a socket.</div>
       <div class="hint" id="sizeWhy" role="status"></div>
     </div>
     <!-- Height three ways. Someone sizing a bin for a part knows the part in millimetres,
