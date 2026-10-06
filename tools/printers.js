@@ -26,6 +26,13 @@
  * `id` travels in the shared link (`pr`), so a link reproduces the entry the sender
  * picked rather than whichever printer happens to share its bed. Ids are permanent:
  * rename the label freely, never the id.
+ *
+ * `speed: 'fast'` marks a printer that prints well past the speeds of a classic
+ * bed-slinger — CoreXY, or input shaping with firmware tuned for it — and only steers
+ * the rough print time (src/shared-ui/estimate.js). Absent means standard, which is the
+ * slower guess, so a printer is marked only where its maker's own profiles run fast as
+ * shipped: a printer that has to be tuned to go fast, or a listing that covers a fast
+ * and a slow model under one name (the Ender-3 V3 and V3 SE), is left standard.
  */
 'use strict';
 
@@ -33,37 +40,37 @@ const PRINTERS = [
   { maker: 'Anycubic', models: [
     /* Anycubic: 250 × 250 × 260. OrcaSlicer's profile says 255 × 255 — enough for a
        six-cell, 252 mm piece that the published bed cannot take. The maker's figure. */
-    { id: 'anycubic-kobra-3', name: 'Kobra 3', bed: [250, 250, 260] },
+    { id: 'anycubic-kobra-3', name: 'Kobra 3', bed: [250, 250, 260], speed: 'fast' },
   ] },
   { maker: 'Bambu Lab', models: [
     // bambulab.com tech specs, and Bambu Studio's machine profiles (printable_area)
-    { id: 'bambu-a1-mini', name: 'A1 mini', bed: [180, 180, 180] },
-    { id: 'bambu-a1', name: 'A1', bed: [256, 256, 256] },
-    { id: 'bambu-p1', name: 'P1S / P1P', bed: [256, 256, 256] },
-    { id: 'bambu-x1c', name: 'X1 Carbon', bed: [256, 256, 256] },
+    { id: 'bambu-a1-mini', name: 'A1 mini', bed: [180, 180, 180], speed: 'fast' },
+    { id: 'bambu-a1', name: 'A1', bed: [256, 256, 256], speed: 'fast' },
+    { id: 'bambu-p1', name: 'P1S / P1P', bed: [256, 256, 256], speed: 'fast' },
+    { id: 'bambu-x1c', name: 'X1 Carbon', bed: [256, 256, 256], speed: 'fast' },
     /* Quoted as 350 × 320 × 325, which is the width the two nozzles cover between them.
        Each reaches 325 of it (Bambu Studio: left nozzle x 0–325, right x 25–350) and a
        one-filament part is printed by one nozzle, so Bambu's single-nozzle figure. */
-    { id: 'bambu-h2d', name: 'H2D, one nozzle', bed: [325, 320, 325] },
+    { id: 'bambu-h2d', name: 'H2D, one nozzle', bed: [325, 320, 325], speed: 'fast' },
   ] },
   { maker: 'Creality', models: [
     // creality.com specs and its Ender-3 V3 series comparison; OrcaSlicer profiles agree
     { id: 'creality-ender-3-v3', name: 'Ender-3 V3 / V3 SE', bed: [220, 220, 250] },
-    { id: 'creality-ender-3-v3-ke', name: 'Ender-3 V3 KE', bed: [220, 220, 240] },
-    { id: 'creality-k1', name: 'K1 / K1C', bed: [220, 220, 250] },
-    { id: 'creality-k1-max', name: 'K1 Max', bed: [300, 300, 300] },
-    { id: 'creality-k2-plus', name: 'K2 Plus', bed: [350, 350, 350] },
+    { id: 'creality-ender-3-v3-ke', name: 'Ender-3 V3 KE', bed: [220, 220, 240], speed: 'fast' },
+    { id: 'creality-k1', name: 'K1 / K1C', bed: [220, 220, 250], speed: 'fast' },
+    { id: 'creality-k1-max', name: 'K1 Max', bed: [300, 300, 300], speed: 'fast' },
+    { id: 'creality-k2-plus', name: 'K2 Plus', bed: [350, 350, 350], speed: 'fast' },
   ] },
   { maker: 'Elegoo', models: [
-    { id: 'elegoo-neptune-4', name: 'Neptune 4 / 4 Pro', bed: [225, 225, 265] },
-    { id: 'elegoo-centauri-carbon', name: 'Centauri Carbon / Carbon 2', bed: [256, 256, 256] },
+    { id: 'elegoo-neptune-4', name: 'Neptune 4 / 4 Pro', bed: [225, 225, 265], speed: 'fast' },
+    { id: 'elegoo-centauri-carbon', name: 'Centauri Carbon / Carbon 2', bed: [256, 256, 256], speed: 'fast' },
   ] },
   { maker: 'Prusa', models: [
     // prusa3d.com specs, and PrusaSlicer's bundled profiles (bed_shape, max_print_height)
     { id: 'prusa-mini', name: 'MINI / MINI+', bed: [180, 180, 180] },
-    { id: 'prusa-mk4', name: 'MK4 / MK4S', bed: [250, 210, 220] },
-    { id: 'prusa-core-one', name: 'CORE One', bed: [250, 220, 270] },
-    { id: 'prusa-xl', name: 'XL', bed: [360, 360, 360] },
+    { id: 'prusa-mk4', name: 'MK4 / MK4S', bed: [250, 210, 220], speed: 'fast' },
+    { id: 'prusa-core-one', name: 'CORE One', bed: [250, 220, 270], speed: 'fast' },
+    { id: 'prusa-xl', name: 'XL', bed: [360, 360, 360], speed: 'fast' },
   ] },
   { maker: 'Sovol', models: [
     { id: 'sovol-sv06', name: 'SV06', bed: [220, 220, 250] },
@@ -72,9 +79,9 @@ const PRINTERS = [
     /* A kit, built in three sizes. X and Y from the Voron 2.4 Klipper config in
        VoronDesign/Voron-2; the height is that config's own position_max for Z, which
        is lower than the size it is named for. */
-    { id: 'voron-2.4-250', name: '2.4, 250 mm', bed: [250, 250, 210] },
-    { id: 'voron-2.4-300', name: '2.4, 300 mm', bed: [300, 300, 260] },
-    { id: 'voron-2.4-350', name: '2.4, 350 mm', bed: [350, 350, 310] },
+    { id: 'voron-2.4-250', name: '2.4, 250 mm', bed: [250, 250, 210], speed: 'fast' },
+    { id: 'voron-2.4-300', name: '2.4, 300 mm', bed: [300, 300, 260], speed: 'fast' },
+    { id: 'voron-2.4-350', name: '2.4, 350 mm', bed: [350, 350, 310], speed: 'fast' },
   ] },
 ];
 
@@ -100,13 +107,15 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
    several printers share one bed and the value has to say which of them you picked. */
 function options() {
   /* data-generic marks the size-only entries: they are the ones a link without a
-     printer id is matched against — see FIELDS.presetFor. */
+     printer id is matched against — see FIELDS.presetFor. data-speed comes after
+     data-bed, which test/guide-facts.js reads straight after the value. */
   const opt = (id, label, bed, extra) =>
     `<option value="${esc(id)}" data-bed="${bed.join(',')}"${extra || ''}>` +
     `${esc(label)}</option>`;
   return PRINTERS.map((g) =>
     `<optgroup label="${esc(g.maker)}">` +
-    g.models.map((m) => opt(m.id, `${g.maker} ${m.name} — ${size(m.bed)}`, m.bed)).join('') +
+    g.models.map((m) => opt(m.id, `${g.maker} ${m.name} — ${size(m.bed)}`, m.bed,
+                            m.speed === 'fast' ? ' data-speed="fast"' : '')).join('') +
     '</optgroup>').join('\n') + '\n' +
     '<optgroup label="Any printer, by bed size">' +
     GENERIC.map((s) => opt(s.id, `${size(s.bed)} mm`, s.bed,

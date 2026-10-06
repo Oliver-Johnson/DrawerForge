@@ -13,7 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const G = require('../src/core.js');
-const { SPEC, BIN_DEFAULTS, lipHeight } = require('../src/bins/bin.js');
+const { SPEC, BIN_DEFAULTS, lipHeight, binHeights } = require('../src/bins/bin.js');
 
 const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/&nbsp;/g, ' ');
@@ -250,13 +250,15 @@ console.log('\nclaims the prose states outright');
 console.log('\nthe bin height table');
 {
   const html = read('guide/index.html');
-  const base = SPEC.footH + BIN_DEFAULTS.floorT;   // foot plus floor, before anything fits
   const rows = new Map();
   for (const m of html.matchAll(/<tr><td>(\d+)<\/td><td>([\d.]+) mm<\/td><td>([\d.]+) mm<\/td><\/tr>/g)) {
     const units = +m[1], total = +m[2], usable = +m[3];
     rows.set(units, total);
     const wantTotal = units * SPEC.unitH;
-    const wantUsable = Math.round((wantTotal - base) * 100) / 100;
+    /* The depth the bins page quotes beside its height field, from the engine's own
+       floor. Worked out here as foot plus floor, it left out the BLOAT the slab runs
+       past the floor, and the table said 0.05 mm more than any bin holds. */
+    const wantUsable = Math.round(binHeights({ hUnits: units }).inside * 100) / 100;
     if (total !== wantTotal || Math.abs(usable - wantUsable) > 0.005) {
       console.log(`  ${units} units: says ${total} mm / ${usable} usable — ` +
                   `should be ${wantTotal} / ${wantUsable}`);
