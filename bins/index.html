@@ -5677,6 +5677,9 @@ if (typeof module !== 'undefined') module.exports = DRAWERS;
  * (= 41.5/2 - 3.75). Keeping that constant is what makes clearance uniform
  * around the perimeter — see docs/socket-clearance.md for why that matters.
  *
+ * A bin is whole cells or half cells (21 mm) on each axis. A half-size bin stands
+ * on quarter feet: see binFeet.
+ *
  * Runs in the browser and headless in Node (module.exports guard at the bottom).
  */
 'use strict';
@@ -6206,7 +6209,10 @@ const maskOf = (c) => {
   }
   return new Set(c.cells.map(([x, y]) => cellKey(x, y)));
 };
-const isFullRect = (c) => maskOf(c).size === c.u * c.v;
+/* No mask is a full rectangle whatever the size. Counting the cells instead sent every
+   half-size bin down the carved path: a 1.5 x 1 has two whole cells in its mask and an
+   area of 1.5, and the two can never be equal. */
+const isFullRect = (c) => !c.cells || !c.cells.length || maskOf(c).size === c.u * c.v;
 
 /* Advisory, not a gate. Both odd carves turn out to build watertight — the per-cell
    builder walls a hole just as readily as an outer edge — so they are reported and
@@ -6244,6 +6250,83 @@ function maskCheck(mask, u, v) {
   if (holes) return { ok: false, why: 'the shape encloses a hole' };
   return { ok: true };
 }
+
+/* ---------- half-size bins --------------------------------------------------
+ * A bin may be half a cell, 21 mm, longer on either axis: 0.5, 1.5, 2.5 cells and so on.
+ * Its body, lip, lid, dividers, scoop and label all come from its outline, and the
+ * outline takes any size already (outlineAt). What changes is what it stands on.
+ *
+ * A half-size bin stands on QUARTER feet, in both axes, whichever axis is the half one:
+ * the spec foot on a 21 mm pitch instead of 42. Each is the spec profile 10.5 mm in from
+ * every side of a whole foot — 20.5 mm square at the top — with the spec's corner radius
+ * at every level, half-width less 17.00, so its outer corner arcs sit on the same centres
+ * as a whole foot's. In a standard 42 mm socket a quarter foot fills one corner of it with
+ * the clearance a whole foot gets on its two outer sides and its outer corner, so a
+ * half-size bin fits any Gridfinity baseplate, and a 21 mm half-grid plate besides, which
+ * is the same foot Gridfinity Rebuilt's half grid builds. test/fit-check.js measures it
+ * from the spec alone.
+ *
+ * Quarter feet rather than half feet, 20.5 x 41.5, split only along the half axis. Half
+ * feet would be fewer, but a 1.5 x 1 bin on them could sit on a half step one way and
+ * not the other. Quarter feet sit on any half step both ways.
+ *
+ * A whole-size bin keeps its whole feet, and so stays on whole cells. On quarter feet it
+ * could sit anywhere too, but then moving it would change its file, and a bin already
+ * printed could not follow.
+ *
+ * A foot only presses on a socket's walls with its outer sides. A bin half a cell across
+ * has no outer side on the far half of the socket, so alone in it, it can slide 21 mm
+ * across it (fit-check measures it); the bins beside it are what hold it.
+ *
+ * Not carved, in this version: a mask counts whole cells, so a half-size bin's is ignored
+ * here and dropped from a link.
+ */
+const isWhole = (x) => Math.abs(x - Math.round(x)) < 1e-9;
+// a size that is not a number is nobody's half: the floor and holes it decides stay whole
+const isHalfSize = (c) => [c.u, c.v].some((n) => isFinite(n) && !isWhole(n));
+const QUARTER_IN = SPEC.pitch / 4;      // 10.5: a quarter foot is a whole one less this per side
+
+/* The feet a bin stands on, as { i, j, x, y, inset }: the cell, or for a half-size bin the
+   quarter, it stands under; its centre in the bin's frame; and how far in from a whole
+   foot each of its sides is. Whole feet go cell by cell in the order buildBin has always
+   built them, so a whole bin comes out byte for byte as it did. Pure, so the page can
+   count and weigh feet without building anything. */
+function binFeet(cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg || {}), out = [];
+  if (isHalfSize(c)) {
+    const p = SPEC.pitch / 2, nx = Math.round(c.u / 0.5), ny = Math.round(c.v / 0.5);
+    for (let i = 0; i < nx; i++)
+      for (let j = 0; j < ny; j++)
+        out.push({ i, j, x: (i - (nx - 1) / 2) * p, y: (j - (ny - 1) / 2) * p, inset: QUARTER_IN });
+    return out;
+  }
+  const mask = maskOf(c);
+  for (let i = 0; i < c.u; i++)
+    for (let j = 0; j < c.v; j++)
+      if (mask.has(cellKey(i, j)))
+        out.push({ i, j, x: (i - (c.u - 1) / 2) * SPEC.pitch, y: (j - (c.v - 1) / 2) * SPEC.pitch,
+                   inset: 0 });
+  return out;
+}
+
+/* Why a bin's feet take no holes whatever it asks for, or '' when they take them.
+ *
+ * A half-size bin's do not, in this version. A plate's magnet sits 13 mm from its cell's
+ * centre, which is 2.5 mm from the centre of the quarter a quarter foot stands in, towards
+ * that corner of the socket — so a different way in each of the four quarters. Which
+ * quarter a foot lands in is decided by where the bin sits on the half grid: a hole placed
+ * to meet the magnet in one position misses it by 5 mm half a cell along. Holes built at
+ * fixed sites would be right in some places and wrong in others, and the part cannot know
+ * which, and a hole built for the place the bin sits in would mean moving the bin changes
+ * its file, which is the reason a whole bin stays on whole cells.
+ *
+ * The settings are kept, on the bin and in its link, and simply not built: holeSites
+ * finds no sites, holePlan nothing to build, and screws raise no floor. The page uses this
+ * to say so beside the boxes. */
+const feetHolesOff = (c) => (isHalfSize(c)
+  ? 'Half-size bins have no magnet or screw holes yet: where a hole would meet a ' +
+    'baseplate magnet depends on where the bin sits on the half grid.'
+  : '');
 
 /* Carved body: a slab per cell and a wall panel per exposed edge, all overlapping.
    A cell's slab reaches the bin's outer face where an edge is exposed and past the
@@ -6552,8 +6635,9 @@ const SITE_MAX = SPEC.centre - FOOT_HOLES.off - 2 * BLOAT;
 /* The floor a screw needs: the hole's end plus a skin, above the top of the foot. 1.85,
    rounded, because the sum comes out 1.8499999999999996 and the page quotes it. */
 const SCREW_FLOOR = Math.round((FOOT_HOLES.screwTop + FOOT_HOLES.skin - SPEC.footH) * 100) / 100;
-// the floor a bin is really built with: screws raise it, nothing else does
-const builtFloorT = (c) => (c.screws ? Math.max(c.floorT, SCREW_FLOOR) : c.floorT);
+/* the floor a bin is really built with: screws raise it, nothing else does, and only
+   screws that are built (feetHolesOff) */
+const builtFloorT = (c) => (c.screws && !feetHolesOff(c) ? Math.max(c.floorT, SCREW_FLOOR) : c.floorT);
 const holeSize = (x, lim, d) => Math.min(lim.max, Math.max(lim.min, isFinite(x) ? x : d));
 
 /* Which corners of which cells get a hole, as [i, j, sx, sy]: the cell, and which of its
@@ -6562,7 +6646,7 @@ const holeSize = (x, lim, d) => Math.min(lim.max, Math.max(lim.min, isFinite(x) 
    bin — so a rectangle gets four however big it is, and a carved L gets the five convex
    corners of its outline. Pure, so the page counts magnets without building anything. */
 function holeSites(c) {
-  if (!c.magnets && !c.screws) return [];
+  if ((!c.magnets && !c.screws) || feetHolesOff(c)) return [];
   const mask = maskOf(c), has = (x, y) => mask.has(cellKey(x, y)), out = [];
   for (let i = 0; i < c.u; i++)
     for (let j = 0; j < c.v; j++) {
@@ -6577,7 +6661,7 @@ function holeSites(c) {
 /* What one site's column is made of, bottom up, as [z0, z1, hole]; a null hole is solid.
    Each piece runs a BLOAT into the next, and each opening is inside the one below. */
 function holePlan(c) {
-  if (!c.magnets && !c.screws) return null;
+  if ((!c.magnets && !c.screws) || feetHolesOff(c)) return null;
   const F = FOOT_HOLES, magnets = !!c.magnets, screws = !!c.screws;
   const rM = holeSize(c.magnetD, F.magnetD, 6) / 2 + F.fit / 2;
   const depth = holeSize(c.magnetH, F.magnetH, 2) + F.deeper;
@@ -6860,6 +6944,9 @@ function buildBin(G, cfg) {
   if (H <= SPEC.footH + 0.5)
     throw new Error(`hUnits ${c.hUnits} gives ${H} mm, which is not taller than the ${SPEC.footH} mm base`);
 
+  // a mask counts whole cells, and a half-size bin is not carved: see binFeet
+  const half = isHalfSize(c);
+  if (half) c.cells = null;
   const polys = [];
   const mask = maskOf(c), full = isFullRect(c);
 
@@ -6894,30 +6981,29 @@ function buildBin(G, cfg) {
                      columnsOf(i, j, cx, cy, plan.slab, z0, z1));
   };
 
-  /* feet — one closed shell per occupied cell, overlapping the body above */
+  /* feet — one closed shell per foot, overlapping the body above: a whole foot under
+     each occupied cell, or a half-size bin's quarter feet. A quarter foot is the same
+     sweep on rings `inset` narrower each side, keeping each level's corner radius, so
+     its corner arcs keep the 17.00 centres (see binFeet). */
   const prof = SPEC.prof;
   const zs = prof.map((p) => p[0]).concat([SPEC.footH + BLOAT]);
-  for (let i = 0; i < c.u; i++)
-    for (let j = 0; j < c.v; j++) {
-      if (!mask.has(cellKey(i, j))) continue;
-      const cx = (i - (c.u - 1) / 2) * SPEC.pitch;
-      const cy = (j - (c.v - 1) / 2) * SPEC.pitch;
-      const rings = prof.map(([, half]) => {
-        const h = half - c.shrink;
-        return roundRect(h, h, h - SPEC.centre, n).map((p) => [p[0] + cx, p[1] + cy]);
-      });
-      rings.push(rings[rings.length - 1]);      // BLOAT extension into the body
-      if (holed.has(cellKey(i, j))) {
-        polys.push(...holedCell(G, rings, zs, cx, cy, plan.s,
-                                columnsOf(i, j, cx, cy, plan.foot, 0, zs[zs.length - 1])));
-        continue;
-      }
-      polys.push(...sweep(G.makePoly, rings, zs));
-      polys.push(...fanCap(G.makePoly, rings[0], zs[0], false, cx, cy));
-      // capped at the height the sweep actually ends at, overlap extension included:
-      // capping lower left the shell open at the top with a stray lid inside it
-      polys.push(...fanCap(G.makePoly, rings[rings.length - 1], zs[zs.length - 1], true, cx, cy));
+  for (const { i, j, x: cx, y: cy, inset } of binFeet(c)) {
+    const rings = prof.map(([, w]) => {
+      const h = w - c.shrink;
+      return roundRect(h - inset, h - inset, h - SPEC.centre, n).map((p) => [p[0] + cx, p[1] + cy]);
+    });
+    rings.push(rings[rings.length - 1]);      // BLOAT extension into the body
+    if (holed.has(cellKey(i, j))) {
+      polys.push(...holedCell(G, rings, zs, cx, cy, plan.s,
+                              columnsOf(i, j, cx, cy, plan.foot, 0, zs[zs.length - 1])));
+      continue;
     }
+    polys.push(...sweep(G.makePoly, rings, zs));
+    polys.push(...fanCap(G.makePoly, rings[0], zs[0], false, cx, cy));
+    // capped at the height the sweep actually ends at, overlap extension included:
+    // capping lower left the shell open at the top with a stray lid inside it
+    polys.push(...fanCap(G.makePoly, rings[rings.length - 1], zs[zs.length - 1], true, cx, cy));
+  }
 
   /* body */
   /* One split list, both loops. The ramp needs a vertex where it ends, and the two
@@ -7097,7 +7183,8 @@ function buildBin(G, cfg) {
     lipH, totalH: topZ + lipH,       // H is the stacking pitch; totalH is what it occupies
     W: (c.u - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
     D: (c.v - 1) * SPEC.pitch + 2 * (SPEC.half - c.shrink),
-    footH: SPEC.footH, floorZ, cells: mask.size,
+    // a half-size bin's mask is whole cells under part of it; its area is the count
+    footH: SPEC.footH, floorZ, cells: half ? c.u * c.v : mask.size,
     cavity: Math.max(0, H - floorZ),
     // what goes into the feet once it is printed: a magnet, or a screw, per hole
     magnets: plan && plan.magnets ? holeSites(c).length : 0,
@@ -7128,7 +7215,8 @@ const SEP = { field: '-', bin: '_', layer: '~' };
 const PACK_EDGES = ['f', 'b', 'l', 'r'];
 
 function maskBits(b) {
-  if (!b.cells || !b.cells.length) return '';
+  // a half-size bin is never carved, so it never carries a mask (see binFeet)
+  if (!b.cells || !b.cells.length || isHalfSize(b)) return '';
   const set = new Set(b.cells.map(([x, y]) => cellKey(x, y)));
   if (set.size === b.u * b.v) return '';
   let out = '';
@@ -7220,25 +7308,42 @@ const maxDividers = (inside, wall) =>
 const numAt = (p, i, d, hi) => (isFinite(p[i]) ? Math.min(hi, Math.max(0, p[i])) : d);
 const countAt = (p, i, d, lo, hi) =>
   (isFinite(p[i]) ? Math.min(hi, Math.max(lo, Math.round(p[i]))) : d);
+// the same in half cells: to the nearest half, so 0.25 is a half and 1.2 is a whole one
+const halfAt = (p, i, d, lo, hi) =>
+  (isFinite(p[i]) ? Math.min(hi, Math.max(lo, Math.round(p[i] * 2) / 2)) : d);
+/* Sizes and positions are in cells, and since half-size bins they may end in .5. The
+   four fields are the same four, so the format did not grow and a link from before reads
+   exactly as it did: it only ever held whole numbers, and a whole number is its own
+   nearest half.
+     u and v snap to halves, the smallest half a cell.
+     x and y snap to halves for a half-size bin, and to whole cells for a whole one, which
+   stays on whole cells (see binFeet): a whole bin on a half step is rounded onto the
+   grid as a fractional position always was.
+     A half-size bin's mask is dropped. A mask counts whole cells and nothing carves a
+   half-size bin, so one can only be a link typed by hand.
+   A page from before half sizes reads 1.5 as 2, and has no way to know it should not:
+   neither page checks the link's version. That is the one thing a new link loses in an
+   old tab. */
 function unpackBin(t) {
   const raw = String(t).split(SEP.field);
   const p = raw.map(Number);
   const edges = {};
   PACK_EDGES.forEach((k, i) => { edges[k] = snapEdge(p[10 + i]); });
-  const u = countAt(p, 2, BIN_DEFAULTS.u, 1, LINK_MAX.cells);
-  const v = countAt(p, 3, BIN_DEFAULTS.v, 1, LINK_MAX.cells);
+  const u = halfAt(p, 2, BIN_DEFAULTS.u, 0.5, LINK_MAX.cells);
+  const v = halfAt(p, 3, BIN_DEFAULTS.v, 0.5, LINK_MAX.cells);
+  const half = isHalfSize({ u, v }), posAt = half ? halfAt : countAt;
   const hUnits = countAt(p, 4, BIN_DEFAULTS.hUnits, 1, LINK_MAX.hUnits);
   const H = hUnits * SPEC.unitH;
   const wall = numAt(p, 5, BIN_DEFAULTS.wall, LINK_MAX.wall);
   const inside = (n) => (n - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall;
   /* A floor or scoop past the bin's height, or a label shelf past its depth, builds
      the same part as one at it: the geometry already stops them there. */
-  return { x: countAt(p, 0, 0, 0, LINK_MAX.cells), y: countAt(p, 1, 0, 0, LINK_MAX.cells),
+  return { x: posAt(p, 0, 0, 0, LINK_MAX.cells), y: posAt(p, 1, 0, 0, LINK_MAX.cells),
            u, v, hUnits, wall, floorT: numAt(p, 6, BIN_DEFAULTS.floorT, H),
            divX: countAt(p, 7, 0, 0, maxDividers(inside(u), wall)),
            divY: countAt(p, 8, 0, 0, maxDividers(inside(v), wall)), solid: !!p[9],
            edges, scoop: numAt(p, 14, 0, H), label: numAt(p, 15, 0, v * SPEC.pitch),
-           cells: bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v),
+           cells: half ? null : bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v),
            done: !!p[17], divRemovable: !!p[18],
            lid: !!p[19], lidSides: lidSidesFrom(p[20]), ...feetFrom(p[21]) };
 }
@@ -7251,6 +7356,7 @@ if (typeof module !== 'undefined') {
   module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, binHeights, unitsForInside, unitsForTop, REQUIRED_CORE,
     FOOT_HOLES, SCREW_FLOOR, holeSites, holePlan, builtFloorT, feetBits, feetFrom,
+    isHalfSize, binFeet, feetHolesOff,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers, LINK_MAX };
 }
@@ -7642,23 +7748,31 @@ function volumeMm3(c) {
   // the floor as built: screw holes raise a thin one
   const floorT = builtFloorT(c);
   const H = c.hUnits * SPEC.unitH, floorZ = SPEC.footH + floorT;
-  // a carved bin has fewer feet and less floor than its bounding box implies
-  const cells = binCells(c).length;
   const infill = Math.max(0, Math.min(1, (state.infill === undefined ? 15 : state.infill) / 100));
 
-  /* base block: the feet plus the solid floor slab above them */
-  let footV = 0, footLat = 0;
-  const N = 60;
-  for (let i = 0; i < N; i++) {
-    const h = footProfileHalf(SPEC.footH * (i + 0.5) / N);
-    footV += areaRR(h, h, h - C) * (SPEC.footH / N);
-    footLat += perimRR(h, h, h - C) * (SPEC.footH / N);
+  /* base block: the feet plus the solid floor slab above them.
+     The feet are the ones the engine builds, added up foot by foot (binFeet): a carved
+     bin has fewer than its bounding box implies, and a half-size bin stands on quarter
+     feet, 10.5 mm in on every side — counted a whole foot per cell, a 1.5 x 1 had two
+     whole feet where it has six quarter ones. Feet of one size are summed together, so a
+     whole bin's figures come out exactly as they did. */
+  const sizes = new Map();                       // how far in from a whole foot -> how many
+  for (const f of binFeet(c)) sizes.set(f.inset, (sizes.get(f.inset) || 0) + 1);
+  let footV = 0, footLat = 0, botA = 0;
+  const N = 60, h0 = SPEC.prof[0][1];
+  for (const [inset, count] of sizes) {
+    let v = 0, lat = 0;
+    for (let i = 0; i < N; i++) {
+      const h = footProfileHalf(SPEC.footH * (i + 0.5) / N);
+      v += areaRR(h - inset, h - inset, h - C) * (SPEC.footH / N);
+      lat += perimRR(h - inset, h - inset, h - C) * (SPEC.footH / N);
+    }
+    footV += v * count; footLat += lat * count;
+    botA += count * areaRR(h0 - inset, h0 - inset, h0 - C);
   }
-  footV *= cells; footLat *= cells;
   const slabH = (c.solid || floorZ >= H - 0.2) ? (H - SPEC.footH) : floorT;
   const baseRaw = footV + areaRR(hwO, hdO, SPEC.r) * slabH;
   const baseLat = footLat + perimRR(hwO, hdO, SPEC.r) * slabH;
-  const botA = cells * areaRR(SPEC.prof[0][1], SPEC.prof[0][1], SPEC.prof[0][1] - C);
   const baseShell = baseLat * SHELL_T + (botA + areaRR(hwO, hdO, SPEC.r)) * SKIN_T;
   const baseFil = Math.min(baseRaw, baseShell + infill * Math.max(0, baseRaw - baseShell));
 
@@ -11096,13 +11210,26 @@ function shareLink() {
 function designLink() {
   return location.origin + location.pathname + '#' + descString(VIEW_KEYS);
 }
+/* The link format takes half cells now (unpackBin), and this page does not yet: its map,
+   its occupancy and its drag all count whole cells, and a bin at y 0.5 threw in the map
+   and left the page dead. So a layout read here is put on whole cells the way a page from
+   before half cells reads it, 1.5 up to 2, until the map learns half steps. No page has
+   written a half yet, so this only meets a link typed by hand. */
+function onWholeCells(ls) {
+  for (const L of ls)
+    for (const b of L.bins) {
+      b.u = Math.max(1, Math.round(b.u)); b.v = Math.max(1, Math.round(b.v));
+      b.x = Math.round(b.x); b.y = Math.round(b.y);
+    }
+  return ls;
+}
 function loadFromHash(src) {
   const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
   if (!h) return;
   const q = parseHash(h);
   for (const [k, val] of Object.entries(q)) {
     if (k === 'v') continue;
-    if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
+    if (k === 'bl') { const ls = onWholeCells(unpackLayers(val)); if (ls.length) layers = ls; continue; }
     // a menu takes only a value it offers; anything else leaves it blank and reads NaN
     if (k === 'bseg') {
       if ([...$('arcSegs').options].some((o) => o.value === val)) $('arcSegs').value = val;
@@ -11464,7 +11591,7 @@ updateUndoButtons();
    you did not want to look at. Indices are safe to trust here because the same hash
    carried the layout they point into. */
 if (pendingScratch) {
-  const ls = unpackLayers(pendingScratch);
+  const ls = onWholeCells(unpackLayers(pendingScratch));
   const b = ls[0] && ls[0].bins[0];
   if (b) {
     scratch = b;

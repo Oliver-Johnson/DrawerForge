@@ -251,6 +251,19 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   The audit probes every site of every holed build from the bed: the hole's roof has to be
   where it was asked for, and an unholed site has to be solid, because a foot with its
   holes left solid is just as watertight as one with them open.
+- A **half-size bin** (0.5, 1.5, 2.5 cells on either axis) stands on **quarter feet** in
+  both axes (`binFeet`): the same sweep as a whole foot on rings 10.5 mm in on every side,
+  keeping each level's corner radius, so its corner arcs stay on the 17.00 centres and it
+  seats in a corner of a standard socket with a whole foot's clearance (`fit-check.js`
+  measures it from the spec). Nothing else changes: the body, lip, lid, dividers, scoop
+  and label already came from an outline that takes any size. A whole bin keeps whole
+  feet, built in the same order from the same numbers, so it is byte for byte what it
+  was, and `bin-audit.js` holds a dozen links from before half sizes to their STL
+  digests to keep it so. A half-size bin builds **no holes** (`feetHolesOff`): a plate's
+  magnet is 2.5 mm off a quarter's centre towards that socket corner, so which way a
+  hole would have to go depends on where the bin sits. The audit slices every quarter
+  against the spec and probes the line between quarters from the bed, because a
+  half-size bin on whole feet is just as watertight and the body sets its footprint.
 - Every rounded square in a bin shares the corner-arc centre **17.00 mm**
   (`41.5/2 − 3.75`). That constant is what makes clearance uniform around the perimeter
   instead of binding at the corners. See [socket-clearance.md](socket-clearance.md) for

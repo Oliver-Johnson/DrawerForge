@@ -135,13 +135,91 @@ console.log(`  faceting costs     ${(b.worstC - a.worstC).toFixed(3)} mm at the 
 console.log(`  centres matched    corner ${c.worstC.toFixed(3)}  flat ${c.worstF.toFixed(3)}  ratio ${(c.worstF / c.worstC).toFixed(1)}x`);
 console.log(`  matched, no facet  corner ${d.worstC.toFixed(3)}  flat ${d.worstF.toFixed(3)}`);
 
+/* ---- a half-size bin's quarter foot --------------------------------------
+ * A half-size bin stands on quarter feet: the spec foot on a 21 mm pitch, as Gridfinity
+ * Rebuilt's half grid builds it. At every level of the profile it is 10.5 mm in from the
+ * spec foot on each side, keeping the spec's corner radius there — 20.5 mm square at the
+ * top, with its corner arcs on the same 17.00 centres as the whole foot's. Derived here
+ * from the spec as the whole foot is, never from src/bins/bin.js.
+ *
+ * In a standard socket a quarter foot fills one corner. Its two outer sides and its outer
+ * corner face the socket's walls and are measured like a whole foot's; its two inner
+ * sides face the rest of the socket, which a neighbouring quarter fills or nothing does,
+ * so they have nothing to measure against. Every one of its points must still be inside
+ * the socket at every height, in each of the four corners. Sampled the way the whole foot
+ * is above, so the two compare like for like. */
+const QUARTER_IN = PITCH / 4;                          // 10.5
+function inside(p, poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+  }
+  return c;
+}
+// the quarter foot at z, in the corner of the socket that (sx, sy) points to
+function quarterAt(z, sx, sy) {
+  const b = binAt(z), h = b.half - QUARTER_IN;
+  return ring(h, b.r, 256).map(([x, y]) => [x + sx * QUARTER_IN, y + sy * QUARTER_IN]);
+}
+function quarterReport() {
+  console.log('\nE. a half-size bin\'s quarter foot in a corner of the shipped socket');
+  console.log('   z    flat gap  corner gap  points outside');
+  let worstF = Infinity, worstC = Infinity, out = 0;
+  for (const z of ZS_TEST) {
+    const s = socketAt(z, 4.0, false), sock = ring(s.half, s.r, 6);
+    let flat = Infinity, corner = Infinity, outHere = 0;
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]])
+      for (const p of quarterAt(z, sx, sy)) {
+        if (!inside(p, sock)) outHere++;
+        // how far out towards this corner's two walls, from the quarter's own centre
+        const dx = sx * (p[0] - sx * QUARTER_IN), dy = sy * (p[1] - sy * QUARTER_IN);
+        const arc = BIN_CENTRE - QUARTER_IN;           // 6.5: where its corner arcs start
+        if (dx <= arc && dy <= arc) continue;          // faces the rest of the socket
+        const d = minDist(p, sock);
+        if (dx > arc && dy > arc) corner = Math.min(corner, d); else flat = Math.min(flat, d);
+      }
+    worstF = Math.min(worstF, flat); worstC = Math.min(worstC, corner); out += outHere;
+    console.log(`  ${z.toFixed(2).padStart(4)}  ${flat.toFixed(3).padStart(8)}  ` +
+                `${corner.toFixed(3).padStart(10)}  ${String(outHere).padStart(14)}`);
+  }
+  console.log(`  worst:  flat ${worstF.toFixed(3)} mm   corner ${worstC.toFixed(3)} mm   ` +
+              `points outside the socket ${out}`);
+
+  /* A foot presses on a wall only with its outer sides, so a bin half a cell across, alone
+     in a socket, has nothing on its far side: it can slide until its inner side meets the
+     socket's other wall. Said here so the page can say it; not a fault, and not gated. */
+  let play = 0;
+  for (let dx = 0; dx < PITCH; dx += 0.01) {
+    const fits = [0.05, 0.8, 2.5, 4.2].every((z) => {
+      const s = socketAt(z, 4.0, false), sock = ring(s.half, s.r, 6);
+      // a 0.5 x 1 bin: two quarters down the left of the socket, slid right by dx
+      return [-1, 1].every((sy) => quarterAt(z, -1, sy).every(([x, y]) => inside([x + dx, y], sock)));
+    });
+    if (!fits) break;
+    play = dx;
+  }
+  console.log(`  a bin half a cell wide, alone in a socket, can slide ${play.toFixed(2)} mm across it`);
+  return { worstF, worstC, out };
+}
+const e = quarterReport();
+console.log(`  quarter foot       corner ${e.worstC.toFixed(3)}  flat ${e.worstF.toFixed(3)}` +
+            `  (whole foot ${a.worstC.toFixed(3)} and ${a.worstF.toFixed(3)})`);
+
 /* CI guard. Deliberately loose: the corner clearance being tighter than the flats is a
    known, documented deviation (docs/socket-clearance.md) and applying the fix should not
    fail the build. What must never happen is clearance going to zero — that is a socket a
-   bin cannot enter. */
+   bin cannot enter. A quarter foot is held to the same, and must not be any tighter than
+   a whole foot: its corners sit on the whole foot's arc centres, so it gets the same. */
 if (!(a.worstC > 0.02) || !(a.worstF > 0.05)) {
   console.error(`\n  FAIL: a spec bin no longer fits the socket ` +
                 `(corner ${a.worstC.toFixed(3)}, flat ${a.worstF.toFixed(3)} mm)`);
   process.exit(1);
 }
-console.log('\nspec bin fits the shipped socket');
+if (!(e.worstC > 0.02) || !(e.worstF > 0.05) || e.out ||
+    e.worstC < a.worstC - 1e-3 || e.worstF < a.worstF - 1e-3) {
+  console.error(`\n  FAIL: a quarter foot no longer fits a corner of the socket as a whole foot does ` +
+                `(corner ${e.worstC.toFixed(3)}, flat ${e.worstF.toFixed(3)} mm, ${e.out} points outside)`);
+  process.exit(1);
+}
+console.log('\nspec bin fits the shipped socket, and so does a half-size bin\'s quarter foot');
