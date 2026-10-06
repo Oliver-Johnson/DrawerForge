@@ -1006,6 +1006,125 @@ console.log('\nrounded outer corners, on the plate and nowhere else:');
               `otherwise eat the corner socket's rim`);
 }
 
+/* A rounded corner beside a half cell keeps its rim.
+ *
+ * A half cell's short side is a quarter pitch, and its socket ring's corner is held to that
+ * side less the cutoff, so below about 17.6 mm the ring's corner shrinks and comes out
+ * towards the plate's. buildPiece caps the plate's arc there by the half cell's own ring
+ * (rMaxHalf, from rcHalf), solved, as the whole cell's cap is, to leave WALL — 0.2 mm —
+ * between the two arcs. Before that cap the arc folded through the rim at pitch 14, and
+ * at 16 and 17 it did not fold and left 0.031 and 0.134 mm of rim. Every other check here
+ * passed those: a rim a few hundredths thick is exactly as watertight, and as well wound,
+ * as one of 0.2.
+ *
+ * So the rim is measured off the mesh, as the least distance between the plate's outer
+ * wall along the corner arc (its vertical faces that run neither along x nor along y) and
+ * the socket's top edge (the sloped faces' edges at the plate top). What it is held to is
+ * what the cap promises the mesh: WALL, or the rim cutoff where that is thinner, since
+ * along the straight sides the cutoff is the rim; less what the outline gives up by
+ * drawing the arc as NARC chords, each up to rc(1 − cos(π/4·NARC)) inside it — 15 µm at
+ * 4.88. The socket's ring is drawn inside its own arc too, which only adds rim. Measured
+ * from 13.5 to 60 mm, every cutoff and tolerance, at arcSegs 6 to 24, the thinnest rim
+ * lands on that bar to 1e-14 and never under it, so the bar is the cap's and not a
+ * tolerance chosen to pass. The cap itself is right on the arc; the chord's share is the
+ * outline's, and a whole cell's capped corner gives up the same. */
+console.log('\na rounded corner beside a half cell keeps its rim:');
+{
+  const WALL = 0.2, NARC = 10;
+  const sag = (rc) => rc * (1 - Math.cos(Math.PI / (4 * NARC)));
+  /* Every rounded corner of every piece: the least distance from the arc's chords to the
+     socket edges within reach of that corner, and the arc's radius, read off the arc's two
+     ends where they sit on the plate's edges. */
+  const cornerRims = (cfg, L) => {
+    const H = G.platePad(cfg) + cfg.plateHeight, out = [];
+    const ptSeg = (p, a, b) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx*dx + dy*dy;
+      const t = l2 ? Math.max(0, Math.min(1, ((p[0]-a[0])*dx + (p[1]-a[1])*dy) / l2)) : 0;
+      return Math.hypot(p[0] - a[0] - t*dx, p[1] - a[1] - t*dy);
+    };
+    const gap = (a, b) => Math.min(ptSeg(a[0], b[0], b[1]), ptSeg(a[1], b[0], b[1]),
+                                   ptSeg(b[0], a[0], a[1]), ptSeg(b[1], a[0], a[1]));
+    for (const pc of L.pieces) {
+      const r = G.buildPiece(cfg, L, pc);
+      const arc = [], rim = [];
+      for (const t of G.polysToTriangles(r.polys)) {
+        const top = t.filter((v) => Math.abs(v[2] - H) < 1e-6);
+        if (top.length !== 2) continue;
+        const u = [0, 1, 2].map((k) => t[1][k] - t[0][k]), w = [0, 1, 2].map((k) => t[2][k] - t[0][k]);
+        const n = [u[1]*w[2] - u[2]*w[1], u[2]*w[0] - u[0]*w[2], u[0]*w[1] - u[1]*w[0]];
+        const len = Math.hypot(...n);
+        if (len < 1e-12) continue;
+        const e = top.map((v) => [v[0], v[1]]);
+        if (Math.abs(n[2] / len) > 1e-6) rim.push(e);
+        else if (Math.abs(e[1][0] - e[0][0]) > 1e-6 && Math.abs(e[1][1] - e[0][1]) > 1e-6) arc.push(e);
+      }
+      const corners = { ll: [0, 0], lr: [r.W, 0], ur: [r.W, r.D], ul: [0, r.D] };
+      const halfAt = { ll: false, lr: !!pc.hR, ur: !!(pc.hR || pc.hB), ul: !!pc.hB };
+      for (const [k, [cx, cy]] of Object.entries(corners)) {
+        const within = (d) => (s) => s.every(([x, y]) => Math.abs(x - cx) < d && Math.abs(y - cy) < d);
+        const chords = arc.filter(within(7)), edges = rim.filter(within(12));
+        if (!chords.length || !edges.length) continue;
+        let thin = Infinity, rc = 0;
+        for (const a of chords) for (const b of edges) thin = Math.min(thin, gap(a, b));
+        for (const s of chords) for (const [x, y] of s) {
+          if (Math.abs(y - cy) < 1e-6) rc = Math.max(rc, Math.abs(x - cx));
+          if (Math.abs(x - cx) < 1e-6) rc = Math.max(rc, Math.abs(y - cy));
+        }
+        out.push({ at: `${pc.id} ${k}`, half: halfAt[k], rim: thin, rc,
+                   bar: Math.min(cfg.topCutoff, WALL) - sag(rc) });
+      }
+    }
+    return out;
+  };
+  const C = G.PLATE_RANGES.topCutoff;
+  const pitches = [];
+  for (let p = G.PLATE_RANGES.pitch.min; p <= 18 + 1e-9; p += 0.5) pitches.push(p);
+  pitches.push(42);
+  const LAYS = {
+    'column and row': (p) => ({ drawerW: 3*p + p/2, drawerD: 2*p + p/2 }),
+    'column': (p) => ({ drawerW: 3*p + p/2, drawerD: 2*p }),
+    'row': (p) => ({ drawerW: 3*p, drawerD: 2*p + p/2 }),
+  };
+  let builds = 0, halves = 0, worst = null;
+  const under = [];
+  for (const arcSegs of [6, 12])
+    for (const p of pitches)
+      for (const topCutoff of [C.min, G.DEFAULTS.topCutoff, C.max])
+        for (const outerRadius of [4.88, 6])
+          for (const [ln, lay] of Object.entries(LAYS)) {
+            const cfg = Object.assign({}, G.DEFAULTS, { pitch: p, marginMode: 'half', connector: 'none',
+              outerRadius, topCutoff, arcSegs }, lay(p));
+            const L = G.computeLayout(cfg);
+            builds++;
+            for (const c of cornerRims(cfg, L)) {
+              if (c.half) halves++;
+              if (c.rim < c.bar - 1e-9)
+                under.push(`${p} mm, cutoff ${topCutoff}, radius ${outerRadius}, ${ln}, arcSegs ${arcSegs}, ` +
+                           `${c.at}${c.half ? ' (half)' : ''}: ${c.rim.toFixed(4)} under ${c.bar.toFixed(4)}`);
+              if (c.half && (!worst || c.rim - c.bar < worst.rim - worst.bar))
+                worst = Object.assign({ p, topCutoff, outerRadius }, c);
+            }
+          }
+  /* The reviewer's two, by name: the default cutoff, the stock cap's radius, a half column
+     and a half row, at the shipped smoothness. */
+  const named = [16, 17].map((p) => {
+    const cfg = Object.assign({}, G.DEFAULTS, { pitch: p, marginMode: 'half', connector: 'none',
+      outerRadius: 4.88 }, LAYS['column and row'](p));
+    const hs = cornerRims(cfg, G.computeLayout(cfg)).filter((c) => c.half);
+    return `${p} mm ${Math.min(...hs.map((c) => c.rim)).toFixed(3)}`;
+  });
+  console.log(`  ${builds} plates, ${halves} half-cell corners: ` +
+              (under.length ? `RIM UNDER WHAT THE CAP LEAVES: ${under.slice(0, 4).join('; ')}` +
+                              (under.length > 4 ? ` and ${under.length - 4} more` : '')
+                            : `none under WALL ${WALL} (or the cutoff) less the arc's chords`) +
+              (halves ? '' : '   NO HALF-CELL CORNER MEASURED'));
+  if (worst)
+    console.log(`  nearest its bar: ${worst.rim.toFixed(4)} mm at ${worst.p} mm, cutoff ` +
+                `${worst.topCutoff}, radius ${worst.outerRadius} capped to ${worst.rc.toFixed(3)}, ` +
+                `against ${worst.bar.toFixed(4)}; at the stock cutoff, 16 and 17 mm: ${named.join(', ')}`);
+  if (under.length || !halves) bad++;
+}
+
 /* Shared by the sections below: build every piece of a design and count its bad edges,
    and how many of those are open (used an odd number of times) rather than shells
    touching. `beyond` is how far any piece reaches past its own footprint and the tabs or
