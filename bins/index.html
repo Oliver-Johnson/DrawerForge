@@ -6505,7 +6505,8 @@ function buildBin(G, cfg) {
  * back with dividers it never had. Separators are now characters that cannot
  * occur in a plain non-negative decimal, and packBin writes every number as one.
  *
- * Field positions are the format. A bin is 22 fields and everything after a change
+ * Field positions are the format. A bin is 21 fields, 22 when its feet have holes,
+ * and everything after a change
  * shifts, so adding or removing one invalidates every link already in circulation.
  * Growing it is safe only at the end: a link from before reads the fields it lacks as
  * absent, and each field's absent value has to mean what such a link always meant.
@@ -6564,9 +6565,14 @@ function packBin(b) {
              /* A lid, and which of its four sides carry a skirt, as a bitmask. One
                 field rather than four: the sides are only meaningful when there is a
                 lid, and the format is positional so every field costs every link. */
-             b.lid ? 1 : 0, lidSideBits(b.lidSides),
-             // holes in the feet, and later the finger slots: see feetBits
-             feetBits(b)]);
+             b.lid ? 1 : 0, lidSideBits(b.lidSides)])
+    /* Holes in the feet, and later the finger slots (see feetBits), only on a bin that
+       has some. Every bin had this field written as a 0, so a link made before it came
+       back one field longer, which rewrote the address, the local save, saved drawers
+       and the README link the first time it was opened, and the page then said the
+       link had replaced the layout. A bin without holes is 21 fields, exactly as it
+       was; unpackBin reads the absent 22nd as none. */
+    .concat(feetBits(b) ? [feetBits(b)] : []);
   /* Still checked, but answered with a 0 rather than a throw: a bad field then costs
      that one field, where a separator inside it would shift every field after it. */
   const seps = Object.values(SEP);

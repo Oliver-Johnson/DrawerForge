@@ -72,22 +72,26 @@ console.log('\nseparators cannot appear inside a value');
   ]) {
     let packed = '', why = '';
     try { packed = packBin(b); } catch (e) { why = 'THREW: ' + e.message; }
-    if (!why && packed.split('-').length !== 22) why = `shifted to ${packed.split('-').length} fields`;
+    if (!why && packed.split('-').length !== 21) why = `shifted to ${packed.split('-').length} fields`;
     if (!why && /e/.test(packed)) why = `exponent form in ${packed}`;
     if (!why && unpackBin(packed)[key] !== want) why = `read back as ${unpackBin(packed)[key]}`;
     console.log(`  ${name.padEnd(38)} ${why ? 'FAILED — ' + why : 'packs'}`);
     if (why) bad++;
   }
-  /* 22 since a bin can have holes in its feet: position IS the format, so this number
-     is deliberate and changing it changes what every link means. Update it on purpose or
-     not at all.
+  /* 21 for a bin with nothing in its feet, and 22 for one with holes: position IS the
+     format, so these numbers are deliberate and changing them changes what every link
+     means. Update them on purpose or not at all. A plain bin stays at 21 so that every
+     link made before holes existed packs back to exactly the same text: written as a 0
+     on every bin, the 22nd field rewrote old links the first time they were opened.
      It went 17 -> 18 by APPENDING, which is the only safe direction — see the
      older-link case below, which is what makes appending safe rather than merely
      conventional. */
   const packed = packBin(bin({}));
   const fieldCount = packed.split('-').length;
-  console.log(`  field count is stable                  ${fieldCount === 22 ? '22, correct' : fieldCount + ' — WRONG'}`);
-  if (fieldCount !== 22) bad++;
+  const holedCount = packBin(bin({ magnets: true })).split('-').length;
+  const countsOk = fieldCount === 21 && holedCount === 22;
+  console.log(`  field count is stable                  ${countsOk ? '21, and 22 with holes, correct' : fieldCount + ' and ' + holedCount + ' — WRONG'}`);
+  if (!countsOk) bad++;
 
   /* A link written before the field existed. Nobody has one yet, but the reason to
      handle it is the same reason to append rather than insert: the day the format grows
@@ -136,13 +140,21 @@ console.log('\nholes in the feet');
                 old.lid === false && old.lidSides.f === true;
   console.log(`  a 21-field link reads as no holes      ${oldOk ? 'intact' : 'WRONG: ' + holes(old)}`);
   if (!oldOk) bad++;
+  /* And packs back to the same text. A link opened is written straight back to the
+     address, the local save and any saved drawer, so one that came back a field longer
+     was a changed layout: the next load said the link had replaced it. */
+  const before = [packBin(bin({})), packBin(bin({ lid: true, scoop: 10, edges: { f: 0.5, b: 1, l: 1, r: 1 } }))];
+  const rewritten = before.filter((p) => packBin(unpackBin(p)) !== p || p.split('-').length !== 21);
+  console.log(`  a link from before holes packs as it was ${rewritten.length ? 'REWRITTEN: ' + rewritten.join(', ') : 'byte for byte'}`);
+  if (rewritten.length) bad++;
 
   // every combination the three boxes can make, each on its own and each with the rest
   const fails = [];
   for (let n = 0; n < 8; n++) {
     const want = { magnets: !!(n & 1), screws: !!(n & 2), holesEvery: !!(n & 4) };
     const p = packBin(bin(want)), back = unpackBin(p);
-    if (p.split('-').length !== 22 || p.split('-')[21] !== String(n) ||
+    const f = p.split('-');
+    if ((n ? f.length !== 22 || f[21] !== String(n) : f.length !== 21) ||
         ['magnets', 'screws', 'holesEvery'].some((k) => back[k] !== want[k]))
       fails.push(`${holes(want)} came back ${holes(back)} from ${p.split('-')[21]}`);
   }
@@ -219,9 +231,14 @@ console.log('\nhalf-size bins');
   console.log(`  ${'its hole settings survive the trip'.padEnd(38)} ${holesOk ? 'intact' : 'LOST from ' + holed}`);
   if (!holesOk) bad++;
 
+  /* No field of its own: a plain half-size bin is 21 fields like any plain bin, and one
+     asking for holes 22, like any holed bin (the holed one above). */
   const count = packBin(bin({ x: 0.5, y: 1.5, u: 2.5, v: 0.5 })).split('-').length;
-  console.log(`  ${'the field count does not grow'.padEnd(38)} ${count === 22 ? '22, correct' : count + ' — WRONG'}`);
-  if (count !== 22) bad++;
+  const holedCount = holed.split('-').length;
+  const countOk = count === 21 && holedCount === 22;
+  console.log(`  ${'the field count does not grow'.padEnd(38)} ` +
+              (countOk ? '21, and 22 with holes, correct' : `${count} and ${holedCount} — WRONG`));
+  if (!countOk) bad++;
 }
 
 /* A number that is not one. Nothing on the page is known to make a NaN, but one used to
@@ -242,7 +259,7 @@ console.log('\na value that is not a number comes back as the default');
     let why = '';
     try {
       const packed = packBin(b);
-      if (packed.split('-').length !== 22) why = `shifted to ${packed.split('-').length} fields`;
+      if (packed.split('-').length !== 21) why = `shifted to ${packed.split('-').length} fields`;
       else if (read(unpackBin(packed)) !== want) why = `read back as ${read(unpackBin(packed))}, not ${want}`;
     } catch (e) { why = 'THREW: ' + e.message; }
     console.log(`  ${name.padEnd(38)} ${why ? 'FAILED — ' + why : 'default'}`);
