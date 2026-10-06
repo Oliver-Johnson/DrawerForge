@@ -797,6 +797,19 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
 @media(max-width:980px){
   body.binsheet{padding-bottom:min(50dvh,520px)}
   body.binsheet:has(#s-bin.closed){padding-bottom:64px}
+  /* And the same height kept clear of whatever the browser scrolls to. Tab brings what it
+     lands on only just inside the window, and with the sheet up the foot of the window is
+     the sheet: measured in the October 2026 review, every one of the 25 stops after it —
+     Checks, the layer tabs, Fill and Clear, the downloads, the footer — was focused out of
+     sight underneath. On the root, because the page is what scrolls; the 8 px is room for
+     the focus ring. */
+  html:has(body.binsheet){scroll-padding-bottom:calc(min(50dvh,520px) + 8px)}
+  html:has(body.binsheet #s-bin.closed){scroll-padding-bottom:72px}
+  /* The tip jar is fixed to the same corner, a layer under the sheet (60 to its 66), so it
+     was there for Tab to reach and not there to be seen; lifted above the sheet it would sit
+     on the map, which is what the sheet keeps clear. It waits while the sheet is up, and
+     comes back when the sheet goes. */
+  body.binsheet .kofi{display:none}
   body.binsheet #s-bin{position:fixed;left:0;right:0;bottom:0;z-index:66;margin:0;
     display:flex;flex-direction:column;max-height:min(50dvh,520px);
     border-radius:14px 14px 0 0;border-bottom:0;box-shadow:0 -12px 32px rgba(0,0,0,.55);
