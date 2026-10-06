@@ -124,7 +124,9 @@ const ESTIMATE = (() => {
    * on the long side of a printer that levels itself before every print.
    *
    * With those, before rounding, a 1×1×3 bin is about 35 minutes fast and 70 standard,
-   * a 2×2×3 about 75 minutes and 2 h 55, and a 5 × 5 baseplate about 1 h 20 and 3 h 15.
+   * a 2×2×3 about 75 minutes and 2 h 55, and a 5 × 5 baseplate about 1 h 20 and 3 h 15
+   * (77 and 194 minutes: the plate alone, 210 mm square, at the page's defaults; a
+   * plate that carries margins weighs more and takes longer).
    *
    * Conservative on purpose — a print that finishes early is a pleasant surprise and
    * one that runs past bedtime is not — and rounded up to the next 5 minutes under an
