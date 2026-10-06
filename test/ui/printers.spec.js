@@ -379,6 +379,40 @@ test('bins: the drawer is typed in inches, the height and front too', async ({ p
   await expect(page.locator('#gridSummary')).toContainText('168 × 378 mm, 6.61 × 14.88 in');
 });
 
+/* Inches are for the drawer only. The bin's wall, floor, scoop and label shelf and the
+   printer's bed are labelled in millimetres in either unit, and were read as inches:
+   a bin drawn in inches had a 10 mm wall (1.2 in, clamped), a floor filling the whole
+   bin and a 6502 mm bed. */
+test('bins: in inches, a bin is drawn with its millimetre wall, floor and bed', async ({ page }) => {
+  await H.forgetSaved(page);
+  await H.openBins(page);
+  await page.click('#s-drawer > h2 > button');      // panel 01 loads closed here
+  await toInches(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  const bin = await page.evaluate(() => {
+    const b = B()[0];
+    return { wall: b.wall, floorT: b.floorT, scoop: b.scoop, label: b.label };
+  });
+  expect(bin).toEqual({ wall: 1.2, floorT: 1.2, scoop: 0, label: 0 });
+  expect(await page.evaluate(() => [state.bedW, state.bedD, state.bedH])).toEqual([256, 256, 256]);
+  expect(await page.inputValue('#wall')).toBe('1.2');
+
+  // a figure typed into a millimetre field is millimetres, with inches on
+  await H.setField(page, 'wall', '2');
+  await H.setField(page, 'floorT', '3');
+  await H.setField(page, 'scoop', '10');
+  await H.setField(page, 'label', '12');
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => {
+    const b = B()[0];
+    return [b.wall, b.floorT, b.scoop, b.label];
+  })).toEqual([2, 3, 10, 12]);
+  // and the check of the bed against the bin reads the bed in millimetres too
+  await H.setField(page, 'bedW', '180');
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => state.bedW)).toBe(180);
+});
+
 test('one unit for both tools: inches picked on one page are inches on the other',
   async ({ page }) => {
     await platesOver(page);
