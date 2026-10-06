@@ -12,8 +12,8 @@ code you have the right to license that way.
 
 ## The one thing that will trip you up
 
-**`index.html`, `bins/index.html` and every page under `guide/` are generated. Do not
-edit them.**
+**`index.html`, `bins/index.html` and every page under `guide/` are generated, and so are
+`sw.js` and `manifest.webmanifest`. Do not edit them.**
 
 Each page is one self-contained file with no third-party requests, which is what makes
 the tools work offline and load instantly. That file is built by splicing the sources
@@ -53,7 +53,8 @@ That covers:
 | `test/drawers-file.js` | a saved drawer survives the design file round trip byte for byte, and a malformed or hostile file is refused with a reason rather than half-read |
 | `test/seo-check.js` | structured data parses and matches the visible prose; the link-preview image and icons exist at the size and path every page's tags claim |
 | `test/guide-facts.js` | the numbers the guides quote, recomputed from `core.js` and the bin spec — every row of the drawer-size and printer tables, and each worked example in the prose — and that the split guide and both tools list the same printers on the same beds as `tools/printers.js` |
-| `test/ui/` | Playwright: place, carve, merge, resize, share |
+| `test/app-check.js` | the web manifest has what a browser needs to offer an install, each icon is the size the manifest claims, and the service worker caches exactly the pages in `tools/manifest.js` and everything they load |
+| `test/ui/` | Playwright: place, carve, merge, resize, share, open offline |
 | `test/ci-sim.js` | what CI will see, spliced from git's stored bytes rather than your working tree — so a page you rebuilt but never staged fails here, as it would on CI |
 
 ## Line endings

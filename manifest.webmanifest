@@ -1,0 +1,46 @@
+{
+  "name": "Drawerforge",
+  "short_name": "Drawerforge",
+  "description": "Gridfinity baseplates and bins, built to the drawer you actually have.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#171c22",
+  "theme_color": "#171c22",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Baseplates",
+      "short_name": "Baseplates",
+      "description": "Size a baseplate to your drawer and split it for your print bed",
+      "url": "./"
+    },
+    {
+      "name": "Bins",
+      "short_name": "Bins",
+      "description": "Lay out the bins that fill your drawer",
+      "url": "bins/"
+    }
+  ]
+}
