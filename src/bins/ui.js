@@ -832,8 +832,8 @@ function readControls() {
   const int = (id, d) => { const x = parseInt($(id).value, 10); return isFinite(x) ? x : d; };
   /* Counts are rounded, not truncated: parseInt read "2.7" dividers as 2 and "1e3" as 1. */
   const count = (id, d) => fieldClamp(id, Math.round(num(id, d)));
-  /* Width and depth to the nearest half cell, as a link is read (unpackBin): buildBin
-     never sees a 1.3, which would be a bin of no size the grid has. */
+  /* Width and depth to the nearest half cell, as the engine would build them anyway
+     (halfSized in bin.js): a 1.3 would be a bin of no size the grid has. */
   const halves = (id, d) => fieldClamp(id, Math.round(num(id, d) * 2) / 2);
   const len = (id, d) => { const x = FIELDS.lengthOf($(id), unit); return isFinite(x) ? x : d; };
   /* Only the drawer's own fields are shown in inches. The wall, floor, scoop, label and

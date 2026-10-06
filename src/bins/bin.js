@@ -539,8 +539,16 @@ function maskCheck(mask, u, v) {
  * here and dropped from a link.
  */
 const isWhole = (x) => Math.abs(x - Math.round(x)) < 1e-9;
-// a size that is not a number is nobody's half: the floor and holes it decides stay whole
-const isHalfSize = (c) => [c.u, c.v].some((n) => isFinite(n) && !isWhole(n));
+/* Width and depth to the nearest half cell, never under one half, as the panel reads
+   them. Every part starts here, so a size with no place on the grid builds as the half
+   it is nearest, body and feet alike: built as asked, 1.25 was a 52 mm body on quarter
+   feet 62.5 mm across. A whole size or a half is its own nearest half, so builds as it
+   did. Neither the page nor a link hands the engine anything else. */
+const toHalf = (n) => (isFinite(n) ? Math.max(0.5, Math.round(n * 2) / 2) : n);
+const halfSized = (c) => Object.assign(c, { u: toHalf(c.u), v: toHalf(c.v) });
+/* Half-size as it would be built, so 1.2, which builds as 1, is not. A size that is not
+   a number is nobody's half: the floor and holes it decides stay whole. */
+const isHalfSize = (c) => [c.u, c.v].some((n) => isFinite(n) && !isWhole(toHalf(n)));
 const QUARTER_IN = SPEC.pitch / 4;      // 10.5: a quarter foot is a whole one less this per side
 
 /* The feet a bin stands on, as { i, j, x, y, inset }: the cell, or for a half-size bin the
@@ -549,7 +557,7 @@ const QUARTER_IN = SPEC.pitch / 4;      // 10.5: a quarter foot is a whole one l
    built them, so a whole bin comes out byte for byte as it did. Pure, so the page can
    count and weigh feet without building anything. */
 function binFeet(cfg) {
-  const c = Object.assign({}, BIN_DEFAULTS, cfg || {}), out = [];
+  const c = halfSized(Object.assign({}, BIN_DEFAULTS, cfg || {})), out = [];
   if (isHalfSize(c)) {
     const p = SPEC.pitch / 2, nx = Math.round(c.u / 0.5), ny = Math.round(c.v / 0.5);
     for (let i = 0; i < nx; i++)
@@ -1063,7 +1071,7 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
  * the split.
  */
 function dividerPart(G, cfg, axis) {
-  const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg));
+  const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const iw = hw - c.wall, id = hd - c.wall;
@@ -1133,8 +1141,8 @@ function feetFrom(n) {
 }
 
 function lidPart(G, cfg) {
-  const c = Object.assign({}, BIN_DEFAULTS, { lidT: 1.2, lidClr: 0.2, lidSkirt: 3.0,
-                                              lidSides: null }, cfg);
+  const c = halfSized(Object.assign({}, BIN_DEFAULTS, { lidT: 1.2, lidClr: 0.2, lidSkirt: 3.0,
+                                                        lidSides: null }, cfg));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const r = SPEC.half - SPEC.centre;
@@ -1193,7 +1201,7 @@ function lidPart(G, cfg) {
 }
 
 function buildBin(G, cfg) {
-  const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg || {}));
+  const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg || {})));
   // screw holes run up past the foot, and the floor grows to keep them closed
   c.floorT = builtFloorT(c);
   const n = c.arcSegs;
