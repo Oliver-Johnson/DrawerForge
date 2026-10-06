@@ -2878,19 +2878,22 @@ function saveBlobAsync(blob, name) {
    exactly n × 42 mm grids to n cells, which is what someone who owns an n-cell
    baseplate is telling us they have. Plus the margins that baseplate keeps, when the
    link carries custom ones: those come off the drawer before the cells are counted (see
-   grid), so n cells and nothing else would come back as fewer than were typed. No larger
-   than DRAWER_MAX, though: with the margins added, 47 cells wrote a drawer past the cap,
-   which readControls then cut down and Checks called an error nobody had made, and a
-   margin of 1e9 put a ten-digit drawer in the field. At the cap the grid is the most
-   cells there is room for, which is where the field's max stops the spinner. */
+   grid), so n cells and nothing else would come back as fewer than were typed.
+   The margins never carry the drawer past DRAWER_MAX, though. They did: 47 cells and
+   100 mm a side wrote a 2174 mm drawer, which readControls cut down and Checks called a
+   drawer nobody had typed, and a margin of 1e9 put a ten-digit drawer in the field. At
+   the cap the grid is the most cells there is room for, which is where the field's max
+   stops the spinner. Cells alone past the cap are still written as asked, so Checks
+   says the drawer was cut down, as it does for one typed into the drawer field. */
 for (const [id, field] of [['gridX', 'drawerW'], ['gridY', 'drawerD']])
   $(id).addEventListener('input', () => {
     const n = parseInt($(id).value, 10);
     if (!isFinite(n) || n < 1) return;      // mid-edit: an empty box is not a request
     const pm = plateMargins();
     const keep = !pm ? 0 : field === 'drawerW' ? pm.l + pm.r : pm.f + pm.b;
+    const cells = n * SPEC.pitch;
     // in whatever unit it is showing
-    FIELDS.setLength($(field), Math.min(DRAWER_MAX, n * SPEC.pitch + keep), unit);
+    FIELDS.setLength($(field), Math.min(cells + keep, Math.max(DRAWER_MAX, cells)), unit);
     schedule();
   });
 $('bedPreset').addEventListener('change', () => {

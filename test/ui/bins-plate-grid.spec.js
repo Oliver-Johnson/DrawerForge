@@ -176,8 +176,10 @@ test('a pitch a hair off 42 is standard, and any other is named as itself', asyn
 /* The cell fields write a drawer, and a drawer stops at DRAWER_MAX. With the plate's
    margins added back, 47 cells in a 2000 mm drawer with 100 mm a side wrote a 2174 mm
    drawer, which the page then cut down and reported as an error nobody had made; a
-   margin of 1e9 put 1000000210 in the width field. The written drawer stops at the cap,
-   and the spinner stops at the cells a drawer at the cap holds. */
+   margin of 1e9 put 1000000210 in the width field. The margins never carry the written
+   drawer past the cap, and the spinner stops at the cells a drawer at the cap holds.
+   Cells that by themselves ask for more than the cap are told so, with or without
+   margins, as bins-robustness.spec.js has them told without. */
 test('the cell fields stop where the drawer does, margins and all', async ({ page }) => {
   const errors = watch(page);
   const maxes = () => page.evaluate(() => [$('gridX').max, $('gridY').max]);
@@ -193,6 +195,12 @@ test('the cell fields stop where the drawer does, margins and all', async ({ pag
   await H.setField(page, 'gridX', 40);
   await page.waitForTimeout(400);
   expect(await page.evaluate(() => [state.drawerW, grid().nx])).toEqual([40 * 42 + 200, 40]);
+  // 500 cells is 21000 mm before any margin: past the cap on its own, and said so
+  await H.setField(page, 'gridX', 500);
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => [state.drawerW, $('drawerW').value, grid().nx]))
+    .toEqual([2000, '21000', 42]);
+  await expect(page.locator('#warnings')).toContainText('21000 × 380 mm drawer is bigger than the 2000 mm');
 
   // a margin no drawer has room for: one cell is all there is, and nothing runs away
   await page.goto('about:blank');
