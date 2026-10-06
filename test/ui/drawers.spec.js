@@ -721,9 +721,10 @@ test('Back, then the header link, brings the other page up as the drawer has it'
 });
 
 /* With the browser's storage full, a change reaches the drawer nowhere: the page's
-   address holds it, and the header link carries it to the other page and back. Coming
-   back, the page took its half from the drawer instead, and the change was gone. The
-   junk fills storage to the last byte, so a save that grows the drawer is refused. */
+   address holds it. Reloaded, gone Back to, or carried to the other page and back by the
+   header links, the page came up with the drawer's older half instead, and the change
+   was gone. The junk fills storage to the last byte, so a save that grows the drawer is
+   refused. */
 const fillStorage = (page) => page.evaluate(() => {
   let i = 0;
   for (let size = 1 << 20; size >= 1; size >>= 1) {
@@ -731,26 +732,64 @@ const fillStorage = (page) => page.evaluate(() => {
     for (;;) { try { localStorage.setItem('junk' + i++, s); } catch (err) { break; } }
   }
 });
+/* Kitchen saved on `tool`, storage filled, and then a change that would grow the drawer,
+   so the browser refuses it: the address is the one copy of it. */
+async function changeWithStorageFull(page, tool) {
+  const errors = await openPlates(page);
+  if (tool === 'bins') { await toBins(page); await H.dragCells(page, [0, 0], [1, 1]); }
+  await settle(page);
+  await saveAs(page, 'Kitchen');
+  await settle(page);
+  await fillStorage(page);
+  if (tool === 'bins') await H.dragCells(page, [2, 0], [3, 1]);
+  else await page.selectOption('#connector', 'puzzlekey');
+  await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+  return errors;
+}
+/* The change is on screen, and the page's first save after it landed, past any reload,
+   was refused: the change is still too big for the storage. */
+async function stillThere(page, tool, how) {
+  await expect(page.locator('#drawerName'), `${how}: the change, refused again`)
+    .toHaveText('not saving · Kitchen');
+  if (tool === 'bins') expect(await binCount(page), how).toBe(2);
+  else expect(await page.inputValue('#connector'), how).toBe('puzzlekey');
+  await expect(page.locator('#setAside'), how).toBeHidden();
+}
 for (const tool of ['bins', 'plates']) {
+  const ready = tool === 'bins' ? binsReady : platesReady;
   test(`with storage full, a change on ${tool} is still there after the trip to the other page`,
     async ({ page }) => {
-      const errors = await openPlates(page);
-      if (tool === 'bins') { await toBins(page); await H.dragCells(page, [0, 0], [1, 1]); }
-      await settle(page);
-      await saveAs(page, 'Kitchen');
-      await settle(page);
-      await fillStorage(page);
-      // longer than what is saved, so the drawer would grow
-      if (tool === 'bins') await H.dragCells(page, [2, 0], [3, 1]);
-      else await page.selectOption('#connector', 'puzzlekey');
-      await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+      const errors = await changeWithStorageFull(page, tool);
       if (tool === 'bins') { await toPlates(page); await toBins(page); }
       else { await toBins(page); await toPlates(page); }
-      // the first save after the page lands, past any reload: refused, since the change is back
-      await expect(page.locator('#drawerName'), 'the change, still too big for the storage')
-        .toHaveText('not saving · Kitchen');
-      if (tool === 'bins') expect(await binCount(page)).toBe(2);
-      else expect(await page.inputValue('#connector')).toBe('puzzlekey');
+      await stillThere(page, tool, 'there and back');
+      expect(errors).toEqual([]);
+    });
+  test(`with storage full, a change on ${tool} is still there after a reload`, async ({ page }) => {
+    const errors = await changeWithStorageFull(page, tool);
+    await page.reload();
+    await ready(page);
+    await stillThere(page, tool, 'reload');
+    expect(errors).toEqual([]);
+  });
+  test(`with storage full, a change on ${tool} is still there after going Back to it`, async ({ page }) => {
+    const errors = await changeWithStorageFull(page, tool);
+    if (tool === 'bins') await toPlates(page); else await toBins(page);
+    await page.goBack();
+    await ready(page);
+    await stillThere(page, tool, 'Back');
+    expect(errors).toEqual([]);
+  });
+  test(`with storage full, a change on ${tool} is still there when Back brings it from the cache`,
+    async ({ page }) => {
+      const errors = await changeWithStorageFull(page, tool);
+      // the back-forward cache shows the page again without loading it
+      const stayed = await page.evaluate(() => {
+        dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+        return !!(history.state && history.state.drawerforge);   // reopening clears it to reload
+      });
+      expect(stayed, 'the page stays as it is').toBe(true);
+      await stillThere(page, tool, 'Back from the cache');
       expect(errors).toEqual([]);
     });
 }
