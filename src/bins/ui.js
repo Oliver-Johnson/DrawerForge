@@ -431,6 +431,11 @@ PHONE.addEventListener('change', placeDividers);
 placeDividers();
 function closeSheet() {
   const inside = $('s-bin').contains(document.activeElement);
+  /* What was typed a moment ago is still waiting for its redraw (schedule, below), and
+     landing after the selection has gone it would go to the next bin drawn instead of
+     this one: so it lands now, while the bin is still the selected one. Escape straight
+     after typing a note was the case that lost it. */
+  clearTimeout(timer); readControls();
   clearSel(); readControls(); drawMap(); refresh();
   /* The X has gone with the sheet, and focus with it unless it is put somewhere: on the
      panel's own header, folded back into the column, which is where the sheet went. */
@@ -3504,7 +3509,16 @@ function duplicateSelected() {
    just as invisibly. */
 document.addEventListener('keydown', (e) => {
   const t = e.target;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+  /* A key typed into a field is the field's, and goes no further — except Escape in a field
+     of the phone's bin sheet. The sheet is in the way of the map the way a dialog is, and
+     its fields are where focus mostly is while it is up, so the key that puts it away has
+     to work from them. Nothing in it means anything else there:
+     a number or a checkbox does nothing with Escape, an open menu's list takes the key for
+     itself and closes, and the note's text is not touched. An IME still composing keeps it. */
+  const sheetField = e.key === 'Escape' && !e.isComposing && PHONE.matches &&
+    document.body.classList.contains('binsheet') && $('s-bin').contains(t);
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA') &&
+      !sheetField) return;
   if (document.querySelector('dialog[open]')) return;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }

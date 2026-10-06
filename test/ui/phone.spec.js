@@ -208,6 +208,39 @@ test.describe('bins', () => {
       expect((await sheet(page)).cls).toBe(false);
     });
 
+  /* And from inside it, where focus mostly is while it is up: a number, a menu, the note.
+     None of them does anything else with Escape, so it puts the sheet away from each, keeps
+     what was typed, and leaves focus on the panel's header where the sheet went. */
+  test('Escape puts the sheet away from a field inside it too', async ({ page }) => {
+    await fingerDrag(page, [1, 1], [2, 2]);
+    for (const id of ['hUnits', 'edgeF', 'note']) {
+      if (!(await sheet(page)).cls) {
+        const p = await cellNow(page, 1, 1);
+        await page.touchscreen.tap(p.x, p.y);
+        await page.waitForTimeout(350);
+      }
+      expect((await sheet(page)).cls, `fixture: the sheet is up before ${id}`).toBe(true);
+      await page.locator('#' + id).focus();
+      if (id === 'note') await page.keyboard.type('M3 screws');
+      if (id === 'edgeF') {
+        /* A menu's list, open, is the one place Escape already means something: it closes
+           the list, and only the list. The page never sees that key. */
+        await page.keyboard.press('Alt+ArrowDown');
+        await page.waitForTimeout(150);
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(150);
+        expect((await sheet(page)).cls, 'Escape in an open menu closes the menu').toBe(true);
+      }
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(150);
+      expect((await sheet(page)).cls, `Escape in #${id} puts the sheet away`).toBe(false);
+      expect(await page.evaluate(() => document.activeElement === document.querySelector('#s-bin>h2>button')),
+        'focus goes to the panel header').toBe(true);
+    }
+    expect((await H.bins(page)).length, 'nothing is deleted').toBe(1);
+    expect(await page.evaluate(() => B()[0].note), 'the note typed is kept').toBe('M3 screws');
+  });
+
   /* The sheet covers the foot of the screen, and the browser scrolls whatever Tab lands on
      only far enough to be inside the window, which is under the sheet. Measured in the
      October 2026 review: with it up, every one of the 25 stops after it (Checks, the layer
