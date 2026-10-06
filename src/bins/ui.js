@@ -1592,14 +1592,36 @@ function drawMap() {
      window. Measuring the extra row would not have saved them: there the map is within
      about 20 px of its 40 px cells. So the preview gives up the difference instead.
      And the map is sized again once paired, as the baseplates page's cut map is, should
-     anything above it wrap all the same: with more layers than the row can hold. */
+     anything above it wrap all the same: with more layers than the row can hold.
+     The row is two layers' tabs and the switch, and no more. Measured with every tab,
+     the card grew a tab's width, about 70 px, out of the preview with each layer, and
+     in a drawer of whole bins as much as in one of half: four layers left a 1366 × 768
+     preview 391 px wide where it had been 587, beside a map centred in an empty card.
+     With a third layer the switch takes a row of its own under the tabs instead, the
+     map is sized again for it, and the preview keeps what two layers left it. At
+     1366 × 768 that row takes the coverage bar 21 px under the window, the map being at
+     its 40 px cells already, as a fifth layer's wrapped tabs took it 14 px under before
+     the switch: a little scrolling with three layers or more, for a preview that no
+     longer shrinks with every one.
+     And each tab is counted as wide as the widest. The tabs share their row equally
+     (.seg), so the row's own max-content, which adds each tab's width, left the tab in
+     use, which is bold, 3 px short of its label: it wrapped to two lines, and the map
+     lost 15 px of height to it. */
   let toolsW = 0;
   if (twoCol) {
-    const tools = $('s-layout').querySelector('.maptools');
+    const tools = $('s-layout').querySelector('.maptools'), tabs = $('layerTabs');
+    const each = [...tabs.children];
     tools.style.width = 'max-content';
-    // up to the next pixel, which a rounded offsetWidth was not: 385.4 px in 385 wraps
-    toolsW = Math.ceil(tools.getBoundingClientRect().width) + 2;   // and the card's border
+    for (const b of each) b.style.flex = 'none';             // each tab its own width
+    const widest = Math.max(...each.map((b) => b.getBoundingClientRect().width));
+    const rest = tools.getBoundingClientRect().width - tabs.getBoundingClientRect().width;
+    for (const b of each) b.style.flex = '';
     tools.style.width = '';
+    // n tabs and the line between each two, the tabs' border, the switch and the
+    // padding round them; up to the next pixel, which a rounded offsetWidth was not
+    // (385.4 px in 385 wraps); and the card's border
+    const n = Math.min(2, each.length);
+    toolsW = Math.ceil(n * widest + (n - 1) + 2 + rest) + 2;
   }
   const chrome = () => svg.getBoundingClientRect().top - top.getBoundingClientRect().top + 41;
   const size = (fixed) => {

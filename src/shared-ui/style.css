@@ -416,10 +416,14 @@ footer .mono{font-family:var(--mono);font-size:11px}
 #fillmap .midline{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 4;opacity:.5;pointer-events:none}
 /* The layer tabs and the Steps switch share a row above the map; the switch drops to a
    row of its own only when the tabs need the room. Beside the preview the map's card is
-   kept wide enough for the row (drawMap), so there that is only with many layers.
-   #stepWhy, under the map, is the reason a place was refused. */
+   kept wide enough for the row with two layers (drawMap), so there that is only with
+   three or more. #stepWhy, under the map, is the reason a place was refused.
+   On a row of their own the tabs may shrink, and their labels wrap, as they did before
+   they shared it: held at the width of every label in a line, six layers ran 20 px out
+   of the map's card at 1366 × 768, and on a phone four or more ran off the card, and
+   off the screen, where the last tabs could not be reached. */
 .maptools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
-.maptools #layerTabs{flex:1 0 auto}
+.maptools #layerTabs{flex:1 1 auto}
 .steps{display:flex;align-items:center;gap:8px}
 .steps .seg button{flex:none;padding:7px 12px}
 /* #stepWhy says its reason on the front marker's line, covering the marker until the

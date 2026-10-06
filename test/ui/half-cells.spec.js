@@ -608,3 +608,43 @@ test('a reason under the map stays on the front marker\'s line, at any window si
   onItsLine(m, 'a long reason');
   inView(m, 'a long reason');
 });
+
+/* Beside the preview the map's card is kept wide enough for the Steps switch beside the
+   layer tabs (drawMap). It was measured as wide as every tab and the switch together,
+   so each layer took a tab's width, about 70 px, off the preview: four layers left it
+   391 px at 1366 x 768 rather than 587, with the map centred in an empty card, and in a
+   drawer of whole bins too, which has no use for half steps. The card is now wide
+   enough for two layers' tabs beside the switch, which is the cost of having the switch
+   there; with more, the switch takes a row of its own under the tabs and the map is
+   sized again for it. One layer's preview stands in for the old page's: there the card
+   is the map's width, as it was for any number of layers before the switch. */
+test('more layers than two do not take any more of the preview\'s width', async ({ page }) => {
+  const one = bin(0, 0, 1, 1);
+  const look = () => page.evaluate(() => {
+    const card = $('s-layout').getBoundingClientRect();
+    const inCard = [...document.querySelectorAll('#layerTabs button, .steps')]
+      .every((el) => { const r = el.getBoundingClientRect(); return r.left >= card.left && r.right <= card.right; });
+    return { preview: Math.round($('threewrap').getBoundingClientRect().width), inCard,
+             tabs: Math.round($('layerTabs').getBoundingClientRect().height) };
+  });
+  for (const [w, h] of [[1366, 768], [1920, 1080]]) {
+    await page.setViewportSize({ width: w, height: h });
+    const seen = {};
+    for (const n of [1, 2, 4, 6]) {
+      await openAt(page, 'bl=' + Array(n).fill(one).join('~'));
+      seen[n] = await look();
+      expect(seen[n].inCard, `${w} x ${h}, ${n} layers: every tab and the switch inside the card`).toBe(true);
+    }
+    expect(seen[2].preview, `${w} x ${h}: two layers cost the switch's room and no more`)
+      .toBeGreaterThanOrEqual(seen[1].preview - 100);
+    for (const n of [4, 6])
+      expect(seen[n].preview, `${w} x ${h}, ${n} layers: no narrower than with two`)
+        .toBeGreaterThanOrEqual(seen[2].preview - 2);
+    // and the room is enough: two layers' tabs, the one in use in bold, each on one line
+    expect(seen[2].tabs, `${w} x ${h}: two layers' tabs each on one line`).toBe(seen[1].tabs);
+  }
+  // on a phone the tabs have a row of their own, and many of them still fit the card
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openAt(page, 'bl=' + Array(6).fill(one).join('~'));
+  expect((await look()).inCard, 'six layers\' tabs on a phone').toBe(true);
+});
