@@ -1531,11 +1531,12 @@ function initMap() {
        is the one cell you cannot. */
     if (handle && !e.altKey && !carving && selected >= 0 && B()[selected]) {
       const b = B()[selected], st = stepOf();
-      pushUndo();
       /* The anchor is the step at the far corner, which stays put. In half steps the
          grips resize in halves; in whole ones a half-size bin keeps its far edge where
-         it is, and the near one follows the pointer in whole cells. */
-      drag = { mode: 'resize', idx: selected, st,
+         it is, and the near one follows the pointer in whole cells. The undo step is
+         filed at the first change (banked), not here: a grip pressed and let go is no
+         edit. */
+      drag = { mode: 'resize', idx: selected, st, snap: snapshot(), moved: false,
                ax: handle[0] === 'l' ? b.x + b.u - st : b.x,
                ay: handle[1] === 'f' ? b.y + b.v - st : b.y,
                x1: c.x, y1: c.y };
@@ -1577,11 +1578,11 @@ function initMap() {
         return;
       }
       const b = B()[hit];                                // grab to move; a still
-      selExtra.clear();                                  // release is just a select
-      selected = hit;
-      writeControls(b);
-      pushUndo();
-      drag = { mode: 'move', idx: hit, dx: c.x - b.x, dy: c.y - b.y, moved: false };
+      selExtra.clear();                                  // release is just a select,
+      selected = hit;                                    // so the undo step waits for
+      writeControls(b);                                  // the first move (banked)
+      drag = { mode: 'move', idx: hit, dx: c.x - b.x, dy: c.y - b.y, moved: false,
+               snap: snapshot() };
       if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
       readControls(); drawMap(); refresh();
       return;
@@ -1600,6 +1601,11 @@ function initMap() {
     /* A refusal the map cannot show is said (mapSay); any other outcome clears it, so
        it describes where the pointer is now rather than somewhere it passed. */
     const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why : '');
+    /* A move or a resize files its undo step with the layout as the press found it, at
+       its first real change. Filed at the press, a click that only selected a bin was a
+       step of its own: the next Undo spent itself on a layout that had not changed, and
+       the click threw away Redo. */
+    const banked = () => { if (!drag.moved) pushOn(uStack(), rStack(), drag.snap); };
     if (drag.mode === 'create') {
       if (c.x === drag.x1 && c.y === drag.y1) return;
       drag.x1 = c.x; drag.y1 = c.y;
@@ -1617,6 +1623,7 @@ function initMap() {
       const why = placeWhy(nx, ny, b.u, b.v, drag.idx);
       say(why);
       if (why) return;                                   // refuse, don't snap away
+      banked();
       b.x = nx; b.y = ny; drag.moved = true;
       drawMap();
       return;
@@ -1628,6 +1635,7 @@ function initMap() {
     const why = placeWhy(nx, ny, nu, nv, drag.idx);
     say(why);
     if (why) return;
+    banked();
     b.x = nx; b.y = ny; setFootprint(b, nu, nv);
     drag.moved = true;
     writeControls(b); drawMap();
