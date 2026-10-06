@@ -310,6 +310,10 @@ section.p>h2 .caret{margin-left:auto;transition:transform .15s;color:var(--dim)}
 section.p.closed .caret{transform:rotate(-90deg)}
 section.p .body{padding:2px 13px 13px;display:grid;gap:9px}
 section.p.closed .body{display:none}
+/* Baseplates on a phone: panels 02 to 05 folded from the first frame, before ui.js has
+   run to fold them for real (it explains, and takes html.fold away once it has). */
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag)>.body{display:none}
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag) .caret{transform:rotate(-90deg)}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 /* Type sizes.
@@ -744,6 +748,67 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input{min-height:20px}
 }
 
+/* ---- the phone's section bar ----------------------------------------------
+   Stacked, the page is one long column, and the bar keeps Settings, Map, Preview and
+   Export a tap away at the top of the screen (chrome.js does the jumping). Not shown
+   side by side, where everything it jumps to is already in view.
+   It is fixed, not sticky, and only comes down once the header has scrolled away
+   (chrome.js watches the header and sets .on). A sticky bar sits in the flow, and its
+   44 px came straight off the first screen: on a first visit the bins page then showed
+   about 94 px of the drawer map, under the 120 the first-screen test asks for. While the
+   header is in view there is nothing to jump past anyway. It is moved off the top rather
+   than hidden, so it stays in the Tab order, and focus inside it brings it down.
+   The scroll padding is the bar's height, so nothing the page scrolls to — a jump, a
+   skip link, a field Tab lands on — ends up underneath it. */
+.jumpbar{display:none}
+@media(max-width:980px){
+  .jumpbar{display:flex;gap:6px;position:fixed;top:0;left:0;right:0;z-index:40;
+    padding:6px 10px;background:var(--bg);border-bottom:1px solid var(--line);
+    transform:translateY(-100%);transition:transform .15s}
+  .jumpbar.on,.jumpbar:focus-within{transform:none}
+  .jumpbar button{flex:1 1 0;min-width:0;background:var(--panel2);color:var(--ink);
+    border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px;cursor:pointer}
+  .jumpbar button:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+  html{scroll-padding-top:60px}
+  /* in single-bin mode there is no drawer map, and a carve grid only while carving */
+  body.binfocus:not(.focuscarve) #jumpMap{display:none}
+}
+
+/* ---- the bin sheet (bins page, phone) ---------------------------------------
+   Selecting a bin opens panel 03, and stacked, panel 03 is about 1,500 px of settings
+   ABOVE the map: every edit was a scroll up to change it and a scroll down to see what it
+   did. So on a phone, with a bin selected, the panel leaves the column and becomes a
+   sheet over the foot of the screen, with the map above it still in reach — drag, tap,
+   resize, carve — and the sheet's own contents scrolling inside it. Its header still
+   folds it down to a bar; the X lets go of the selection, which is what puts it away.
+   bins/ui.js sets body.binsheet whenever a bin is selected outside single-bin mode,
+   at every width; only these rules make anything of it, so the desktop is unchanged.
+   The page gets the sheet's height as padding at its foot, or the last of it (the
+   footer, the download) could never be scrolled clear. */
+#binSheetClose{display:none}
+@media(max-width:980px){
+  body.binsheet{padding-bottom:min(50dvh,520px)}
+  body.binsheet:has(#s-bin.closed){padding-bottom:64px}
+  body.binsheet #s-bin{position:fixed;left:0;right:0;bottom:0;z-index:66;margin:0;
+    display:flex;flex-direction:column;max-height:min(50dvh,520px);
+    border-radius:14px 14px 0 0;border-bottom:0;box-shadow:0 -12px 32px rgba(0,0,0,.55);
+    animation:sheetup .16s ease-out}
+  /* the handle: says "this came up from below" without being a control of its own */
+  body.binsheet #s-bin::before{content:"";position:absolute;top:5px;left:50%;width:36px;
+    height:4px;margin-left:-18px;border-radius:2px;background:var(--line);pointer-events:none}
+  body.binsheet #s-bin>h2{flex:none}
+  body.binsheet #s-bin>h2>button{padding-right:56px}
+  body.binsheet #s-bin>.body{overflow-y:auto;overscroll-behavior:contain;min-height:0;
+    padding-bottom:max(13px,env(safe-area-inset-bottom))}
+  body.binsheet #binSheetClose{display:flex;align-items:center;justify-content:center;
+    position:absolute;top:2px;right:6px;min-width:44px;min-height:44px;
+    background:none;border:1px solid transparent;border-radius:6px;color:var(--dim);
+    font-size:22px;line-height:1;cursor:pointer}
+  body.binsheet #binSheetClose:hover{color:var(--ink);border-color:var(--line)}
+  body.binsheet #binSheetClose:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+}
+@keyframes sheetup{from{transform:translateY(100%)}}
+
 /* ---- reduced motion -------------------------------------------------------
    Every transition on the site, in one place, at the end of the file. It has to be
    the end: a media query adds no specificity, so a block sitting above the rules it
@@ -759,8 +824,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input,
   .tog input::after,
   .skip,
-  .kofi{transition:none}
+  .kofi,
+  .jumpbar{transition:none}
   .kofi:hover{transform:none}
+  body.binsheet #s-bin{animation:none}
 }
 
 /* ---- single-bin focus (bins page) ---------------------------------------
@@ -878,6 +945,20 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
      it opens, because half its entries depend on the bin under the cursor — which layer
      it can move to, and whether it is already marked printed. -->
 <div id="ctxmenu" class="ctxmenu" role="menu" hidden></div>
+<!-- On a phone the page is one long column: the panels, then the map, the preview, the
+     tables and the download, and getting from the settings to the map and back was a long
+     scroll each way. This bar comes down at the top of the screen there once the header
+     has scrolled away, and jumps to each part.
+     It scrolls and moves focus (chrome.js), and it is buttons rather than #links because
+     the address's fragment holds the layout and changing it reloads the tool. Wide enough
+     for the side-by-side layout there is nothing to jump between, and it is not shown.
+     data-jump lists where each goes; the first of them on screen wins. -->
+<nav class="jumpbar" id="jumpbar" aria-label="Jump to a part of the page">
+  <button type="button" data-jump="s-drawer s-bin">Settings</button>
+  <button type="button" id="jumpMap" data-jump="s-layout s-focuscarve">Map</button>
+  <button type="button" data-jump="c-preview">Preview</button>
+  <button type="button" data-jump="c-export">Export</button>
+</nav>
 <main class="app">
 <!-- Shown only while one bin is being edited on its own. It carries the way back,
      and it has to: focus hides the map, the layer tabs and panel 01, so every other
@@ -1001,6 +1082,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
      something real. -->
 <section class="p closed" id="s-bin">
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-bin"><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></button></h2>
+  <!-- On a phone, with a bin selected, this panel is a sheet over the foot of the screen
+       rather than 1,500 px of settings above the map (style.css, "the bin sheet"). This is
+       its way out: it lets go of the selection, which is what puts the sheet away. Shown
+       only as the sheet; beside a desktop map the panel is part of the rail, and an X on it
+       would read as closing the panel. A sibling of the h2 rather than inside it, because
+       every button in a panel header toggles its panel. -->
+  <button type="button" class="sheetx" id="binSheetClose" title="Close — lets go of the selected bin" aria-label="Close the bin settings">×</button>
   <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
       <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" max="50" value="1"></label>
@@ -1018,7 +1106,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       <label class="f"><b>Dividers across</b><input id="divX" type="number" step="1" min="0" value="0"></label>
       <label class="f"><b>Dividers along</b><input id="divY" type="number" step="1" min="0" value="0"></label>
     </div>
-    <div class="hint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments.</div>
+    <div class="hint" id="divHint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments.</div>
     <!-- Only shown with a bin selected: it describes that bin, not the next one you
          draw. Half a drawer is often already printed, and a plate arranged around
          parts already sitting in the drawer wastes the plate. -->
@@ -1180,7 +1268,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   </div>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-preview">
   <!-- The toggle lives here, not in panel 01. It changes what this box shows, and up
        there it was three scrolls away behind the first panel you ever fill in — easy
        to forget you had it, and easy not to know it existed. A control belongs beside
@@ -1214,7 +1302,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   </div>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-export">
   <h3>Export <span class="tail" id="exportTail"></span></h3>
   <div class="exportbar">
     <div class="exportrow">
@@ -6661,6 +6749,77 @@ function setPanel(id, open) {
 let hadSelection = false;
 let hadErrors = false;
 
+/* ---------- the bin sheet (phone) -----------------------------------------
+   On a phone the selected bin's settings are a sheet over the foot of the screen with
+   the map above it, instead of panel 03 opening 1,500 px of settings above the map (the
+   rules, and the reason, are in style.css). This keeps the class that makes it a sheet
+   in step with the selection, and does the three things the stylesheet cannot. */
+const PHONE = matchMedia('(max-width: 980px)');
+let sheetWas = false, sheetReveal = false;
+function applySheet() {
+  const on = !focused && selAll().length > 0;
+  document.body.classList.toggle('binsheet', on);
+  if (PHONE.matches && on !== sheetWas) {
+    /* Opening, the sheet comes up over the bottom half of the screen, which is where the
+       bin you just tapped may well be. Not while a finger is still dragging it: the page
+       moving under a drag would move the bin. The release redraws, and comes back here. */
+    if (on) sheetReveal = true;
+    /* Put away, the panel goes back into the column above the map, and open it would be
+       the 1,500 px the sheet exists to keep out of the way — so it goes back folded, as
+       the page first showed it. Not on the way into single-bin mode, which is about
+       nothing but this panel. */
+    else if (!focused) setPanel('s-bin', false);
+  }
+  sheetWas = on;
+  /* Two frames on, not one. The panel leaving the column (it was in it in single-bin
+     mode, all 1,500 px of it, above the map) moves everything under it, and the browser's
+     scroll anchoring corrects for that in the frame's own update, after a callback in the
+     first frame has already measured the page as it was. */
+  if (sheetReveal && !drag) {
+    sheetReveal = false;
+    requestAnimationFrame(() => requestAnimationFrame(revealSelected));
+  }
+}
+/* Scroll the selected bin clear of the sheet, without pushing the top of it under the
+   section bar. The bin's box comes from the map's own transform (see cellFromEvent). */
+function revealSelected() {
+  const b = selected >= 0 ? B()[selected] : null;
+  if (!b || !document.body.classList.contains('binsheet')) return;
+  const svg = $('fillmap'), m = svg.getScreenCTM && svg.getScreenCTM();
+  if (!m || !svg.getClientRects().length) return;
+  const g = grid(), p = svg.createSVGPoint();
+  p.x = 0; p.y = (g.ny - b.y - b.v) * S; const top = p.matrixTransform(m).y;
+  p.y = (g.ny - b.y) * S; const bottom = p.matrixTransform(m).y;
+  /* Where the sheet's top will be, not where it is: it is still sliding up at this point,
+     and a transform moves the box getBoundingClientRect reports. It sits on the bottom of
+     the window, so its height is enough. */
+  const sheetTop = innerHeight - $('s-bin').offsetHeight - 12;
+  /* the bar's height, not where it is now: it comes down once the header has scrolled away,
+     which the scroll below may well be what does */
+  const bar = $('jumpbar').offsetHeight + 8;
+  if (bottom > sheetTop) scrollBy(0, Math.min(bottom - sheetTop, top - bar));
+  // or scrolled past it — leaving single-bin mode brings the map back above the fold
+  else if (top < bar) scrollBy(0, top - bar);
+}
+/* Size, height and dividers are what a bin gets changed for, and a sheet has room for a
+   few rows before it scrolls, so on a phone the dividers come up under the height. Moved
+   in the document rather than reordered with CSS, so that Tab goes the way the eye does;
+   and moved back on a wider window, where the panel is the rail's and does not change. */
+function placeDividers() {
+  const after = PHONE.matches ? $('binSizeHint') : $('thickRow');
+  if (after.nextElementSibling !== $('divRow')) after.after($('divRow'), $('divHint'));
+}
+PHONE.addEventListener('change', placeDividers);
+placeDividers();
+function closeSheet() {
+  const inside = $('s-bin').contains(document.activeElement);
+  clearSel(); readControls(); drawMap(); refresh();
+  /* The X has gone with the sheet, and focus with it unless it is put somewhere: on the
+     panel's own header, folded back into the column, which is where the sheet went. */
+  if (inside) $('s-bin').querySelector(':scope>h2>button').focus({ preventScroll: true });
+}
+$('binSheetClose').addEventListener('click', closeSheet);
+
 /* ---------- single-bin focus ----------------------------------------------
    The one place that says what focus mode looks like. It sets a class and lets the
    stylesheet do the hiding, for the reason written above that CSS block: this
@@ -7058,6 +7217,8 @@ function readControls() {
      decides what focus hides is applied after every other visibility decision above,
      rather than being quietly undone by one of them. */
   applyFocus();
+  // and whether this is a sheet on a phone follows from the selection and the mode
+  applySheet();
 }
 function writeControls(src) {
   $('u').value = src.u; $('v').value = src.v; $('hUnits').value = src.hUnits;
@@ -9733,6 +9894,14 @@ document.addEventListener('keydown', (e) => {
   /* Carving first, focus second — so Escape backs out one layer at a time rather than
      dropping you all the way to the drawer from inside the carve grid. */
   if (e.key === 'Escape' && focused) { e.preventDefault(); leaveFocus(); return; }
+  /* And the phone's bin sheet, which is in the way of the map the way a dialog is. Not
+     when the Escape was for something else: the right-click menu marks its own, and the
+     expanded preview is closed by chrome.js on the same key. */
+  if (e.key === 'Escape' && !e.defaultPrevented && PHONE.matches &&
+      document.body.classList.contains('binsheet') &&
+      !document.body.classList.contains('previewlock')) {
+    e.preventDefault(); closeSheet(); return;
+  }
   if (selected < 0) return;
   const b = B()[selected];
   if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -10108,6 +10277,46 @@ addEventListener('resize', closeMenu);
       e.preventDefault();
       t.focus();
     });
+
+  /* The phone's section bar (its markup says why it is there). It does what the skip link
+     does — scroll, and move focus so the next Tab carries on from where you landed — and
+     for the same reason never touches location.hash. Each button lists the places it can
+     go and takes the first one on screen: in the bins page's single-bin mode panel 01 and
+     the drawer map are hidden, and Settings is then the bin's own panel. A panel takes
+     focus on its header button, which is a real control. A card is given tabindex="-1"
+     only while it holds focus: carried in the markup, every click inside the card would
+     focus the card and draw a ring round it. The bar does not cover what it jumps to,
+     because the page's scroll-padding-top on a phone (style.css) is its height. */
+  var jumpbar = document.getElementById('jumpbar');
+  if (jumpbar) jumpbar.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-jump]');
+    if (!b) return;
+    var t = b.getAttribute('data-jump').split(' ')
+      .map(function (id) { return document.getElementById(id); })
+      .filter(function (el) { return el && el.getClientRects().length; })[0];
+    if (!t) return;
+    t.scrollIntoView({ block: 'start' });
+    var f = t.querySelector(':scope>h2>button');
+    if (!f) {
+      f = t;
+      if (!t.hasAttribute('tabindex')) {
+        t.setAttribute('tabindex', '-1');
+        t.addEventListener('blur', function () { t.removeAttribute('tabindex'); }, { once: true });
+      }
+    }
+    f.focus({ preventScroll: true });
+  });
+
+  /* The bar comes down once the header has gone off the top, and goes back up when it
+     returns (style.css says why it waits). An observer rather than a scroll listener:
+     it costs nothing while the page scrolls, and it also catches the header leaving by
+     any other route, a jump or a focused field pulling the page down. Without one (an old
+     browser) the bar simply never comes down, and the page is as it was before the bar. */
+  var head = document.querySelector('header');
+  if (jumpbar && head && window.IntersectionObserver)
+    new IntersectionObserver(function (es) {
+      jumpbar.classList.toggle('on', !es[es.length - 1].isIntersecting);
+    }).observe(head);
 
   /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
      read before you reached its controls, and on a phone it pushed the working surface

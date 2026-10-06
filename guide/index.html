@@ -291,6 +291,10 @@ section.p>h2 .caret{margin-left:auto;transition:transform .15s;color:var(--dim)}
 section.p.closed .caret{transform:rotate(-90deg)}
 section.p .body{padding:2px 13px 13px;display:grid;gap:9px}
 section.p.closed .body{display:none}
+/* Baseplates on a phone: panels 02 to 05 folded from the first frame, before ui.js has
+   run to fold them for real (it explains, and takes html.fold away once it has). */
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag)>.body{display:none}
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag) .caret{transform:rotate(-90deg)}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 /* Type sizes.
@@ -725,6 +729,67 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input{min-height:20px}
 }
 
+/* ---- the phone's section bar ----------------------------------------------
+   Stacked, the page is one long column, and the bar keeps Settings, Map, Preview and
+   Export a tap away at the top of the screen (chrome.js does the jumping). Not shown
+   side by side, where everything it jumps to is already in view.
+   It is fixed, not sticky, and only comes down once the header has scrolled away
+   (chrome.js watches the header and sets .on). A sticky bar sits in the flow, and its
+   44 px came straight off the first screen: on a first visit the bins page then showed
+   about 94 px of the drawer map, under the 120 the first-screen test asks for. While the
+   header is in view there is nothing to jump past anyway. It is moved off the top rather
+   than hidden, so it stays in the Tab order, and focus inside it brings it down.
+   The scroll padding is the bar's height, so nothing the page scrolls to — a jump, a
+   skip link, a field Tab lands on — ends up underneath it. */
+.jumpbar{display:none}
+@media(max-width:980px){
+  .jumpbar{display:flex;gap:6px;position:fixed;top:0;left:0;right:0;z-index:40;
+    padding:6px 10px;background:var(--bg);border-bottom:1px solid var(--line);
+    transform:translateY(-100%);transition:transform .15s}
+  .jumpbar.on,.jumpbar:focus-within{transform:none}
+  .jumpbar button{flex:1 1 0;min-width:0;background:var(--panel2);color:var(--ink);
+    border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px;cursor:pointer}
+  .jumpbar button:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+  html{scroll-padding-top:60px}
+  /* in single-bin mode there is no drawer map, and a carve grid only while carving */
+  body.binfocus:not(.focuscarve) #jumpMap{display:none}
+}
+
+/* ---- the bin sheet (bins page, phone) ---------------------------------------
+   Selecting a bin opens panel 03, and stacked, panel 03 is about 1,500 px of settings
+   ABOVE the map: every edit was a scroll up to change it and a scroll down to see what it
+   did. So on a phone, with a bin selected, the panel leaves the column and becomes a
+   sheet over the foot of the screen, with the map above it still in reach — drag, tap,
+   resize, carve — and the sheet's own contents scrolling inside it. Its header still
+   folds it down to a bar; the X lets go of the selection, which is what puts it away.
+   bins/ui.js sets body.binsheet whenever a bin is selected outside single-bin mode,
+   at every width; only these rules make anything of it, so the desktop is unchanged.
+   The page gets the sheet's height as padding at its foot, or the last of it (the
+   footer, the download) could never be scrolled clear. */
+#binSheetClose{display:none}
+@media(max-width:980px){
+  body.binsheet{padding-bottom:min(50dvh,520px)}
+  body.binsheet:has(#s-bin.closed){padding-bottom:64px}
+  body.binsheet #s-bin{position:fixed;left:0;right:0;bottom:0;z-index:66;margin:0;
+    display:flex;flex-direction:column;max-height:min(50dvh,520px);
+    border-radius:14px 14px 0 0;border-bottom:0;box-shadow:0 -12px 32px rgba(0,0,0,.55);
+    animation:sheetup .16s ease-out}
+  /* the handle: says "this came up from below" without being a control of its own */
+  body.binsheet #s-bin::before{content:"";position:absolute;top:5px;left:50%;width:36px;
+    height:4px;margin-left:-18px;border-radius:2px;background:var(--line);pointer-events:none}
+  body.binsheet #s-bin>h2{flex:none}
+  body.binsheet #s-bin>h2>button{padding-right:56px}
+  body.binsheet #s-bin>.body{overflow-y:auto;overscroll-behavior:contain;min-height:0;
+    padding-bottom:max(13px,env(safe-area-inset-bottom))}
+  body.binsheet #binSheetClose{display:flex;align-items:center;justify-content:center;
+    position:absolute;top:2px;right:6px;min-width:44px;min-height:44px;
+    background:none;border:1px solid transparent;border-radius:6px;color:var(--dim);
+    font-size:22px;line-height:1;cursor:pointer}
+  body.binsheet #binSheetClose:hover{color:var(--ink);border-color:var(--line)}
+  body.binsheet #binSheetClose:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+}
+@keyframes sheetup{from{transform:translateY(100%)}}
+
 /* ---- reduced motion -------------------------------------------------------
    Every transition on the site, in one place, at the end of the file. It has to be
    the end: a media query adds no specificity, so a block sitting above the rules it
@@ -740,8 +805,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input,
   .tog input::after,
   .skip,
-  .kofi{transition:none}
+  .kofi,
+  .jumpbar{transition:none}
   .kofi:hover{transform:none}
+  body.binsheet #s-bin{animation:none}
 }
 
 /* ---- single-bin focus (bins page) ---------------------------------------
@@ -1086,6 +1153,46 @@ can come back to it later.</p>
       e.preventDefault();
       t.focus();
     });
+
+  /* The phone's section bar (its markup says why it is there). It does what the skip link
+     does — scroll, and move focus so the next Tab carries on from where you landed — and
+     for the same reason never touches location.hash. Each button lists the places it can
+     go and takes the first one on screen: in the bins page's single-bin mode panel 01 and
+     the drawer map are hidden, and Settings is then the bin's own panel. A panel takes
+     focus on its header button, which is a real control. A card is given tabindex="-1"
+     only while it holds focus: carried in the markup, every click inside the card would
+     focus the card and draw a ring round it. The bar does not cover what it jumps to,
+     because the page's scroll-padding-top on a phone (style.css) is its height. */
+  var jumpbar = document.getElementById('jumpbar');
+  if (jumpbar) jumpbar.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-jump]');
+    if (!b) return;
+    var t = b.getAttribute('data-jump').split(' ')
+      .map(function (id) { return document.getElementById(id); })
+      .filter(function (el) { return el && el.getClientRects().length; })[0];
+    if (!t) return;
+    t.scrollIntoView({ block: 'start' });
+    var f = t.querySelector(':scope>h2>button');
+    if (!f) {
+      f = t;
+      if (!t.hasAttribute('tabindex')) {
+        t.setAttribute('tabindex', '-1');
+        t.addEventListener('blur', function () { t.removeAttribute('tabindex'); }, { once: true });
+      }
+    }
+    f.focus({ preventScroll: true });
+  });
+
+  /* The bar comes down once the header has gone off the top, and goes back up when it
+     returns (style.css says why it waits). An observer rather than a scroll listener:
+     it costs nothing while the page scrolls, and it also catches the header leaving by
+     any other route, a jump or a focused field pulling the page down. Without one (an old
+     browser) the bar simply never comes down, and the page is as it was before the bar. */
+  var head = document.querySelector('header');
+  if (jumpbar && head && window.IntersectionObserver)
+    new IntersectionObserver(function (es) {
+      jumpbar.classList.toggle('on', !es[es.length - 1].isIntersecting);
+    }).observe(head);
 
   /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
      read before you reached its controls, and on a phone it pushed the working surface

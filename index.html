@@ -46,12 +46,16 @@
      saves its layout within moments of opening. In the head, so the class is on <html> before
      the header is laid out and the page never paints the long header and then jumps.
      localStorage throws outright when storage is blocked; that counts as a first visit,
-     which shows more rather than less. The bins page carries the same lines. -->
+     which shows more rather than less. The bins page carries the same lines.
+     `fold` is this page's alone: on a phone, panels 02 to 05 arrive folded (ui.js says why),
+     and deciding it here is what stops the first frame drawing them open. -->
 <script>
 try {
   if (['plates', 'bins', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
     document.documentElement.classList.add('returning');
 } catch (e) { /* storage blocked: the full header */ }
+if (window.matchMedia && matchMedia('(max-width: 980px)').matches)
+  document.documentElement.classList.add('fold');
 </script>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later
@@ -314,6 +318,10 @@ section.p>h2 .caret{margin-left:auto;transition:transform .15s;color:var(--dim)}
 section.p.closed .caret{transform:rotate(-90deg)}
 section.p .body{padding:2px 13px 13px;display:grid;gap:9px}
 section.p.closed .body{display:none}
+/* Baseplates on a phone: panels 02 to 05 folded from the first frame, before ui.js has
+   run to fold them for real (it explains, and takes html.fold away once it has). */
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag)>.body{display:none}
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag) .caret{transform:rotate(-90deg)}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 /* Type sizes.
@@ -748,6 +756,67 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input{min-height:20px}
 }
 
+/* ---- the phone's section bar ----------------------------------------------
+   Stacked, the page is one long column, and the bar keeps Settings, Map, Preview and
+   Export a tap away at the top of the screen (chrome.js does the jumping). Not shown
+   side by side, where everything it jumps to is already in view.
+   It is fixed, not sticky, and only comes down once the header has scrolled away
+   (chrome.js watches the header and sets .on). A sticky bar sits in the flow, and its
+   44 px came straight off the first screen: on a first visit the bins page then showed
+   about 94 px of the drawer map, under the 120 the first-screen test asks for. While the
+   header is in view there is nothing to jump past anyway. It is moved off the top rather
+   than hidden, so it stays in the Tab order, and focus inside it brings it down.
+   The scroll padding is the bar's height, so nothing the page scrolls to — a jump, a
+   skip link, a field Tab lands on — ends up underneath it. */
+.jumpbar{display:none}
+@media(max-width:980px){
+  .jumpbar{display:flex;gap:6px;position:fixed;top:0;left:0;right:0;z-index:40;
+    padding:6px 10px;background:var(--bg);border-bottom:1px solid var(--line);
+    transform:translateY(-100%);transition:transform .15s}
+  .jumpbar.on,.jumpbar:focus-within{transform:none}
+  .jumpbar button{flex:1 1 0;min-width:0;background:var(--panel2);color:var(--ink);
+    border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px;cursor:pointer}
+  .jumpbar button:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+  html{scroll-padding-top:60px}
+  /* in single-bin mode there is no drawer map, and a carve grid only while carving */
+  body.binfocus:not(.focuscarve) #jumpMap{display:none}
+}
+
+/* ---- the bin sheet (bins page, phone) ---------------------------------------
+   Selecting a bin opens panel 03, and stacked, panel 03 is about 1,500 px of settings
+   ABOVE the map: every edit was a scroll up to change it and a scroll down to see what it
+   did. So on a phone, with a bin selected, the panel leaves the column and becomes a
+   sheet over the foot of the screen, with the map above it still in reach — drag, tap,
+   resize, carve — and the sheet's own contents scrolling inside it. Its header still
+   folds it down to a bar; the X lets go of the selection, which is what puts it away.
+   bins/ui.js sets body.binsheet whenever a bin is selected outside single-bin mode,
+   at every width; only these rules make anything of it, so the desktop is unchanged.
+   The page gets the sheet's height as padding at its foot, or the last of it (the
+   footer, the download) could never be scrolled clear. */
+#binSheetClose{display:none}
+@media(max-width:980px){
+  body.binsheet{padding-bottom:min(50dvh,520px)}
+  body.binsheet:has(#s-bin.closed){padding-bottom:64px}
+  body.binsheet #s-bin{position:fixed;left:0;right:0;bottom:0;z-index:66;margin:0;
+    display:flex;flex-direction:column;max-height:min(50dvh,520px);
+    border-radius:14px 14px 0 0;border-bottom:0;box-shadow:0 -12px 32px rgba(0,0,0,.55);
+    animation:sheetup .16s ease-out}
+  /* the handle: says "this came up from below" without being a control of its own */
+  body.binsheet #s-bin::before{content:"";position:absolute;top:5px;left:50%;width:36px;
+    height:4px;margin-left:-18px;border-radius:2px;background:var(--line);pointer-events:none}
+  body.binsheet #s-bin>h2{flex:none}
+  body.binsheet #s-bin>h2>button{padding-right:56px}
+  body.binsheet #s-bin>.body{overflow-y:auto;overscroll-behavior:contain;min-height:0;
+    padding-bottom:max(13px,env(safe-area-inset-bottom))}
+  body.binsheet #binSheetClose{display:flex;align-items:center;justify-content:center;
+    position:absolute;top:2px;right:6px;min-width:44px;min-height:44px;
+    background:none;border:1px solid transparent;border-radius:6px;color:var(--dim);
+    font-size:22px;line-height:1;cursor:pointer}
+  body.binsheet #binSheetClose:hover{color:var(--ink);border-color:var(--line)}
+  body.binsheet #binSheetClose:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+}
+@keyframes sheetup{from{transform:translateY(100%)}}
+
 /* ---- reduced motion -------------------------------------------------------
    Every transition on the site, in one place, at the end of the file. It has to be
    the end: a media query adds no specificity, so a block sitting above the rules it
@@ -763,8 +832,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input,
   .tog input::after,
   .skip,
-  .kofi{transition:none}
+  .kofi,
+  .jumpbar{transition:none}
   .kofi:hover{transform:none}
+  body.binsheet #s-bin{animation:none}
 }
 
 /* ---- single-bin focus (bins page) ---------------------------------------
@@ -870,6 +941,20 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <button type="button" id="putBack" style="display:none">Put my layout back</button>
   <button type="button" id="tryAnyway" style="display:none">Try it anyway</button>
 </div>
+<!-- On a phone the page is one long column: the panels, then the map, the preview, the
+     tables and the download, and getting from the settings to the map and back was a long
+     scroll each way. This bar comes down at the top of the screen there once the header
+     has scrolled away, and jumps to each part.
+     It scrolls and moves focus (chrome.js), and it is buttons rather than #links because
+     the address's fragment holds the layout and changing it reloads the tool. Wide enough
+     for the side-by-side layout there is nothing to jump between, and it is not shown.
+     data-jump lists where each goes; the first of them on screen wins. -->
+<nav class="jumpbar" id="jumpbar" aria-label="Jump to a part of the page">
+  <button type="button" data-jump="s-drawer">Settings</button>
+  <button type="button" id="jumpMap" data-jump="c-map">Map</button>
+  <button type="button" data-jump="c-preview">Preview</button>
+  <button type="button" data-jump="c-export">Export</button>
+</nav>
 <main class="app">
 <div class="rail">
 
@@ -1082,7 +1167,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
      drawMap decides, through the same DF.stageRow as the bins map. -->
 <div class="stagetop">
 
-<div class="stagecard">
+<div class="stagecard" id="c-map">
   <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
   <div id="mapwrap"><svg id="cutmap" role="img" aria-label="Cut map, loading"></svg></div>
   <!-- Under the map because the map is where the stray click happens: one click on a grid
@@ -1095,7 +1180,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <div id="warnings"></div>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-preview">
   <h3>Preview <span class="tail"><label class="tog"><input type="checkbox" id="explode"> exploded</label></span></h3>
   <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the baseplate, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · middle-drag or shift-drag pan · wheel zoom</div><div id="noGl" class="hint" role="status" style="display:none;position:absolute;inset:0;place-items:center;padding:24px;text-align:center">3D preview unavailable — this browser could not start WebGL. Everything else still works: the pieces, the print plan and every download.</div></div>
 </div>
@@ -1122,7 +1207,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   </tr></thead><tbody id="pieceRows"></tbody></table>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-export">
   <h3>Export <span class="tail" id="exportTail"></span></h3>
   <div class="exportbar">
     <div class="exportrow">
@@ -7220,6 +7305,23 @@ for (const btn of document.querySelectorAll('section.p>h2>button')) {
     btn.setAttribute('aria-expanded', String(!sec.classList.toggle('closed')));
   });
 }
+/* On a phone the rail is not a column beside the map but the top of one long page, and
+   with panels 01 to 05 open the cut map started 2.4 screens below the drawer size. So
+   there only panel 01, the drawer, opens on arrival; the rest arrive folded, a tap each,
+   and the section bar jumps past them. Decided once, as the page opens: a window that
+   changes width later keeps its panels as they are.
+   The decision is made in the <head>, as html.fold, because by the time this script runs
+   the browser has already drawn the rail: done only here, the four panels showed open
+   for the first frames and then snapped shut. style.css folds them by look from the first
+   frame; this makes it real — the class each panel's button reads, and aria-expanded —
+   and then takes the stand-in away. */
+if (document.documentElement.classList.contains('fold')) {
+  for (const id of ['s-printer', 's-split', 's-conn', 's-mag']) {
+    $(id).classList.add('closed');
+    $(id).querySelector(':scope>h2>button').setAttribute('aria-expanded', 'false');
+  }
+  document.documentElement.classList.remove('fold');
+}
 document.querySelectorAll('#splitSeg button').forEach(b => b.addEventListener('click', () => {
   state.splitMode = b.dataset.v;
   if (b.dataset.v !== 'manual') { state.rowCuts = null; state.colCuts = null; }
@@ -7431,6 +7533,46 @@ drawers.attach(arrivedWith);              // is that a saved drawer this browser
       e.preventDefault();
       t.focus();
     });
+
+  /* The phone's section bar (its markup says why it is there). It does what the skip link
+     does — scroll, and move focus so the next Tab carries on from where you landed — and
+     for the same reason never touches location.hash. Each button lists the places it can
+     go and takes the first one on screen: in the bins page's single-bin mode panel 01 and
+     the drawer map are hidden, and Settings is then the bin's own panel. A panel takes
+     focus on its header button, which is a real control. A card is given tabindex="-1"
+     only while it holds focus: carried in the markup, every click inside the card would
+     focus the card and draw a ring round it. The bar does not cover what it jumps to,
+     because the page's scroll-padding-top on a phone (style.css) is its height. */
+  var jumpbar = document.getElementById('jumpbar');
+  if (jumpbar) jumpbar.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-jump]');
+    if (!b) return;
+    var t = b.getAttribute('data-jump').split(' ')
+      .map(function (id) { return document.getElementById(id); })
+      .filter(function (el) { return el && el.getClientRects().length; })[0];
+    if (!t) return;
+    t.scrollIntoView({ block: 'start' });
+    var f = t.querySelector(':scope>h2>button');
+    if (!f) {
+      f = t;
+      if (!t.hasAttribute('tabindex')) {
+        t.setAttribute('tabindex', '-1');
+        t.addEventListener('blur', function () { t.removeAttribute('tabindex'); }, { once: true });
+      }
+    }
+    f.focus({ preventScroll: true });
+  });
+
+  /* The bar comes down once the header has gone off the top, and goes back up when it
+     returns (style.css says why it waits). An observer rather than a scroll listener:
+     it costs nothing while the page scrolls, and it also catches the header leaving by
+     any other route, a jump or a focused field pulling the page down. Without one (an old
+     browser) the bar simply never comes down, and the page is as it was before the bar. */
+  var head = document.querySelector('header');
+  if (jumpbar && head && window.IntersectionObserver)
+    new IntersectionObserver(function (es) {
+      jumpbar.classList.toggle('on', !es[es.length - 1].isIntersecting);
+    }).observe(head);
 
   /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
      read before you reached its controls, and on a phone it pushed the working surface
