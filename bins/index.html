@@ -1788,8 +1788,15 @@ const PLATE_MAX_CELLS = 900;
  *
  *   pitch      Below 13.5 the joints stop closing: keys, snaps and puzzle lobes run into
  *              their neighbours or out of their cells, and every joint leaked somewhere in
- *              5–13 mm. 13.3 still leaks a 1-cell-wide piece; 13.4 up is closed. It was 5,
- *              which only stopped the grid dividing by zero.
+ *              5–13 mm. 13.3 still leaks a 1-cell-wide piece on four of them. 13.5 is
+ *              where all fifteen configurations the audit builds there close, on both its
+ *              layouts, at the default clearance. That is not a promise that every design
+ *              above it closes: a puzzle key in the walls, dropped in from above, leaks at
+ *              14 (12 edges on 2 × 2 pieces, 3 on 1-cell ones), and a 35 mm pitch with a
+ *              magnet and the widest screw head leaks 3. Neither is new — both built the
+ *              same before there were ranges — and each is one setting, the sliver class
+ *              ENGINE.md describes, not a reason to move the floor. It was 5, which only
+ *              stopped the grid dividing by zero.
  *   topCutoff  0 puts the socket's top edge on the plate's own outline, and the rim there
  *              is a face of no width: every joint leaked. It closes from about 0.02, and
  *              0.1 keeps well clear of that edge (a few isolated values inside the range
@@ -1798,15 +1805,10 @@ const PLATE_MAX_CELLS = 900;
  *              is narrower than a spec bin's chamfer at that height, so the bin stops
  *              reaching the socket floor and rides on the rim — by 0.25 mm at 1, and the
  *              chamfer turns over entirely at 2.15. 1 is as far as that is worth taking.
- *   connClr    Past 0.3 the dovetail pocket, cut 1.9 mm + this into the piece, breaks
- *              through the 2.15 mm socket wall and crosses the chamfer cone — it leaked
- *              from 0.34. The hint's own advice stops at 0.25. That ceiling is the
- *              dovetail's alone (dovetailMax, read through connClrMax): the puzzle
- *              notch, the three keys and the H-clip have no pocket near the socket wall
- *              and build closed well past it — to 4 mm at the spec pitch — and the page
- *              took any figure for them before it had ranges, so a saved link can carry
- *              0.35 or 0.5 for one. 1 is where a number stops being a fit and starts
- *              being a slip: a millimetre a side is more play than any of them holds.
+ *   connClr    1 is where a number stops being a fit and starts being a slip: a
+ *              millimetre a side is more play than any joint holds. Most joints stop
+ *              sooner, and where depends on the joint, how its key goes in and the pitch,
+ *              so the ceiling is connClrCeiling's, below, and not a number here.
  *   bottomPad  Nothing breaks above 20; a plate that tall is a typing slip, and the bed
  *              check is what stops one taller than the printer.
  *   magnet and screw minimums keep a cutter from sitting flush with a face — a 0 mm
@@ -1816,13 +1818,73 @@ const PLATE_MAX_CELLS = 900;
 const PLATE_RANGES = {
   pitch: { min: 13.5, max: 200 },
   topCutoff: { min: 0.1, max: 1 },
-  connClr: { min: 0, max: 1, dovetailMax: 0.3 },
+  connClr: { min: 0, max: 1, dovetail: 0.3, snapTop: 0.35, puzzleKey: 0.8,
+             smallPitch: 20, small: 0.3, puzzleRoom: 6.5 },
   bottomPad: { min: 0, max: 20 },
   magnetD: { min: 1 }, magnetH: { min: 0.5, max: 10 },
   screwHoleD: { min: 1 }, screwHeadD: { min: 1 }, screwHeadDepth: { min: 0.5, max: 10 },
 };
-const connClrMax = (connector) =>
-  connector === 'dovetail' ? PLATE_RANGES.connClr.dovetailMax : PLATE_RANGES.connClr.max;
+/* The one fit-clearance field, as each joint's housing is cut to it. readControls in
+   src/ui.js worked this out and the audit copied it by hand, and the ceiling below is a
+   field value whose meaning depends on it — a top-inserted snap is cut to the key's
+   figure, 0.05 under the field — so all three read it from here. */
+function fitClearances(field) {
+  return { tab: field, puzzle: field,
+           key: Math.max(0.1, field - 0.05), hclip: Math.max(0.08, field - 0.05) };
+}
+/* The fit clearance's ceiling for one design, as { max, by }; `by` says what sets it, for
+ * the page to put in words: 'dovetail', 'snaptop', 'pitch', 'joint', or 'slip' for the
+ * plain 1 mm. One function, because four things have to agree on it — the field's range,
+ * the clamp on a number a link brings in, the message saying why, and the fit coupon's
+ * slackest pair — and it takes the whole design because the answer depends on the joint,
+ * which way its key goes in and the pitch. It took a connector name, and a 1 mm ceiling
+ * for everything but the dovetail let a snap clip's housing into the next piece and let
+ * small pitches leak.
+ *
+ * Measured on 2 × 2 and 1-cell pieces from 13.5 to 60 mm, every 0.5 mm of pitch — at
+ * every 0.05 of clearance for the puzzle, the bowtie and the puzzle key, at six for the
+ * rest — and at every 0.01 of clearance at 20, 25, 30, 35, 42 and 60:
+ *
+ *   dovetail  0.3. Past it the pocket, cut 1.9 mm + this into the piece, breaks through
+ *             the 2.15 mm socket wall and crosses the chamfer cone; it leaked from 0.34.
+ *             The hint's own advice stops at 0.25.
+ *   snaptop   0.35, in either housing. The clip's slot puts its seam-side wall
+ *             0.3 − (the key's clearance) from the seam, so past a field of 0.35 that
+ *             wall stands in the next piece — by 0.65 mm at 1 — and two pieces that print
+ *             overlapping cannot butt together. On the coupon the pairs met at the seam.
+ *   pitch     0.3 below 20 mm, for the three housings the field cuts that leaked there:
+ *             the puzzle, and the bowtie and puzzle key in the floor. Past 0.3 they left
+ *             holes from 13.5 to 19 mm — a puzzle key at 14 from 0.4, a bowtie at 18 at
+ *             1, a puzzle at 19 from 0.35 — and from the default 0.2 to 0.3 none did. The
+ *             puzzle's lobe also needs room in its cell: it opens the plate once its
+ *             clearance passes half the pitch less 6.475 mm, so it stops at half the pitch
+ *             less 6.5 — 0.25 at 13.5, and 0.3 from 13.6.
+ *   joint     0.8 for a puzzle key in the floor from 20 mm up: between 0.82 and 0.96 its
+ *             recess leaked at every pitch measured, 20 to 60.
+ *   slip      1 for the rest. A key in the walls is cut to keySlim's own clearance, which
+ *             the field does not move. The snap and the H-clip did not leak above 0.3 at
+ *             any pitch measured but in one band — an H-clip dropped in from above leaks
+ *             at 0.74 to 0.745 and nowhere else. From 20 mm up the bowtie and the puzzle
+ *             leak only at isolated values: the bowtie at 25 mm at 0.64, the puzzle at
+ *             0.39–0.4 at 21 and 32.5–35 mm and here and there from 0.52 to 0.87. That is
+ *             the sliver class again, not a ceiling — no limit short of 0.38 misses them,
+ *             and the same class turns up under the default too: a snap at 20 mm at 0.29,
+ *             a bowtie at 17 mm at 0.15 and under. */
+function connClrCeiling(cfg) {
+  const R = PLATE_RANGES.connClr;
+  const kind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
+  if (kind === 'dovetail') return { max: R.dovetail, by: 'dovetail' };
+  if (kind === 'snaptop') return { max: R.snapTop, by: 'snaptop' };
+  const floorKey = ['bowtie', 'puzzlekey'].includes(cfg.connector) && cfg.keyMount !== 'wall';
+  if (cfg.connector !== 'puzzle' && !floorKey) return { max: R.max, by: 'slip' };
+  if (cfg.pitch < R.smallPitch) {
+    const room = cfg.connector === 'puzzle'
+      ? Math.floor((cfg.pitch / 2 - R.puzzleRoom) * 100 + 1e-9) / 100 : Infinity;
+    return { max: Math.min(R.small, room), by: 'pitch' };
+  }
+  if (cfg.connector === 'puzzlekey') return { max: R.puzzleKey, by: 'joint' };
+  return { max: R.max, by: 'slip' };
+}
 /* A piece's column letters, spreadsheet-style: A … Z, AA, AB … The id was
    String.fromCharCode(65 + s), which runs on past Z into '[', '\' and the lower case — a
    33-piece row shipped `baseplate-\1.stl`, and both `baseplate-A1.stl` and
@@ -3592,7 +3654,7 @@ const DEFAULTS = {
 if (typeof module !== 'undefined') {
   module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
-    connClrMax, PRINT_LAYER,
+    connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };
