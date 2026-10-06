@@ -243,6 +243,32 @@ console.log('\nclaims the prose states outright');
     check(`the rule gives ${want(1)} mm for one cell`, want(1), one);
     check(`the rule gives ${want(6)} mm for six`, want(6), six);
   }
+
+  /* Half cells, in "what to do with the remainder": where they start, how wide they are,
+     and the worked example, each asked of the layout code the plate is built from —
+     halfStrips for where a strip starts, gridCells for what a drawer gets. */
+  {
+    const d = text('guide/drawer-sizes/index.html');
+    const from = d.match(/From ([\d.]+) mm up there is a fourth way: put half cells in it/);
+    const wide = d.match(/gets a ([\d.]+) mm column of them/);
+    const ex = d.match(/The (\d+)" drawer above, ([\d.]+) mm over, gets a column of half cells with ([\d.]+) mm of margin to spare/);
+    if (!from || !wide || !ex) {
+      console.log('  the half-cell paragraph is gone or reworded — reword this check with ' +
+                  'it, do not delete it');
+      bad++;
+    } else {
+      const P = SPEC.pitch, start = +from[1];
+      check(`half cells start at ${start} mm over`, true,
+            G.halfStrips(start, 0, P).hX === 1 && G.halfStrips(start - 0.1, 0, P).hX === 0);
+      check(`a half cell is ${P / 2} mm`, P / 2, +wide[1]);
+      const mm = Math.round(+ex[1] * 25.4 * 10) / 10;
+      const c = G.gridCells({ drawerW: mm, drawerD: mm, pitch: P, marginMode: 'half',
+                              alignX: 'center', alignY: 'center' });
+      check(`the ${ex[1]} inch drawer is ${R2(mm - c.nx * P)} mm over`, R2(mm - c.nx * P), +ex[2]);
+      check(`and gets a column of half cells`, true, c.hX === 1);
+      check(`with ${R2(c.mL + c.mR - P / 2)} mm of margin left`, R2(c.mL + c.mR - P / 2), +ex[3]);
+    }
+  }
 }
 
 /* The bin height table, and the worked example that sends a reader to look a row up.
