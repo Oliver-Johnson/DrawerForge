@@ -42,6 +42,13 @@
 const G = require('../src/core.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
+/* Two drawers for the half-cell cases below: 4 × 4 cells and 2 × 2, each with a column
+   and a row of half cells and a few millimetres of margin past them, the first on a bed
+   that splits it into four pieces. */
+const HALF_SPLIT = { drawerW: 192, drawerD: 194, bedW: 128, bedD: 128, marginMode: 'half',
+                     strips: [1, 1] };
+const HALF_SMALL = { drawerW: 107, drawerD: 108, marginMode: 'half', strips: [1, 1] };
+
 const CASES = [
   { name: '1x1 solid', drawerW: 42, drawerD: 42 },
   { name: '2x2 solid', drawerW: 84, drawerD: 84 },
@@ -124,6 +131,44 @@ const CASES = [
      opposite ways and the BSP was being asked about points inside a shell twice. See
      puzzleShape. */
 
+  /* --- half cells: Leftover space set to fill with them (marginMode 'half') ---
+   *
+   * A 21 mm column of cells along the right and a row along the back, wherever the
+   * leftover has room (halfStrips in core.js). Each case names the strips it expects in
+   * `strips`, [column, row], and the loop below fails it if the layout has any others:
+   * a half-cell case that quietly built none is a solid margin, and passes everything
+   * else here. Every one is probed half socket by half socket as well — see
+   * halfSocketsCut — because a strip left as margin is just as watertight.
+   *
+   * They use a 128 mm bed so a 4 × 4 drawer splits into four pieces: every joint meets
+   * the strips where a seam crosses them, which is all the joints have to do with them,
+   * at a fraction of a 9 × 9 plate's build time. Magnets and the floor pad are 2 × 2,
+   * the dearest builds in the file. */
+  { name: 'half column', drawerW: 191, drawerD: 170, marginMode: 'half', strips: [1, 0] },
+  { name: 'half row', drawerW: 170, drawerD: 191, marginMode: 'half', strips: [0, 1] },
+  // both, with the quarter cell in the corner, no margin past them and the corners rounded
+  { name: 'half both, rounded', drawerW: 189, drawerD: 189, marginMode: 'half', strips: [1, 1],
+    outerRadius: 4 },
+  // the leftover past the strips, placed by the alignment on the far side of the grid
+  { name: 'half, margin left', drawerW: 199, drawerD: 199, marginMode: 'half', strips: [1, 1],
+    alignX: 'start', alignY: 'start' },
+  { name: 'half split dovetail', ...HALF_SPLIT },
+  { name: 'half split no joint', ...HALF_SPLIT, connector: 'none' },
+  { name: 'half split bowtie', ...HALF_SPLIT, connector: 'bowtie', keyType: 'bowtie' },
+  { name: 'half split puzzlekey', ...HALF_SPLIT, connector: 'puzzlekey', keyType: 'puzzlekey' },
+  { name: 'half split snap', ...HALF_SPLIT, connector: 'snap', keyType: 'snap' },
+  { name: 'half split hclip', ...HALF_SPLIT, connector: 'hclip' },
+  { name: 'half split hclip top', ...HALF_SPLIT, connector: 'hclip', keyInsert: 'top', opens: true },
+  { name: 'half split snap top', ...HALF_SPLIT, connector: 'snap', keyType: 'snap',
+    keyMount: 'wall', keyInsert: 'top', opens: true },
+  { name: 'half staggered', ...HALF_SPLIT, drawerW: 6 * 42 + 24, splitMode: 'staggered' },
+  { name: 'half split @6', ...HALF_SPLIT, arcSegs: 6 },
+  { name: 'half skeleton', drawerW: 192, drawerD: 194, marginMode: 'half', strips: [1, 1],
+    plateStyle: 'skeleton', connector: 'none' },
+  { name: 'half magnets+screws', ...HALF_SMALL, magnets: true, screws: true },
+  { name: 'half magnets above', ...HALF_SMALL, magnets: true, magnetSide: 'top' },
+  { name: 'half extra floor', ...HALF_SMALL, bottomPad: 2 },
+
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 
   /* The lobe's far pole points along the seam, the boundary between two cell regions runs
@@ -175,6 +220,14 @@ const CASES = [
      would have read "known" over every one of them. */
   { name: '1x1 magnets', drawerW: 42, drawerD: 42, magnets: true,
     quarantine: 'bottom-face sliver at the pocket rim', worst: 6 },
+  /* The two classes above with half cells, which add nothing to either: the loop builds
+     each one again as solid margin and requires the same edges used the same number of
+     times. The lobes sit on whole-cell junctions and the bosses on whole cells, so the
+     strips meet neither. */
+  { name: 'half split puzzle', ...HALF_SPLIT, connector: 'puzzle',
+    quarantine: 'lobe apex sits on a region boundary' },
+  { name: 'half bosses+magnets', ...HALF_SMALL, magnets: true, baseMode: 'bosses',
+    quarantine: 'bosses abut, not overlap' },
 ];
 
 let bad = 0;
@@ -183,8 +236,16 @@ let bad = 0;
    nowhere else: Object.assign over it would enumerate every key and report the lot as
    read, which is the one way this measurement can lie. */
 const readKeys = new Set();
+/* And for marginMode, which values: it is one key with three meanings to core.js ('none'
+   on the page arrives as 'custom' with no margins), and a mode no case hands the builders
+   is as untested as a key they never read — see the foot of the file. */
+const modesRead = new Set();
 const watch = (cfg) => new Proxy(cfg, {
-  get(t, k) { if (typeof k === 'string') readKeys.add(k); return t[k]; },
+  get(t, k) {
+    if (typeof k === 'string') readKeys.add(k);
+    if (k === 'marginMode') modesRead.add(t[k]);
+    return t[k];
+  },
 });
 
 console.log('case              grid    polys   W x D x H (mm)          mesh');
@@ -320,6 +381,82 @@ for (const cs of CASES) {
                 `${good ? '' : '   HOUSING NOT BUILT'}`);
     if (!good) bad++;
   }
+
+  if (cfg.marginMode === 'half') {
+    const got = [L.hX, L.hY];
+    const want = cs.strips || [0, 0];
+    const sockets = halfSocketsCut(cfg, L, pieces);
+    const same = got[0] === want[0] && got[1] === want[1];
+    const good = same && sockets.cut === sockets.of && sockets.of > 0;
+    console.log(`${''.padEnd(24)} half cells: column ${got[0]}, row ${got[1]}` +
+                `${same ? '' : `, NOT THE ${want[0]} AND ${want[1]} THE CASE NAMES`}; ` +
+                `${sockets.cut} of ${sockets.of} half sockets cut at their own size` +
+                `${sockets.fail.length ? '   NOT CUT: ' + sockets.fail.slice(0, 3).join('; ') : ''}`);
+    if (!good) bad++;
+    /* A known leak with half cells has to be the same leak as without them: the same
+       drawer as solid margin, compared edge-use count for edge-use count. */
+    if (cs.quarantine) {
+      const autoCfg = Object.assign({}, cfg, { marginMode: 'auto' });
+      const autoL = G.computeLayout(autoCfg);
+      const autoPieces = autoL.pieces.map((pc) => G.buildPiece(autoCfg, autoL, pc).polys);
+      const mine = boundaryShare(pieces), theirs = boundaryShare(autoPieces);
+      console.log(`${''.padEnd(24)} as solid margin: ${theirs}` +
+                  `${mine === theirs ? ' — the same, so the half cells add none' : '   HALF CELLS ADD TO IT'}`);
+      if (mine !== theirs) bad++;
+    }
+  }
+}
+
+/* Every half socket on a half-cell plate, probed straight down: open at its centre and
+ * just inside its top edge on each axis, and roofed at the plate top just outside it, on
+ * the rim the cell keeps round its socket. The first says a socket was cut and the
+ * second that it was cut at the half cell's size — a whole socket centred on a half cell
+ * would open the rim, and run on through the wall into its neighbour. A strip of half
+ * cells built as margin instead is solid all the way across, and watertight, and nothing
+ * else in this file would notice it.
+ *
+ * Probing reads horizontal faces only, so the socket's sloped walls do not count as a
+ * roof, and the socket floor of a padded plate is "open" here: it is a pad's height off
+ * the bed, far below the plate top. */
+function halfSocketsCut(cfg, L, pieces) {
+  const inTri = (t, px, py) => {
+    const s = (a, b) => (b[0]-a[0])*(py-a[1]) - (b[1]-a[1])*(px-a[0]);
+    const d1 = s(t[0], t[1]), d2 = s(t[1], t[2]), d3 = s(t[2], t[0]);
+    return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+  };
+  const roofAt = (tris, px, py) => {
+    let z = -Infinity;
+    for (const t of tris) {
+      if (Math.abs(t[0][2] - t[1][2]) > 1e-6 || Math.abs(t[0][2] - t[2][2]) > 1e-6) continue;
+      if (t[0][2] > z && inTri(t, px, py)) z = t[0][2];
+    }
+    return z;
+  };
+  const pitch = cfg.pitch, half = pitch / 2, H = G.platePad(cfg) + cfg.plateHeight;
+  const IN = 0.15;   // in from the socket's top edge, and in from the cell's
+  let of = 0, cut = 0;
+  const fail = [];
+  L.pieces.forEach((pc, i) => {
+    const cells = [];   // [centre x, centre y, half size x, half size y], piece-local
+    const x0 = pc.mL + pc.nx * pitch, y0 = pc.mF + pc.ny * pitch;
+    if (pc.hR) for (let j = 0; j < pc.ny; j++) cells.push([x0 + half / 2, pc.mF + j * pitch + half, half / 2, half]);
+    if (pc.hB) for (let k = 0; k < pc.nx; k++) cells.push([pc.mL + k * pitch + half, y0 + half / 2, half, half / 2]);
+    if (pc.hR && pc.hB) cells.push([x0 + half / 2, y0 + half / 2, half / 2, half / 2]);
+    if (!cells.length) return;
+    const tris = G.polysToTriangles(pieces[i]);
+    for (const [cx, cy, hx, hy] of cells) {
+      of++;
+      const inner = [[cx, cy], [cx - hx + cfg.topCutoff + IN, cy], [cx + hx - cfg.topCutoff - IN, cy],
+                     [cx, cy - hy + cfg.topCutoff + IN], [cx, cy + hy - cfg.topCutoff - IN]];
+      const rim = [[cx - hx + IN, cy], [cx + hx - IN, cy], [cx, cy - hy + IN], [cx, cy + hy - IN]];
+      const open = inner.every(([x, y]) => roofAt(tris, x, y) < H - 1);
+      const roofed = rim.every(([x, y]) => Math.abs(roofAt(tris, x, y) - H) < 1e-6);
+      if (open && roofed) cut++;
+      else fail.push(`${pc.id} at ${cx.toFixed(1)}, ${cy.toFixed(1)}: ` +
+                     `${open ? '' : 'not open'}${open || roofed ? '' : ', '}${roofed ? '' : 'rim open'}`);
+    }
+  });
+  return { of, cut, fail };
 }
 
 /* How many of the bad edges are actually open boundary, and how many are shells meeting
@@ -1452,6 +1589,15 @@ console.log('\nevery parameter in DEFAULTS is read by somebody:');
   console.log(`  ${Object.keys(G.DEFAULTS).length} keys, ${readKeys.size} read` +
               (unread.length ? `   NEVER READ: ${unread.join(', ')}` : '   none dead'));
   if (unread.length) bad++;
+  /* The same question one level down, for the key whose value picks a different layout.
+     marginMode was read by every case in this file while only two of its values were
+     ever built, and the third adds geometry of its own: a mode no case reaches is the
+     configuration-with-no-case ENGINE.md §5 calls worse than a quarantined one. */
+  const MODES = ['auto', 'custom', 'half'];
+  const unbuilt = MODES.filter((m) => !modesRead.has(m));
+  console.log(`  marginMode: ${MODES.filter((m) => modesRead.has(m)).join(', ')} built` +
+              (unbuilt.length ? `   NEVER BUILT: ${unbuilt.join(', ')}` : ''));
+  if (unbuilt.length) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall plates watertight and every shell facing outwards');

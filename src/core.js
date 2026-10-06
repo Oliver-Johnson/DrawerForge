@@ -583,10 +583,17 @@ function extrudePoly(pts2d, z0, z1) {
 }
 
 function roundedSquareRing(cx, cy, half, r, n) {
+  return roundedRectRing(cx, cy, half, half, r, n);
+}
+/* The same ring with a half size of its own on each axis, for the half cells along a
+   plate's right side and back (see halfStrips): a 21 × 42 or 21 × 21 socket. Same
+   vertices in the same order as the square one, so a square ring is the bytes it was,
+   and its corner radius is held by the shorter side, as the square's is by its one. */
+function roundedRectRing(cx, cy, hx, hy, r, n) {
   n = n || 6;
-  r = Math.max(0.3, Math.min(r, half - 0.01));
+  r = Math.max(0.3, Math.min(r, Math.min(hx, hy) - 0.01));
   const pts = [];
-  const cs = [[half-r, half-r, 0], [-half+r, half-r, 90], [-half+r, -half+r, 180], [half-r, -half+r, 270]];
+  const cs = [[hx-r, hy-r, 0], [-hx+r, hy-r, 90], [-hx+r, -hy+r, 180], [hx-r, -hy+r, 270]];
   for (const [ox, oy, a0] of cs) {
     for (let k = 0; k < n; k++) {
       const a = (a0 + 90*k/n) * Math.PI/180;
@@ -880,10 +887,18 @@ function pieceColumn(s) {
    margins six cells wide arrived there as a map seven wide, and the seventh column took
    bins with no sockets under them. Both pages ask here now. Needs drawerW, drawerD,
    pitch, marginMode, and the four margins when it is 'custom' or the alignment when it
-   is not. */
+   is not.
+ *
+ * marginMode 'half' is 'auto' with a strip of half cells laid in the leftover first (see
+ * halfStrips): hX and hY say whether there is a half column and a half row, and the
+ * alignment places what is left after them. The strips are counted INTO mR and mB, so to
+ * everything that sizes a piece — the bed check, the split search, the outline — they are
+ * margin, which is the width they take; only buildPiece and the cut map look inside. A
+ * caller quoting the solid margin takes them back out. hX and hY are 0 in every other
+ * mode, and that mode's numbers are the ones it always gave. */
 function gridCells(p) {
   const pitch = p.pitch;
-  let nx, ny, mL, mR, mF, mB;
+  let nx, ny, mL, mR, mF, mB, hX = 0, hY = 0;
   if (p.marginMode === 'custom') {
     mL = p.mLeft; mR = p.mRight; mF = p.mFront; mB = p.mBack;
     nx = Math.max(1, Math.floor((p.drawerW - mL - mR) / pitch + 1e-6));
@@ -893,19 +908,49 @@ function gridCells(p) {
   } else {
     nx = Math.max(1, Math.floor(p.drawerW / pitch + 1e-6));
     ny = Math.max(1, Math.floor(p.drawerD / pitch + 1e-6));
-    const remX = p.drawerW - nx*pitch, remY = p.drawerD - ny*pitch;
+    let remX = p.drawerW - nx*pitch, remY = p.drawerD - ny*pitch;
+    if (p.marginMode === 'half') {
+      ({ hX, hY } = halfStrips(remX, remY, pitch));
+      remX -= hX * pitch/2; remY -= hY * pitch/2;
+    }
     mL = p.alignX === 'start' ? remX : p.alignX === 'end' ? 0 : remX/2;
     mR = remX - mL;
     mF = p.alignY === 'start' ? remY : p.alignY === 'end' ? 0 : remY/2;
     mB = remY - mF;
+    // added only where there is a strip, so a plate without one keeps its exact margins
+    if (hX) mR += pitch/2;
+    if (hY) mB += pitch/2;
   }
-  return { nx, ny, mL, mR, mF, mB };
+  return { nx, ny, mL, mR, mF, mB, hX, hY };
+}
+/* Whether the leftover past the whole cells takes a half cell: a column of them on the
+ * right if remX is half a pitch or more, a row along the back if remY is. Each answer is
+ * 0 or 1 — a second strip would be a whole cell, and the whole cells already took those.
+ *
+ * Always the right and the back, whatever the alignment says, and the alignment then
+ * places what is left. A bin is placed in cells from the front left corner, so a strip
+ * there would move every bin on the Bins page when this switched on or off; at the right
+ * and back it sits past the last whole cell (x = nx, y = ny) and nothing else moves. The
+ * front also stays free for the slack the drawer-size guide says to keep where you reach
+ * in.
+ *
+ * A half cell takes half-size bins only, whose quarter feet seat in a corner of a whole
+ * socket with a whole foot's clearance (ENGINE.md §4) — so the socket here is the spec
+ * profile on a 21 × 42 or 21 × 21 rounded rectangle, the same distance in from every
+ * side. The 1e-6 is gridCells' own floor tolerance: a 357 mm drawer is 8 cells and
+ * exactly a half, and must say so. The Bins page is to ask it the same way, through
+ * gridCells with the plate's `mm` from the link, so both maps put the strip in the same
+ * place; until it does, it reads 'half' as a solid margin, as any page from before
+ * half cells does. */
+function halfStrips(remX, remY, pitch) {
+  const fits = (rem) => rem >= pitch/2 - 1e-6 ? 1 : 0;
+  return { hX: fits(remX), hY: fits(remY) };
 }
 /* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
    splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
 function computeLayout(p) {
   const pitch = p.pitch;
-  const { nx, ny, mL, mR, mF, mB } = gridCells(p);
+  const { nx, ny, mL, mR, mF, mB, hX, hY } = gridCells(p);
   const maxCellsX = Math.max(1, Math.floor(p.bedW / pitch));
   const maxCellsY = Math.max(1, Math.floor(p.bedD / pitch));
 
@@ -1002,6 +1047,10 @@ function computeLayout(p) {
         nx: segEnds[s] - segStarts[s], ny: bandEnds[b] - bandStarts[b],
         mL: segStarts[s] === 0 ? mL : 0, mR: segEnds[s] === nx ? mR : 0,
         mF: bandStarts[b] === 0 ? mF : 0, mB: bandEnds[b] === ny ? mB : 0,
+        /* The piece that owns a strip of half cells, which its mR or mB includes (see
+           gridCells): every piece along the right edge carries its stretch of the half
+           column, and every piece along the back its stretch of the half row. */
+        hR: segEnds[s] === nx && hX === 1, hB: bandEnds[b] === ny && hY === 1,
       });
     }
   }
@@ -1029,7 +1078,7 @@ function computeLayout(p) {
       }
     }
   }
-  return { nx, ny, mL, mR, mF, mB, rowCuts, colCuts, pieces, seams,
+  return { nx, ny, mL, mR, mF, mB, hX, hY, rowCuts, colCuts, pieces, seams,
            bands: nBands, gridW: nx*pitch, gridD: ny*pitch,
            maxCellsX, maxCellsY };
 }
@@ -1718,7 +1767,13 @@ function annulusStrip(outerLoop, innerLoop, cx, cy, z, up) {
   return polys;
 }
 
-function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
+/* `half` is the cell's half size on each axis, [hx, hy]: left out, a whole cell at the
+   profile's pitch. A half cell passes its own (see halfStrips) and gets the same socket,
+   the same distance in from each of its sides, on a rounded rectangle: the strip around
+   the socket, the rim on top and the floor cap all follow the ring, and annulusStrip
+   pairs the cell outline against it by angle about the centre as it does a square, both
+   loops being star-shaped about that point. */
+function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half) {
   const polys = [];
   const { pts: oc } = earTriangulate(clipped);
   const n = oc.length;
@@ -1728,11 +1783,12 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
                         [oc[j][0], oc[j][1], H], [oc[i][0], oc[i][1], H]]);
     if (p) polys.push(p);
   }
+  const [hx, hy] = half || [prof.pitchHalf, prof.pitchHalf];
   const zs = prof.zs.slice(1, 5), ds = prof.ds.slice(1, 5);
   const rings = zs.map((z, i) => {
     const d = ds[i];
     const r = prof.rTop - (d - ds[ds.length-1]);
-    return roundedSquareRing(cx, cy, prof.pitchHalf - d, r, arcSegs).map(p => [p[0], p[1], z]);
+    return roundedRectRing(cx, cy, hx - d, hy - d, r, arcSegs).map(p => [p[0], p[1], z]);
   });
   const rn = rings[0].length;
   for (let i = 0; i < rings.length - 1; i++) {
@@ -1999,12 +2055,23 @@ function buildPiece(cfg, layout, piece, onStatus) {
   if (onStatus) onStatus('outline');
 
   // ---- region grid: x cuts and y cuts ----
+  /* A strip of half cells (piece.hR, piece.hB; see halfStrips) is one more cut, half a
+     pitch past the last whole cell, and the region it closes off is a cell rather than
+     margin. The margin after it is what mR or mB holds beyond the strip, and gets a
+     region of its own only when there is any, as a plate's margin always has. */
+  const hxR = piece.hR ? 1 : 0, hyB = piece.hB ? 1 : 0;
   const xs = [0]; if (piece.mL > 0.01) xs.push(piece.mL);
   for (let i = 1; i <= piece.nx; i++) xs.push(gx0 + i*pitch);
-  if (piece.mR > 0.01) xs.push(W); else xs[xs.length-1] = W;
+  if (hxR) {
+    xs.push(gx0 + piece.nx*pitch + half);
+    if (piece.mR - half > 0.01) xs.push(W); else xs[xs.length-1] = W;
+  } else if (piece.mR > 0.01) xs.push(W); else xs[xs.length-1] = W;
   const ys = [0]; if (piece.mF > 0.01) ys.push(piece.mF);
   for (let j = 1; j <= piece.ny; j++) ys.push(gy0 + j*pitch);
-  if (piece.mB > 0.01) ys.push(D); else ys[ys.length-1] = D;
+  if (hyB) {
+    ys.push(gy0 + piece.ny*pitch + half);
+    if (piece.mB - half > 0.01) ys.push(D); else ys[ys.length-1] = D;
+  } else if (piece.mB > 0.01) ys.push(D); else ys[ys.length-1] = D;
   const cellXi = piece.mL > 0.01 ? 1 : 0;         // index offset of first cell column
   const cellYi = piece.mF > 0.01 ? 1 : 0;
   const BLOAT = 0.05;
@@ -2022,12 +2089,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
       const clipped = clipToRect(outline, x0, y0, x1, y1);
       if (!clipped) continue;
       const ci = ix - cellXi, cj = iy - cellYi;
-      const isCell = ci >= 0 && ci < piece.nx && cj >= 0 && cj < piece.ny;
+      const isCell = ci >= 0 && ci < piece.nx + hxR && cj >= 0 && cj < piece.ny + hyB;
       if (!isCell) {                                 // margin / corner: plain extrusion
         shells.push(extrudePoly(clipped, 0, H));
         continue;
       }
-      const cx = gx0 + ci*pitch + half, cy = gy0 + cj*pitch + half;
+      // in the half column, the half row, or both (the quarter cell at the back right)
+      const halfX = ci === piece.nx, halfY = cj === piece.ny;
+      const cx = gx0 + ci*pitch + (halfX ? half/2 : half);
+      const cy = gy0 + cj*pitch + (halfY ? half/2 : half);
       /* Skeleton only where there is nothing that needs the material back.
        *
        * The shell removes the bulk below z 2.5 — which is exactly the wall band every
@@ -2041,7 +2111,8 @@ function buildPiece(cfg, layout, piece, onStatus) {
        * that skeleton mode does not build.
        */
       // cells are built bloated by BLOAT per side, so a whole one measures (pitch+0.1)^2;
-      // anything the piece boundary has cut into measures less than pitch^2
+      // anything the piece boundary has cut into measures less than pitch^2 — and so does
+      // a half cell, which stays solid: skeletonCellRegion's rings are square
       const fullCell = Math.abs(polyArea2D(clipped)) >= pitch * pitch - 0.5;
       const onEdge = ci === 0 || cj === 0 || ci === piece.nx - 1 || cj === piece.ny - 1;
       const jointed = cfg.connector && cfg.connector !== 'none';
@@ -2050,7 +2121,8 @@ function buildPiece(cfg, layout, piece, onStatus) {
       let region = skel
         ? skeletonCellRegion(clipped, prof, cx, cy, H, cfg.arcSegs || 6,
                              Math.max(0.4, cfg.skin || 0.8))
-        : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6);
+        : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6,
+                           halfX || halfY ? [halfX ? half/2 : half, halfY ? half/2 : half] : undefined);
       /* Small convex cutters local to this cell, batched by feature and subtracted one
        * batch at a time.
        *
@@ -2122,7 +2194,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
           ...extrudePoly(puzzleShape(pn.edge, pn.e, pn.s, cfg.puzzle, cfg.puzzle.clr, true),
                          -0.5, pad - 0.4));
       }
-      if (cellFastener) {
+      /* None in a half cell. A half-size bin's quarter feet carry no holes (feetHolesOff
+         in bins/bin.js), and where a half socket's would go is not settled: a whole
+         cell's four sites are holeOffset (13 mm) from its centre each way, past the
+         middle of a 21 mm cell, so they cannot simply be kept, and moving them is a
+         choice for magnets in bins that do not have any. Checks on the page says so, so
+         a plate with magnets does not look short of holes by mistake. The corner bosses
+         below are laid out over the whole cells only, so half cells get none of those
+         either. */
+      if (cellFastener && !halfX && !halfY) {
         const off = cfg.holeOffset;
         for (const sx of [-1, 1]) for (const sy of [-1, 1])
           cuts.fastener.push(...movePolys(cellFastener, cx + sx*off, cy + sy*off));
@@ -2147,6 +2227,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
       cfg.magnets ? cfg.magnetH + 0.8 : 0,
       cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
     const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
+    // whole cells only: a half cell has no mounting sites (see the fastener cut above)
     for (let i = 0; i < piece.nx; i++) for (let j = 0; j < piece.ny; j++) {
       const ccx = gx0 + i*pitch + half, ccy = gy0 + j*pitch + half;
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
@@ -2665,11 +2746,11 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, gridCells, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
-    makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
+    makePoly, triangulateRing, earTriangulate, roundedSquareRing, roundedRectRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };
 }
 
