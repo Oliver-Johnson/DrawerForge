@@ -69,7 +69,10 @@ const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFron
 const RANGES = PLATE_RANGES;
 const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
 const mount = () => mountLimits(state);
-const mountWhy = (opens) => `at a ${state.pitch} mm pitch — mounting holes sit ` +
+// "an 18 mm pitch", "an 80 mm pitch": the article goes by how the number is said
+const atPitch = () => `at ${/^(8|1[18](\.|$))/.test(String(state.pitch)) ? 'an' : 'a'} ` +
+  `${state.pitch} mm pitch`;
+const mountWhy = (opens) => `${atPitch()} — mounting holes sit ` +
   `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
   (state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
     : opens ? 'a cut open to the socket has to stay on the socket floor'
@@ -109,12 +112,23 @@ const LIMITS = {
     when: () => state.screws, why: () => mountWhy(false), off: 'screw holes' },
   screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mount().depth),
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
-  // the dovetail's ceiling is its own, so the other joints are not held to its reason
-  connClr: { min: RANGES.connClr.min, max: () => connClrMax(state.connector), label: 'Fit clearance',
-    when: () => state.connector !== 'none',
-    why: () => state.connector === 'dovetail'
-      ? '— any looser and a dovetail pocket breaks through into the socket beside it' : '' },
+  // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
+  connClr: { min: RANGES.connClr.min, max: () => connClrCeiling(state).max, label: 'Fit clearance',
+    when: () => state.connector !== 'none', why: () => clrWhy(connClrCeiling(state).by) },
 };
+/* What sets the clearance's ceiling, in words: core.js connClrCeiling decides it and says
+   which reason applies. A ceiling that moves with the pitch names the pitch, as the mount
+   sizes do, because that is the number to change; 'slip' is the plain 1 mm and keeps the
+   millimetres advice. */
+const CLR_JOINT = { puzzle: 'puzzle tab', bowtie: 'bowtie key', puzzlekey: 'puzzle key' };
+const clrWhy = (by) => ({
+  dovetail: '— any looser and a dovetail pocket breaks through into the socket beside it',
+  snaptop: '— any looser and the housing of a snap clip dropped in from above crosses the ' +
+    'seam into the next piece',
+  pitch: `${atPitch()} — on cells under ${RANGES.connClr.smallPitch} mm a ` +
+    `looser ${CLR_JOINT[state.connector]} opens holes in the plate`,
+  joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess opens holes in the plate`,
+})[by] || '';
 /* id -> the message that goes under it. Rebuilt from scratch on every read, so a field
    that has come good stops complaining without anything having to remember it once did. */
 const fieldErrors = new Map();
@@ -228,15 +242,15 @@ function readControls() {
      the estimate divides by 100, so a stray 900 would quote a mass nothing can print. */
   state.infill = Math.max(0, Math.min(100, state.infill));
   // `|| 0.2` made a clearance of 0 into 0.2, and let 100 through
-  const clr = readNumber('connClr');
-  state.tab = Object.assign({}, DEFAULTS.tab, { clr });
+  const fit = fitClearances(readNumber('connClr'));
+  state.tab = Object.assign({}, DEFAULTS.tab, { clr: fit.tab });
   /* No state.bowtie: a bowtie is built from state.key like the other two keyed joints,
      and DEFAULTS.bowtie is gone. This line survived it by being harmless —
      Object.assign over undefined yields {} — which is exactly how a parameter block
      that configures nothing goes on looking like it configures something. */
-  state.key = Object.assign({}, DEFAULTS.key, { clr: Math.max(0.1, clr - 0.05) });
-  state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: Math.max(0.08, clr - 0.05) });
-  state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr });
+  state.key = Object.assign({}, DEFAULTS.key, { clr: fit.key });
+  state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: fit.hclip });
+  state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr: fit.puzzle });
   $('alignRow').style.display = mm === 'auto' ? '' : 'none';
   $('customMargins').style.display = mm === 'custom' ? '' : 'none';
   $('magRow').style.display = state.magnets ? '' : 'none';
@@ -1043,17 +1057,22 @@ function connectorPart() {
  * out again from bottomPad and the joint's own minimum — the puzzle cavity is cut
  * relative to it, and the coupon has no other way to know.
  *
- * `clrMax` is the joint's clearance with the field at its top, so the coupon offers no
- * pair looser than the field will take: the field's headroom, carried into whichever
- * clearance this joint is cut to. A slim wall key's clearance is its own and the field
+ * `clrMax` is the joint's clearance with the field at its ceiling, so the coupon offers
+ * no pair looser than the field will take: the same ceiling the field is held to
+ * (connClrCeiling), cut the way this joint cuts the field (fitClearances). It was the
+ * field's headroom added to the joint's clearance, which is the same thing only while
+ * the key's 0.1 floor is not in play, and it read a ceiling that knew the connector and
+ * nothing else — a snap clip dropped in from above got pairs to 0.95, whose housings
+ * met across the coupon's seam. A slim wall key's clearance is its own and the field
  * does not move it, so it has no ceiling to keep to. */
 function activeJoint() {
   const pad = builtH() - state.plateHeight;
-  const headroom = connClrMax(state.connector) - state.tab.clr;   // tab.clr is the field
+  const top = fitClearances(connClrCeiling(state).max);
   if (!KEYED.includes(state.connector)) {
-    const clr = state.connector === 'puzzle' ? state.puzzle.clr : state.tab.clr;
+    const puzzle = state.connector === 'puzzle';
     return { kind: state.connector === 'none' ? 'none' : state.connector, pad,
-             clr, clrMax: clr + headroom };
+             clr: puzzle ? state.puzzle.clr : state.tab.clr,
+             clrMax: puzzle ? top.puzzle : top.tab };
   }
   const prm = activeKeyDims();
   // core.js owns this, so the coupon, the plate and the audit cannot disagree
@@ -1063,7 +1082,7 @@ function activeJoint() {
   const clr = kind === 'snaptop' ? state.key.clr : prm.clr;
   const slim = kind !== 'snaptop' && state.connector !== 'hclip' && state.keyMount === 'wall';
   return { kind, shape: activeKeyShape(), prm, pad, clr,
-           clrMax: slim ? Infinity : clr + headroom,
+           clrMax: slim ? Infinity : state.connector === 'hclip' ? top.hclip : top.key,
            part: connectorPart().polys };
 }
 /* ---------- material ------------------------------------------------------

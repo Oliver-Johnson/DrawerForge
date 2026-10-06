@@ -805,37 +805,47 @@ console.log('\nrounded outer corners, on the plate and nowhere else:');
 
 /* Shared by the sections below: build every piece of a design and count its bad edges,
    and how many of those are open (used an odd number of times) rather than shells
-   touching. */
+   touching. `beyond` is how far any piece reaches past its own footprint and the tabs or
+   lobes buildPiece says stick out of it — the room the print plan packs it into, and the
+   line the next piece starts at. */
 function buildAll(over) {
   const cfg = Object.assign({}, G.DEFAULTS, {
     marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0,
     magnets: false, screws: false, arcSegs: 6 }, over);
   if (['bowtie', 'puzzlekey', 'snap'].includes(cfg.connector) && !over.keyType) cfg.keyType = cfg.connector;
-  if (over.clr !== undefined) {   // the four clearances, derived the way readControls does
-    const c = over.clr;
-    cfg.tab = Object.assign({}, G.DEFAULTS.tab, { clr: c });
-    cfg.key = Object.assign({}, G.DEFAULTS.key, { clr: Math.max(0.1, c - 0.05) });
-    cfg.hclip = Object.assign({}, G.DEFAULTS.hclip, { clr: Math.max(0.08, c - 0.05) });
-    cfg.puzzle = Object.assign({}, G.DEFAULTS.puzzle, { clr: c });
+  if (over.clr !== undefined) {   // the four clearances, cut from the field as the page cuts them
+    const fit = G.fitClearances(over.clr);
+    for (const j of ['tab', 'key', 'hclip', 'puzzle'])
+      cfg[j] = Object.assign({}, G.DEFAULTS[j], { clr: fit[j] });
   }
   const L = G.computeLayout(cfg);
-  const pieces = L.pieces.map((pc) => G.buildPiece(cfg, L, pc).polys);
-  let bad = 0, open = 0;
-  for (const polys of pieces) {
-    bad += G.checkManifold(polys).bad;
+  const built = L.pieces.map((pc) => G.buildPiece(cfg, L, pc));
+  const pieces = built.map((r) => r.polys);
+  let bad = 0, open = 0, beyond = 0;
+  for (const r of built) {
+    bad += G.checkManifold(r.polys).bad;
     const key = (v) => v.map((x) => Math.round(x * 1000) / 1000).join(',');
     const edges = new Map();
-    for (const t of G.polysToTriangles(polys))
+    const p = r.protrusion;
+    for (const t of G.polysToTriangles(r.polys))
       for (let i = 0; i < 3; i++) {
         const a = key(t[i]), b = key(t[(i + 1) % 3]);
         const k = a < b ? a + '|' + b : b + '|' + a;
         edges.set(k, (edges.get(k) || 0) + 1);
+        const [x, y] = t[i];
+        beyond = Math.max(beyond, -p.l - x, x - r.W - p.r, -p.f - y, y - r.D - p.b);
       }
     for (const c of edges.values()) if (c % 2) open++;
   }
-  return { cfg, L, pieces, bad, open };
+  return { cfg, L, pieces, bad, open, beyond: Math.round(beyond * 1e4) / 1e4 };
 }
 const leakText = (r) => r.bad ? `${r.bad} BAD EDGES${r.open ? ` (${r.open} open)` : ' (shells touching)'}` : 'watertight';
+// four 2 × 2 pieces, and a 3 × 3 split into pieces one cell wide — the narrow one is
+// what gives out first as the pitch comes down
+const PIECE_LAYOUTS = {
+  '2x2 pieces': (p) => ({ drawerW: 4 * p, drawerD: 4 * p, splitMode: 'manual', rowCuts: [2], colCuts: [[2], [2]] }),
+  '1-cell pieces': (p) => ({ drawerW: 3 * p, drawerD: 3 * p, splitMode: 'manual', rowCuts: [1], colCuts: [[2], [1]] }),
+};
 
 /* A magnet or screw-head pocket never cuts through the floor it sits in.
  *
@@ -949,12 +959,7 @@ console.log('\nthe smallest pitch the page allows:');
     'snap top': { connector: 'snap', keyInsert: 'top' },
     skeleton: { connector: 'none', plateStyle: 'skeleton' },
   };
-  // four 2 × 2 pieces, and a 3 × 3 split into pieces one cell wide — the narrow one is
-  // what gives out first as the pitch comes down
-  const LAYOUTS = {
-    '2x2 pieces': (p) => ({ drawerW: 4 * p, drawerD: 4 * p, splitMode: 'manual', rowCuts: [2], colCuts: [[2], [2]] }),
-    '1-cell pieces': (p) => ({ drawerW: 3 * p, drawerD: 3 * p, splitMode: 'manual', rowCuts: [1], colCuts: [[2], [1]] }),
-  };
+  const LAYOUTS = PIECE_LAYOUTS;
   // the puzzle's own quarantine above, at this pitch too: the same edge, used 4 times
   const QUARANTINE = { 'puzzle @ 2x2 pieces': 'lobe apex sits on a region boundary' };
   for (const [ln, lay] of Object.entries(LAYOUTS)) {
@@ -992,7 +997,8 @@ console.log('\nthe other limits, built at their ends:');
     ['rim cutoff at its maximum', { ...cell, topCutoff: R.topCutoff.max }],
     ['extra floor at its maximum', { ...cell, bottomPad: R.bottomPad.max }],
     ['dovetail, no clearance', { ...split, connector: 'dovetail', clr: R.connClr.min }],
-    ['dovetail, most clearance', { ...split, connector: 'dovetail', clr: G.connClrMax('dovetail') }],
+    ['dovetail, most clearance', { ...split, connector: 'dovetail',
+      clr: G.connClrCeiling({ ...G.DEFAULTS, connector: 'dovetail' }).max }],
     ['widest magnet, from below', { ...cell, magnets: true, magnetD: at42({}).magnetD }],
     ['widest magnet, from above', { ...cell, magnets: true, magnetSide: 'top',
       magnetD: at42({ magnetSide: 'top' }).magnetD }],
@@ -1011,30 +1017,6 @@ console.log('\nthe other limits, built at their ends:');
   console.log(`  ${'dovetail at 0.35 clearance'.padEnd(28)} ${leakText(past)}` +
               (past.open ? ' — the cap is earned' : '   NOW CLOSED — the cap can go up'));
   if (!past.open) bad++;
-
-  /* Every other joint at its own ceiling. The dovetail's 0.3 is the dovetail's: held over
-     the rest, it refuses a bowtie link at 0.35 or 0.5 that builds closed, and gives the
-     dovetail's reason for it. So each housing whose cut the clearance moves is built at
-     the most the page lets it have, and that has to be past the dovetail's. The puzzle
-     carries its quarantine from the top of this file: shells touching are known, a hole
-     is not. */
-  const JOINTS = {
-    puzzle: { connector: 'puzzle' }, bowtie: { connector: 'bowtie' },
-    puzzlekey: { connector: 'puzzlekey' }, snap: { connector: 'snap' },
-    hclip: { connector: 'hclip' }, 'snap top': { connector: 'snap', keyInsert: 'top' },
-    'snap wall top': { connector: 'snap', keyMount: 'wall', keyInsert: 'top' },
-    'hclip top': { connector: 'hclip', keyInsert: 'top' },
-  };
-  for (const [cn, conf] of Object.entries(JOINTS)) {
-    const most = G.connClrMax(conf.connector);
-    const r = buildAll({ ...split, ...conf, clr: most });
-    const known = cn === 'puzzle' && r.bad && !r.open;
-    const good = most > G.connClrMax('dovetail') && (!r.bad || known);
-    console.log(`  ${`${cn}, most clearance (${most})`.padEnd(34)} ${leakText(r)}` +
-                `${known ? '  known: lobe apex sits on a region boundary' : ''}` +
-                `${most > G.connClrMax('dovetail') ? '' : '   HELD TO THE DOVETAIL\'S CEILING'}`);
-    if (!good) bad++;
-  }
 
   /* A corner boss is 2.6 mm tall and does not grow, so the pocket in it is capped — at
      what leaves a layer over it, which takes the spec's 6.5 × 2.4 magnet. Built at every
@@ -1061,6 +1043,156 @@ console.log('\nthe other limits, built at their ends:');
               (open.length ? `LEAKING: ${open.join('; ')}` : 'all watertight') +
               (holds ? '' : `   THE CAP ${cap} DOES NOT TAKE A 2.4 MM MAGNET UNDER A LAYER`));
   bad += open.length + (holds ? 0 : 1);
+}
+
+/* The fit clearance at its ceiling, for every joint and every pitch band.
+ *
+ * connClrCeiling's answer depends on the joint, which way its key goes in and the pitch,
+ * and a ceiling that knew only the connector let two things through at 1 mm: a snap clip
+ * dropped in from above stood its housing 0.65 mm inside the next piece, and the puzzle,
+ * bowtie and puzzle key left holes in plates under 20 mm. The cases above could not see
+ * either. They built each joint once, at 42 mm, and asked only whether it was watertight —
+ * and a housing standing in the next piece is perfectly watertight.
+ *
+ * So every joint the connector, mount and insert menus make is built at its own ceiling,
+ * on both piece layouts, at the bottom of each pitch band the ceiling changes at, where it
+ * has least room — 13.5; 13.6, where the puzzle reaches 0.3; and 20 — and at a few
+ * pitches between. Each has to come back closed and inside its own width: nothing past
+ * its footprint but the tabs and lobes buildPiece declares. The puzzle's shells touching
+ * at its lobe apex is the quarantine at the top of this file.
+ *
+ * Then the step past each ceiling that set it, which has to be open or across the seam
+ * still: if the engine closes one, this says that ceiling can go up. And the fit coupon at
+ * each ceiling, which is the same joint at four clearances up to it — its pairs have to
+ * stay at or under the ceiling, and a housing must not reach into the gap between a
+ * pair's two tiles, where it meets the other tile's. */
+console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
+{
+  const VARIANTS = {
+    dovetail: { connector: 'dovetail' }, puzzle: { connector: 'puzzle' },
+    bowtie: { connector: 'bowtie' }, puzzlekey: { connector: 'puzzlekey' }, snap: { connector: 'snap' },
+    hclip: { connector: 'hclip' }, 'hclip top': { connector: 'hclip', keyInsert: 'top' },
+    'bowtie wall': { connector: 'bowtie', keyMount: 'wall' },
+    'puzzlekey wall': { connector: 'puzzlekey', keyMount: 'wall' },
+    'snap wall': { connector: 'snap', keyMount: 'wall' },
+    'bowtie wall top': { connector: 'bowtie', keyMount: 'wall', keyInsert: 'top' },
+    'puzzlekey wall top': { connector: 'puzzlekey', keyMount: 'wall', keyInsert: 'top' },
+    'snap top': { connector: 'snap', keyInsert: 'top' },
+    'snap wall top': { connector: 'snap', keyMount: 'wall', keyInsert: 'top' },
+  };
+  const C = G.PLATE_RANGES.connClr;
+  const ceiling = (conf, pitch) => G.connClrCeiling({ ...G.DEFAULTS, ...conf, pitch }).max;
+  /* Where each band starts, read off the function rather than written out, so a ceiling
+     that moves takes its checks with it; then the spec pitch and three between. */
+  const bands = (conf) => {
+    const at = [G.PLATE_RANGES.pitch.min];
+    let was = ceiling(conf, at[0]);
+    for (let i = 1; at[0] + i / 10 <= 60; i++) {
+      const P = Math.round((at[0] + i / 10) * 10) / 10, now = ceiling(conf, P);
+      if (now !== was) at.push(P);
+      was = now;
+    }
+    return [...new Set([...at, 16, C.smallPitch - 0.5, 30, 42])].sort((a, b) => a - b);
+  };
+  /* Shells touching rather than a hole, each at one clearance, each pinned at what it
+     is: the puzzle's is the quarantine at the top of this file, and the dovetail's notch
+     at 0.3 puts its top back edge, 2.2 mm in and 2.4 up, on an edge of the region next
+     to it on the 1-cell layout's narrow pieces — 0.295 is clear of it, and it is no
+     hole. */
+  const KNOWN = { 'dovetail @ 42 mm 1-cell pieces': 3 };
+  const OVER = 1e-6;
+  const ceilings = new Map();
+  for (const [vn, conf] of Object.entries(VARIANTS)) {
+    const fails = [], at = [], known = [];
+    for (const P of bands(conf)) {
+      const most = ceiling(conf, P);
+      for (const [ln, lay] of Object.entries(PIECE_LAYOUTS)) {
+        const r = buildAll({ pitch: P, ...lay(P), ...conf, clr: most });
+        const pinned = KNOWN[`${vn} @ ${P} mm ${ln}`];
+        const touching = r.bad && !r.open && (vn === 'puzzle' || r.bad <= pinned);
+        if (touching && vn !== 'puzzle') known.push(`${P} mm ${ln}: ${leakText(r)}`);
+        if (pinned !== undefined && !r.bad) fails.push(`${P} mm ${ln}: NOW CLEAN — unpin it`);
+        if ((r.bad && !touching) || r.beyond > OVER)
+          fails.push(`${P} mm ${ln} at ${most}: ${leakText(r)}` +
+                     (r.beyond > OVER ? `, ${r.beyond} mm INTO THE NEXT PIECE` : ''));
+      }
+      at.push(`${P}:${most}`);
+      ceilings.set(`${vn} at ${most}`, [conf, most]);
+    }
+    console.log(`  ${vn.padEnd(18)} ${at.join(' ').padEnd(48)} ` +
+                (fails.length ? `FAILS: ${fails.join('; ')}` : 'closed, inside its width') +
+                (known.length ? `  known: ${known.join('; ')}` : ''));
+    bad += fails.length;
+  }
+  // the dovetail's reason is the dovetail's: at the spec pitch nothing else is held to it
+  const held = Object.entries(VARIANTS)
+    .filter(([vn, conf]) => vn !== 'dovetail' && ceiling(conf, 42) <= C.dovetail).map(([vn]) => vn);
+  console.log(`  at 42 mm, past the dovetail's ${C.dovetail}: ` +
+              (held.length ? `HELD TO IT: ${held.join(', ')}` : 'every other joint'));
+  if (held.length) bad++;
+
+  const PAST = [
+    ['snap from above, 0.4 at 42', { connector: 'snap', keyInsert: 'top', pitch: 42, clr: 0.4 }, '2x2 pieces'],
+    ['puzzle, 0.3 at 13.5', { connector: 'puzzle', pitch: 13.5, clr: 0.3 }, '1-cell pieces'],
+    ['puzzle, 0.35 at 19', { connector: 'puzzle', pitch: 19, clr: 0.35 }, '2x2 pieces'],
+    ['bowtie, 0.35 at 15', { connector: 'bowtie', pitch: 15, clr: 0.35 }, '2x2 pieces'],
+    ['puzzle key, 0.4 at 14', { connector: 'puzzlekey', pitch: 14, clr: 0.4 }, '2x2 pieces'],
+    ['puzzle key, 0.82 at 42', { connector: 'puzzlekey', pitch: 42, clr: 0.82 }, '2x2 pieces'],
+  ];
+  for (const [what, o, ln] of PAST) {
+    const r = buildAll({ ...PIECE_LAYOUTS[ln](o.pitch), ...o });
+    const still = r.open > 0 || r.beyond > OVER;
+    console.log(`  ${what.padEnd(28)} ${r.beyond > OVER ? `${r.beyond} mm into the next piece` : leakText(r)}` +
+                (still ? ' — the ceiling is earned' : '   NOW CLEAN — that ceiling can go up'));
+    if (!still) bad++;
+  }
+
+  /* activeJoint in src/ui.js, with the field at the ceiling — a fixture, as in the coupon
+     section above, reading the same two functions the page does. */
+  const H = 4.25;
+  const couponOf = (conf, field) => {
+    const cfg = { ...G.DEFAULTS, ...conf };
+    const fit = G.fitClearances(field);
+    for (const j of ['tab', 'key', 'hclip', 'puzzle']) cfg[j] = { ...G.DEFAULTS[j], clr: fit[j] };
+    const top = G.fitClearances(G.connClrCeiling(cfg).max);
+    const kind = G.jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
+    if (!['bowtie', 'puzzlekey', 'snap', 'hclip'].includes(cfg.connector)) {
+      const puzzle = cfg.connector === 'puzzle';
+      return { cfg, keyed: false, joint: { kind, pad: 0, clr: puzzle ? fit.puzzle : fit.tab,
+                                           clrMax: puzzle ? top.puzzle : top.tab } };
+    }
+    const hclip = cfg.connector === 'hclip';
+    const slim = kind !== 'snaptop' && !hclip && cfg.keyMount === 'wall';
+    const prm = hclip ? G.hclipPrm(cfg.hclip) : slim ? { ...G.DEFAULTS.keySlim } : { ...cfg.key };
+    if (cfg.keyInsert === 'top' && (hclip || cfg.keyMount === 'wall')) prm.depth = 2.0;
+    const shape = hclip ? 'snap' : cfg.connector;
+    return { cfg, keyed: true, joint: { kind, shape, prm, pad: prm.depth + 0.8,
+      clr: kind === 'snaptop' ? fit.key : prm.clr,
+      clrMax: slim ? Infinity : hclip ? top.hclip : top.key,
+      part: G.buildKey(shape, prm, prm.depth - 0.15) } };
+  };
+  const met = [];
+  for (const [name, [conf, most]] of ceilings) {
+    const { cfg, keyed, joint } = couponOf(conf, most);
+    const s = G.buildFitSample(cfg, H, joint);
+    const leaks = G.checkManifold(s.polys).bad;
+    const apart = new Set(s.clrs.map((c) => c.toFixed(3))).size === s.clrs.length;
+    const under = s.clrs.every((c) => c <= joint.clrMax + 1e-9);
+    /* buildFitSample's tiles are 18 wide and 7 apart, each pair 0.6 either side of its
+       seam, with the loose part after the last. A tab or a lobe crosses that gap by
+       design; a key's housing never should. */
+    const tilesEnd = (s.clrs.length - 1) * 25 + 18;
+    let inGap = 0;
+    if (keyed) for (const p of s.polys) for (const v of p.verts)
+      if (v[0] <= tilesEnd + 1e-6 && Math.abs(v[1]) < 0.6 - 1e-6) inGap++;
+    if (leaks || !apart || !under || inGap)
+      met.push(`${name}: pairs ${s.clrs.map((c) => c.toFixed(2)).join('/')}` +
+               (under ? '' : ` OVER ${joint.clrMax.toFixed(2)}`) + (apart ? '' : ' NOT FOUR FITS') +
+               (inGap ? `, ${inGap} vertices IN THE SEAM GAP` : '') + (leaks ? `, ${leaks} BAD EDGES` : ''));
+  }
+  console.log(`  fit coupons at ${ceilings.size} ceilings: ` +
+              (met.length ? `FAIL: ${met.join('; ')}` : 'pairs at or under each, apart, watertight'));
+  bad += met.length;
 }
 
 /* Fewest plates, on a drawer too big for its search.

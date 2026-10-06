@@ -160,6 +160,7 @@ test.describe('ranges on the geometry fields', () => {
 test.describe('limits no tighter than the geometry', () => {
   // 4 × 2 cells cut once: two pieces and one seam, quick to build
   const SEAM = '#w=168&d=84&sp=manual&rc=&cc=2';
+  const seamAt = (p) => `#pi=${p}&w=${4 * p}&d=${2 * p}&sp=manual&rc=&cc=2`;
 
   for (const cn of ['puzzle', 'bowtie', 'puzzlekey', 'snap', 'hclip'])
     test(`a ${cn} at 0.5 mm clearance builds — the 0.3 ceiling is the dovetail's`, async ({ page }) => {
@@ -178,7 +179,13 @@ test.describe('limits no tighter than the geometry', () => {
      the field, so the field's 1 mm is 0.95 on the key. */
   for (const [hash, nominal, ceiling] of [[`${SEAM}&cn=dovetail&cl=0.25`, 0.25, 0.3],
                                           [`${SEAM}&cn=dovetail&cl=0.3`, 0.3, 0.3],
-                                          [`${SEAM}&cn=bowtie&cl=1`, 0.95, 0.95]])
+                                          [`${SEAM}&cn=bowtie&cl=1`, 0.95, 0.95],
+                                          // the other ceilings, each at its own; a snap clip
+                                          // dropped in from above is cut to the key's 0.3
+                                          [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.35`, 0.3, 0.3],
+                                          [`${SEAM}&cn=puzzlekey&cl=0.8`, 0.75, 0.75],
+                                          [`${seamAt(18)}&cn=bowtie&cl=0.3`, 0.25, 0.25],
+                                          [`${seamAt(13.5)}&cn=puzzle&cl=0.25`, 0.25, 0.25]])
     test(`the fit sample stays inside the range: ${hash}`, async ({ page }) => {
       const errors = await openAt(page, hash);
       const clrs = await page.evaluate(() => fitSample().clrs);
@@ -235,6 +242,55 @@ test.describe('limits no tighter than the geometry', () => {
 });
 
 /* ---- #19: a build that throws ----------------------------------------------------- */
+/* ---- the clearance ceiling is the joint's and the pitch's ---------------------------- */
+/* A 1 mm ceiling for every joint but the dovetail let through two kinds of plate. A snap
+   clip dropped in from above is housed in a slot whose seam-side wall stands 0.3 mm less
+   the clearance from the seam, so past 0.35 on the field the wall is in the next piece;
+   and under 20 mm the puzzle, the bowtie and the puzzle key leave holes in the plate at
+   clearances that build closed at 42. Each case is refused at the field, clamped to the
+   ceiling in the state a link loads into, and says which joint and which pitch — the
+   pitch is the number to change. A joint that builds closed at a small pitch is not held
+   to the others' reason. */
+test.describe('the clearance ceiling is the joint\'s and the pitch\'s', () => {
+  const SEAM = '#w=168&d=84&sp=manual&rc=&cc=2';
+  for (const [hash, ceiling, msg] of [
+    [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.5`, 0.35,
+     /Fit clearance must be 0\.35 mm or less — any looser and the housing of a snap clip dropped in from above crosses the seam into the next piece\./],
+    ['#pi=18&cn=bowtie&cl=1', 0.3,
+     /Fit clearance must be 0\.3 mm or less at an 18 mm pitch — on cells under 20 mm a looser bowtie key opens holes in the plate\./],
+    ['#pi=14&cn=puzzlekey&cl=0.5', 0.3,
+     /Fit clearance must be 0\.3 mm or less at a 14 mm pitch — on cells under 20 mm a looser puzzle key opens holes in the plate\./],
+    ['#pi=13.5&cn=puzzle&cl=0.3', 0.25,
+     /Fit clearance must be 0\.25 mm or less at a 13\.5 mm pitch — on cells under 20 mm a looser puzzle tab opens holes in the plate\./],
+    ['#cn=puzzlekey&cl=0.85', 0.8,
+     /Fit clearance must be 0\.8 mm or less — any looser and a puzzle key's recess opens holes in the plate\./],
+  ])
+    test(`${hash} is held to ${ceiling}, and says why`, async ({ page }) => {
+      const errors = await openAt(page, hash);
+      expect(await text(page, 'errConnClr')).toMatch(msg);
+      expect(await shown(page, 'errConnClr')).toBe(true);
+      expect(await text(page, 'warnings')).toMatch(msg);
+      const f = await page.evaluate(() => ({
+        clr: state.tab.clr, max: document.getElementById('connClr').max }));
+      expect(f.clr, 'the link\'s figure is clamped to the ceiling').toBe(ceiling);
+      expect(Number(f.max), 'the field offers no more than the ceiling').toBe(ceiling);
+      expect(await text(page, 'pieceTail')).toMatch(/not building/);
+      expect(await exportOff(page)).toBe(true);
+      expect(errors).toEqual([]);
+    });
+
+  // the snap and the H-clip built closed at every clearance and pitch measured
+  for (const hash of ['#pi=16&w=64&d=32&sp=manual&rc=&cc=2&cn=hclip&cl=1',
+                      '#pi=16&w=64&d=32&sp=manual&rc=&cc=2&cn=snap&cl=1'])
+    test(`${hash} builds — the small-pitch hold is not every joint's`, async ({ page }) => {
+      const errors = await openAt(page, hash);
+      expect(await shown(page, 'errConnClr')).toBe(false);
+      expect(await text(page, 'pieceTail')).toMatch(/ready/);
+      expect(await exportOff(page)).toBe(false);
+      expect(errors).toEqual([]);
+    });
+});
+
 test('a failed build says so in the table and the dialog, and Download goes off',
   async ({ page }) => {
     const pageErrors = [];
