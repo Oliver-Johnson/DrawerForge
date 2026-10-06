@@ -64,7 +64,8 @@ const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFron
  * `when` says whether the field is in play: magnet sizes are not checked with magnets
  * off, nor margins outside Custom, because a complaint about a field you cannot see is
  * one you cannot act on. `why` finishes the too-big message where "check the figure is
- * in millimetres" would be the wrong advice. */
+ * in millimetres" would be the wrong advice, and `off` names the switch that drops a cut
+ * the pitch has no room for. */
 const RANGES = PLATE_RANGES;
 const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
 const mount = () => mountLimits(state);
@@ -99,21 +100,26 @@ const LIMITS = {
     tooSmall: 'at 0 the rim between sockets is a face with no width, and the plate comes out open',
     why: () => '— past that a spec bin rides on the rim instead of seating in its socket' },
   magnetD: { ...RANGES.magnetD, max: () => mount().magnetD, label: 'Magnet Ø', when: () => state.magnets,
-    why: () => mountWhy(state.magnetSide === 'top') },
+    why: () => mountWhy(state.magnetSide === 'top'), off: 'magnet pockets' },
   magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mount().depth), label: 'Magnet depth',
     when: () => state.magnets, why: bossDepth },
   screwHoleD: { ...RANGES.screwHoleD, max: () => mount().screwHoleD, label: 'Screw hole Ø',
-    when: () => state.screws, why: () => mountWhy(true) },
+    when: () => state.screws, why: () => mountWhy(true), off: 'screw holes' },
   screwHeadD: { ...RANGES.screwHeadD, max: () => mount().screwHeadD, label: 'Screw head Ø',
-    when: () => state.screws, why: () => mountWhy(false) },
+    when: () => state.screws, why: () => mountWhy(false), off: 'screw holes' },
   screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mount().depth),
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
-  connClr: { ...RANGES.connClr, label: 'Fit clearance', when: () => state.connector !== 'none',
-    why: () => '— any looser and a dovetail pocket breaks through into the socket beside it' },
+  // the dovetail's ceiling is its own, so the other joints are not held to its reason
+  connClr: { min: RANGES.connClr.min, max: () => connClrMax(state.connector), label: 'Fit clearance',
+    when: () => state.connector !== 'none',
+    why: () => state.connector === 'dovetail'
+      ? '— any looser and a dovetail pocket breaks through into the socket beside it' : '' },
 };
 /* id -> the message that goes under it. Rebuilt from scratch on every read, so a field
    that has come good stops complaining without anything having to remember it once did. */
 const fieldErrors = new Map();
+// id -> the cut the pitch has no room for at all; a check on the design, see readNumber
+const noRoom = new Map();
 /* Named one field at a time rather than derived from the id: the build audits the
    template by literal, and $('errDrawerW') is what it looks for. Fields that sit in one
    row share the line under it. */
@@ -142,18 +148,23 @@ function readNumber(id) {
      the magnet size the link carries, to be found smaller when they go back on. */
   const inPlay = !lim.when || lim.when();
   const lo = lim.min;
-  const hi = typeof lim.max !== 'function' ? (lim.max ?? Infinity) : inPlay ? lim.max() : Infinity;
+  let hi = typeof lim.max !== 'function' ? (lim.max ?? Infinity) : inPlay ? lim.max() : Infinity;
+  /* A range with nothing in it: the pitch leaves no room for a pocket of any size. No
+     number in this field answers that — a screw hole at a 34 mm pitch is refused at 1 mm
+     as at 3 — and putting it on the field left one whose maximum sat under its minimum,
+     red whatever it held. So it is a check on the design instead, under the cut map,
+     naming what does fix it; and the field keeps only its fixed range meanwhile, so the
+     size a link carries is still there when the pitch comes back up. */
+  if (hi < lo) {
+    if (inPlay) noRoom.set(id, `${lim.label}: there is no room for one ${lim.why()}. ` +
+      `Use a larger pitch, or turn off ${lim.off}.`);
+    hi = Infinity;
+  }
   $(id).min = lo;
-  if (isFinite(hi)) $(id).max = Math.max(lo, hi); else $(id).removeAttribute('max');
+  if (isFinite(hi)) $(id).max = hi; else $(id).removeAttribute('max');
   const say = (msg) => { if (inPlay) fieldErrors.set(id, msg); };
   if (!isFinite(v)) {
     say(`${lim.label} is blank — enter a measurement in millimetres.`);
-    return lo;
-  }
-  /* A range with nothing in it: the pitch leaves no room for a pocket of any size. */
-  if (hi < lo) {
-    say(`${lim.label}: there is no room for one ${lim.why()}. Use a larger pitch, ` +
-        'or turn this off.');
     return lo;
   }
   if (v < lo) {
@@ -189,7 +200,7 @@ function showFieldErrors() {
 }
 
 function readControls() {
-  fieldErrors.clear();
+  fieldErrors.clear(); noRoom.clear();
   /* The switches before the numbers: which ranges apply, and how wide they are, depend
      on them — see LIMITS. */
   state.alignX = $('alignX').value; state.alignY = $('alignY').value;
@@ -342,6 +353,7 @@ function warningsList() {
   // first, and above everything: these say what is wrong with what you typed, which
   // nothing below can — every check after this one is reasoning about the clamped value
   for (const msg of fieldErrors.values()) out.push({ err: true, stop: true, t: msg });
+  for (const msg of noRoom.values()) out.push({ err: true, stop: true, t: msg });
   if (layout.nx * layout.ny > MAX_CELLS)
     out.push({ err: true, stop: true, t: `A ${layout.nx} × ${layout.ny} grid is ` +
       `${layout.nx * layout.ny} cells, past the ${MAX_CELLS} this tool will build in one ` +
@@ -857,15 +869,16 @@ function computePrintPlan() {
   if (!layout || Object.keys(builds).length < layout.pieces.length) { printPlan = null; renderPrintPlan(); return; }
   /* Never below zero. A negative spacing packed parts into each other, and a negative
      stack gap sank the upper piece into the one under it, so the 3MF printed them as
-     one fused lump. A blank field means the default; 0 is an answer and stays 0 — the
-     old `|| 4` turned it into 4. */
+     one fused lump. A blank field means the default; a spacing of 0 is an answer and
+     stays 0 — the old `|| 4` turned it into 4. A stack gap of 0 is not: it prints the
+     two pieces fused just the same, so it is held to one layer, as packPlates holds it. */
   const gapOf = (id, dflt) => {
     const v = parseFloat($(id).value);
     return isFinite(v) ? Math.max(0, v) : dflt;
   };
   const gap = gapOf('plateGap', 4);
   const stack = $('stackToggle').checked;
-  const zGap = gapOf('stackGap', 0.24);
+  const zGap = Math.max(PRINT_LAYER, gapOf('stackGap', 0.24));
   $('stackHint').style.display = stack ? '' : 'none';
   const items = layout.pieces.map(pc => {
     const m = builds[pc.id].meta;
@@ -1028,19 +1041,29 @@ function connectorPart() {
  *
  * `pad` is read back off the height the build actually came out at rather than worked
  * out again from bottomPad and the joint's own minimum — the puzzle cavity is cut
- * relative to it, and the coupon has no other way to know. */
+ * relative to it, and the coupon has no other way to know.
+ *
+ * `clrMax` is the joint's clearance with the field at its top, so the coupon offers no
+ * pair looser than the field will take: the field's headroom, carried into whichever
+ * clearance this joint is cut to. A slim wall key's clearance is its own and the field
+ * does not move it, so it has no ceiling to keep to. */
 function activeJoint() {
   const pad = builtH() - state.plateHeight;
-  if (!KEYED.includes(state.connector))
+  const headroom = connClrMax(state.connector) - state.tab.clr;   // tab.clr is the field
+  if (!KEYED.includes(state.connector)) {
+    const clr = state.connector === 'puzzle' ? state.puzzle.clr : state.tab.clr;
     return { kind: state.connector === 'none' ? 'none' : state.connector, pad,
-             clr: state.connector === 'puzzle' ? state.puzzle.clr : state.tab.clr };
+             clr, clrMax: clr + headroom };
+  }
   const prm = activeKeyDims();
   // core.js owns this, so the coupon, the plate and the audit cannot disagree
   const kind = jointKind(state.connector, state.keyMount, state.keyInsert);
-  return { kind, shape: activeKeyShape(), prm, pad,
-           // the clip is one part at one size in either housing, so it is fitted to the
-           // full key's clearance — buildPiece says the same
-           clr: kind === 'snaptop' ? state.key.clr : prm.clr,
+  // the clip is one part at one size in either housing, so it is fitted to the full
+  // key's clearance — buildPiece says the same
+  const clr = kind === 'snaptop' ? state.key.clr : prm.clr;
+  const slim = kind !== 'snaptop' && state.connector !== 'hclip' && state.keyMount === 'wall';
+  return { kind, shape: activeKeyShape(), prm, pad, clr,
+           clrMax: slim ? Infinity : clr + headroom,
            part: connectorPart().polys };
 }
 /* ---------- material ------------------------------------------------------

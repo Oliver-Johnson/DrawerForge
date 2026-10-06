@@ -261,7 +261,7 @@
     <div class="row3">
       <label class="f"><b>Part spacing (mm)</b><input id="plateGap" type="number" step="0.5" min="0" value="4"></label>
       <label class="f" style="align-self:end"><label class="tog"><input id="stackToggle" type="checkbox"> Stack pieces that fit on top</label></label>
-      <label class="f"><b>Stack gap (mm)</b><input id="stackGap" type="number" step="0.02" min="0" value="0.24"></label>
+      <label class="f"><b>Stack gap (mm)</b><input id="stackGap" type="number" step="0.02" min="0.2" value="0.24"></label>
     </div>
     <div class="hint" id="stackHint" style="display:none">Experimental: any piece that fits fully inside the footprint of the one below prints stacked on top, separated by the gap layer — snap apart afterwards. Needs well-tuned bridging (the layer above spans open sockets); test with two first. Respects your printer's Z height.</div>
     <div id="platesRow" style="display:flex;gap:12px;flex-wrap:wrap"></div>
