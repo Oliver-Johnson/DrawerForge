@@ -499,6 +499,18 @@ test('the bin ZIP, the plate ZIP and every 3MF are deflated, and unzip to the sa
     expect(errors).toEqual([]);
   });
 
+/* A bin too big for the bed is said, and leaves out only itself. The bins that fitted
+   were packed onto its plate, which no file carries, so they were in no download and
+   the plan said "0 bins packed". */
+test('a bin too big for the bed takes none of the others with it', async ({ page }) => {
+  const errors = await openAt(page, 'bw=180&bd=180&bl=0-0-5-1-3_0-1-1-1-3_1-1-1-1-3_2-1-1-1-3');
+  await expect(page.locator('#plateSummary')).toContainText('3 bins packed');
+  await expect(page.locator('#plateSummary')).toContainText('1 part TOO BIG');
+  expect(await page.evaluate(() => goodPlates().reduce((n, [p]) => n + p.placed.length, 0)),
+    'every bin that fits is on a plate that is in the files').toBe(3);
+  expect(errors).toEqual([]);
+});
+
 /* ---------- #30: the small ones ----------------------------------------------- */
 
 test('a note is cut by character, never through an emoji', async ({ page }) => {

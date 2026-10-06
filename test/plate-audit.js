@@ -1351,6 +1351,35 @@ console.log('\npiece names past Z:');
   if (wrong.length || odd.length || !unique) bad++;
 }
 
+/* A part too big for the bed takes no other part with it.
+ *
+ * packPlates notes such a part as a plate of its own, marked `overflow`, and both pages
+ * leave those plates out of the files and the plan — there is nothing on them to print.
+ * But the plate was an empty one, and the parts after it were placed on the first plate
+ * with room: that one. A 5 × 1 bin on a 180 mm bed took the three bins that fitted
+ * with it, so they were in no file and the plan said "0 bins packed"; on the baseplates
+ * page a piece that fitted went the same way as one that did not. */
+console.log('\na part too big for the bed takes no other part with it:');
+{
+  const big = { id: 'big', w: 210, d: 42, h: 20, qty: 1 };
+  const small = { id: 'small', w: 42, d: 42, h: 20, qty: 3 };
+  for (const stack of [false, true]) {
+    for (const bigFirst of [true, false]) {
+      const items = bigFirst ? [big, small] : [small, big];
+      const plates = G.packPlates(items, 180, 180, 3, { stack, bedH: 250 });
+      const over = plates.filter((p) => p.overflow);
+      const onOver = over.reduce((n, p) => n + p.placed.length, 0);
+      const printed = plates.filter((p) => !p.overflow).flatMap((p) => p.placed.map((t) => t.id));
+      const ok = over.length === 1 && over[0].overflow === 'big' && onOver === 0 &&
+        printed.length === 3 && printed.every((id) => id === 'small');
+      console.log(`  ${stack ? 'stacked' : 'side by side'}, ${bigFirst ? 'big part listed first' : 'big part listed last'}: ` +
+        `${printed.length} of 3 printable parts on a plate that prints, ${onOver} on the overflow` +
+        (ok ? '' : '   PARTS LOST'));
+      if (!ok) bad++;
+    }
+  }
+}
+
 /* Every parameter in DEFAULTS is read by somebody.
  *
  * Two of the defects this file now covers were the same shape, and neither could fail a

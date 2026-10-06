@@ -2500,10 +2500,15 @@ function packPlates(items, bedW, bedD, gap, opts) {
     b.topW = best.w; b.topD = best.d; b.topZ = t.z + u.h;
     return t;
   }
+  /* A part too big for the bed is noted as a plate of its own, marked `overflow`, which
+     nothing prints: the pages leave it out of the files. So nothing else may go on it.
+     It used to look like an empty plate, and the parts after it were placed there and
+     printed nowhere. */
+  const printing = () => plates.filter((pl) => !pl.overflow);
   for (const u of units) {
     let placed = null, host = null;
-    for (const pl of plates) { placed = tryStack(pl, u); if (placed) { host = pl; break; } }
-    if (!placed) for (const pl of plates) { placed = tryShelf(pl, u); if (placed) { host = pl; pl.towers.push(placed); break; } }
+    for (const pl of printing()) { placed = tryStack(pl, u); if (placed) { host = pl; break; } }
+    if (!placed) for (const pl of printing()) { placed = tryShelf(pl, u); if (placed) { host = pl; pl.towers.push(placed); break; } }
     if (!placed) {
       const pl = { shelves: [], towers: [], placed: [] };
       placed = tryShelf(pl, u);
