@@ -1261,14 +1261,52 @@ console.log('\nmagnet and screw pockets keep a floor:');
   }
 }
 
-/* The limits the page enforces, built at their ends.
- *
- * PLATE_RANGES and mountLimits are where the page stops accepting a number, and each end
- * is there because one step past it leaked or broke through — the reasons are written
- * next to them in core.js. A limit is only worth having if the value AT it is good, so
- * the extremes are built here; and the one step past each that justified the pitch floor
- * is built too, so that if the engine ever closes it the floor can come down and this
- * says so, the way a quarantined case does. */
+/* The area of a plate's cross-section at height z: every triangle the plane crosses gives
+   a segment, wound so the solid is on its left, and along each scanline the overlapping
+   shells add up — inside the plate wherever the count is above zero. Scanlines `dy`
+   apart, so a change narrower than that in y can slip between two; one in x cannot. */
+function sectionArea(polys, z, dy) {
+  const segs = [];
+  for (const t of G.polysToTriangles(polys)) {
+    const [a, b, c] = t;
+    const n = [(b[1]-a[1])*(c[2]-a[2]) - (b[2]-a[2])*(c[1]-a[1]),
+               (b[2]-a[2])*(c[0]-a[0]) - (b[0]-a[0])*(c[2]-a[2])];
+    const pts = [];
+    for (let [p, q] of [[a, b], [b, c], [c, a]]) {
+      // the same edge in two triangles gives the same point, whichever way round it runs
+      if (p[2] > q[2] || (p[2] === q[2] && (p[0] > q[0] || (p[0] === q[0] && p[1] > q[1])))) [p, q] = [q, p];
+      if ((p[2] < z) !== (q[2] < z)) {
+        const s = (z - p[2]) / (q[2] - p[2]);
+        pts.push([p[0] + s*(q[0]-p[0]), p[1] + s*(q[1]-p[1])]);
+      }
+    }
+    if (pts.length !== 2) continue;
+    let [p, q] = pts;
+    if ((q[0]-p[0])*-n[1] + (q[1]-p[1])*n[0] < 0) [p, q] = [q, p];
+    segs.push([p, q, Math.min(p[1], q[1]), Math.max(p[1], q[1])]);
+  }
+  segs.sort((u, v) => u[2] - v[2]);
+  const top = Math.max(...segs.map((s) => s[3]));
+  let area = 0, next = 0, live = [];
+  for (let k = 0; ; k++) {
+    const y = segs[0][2] + dy/2 + k*dy;
+    if (y >= top) break;
+    while (next < segs.length && segs[next][2] <= y) live.push(segs[next++]);
+    live = live.filter((s) => s[3] > y);
+    const xs = [];
+    for (const [p, q, lo] of live)
+      if (y >= lo) xs.push([p[0] + (y - p[1]) * (q[0] - p[0]) / (q[1] - p[1]), q[1] < p[1] ? 1 : -1]);
+    xs.sort((u, v) => u[0] - v[0]);
+    let w = 0, from = 0;
+    for (const [x, s] of xs) {
+      if (w <= 0 && w + s > 0) from = x;
+      else if (w > 0 && w + s <= 0) area += (x - from) * dy;
+      w += s;
+    }
+  }
+  return area;
+}
+
 /* A margin of any width beside a corner, square or rounded.
  *
  * A margin is a region of its own, cut from the plate's outline beside the cells it runs
@@ -1281,13 +1319,56 @@ console.log('\nmagnet and screw pockets keep a floor:');
  * millimetre or so of the edge, so 0.15, 0.4 and 0.75 mm beside a 4 mm corner each did it
  * once a side.
  *
+ * So the cut moves out towards the plate's edge until the band is clear, and a margin with
+ * no room left joins its cells. That changes which region a strip of plate belongs to and
+ * must change nothing else — and on a skeleton plate it did: a skeleton cell is hollow
+ * underneath out to the edge of its region, so a cell whose region had grown over a margin
+ * hollowed the margin too, and 48 of 105 skeleton plates in one sweep lost plastic on the
+ * bed while their meshes stayed perfectly clean. A 1 mm margin by a 1 mm corner lost its
+ * whole solid border, 815 mm² of footprint down to 459. Nothing here could see it.
+ *
+ * A region's corners are points of its outline too: where the arc crosses a clip line of
+ * the other axis, a BLOAT either side of a cut, every region along that line has the same
+ * point. With 2.2 mm margins front and back, side margins of 0.54 to 0.8 mm beside a 4 or
+ * 4.88 mm corner put one of those in the band once their cuts had moved, 58 plates of the
+ * row below, solid and skeleton.
+ *
  * So every margin from none to 1 mm, a hundredth at a time, on all four sides of one cell,
- * beside square corners, the default radius and the largest the cap allows; and the same
- * past a strip of half cells, which is a margin cut of its own. Every one has to come back
- * with no bad edge at all, open or touching. */
+ * beside square corners, the default radius and the largest the cap allows; the same past
+ * a strip of half cells, which is a margin cut of its own; and on the sides only, beside
+ * 2.2 mm front and back; each as a solid plate and as a skeleton. Every one has to come
+ * back with no bad edge at all, open or touching. And
+ * the shape: the area of each plate's cross-section just off the bed, at 1.3 mm, and at
+ * 3.1 mm above the hollow, summed over each row of 101 plates, has to be what it was
+ * before any cut could move — measured on main at 21b1dc4, whose cuts were where its
+ * margins ended, to within 0.01 mm² a row. A change here is a change to the printed
+ * plate; if it is meant, the line printed says what to put in its place. */
 console.log('\na margin of any width beside a corner:');
 {
   const touched = [];
+  const ZS = [0.137, 1.3, 3.1], DY = 0.02;
+  const WAS = {
+    'solid margins r0': [52296.615, 44205.427, 35244.483],
+    'solid past half cells r0': [134588.378, 111585.760, 85866.769],
+    'skeleton margins r0': [21029.262, 21312.539, 35244.483],
+    'skeleton past half cells r0': [102885.028, 88257.595, 85866.769],
+    'solid margins r4': [50888.745, 42797.557, 33836.614],
+    'solid past half cells r4': [133183.770, 110181.152, 84462.161],
+    'skeleton margins r4': [27875.451, 26002.964, 33836.614],
+    'skeleton past half cells r4': [101832.387, 87204.954, 84462.161],
+    'solid margins r4.88': [50200.920, 42109.732, 33148.789],
+    'solid past half cells r4.88': [132496.762, 109494.144, 83775.153],
+    'skeleton margins r4.88': [34609.233, 30746.763, 33148.789],
+    // the same as solid: the arc leaves the corner cell short of whole, so it is not hollowed
+    'skeleton past half cells r4.88': [132496.762, 109494.144, 83775.153],
+    'solid beside 2.2 mm margins r0': [67027.862, 58938.779, 49978.919],
+    'skeleton beside 2.2 mm margins r0': [35698.979, 35985.081, 49978.919],
+    'solid beside 2.2 mm margins r4': [65619.993, 57530.910, 48571.049],
+    'skeleton beside 2.2 mm margins r4': [34299.969, 34586.071, 48571.049],
+    'solid beside 2.2 mm margins r4.88': [64932.168, 56843.085, 47883.224],
+    'skeleton beside 2.2 mm margins r4.88': [33656.240, 33942.342, 47883.224],
+  };
+  const sums = {};
   let builds = 0;
   for (let i = 0; i <= 100; i++) {
     const m = i / 100;
@@ -1297,12 +1378,19 @@ console.log('\na margin of any width beside a corner:');
         // the leftover past a half column and a half row, all of it on the far side
         'past half cells': { drawerW: 42 + 21 + m, drawerD: 42 + 21 + m, marginMode: 'half',
                              alignX: 'end', alignY: 'end' },
+        // where a moved cut's clip lines cross the arc beside a margin of another width
+        'beside 2.2 mm margins': { drawerW: 42 + 2 * m, drawerD: 42 + 4.4, mLeft: m, mRight: m,
+                                   mFront: 2.2, mBack: 2.2 },
       };
-      for (const [dn, d] of Object.entries(DESIGNS)) {
-        const r = buildAll({ ...d, outerRadius, connector: 'none' });
-        builds++;
-        if (r.bad) touched.push(`${dn} ${m.toFixed(2)} mm, radius ${outerRadius}: ${leakText(r)}`);
-      }
+      for (const plateStyle of ['solid', 'skeleton'])
+        for (const [dn, d] of Object.entries(DESIGNS)) {
+          const r = buildAll({ ...d, outerRadius, connector: 'none', plateStyle });
+          builds++;
+          if (r.bad) touched.push(`${plateStyle} ${dn} ${m.toFixed(2)} mm, radius ${outerRadius}: ${leakText(r)}`);
+          const row = `${plateStyle} ${dn} r${outerRadius}`;
+          sums[row] = sums[row] || ZS.map(() => 0);
+          ZS.forEach((z, k) => { sums[row][k] += sectionArea(r.pieces[0], z, DY); });
+        }
     }
   }
   console.log(`  0 to 1 mm by 0.01, ${builds} plates: ` +
@@ -1310,7 +1398,25 @@ console.log('\na margin of any width beside a corner:');
                                 (touched.length > 6 ? ` and ${touched.length - 6} more` : '')
                               : 'every one watertight with no shells touching'));
   bad += touched.length;
+  const moved = Object.entries(sums).filter(([row, s]) =>
+    !WAS[row] || s.some((a, k) => Math.abs(a - WAS[row][k]) > 0.01));
+  for (const [row, s] of moved)
+    console.log(`  ${row}: cross-sections at z ${ZS.join(', ')} sum to ` +
+                `[${s.map((a) => a.toFixed(3)).join(', ')}] mm², ` +
+                (WAS[row] ? `NOT [${WAS[row].join(', ')}] — THE PLATE CHANGED SHAPE` : 'NOTHING ON FILE'));
+  console.log(`  cross-sections of ${Object.keys(sums).length} rows of plates, at z ${ZS.join(', ')}: ` +
+              (moved.length ? `${moved.length} CHANGED` : 'each the shape it was before the cuts could move'));
+  bad += moved.length;
 }
+
+/* The limits the page enforces, built at their ends.
+ *
+ * PLATE_RANGES and mountLimits are where the page stops accepting a number, and each end
+ * is there because one step past it leaked or broke through — the reasons are written
+ * next to them in core.js. A limit is only worth having if the value AT it is good, so
+ * the extremes are built here; and the one step past each that justified the pitch floor
+ * is built too, so that if the engine ever closes it the floor can come down and this
+ * says so, the way a quarantined case does. */
 
 console.log('\nthe smallest pitch the page allows:');
 {

@@ -1623,6 +1623,51 @@ function triangulateRing(outer, inner) {
   return { pts, tris };
 }
 
+/* The region's outline with every point the strip's edges need: where a side of `open`
+   crosses it, and a corner of `open` it passes within `tol` of. A vertex within `tol` of a
+   side is moved onto it, so no two points of this shell are closer than the edge-matching
+   tolerance anyone reading the mesh uses (1e-3 in checkManifold). It moves the outline
+   by no more than that, inside this shell only: a cut beside it is two BLOATs clear of
+   every outline vertex, and so is any other shell's edge. */
+function openSplit(loop, open, tol) {
+  let C = loop.map((p) => [p[0], p[1]]);
+  const corners = [];
+  for (const x of [open[0], open[2]]) for (const y of [open[1], open[3]])
+    if (isFinite(x) && isFinite(y)) corners.push([x, y]);
+  for (const q of corners) {
+    for (let i = 0; i < C.length; i++) {
+      const a = C[i], b = C[(i + 1) % C.length];
+      const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx*dx + dy*dy;
+      const s = l2 ? Math.max(0, Math.min(1, ((q[0]-a[0])*dx + (q[1]-a[1])*dy) / l2)) : 0;
+      if (Math.hypot(a[0] + s*dx - q[0], a[1] + s*dy - q[1]) > tol) continue;
+      if (Math.hypot(a[0] - q[0], a[1] - q[1]) <= tol) C[i] = q.slice();
+      else if (Math.hypot(b[0] - q[0], b[1] - q[1]) <= tol) C[(i + 1) % C.length] = q.slice();
+      else C.splice(i + 1, 0, q.slice());
+      break;
+    }
+  }
+  const lines = [[0, open[0]], [1, open[1]], [0, open[2]], [1, open[3]]].filter(([, c]) => isFinite(c));
+  for (const [k, c] of lines) for (const p of C) if (Math.abs(p[k] - c) <= tol) p[k] = c;
+  for (const [k, c] of lines) {
+    const out = [];
+    for (let i = 0; i < C.length; i++) {
+      const a = C[i], b = C[(i + 1) % C.length];
+      out.push(a);
+      if ((a[k] - c) * (b[k] - c) < 0) {
+        const p = [0, 0];
+        p[k] = c;
+        p[1-k] = a[1-k] + (c - a[k]) / (b[k] - a[k]) * (b[1-k] - a[1-k]);
+        out.push(p);
+      }
+    }
+    C = out;
+  }
+  return C.filter((p, i) => {
+    const q = C[(i + 1) % C.length];
+    return p[0] !== q[0] || p[1] !== q[1];
+  });
+}
+
 // direct watertight mesh for a cell region (no CSG); supports closed floor (pad>0)
 /* Skeleton cell region — a lighter alternative to directCellRegion.
  *
@@ -1636,9 +1681,32 @@ function triangulateRing(outer, inner) {
  * socket profile, and the bulk between that shell and the cell boundary simply is not
  * built. One closed shell, so there are no overlapping or coplanar caps to confuse a
  * slicer.
+ *
+ * `open`, when given, is [x0, y0, x1, y1]: the bulk is left out only inside it, and the
+ * rest of the region is solid all the way down. buildPiece passes it for a cell whose
+ * region has grown over part of a margin (see clearCut there), so the plastic below z 2.5
+ * stays where the margin had it. ±Infinity on a side that has no such strip.
  */
-function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin) {
+function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin, open) {
   const polys = [];
+  /* With `open`, the bulk is left out of `under`, the part of the region inside it, rather
+     than the whole region, and the outline gains the points the solid strip's edges need. */
+  let under = clipped, clip = null;
+  const inOpen = (p) => !open || (p[0] >= open[0] - 1e-9 && p[0] <= open[2] + 1e-9 &&
+                                  p[1] >= open[1] - 1e-9 && p[1] <= open[3] + 1e-9);
+  if (open) {
+    clipped = openSplit(clipped, open, 1e-3);
+    // every point clipToRect works out again is one already there: the outline's, or a
+    // corner of `open`, and it is given back exactly so the edges match
+    const known = clipped.concat([[open[0], open[1]], [open[2], open[1]],
+                                  [open[2], open[3]], [open[0], open[3]]]);
+    clip = (x0, y0, x1, y1) => {
+      const c = clipToRect(clipped, x0, y0, x1, y1);
+      return c && c.map((p) => known.find((q) => Math.abs(q[0] - p[0]) < 1e-7 &&
+                                                 Math.abs(q[1] - p[1]) < 1e-7) || p);
+    };
+    under = clip(open[0], open[1], open[2], open[3]);
+  }
   const zs = prof.zs.slice(1, 5), ds = prof.ds.slice(1, 5);
   const ringAt = (i, off) => {
     const d = ds[i];
@@ -1672,14 +1740,55 @@ function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin) {
   const annulus = (outerLoop, innerLoop, z, up) =>
     polys.push(...annulusStrip(outerLoop, innerLoop, cx, cy, z, up));
   annulus(shell[0], inner[0], zs[0], false);            // underside of the shell
-  annulus(clipped, shell[2], zs[2], false);             // underside of the solid band
-  for (let i = 0; i < clipped.length; i++) {            // outer wall of the solid band
-    const j = (i + 1) % clipped.length;
-    const p = makePoly([[clipped[i][0], clipped[i][1], zs[2]], [clipped[j][0], clipped[j][1], zs[2]],
-                        [clipped[j][0], clipped[j][1], H], [clipped[i][0], clipped[i][1], H]]);
+  annulus(under, shell[2], zs[2], false);               // underside of the solid band
+  const wall = (a, b, z0, z1) => {
+    const p = makePoly([[a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], z1], [a[0], a[1], z1]]);
     if (p) polys.push(p);
+  };
+  const edges = new Set();
+  for (let i = 0; i < clipped.length; i++) {            // outer wall of the solid band
+    const a = clipped[i], b = clipped[(i + 1) % clipped.length];
+    wall(a, b, zs[2], H);
+    edges.add(`${a}|${b}`);
+    // and on down to the bed where the strip is
+    if (!inOpen([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])) wall(a, b, 0, zs[2]);
   }
   annulus(clipped, inner[3].map((v) => [v[0], v[1]]), H, true);   // the rim
+  if (!open) return polys;
+  // the strip's inner side, facing the bulk that is left out
+  for (let i = 0; i < under.length; i++) {
+    const a = under[i], b = under[(i + 1) % under.length];
+    if (!edges.has(`${a}|${b}`)) wall(b, a, 0, zs[2]);
+  }
+  /* Its underside, in convex pieces either side of the open rectangle, each piece given
+     the corners of it that the piece beside it ends at, so their edges meet point for
+     point. */
+  const [ox0, oy0, ox1, oy1] = open;
+  const pieces = [];
+  if (isFinite(ox0)) pieces.push([clip(-Infinity, -Infinity, ox0, Infinity), ox0]);
+  if (isFinite(ox1)) pieces.push([clip(ox1, -Infinity, Infinity, Infinity), ox1]);
+  if (isFinite(oy0)) pieces.push([clip(ox0, -Infinity, ox1, oy0)]);
+  if (isFinite(oy1)) pieces.push([clip(ox0, oy1, ox1, Infinity)]);
+  for (const [piece, x] of pieces) {
+    if (!piece) continue;
+    let pts = piece;
+    if (x !== undefined)
+      for (const y of [oy0, oy1]) {
+        if (!isFinite(y)) continue;
+        const k = pts.findIndex((p, i) => {
+          const q = pts[(i + 1) % pts.length];
+          return p[0] === x && q[0] === x && Math.min(p[1], q[1]) < y - 1e-9 &&
+                 Math.max(p[1], q[1]) > y + 1e-9;
+        });
+        if (k >= 0) pts = pts.slice(0, k + 1).concat([[x, y]], pts.slice(k + 1));
+      }
+    const { pts: P, tris } = earTriangulate(pts);
+    for (const t of tris) {
+      const p = makePoly([[P[t[2]][0], P[t[2]][1], 0], [P[t[1]][0], P[t[1]][1], 0],
+                          [P[t[0]][0], P[t[0]][1], 0]]);
+      if (p) polys.push(p);
+    }
+  }
   return polys;
 }
 
@@ -2163,7 +2272,19 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * crosses the arc, each region's clip lands a BLOAT clear of the arc's vertices too
    * rather than a hair from one. It is also what a margin past a strip of half cells was
    * already held to, and that margin is cut the same way now. Cuts between cells never
-   * come near the outline's vertices: the arc is never wider than half a cell. */
+   * come near the outline's vertices: the arc is never wider than half a cell.
+   *
+   * Two BLOATs clear is not two BLOATs moved. Beside a square corner the only vertex is
+   * the corner itself, on the plate's edge, so no cut moves and a margin up to 0.1 mm
+   * joins. Beside a rounded one the cut steps past each arc vertex within two BLOATs, the
+   * next can be within two BLOATs of where it lands, and it goes on until there is a gap
+   * (and past the crossings below): over margins of 0 to 3 mm, in any mix on the four
+   * sides, beside every corner from 0 to 6 mm by 0.01, a cut that stays moved up to
+   * 0.75 mm. Under a 1.28 mm corner the arc's vertices are that close all the way along,
+   * so the cut runs off the plate and every margin up to the radius plus 0.1 joins its
+   * cells, 1.37 mm by a 1.27 mm corner; beside larger corners up to 1.2 mm can join, and
+   * up to 0.63 mm by a corner of 4 mm or more. The plate is the same plate whichever
+   * region builds it (and see wasL below for a skeleton cell). */
   const CLEAR = 2 * BLOAT;
   const clearCut = (c, edge, vs) => {
     const toward = edge < c ? -1 : 1;
@@ -2175,11 +2296,35 @@ function buildPiece(cfg, layout, piece, onStatus) {
       if (toward < 0 ? c <= edge : c >= edge) return null;
     }
   };
-  const outX = outline.map((p) => p[0]), outY = outline.map((p) => p[1]);
-  const cutL = clearCut(piece.mL, 0, outX), cutF = clearCut(piece.mF, 0, outY);
   // the last cell's far side, a strip of half cells' when there is one
-  const cutR = clearCut(hxR ? gx0 + piece.nx*pitch + half : gx0 + piece.nx*pitch, W, outX);
-  const cutB = clearCut(hyB ? gy0 + piece.ny*pitch + half : gy0 + piece.ny*pitch, D, outY);
+  const lastX = gx0 + piece.nx*pitch + (hxR ? half : 0);
+  const lastY = gy0 + piece.ny*pitch + (hyB ? half : 0);
+  const outX = outline.map((p) => p[0]), outY = outline.map((p) => p[1]);
+  let cutL = clearCut(piece.mL, 0, outX), cutF = clearCut(piece.mF, 0, outY);
+  let cutR = clearCut(lastX, W, outX), cutB = clearCut(lastY, D, outY);
+  /* A region's corners are points of the outline too. Where the arc crosses a clip line of
+     the other axis — a BLOAT either side of a cut — every region along that line has the
+     same crossing point, so it is held clear of the band like a vertex. The two axes
+     depend on each other, so this goes round until neither moves; a cut only ever moves
+     out, so it settles. 0.75 mm margins by a 4.88 mm corner put a crossing in both. */
+  const crossings = (k, at) => {
+    const out = [];
+    for (let i = 0; i < outline.length; i++) {
+      const a = outline[i], b = outline[(i + 1) % outline.length];
+      if ((a[k] - at) * (b[k] - at) < 0)
+        out.push(a[1-k] + (at - a[k]) / (b[k] - a[k]) * (b[1-k] - a[1-k]));
+    }
+    return out;
+  };
+  const clipLines = (...cs) => cs.filter((c) => c !== null).flatMap((c) => [c - BLOAT, c + BLOAT]);
+  for (let pass = 0; pass < 20; pass++) {
+    const xv = outX.concat(...clipLines(cutF, cutB).map((y) => crossings(1, y)));
+    const yv = outY.concat(...clipLines(cutL, cutR).map((x) => crossings(0, x)));
+    const next = [cutL === null ? null : clearCut(cutL, 0, xv), cutF === null ? null : clearCut(cutF, 0, yv),
+                  cutR === null ? null : clearCut(cutR, W, xv), cutB === null ? null : clearCut(cutB, D, yv)];
+    if (next[0] === cutL && next[1] === cutF && next[2] === cutR && next[3] === cutB) break;
+    [cutL, cutF, cutR, cutB] = next;
+  }
   const xs = [0]; if (cutL !== null) xs.push(cutL);
   for (let i = 1; i <= piece.nx; i++) xs.push(gx0 + i*pitch);
   if (hxR) xs.push(gx0 + piece.nx*pitch + half);
@@ -2190,6 +2335,16 @@ function buildPiece(cfg, layout, piece, onStatus) {
   if (cutB !== null) { ys[ys.length-1] = cutB; ys.push(D); } else ys[ys.length-1] = D;
   const cellXi = cutL !== null ? 1 : 0;           // index offset of first cell column
   const cellYi = cutF !== null ? 1 : 0;
+  /* Where each margin was cut before its cut could move, or null where it joined its
+     cells then too: under 0.01 mm, or 0.1 past a strip of half cells. A skeleton cell is
+     hollow below z 2.5 out to the edge of its region, so the region growing over a margin
+     would hollow the margin with it, and the plate's footprint on the bed changed — a
+     1 mm margin by a 1 mm corner lost its whole solid border. So a cell beside a moved cut
+     is still judged whole or not on the region it had, and hollowed only that far:
+     skeletonCellRegion builds the rest of it solid to the bed, as the margin was. */
+  const wasL = piece.mL > 0.01 ? piece.mL : null, wasF = piece.mF > 0.01 ? piece.mF : null;
+  const wasR = (hxR ? piece.mR - half > 0.1 : piece.mR > 0.01) ? lastX : null;
+  const wasB = (hyB ? piece.mB - half > 0.1 : piece.mB > 0.01) ? lastY : null;
 
   /* Shells, kept apart rather than poured into one soup, because the top-insert pass
      below has to subtract from each one on its own — a subtraction is only defined
@@ -2228,14 +2383,26 @@ function buildPiece(cfg, layout, piece, onStatus) {
       // cells are built bloated by BLOAT per side, so a whole one measures (pitch+0.1)^2;
       // anything the piece boundary has cut into measures less than pitch^2 — and so does
       // a half cell, which stays solid: skeletonCellRegion's rings are square
-      const fullCell = Math.abs(polyArea2D(clipped)) >= pitch * pitch - 0.5;
+      const movedL = ci === 0 && wasL !== null && cutL !== wasL;
+      const movedF = cj === 0 && wasF !== null && cutF !== wasF;
+      const movedR = ci === piece.nx + hxR - 1 && wasR !== null && cutR !== wasR;
+      const movedB = cj === piece.ny + hyB - 1 && wasB !== null && cutB !== wasB;
+      const moved = movedL || movedF || movedR || movedB;
+      const asWas = !moved ? clipped : clipToRect(outline,
+        movedL ? Math.max(0, wasL - BLOAT) : x0, movedF ? Math.max(0, wasF - BLOAT) : y0,
+        movedR ? Math.min(W, wasR + BLOAT) : x1, movedB ? Math.min(D, wasB + BLOAT) : y1);
+      const fullCell = !!asWas && Math.abs(polyArea2D(asWas)) >= pitch * pitch - 0.5;
       const onEdge = ci === 0 || cj === 0 || ci === piece.nx - 1 || cj === piece.ny - 1;
       const jointed = cfg.connector && cfg.connector !== 'none';
       const skel = cfg.plateStyle === 'skeleton' && pad <= 0.01 && fullCell
                    && !cfg.magnets && !cfg.screws && !(jointed && onEdge);
+      // hollow only where the margin's solid ended: a BLOAT past where it was cut
+      const open = moved ? [movedL ? wasL + BLOAT : -Infinity, movedF ? wasF + BLOAT : -Infinity,
+                            movedR ? wasR - BLOAT : Infinity, movedB ? wasB - BLOAT : Infinity]
+                         : undefined;
       let region = skel
         ? skeletonCellRegion(clipped, prof, cx, cy, H, cfg.arcSegs || 6,
-                             Math.max(0.4, cfg.skin || 0.8))
+                             Math.max(0.4, cfg.skin || 0.8), open)
         : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6,
                            halfX || halfY ? [halfX ? half/2 : half, halfY ? half/2 : half] : undefined);
       /* Small convex cutters local to this cell, batched by feature and subtracted one
