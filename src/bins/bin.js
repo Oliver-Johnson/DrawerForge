@@ -806,8 +806,9 @@ const FOOT_HOLES = {
 /* How far each site's square may reach: the front and back bands run 2 BLOAT past it,
    and that has to stop a BLOAT short of the corner arcs, which start at 17.00. */
 const SITE_MAX = SPEC.centre - FOOT_HOLES.off - 2 * BLOAT;
-/* The floor a screw needs: the hole's end plus a skin, above the top of the foot. 1.85. */
-const SCREW_FLOOR = FOOT_HOLES.screwTop + FOOT_HOLES.skin - SPEC.footH;
+/* The floor a screw needs: the hole's end plus a skin, above the top of the foot. 1.85,
+   rounded, because the sum comes out 1.8499999999999996 and the page quotes it. */
+const SCREW_FLOOR = Math.round((FOOT_HOLES.screwTop + FOOT_HOLES.skin - SPEC.footH) * 100) / 100;
 // the floor a bin is really built with: screws raise it, nothing else does
 const builtFloorT = (c) => (c.screws ? Math.max(c.floorT, SCREW_FLOOR) : c.floorT);
 const holeSize = (x, lim, d) => Math.min(lim.max, Math.max(lim.min, isFinite(x) ? x : d));
