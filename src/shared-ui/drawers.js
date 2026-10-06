@@ -891,8 +891,15 @@ const DRAWERS = (function () {
             if (!(noted && next.caughtUp) && catchUp(arrivedWith, d)) return;
             /* A hand-over is written down now rather than at the page's first save, which
                is 400 ms off: a reload before it found no record of this tool in the
-               drawer, and the page came back unsaved. */
-            if (noted) { d.marks[o.tool] = fp; if (saveAll(s)) ours = fp; savedInto(d.id); }
+               drawer, and the page came back unsaved. The half goes in with the mark, as
+               a save does: the mark alone fits in a full storage, and then it named a
+               half the drawer did not have. */
+            if (noted) {
+              d.hash = mergeDesign(d.hash, arrivedWith, o.owns, base);
+              d.marks[o.tool] = fp;
+              if (saveAll(s)) ours = fp;
+              savedInto(d.id);
+            }
           }
         }
         paintBar();

@@ -763,6 +763,10 @@ for (const tool of ['bins', 'plates']) {
       if (tool === 'bins') { await toPlates(page); await toBins(page); }
       else { await toBins(page); await toPlates(page); }
       await stillThere(page, tool, 'there and back');
+      // the drawer was not told the page has a half it could not save, so this is no Back
+      await page.reload();
+      await ready(page);
+      await stillThere(page, tool, 'there and back, then reload');
       expect(errors).toEqual([]);
     });
   test(`with storage full, a change on ${tool} is still there after a reload`, async ({ page }) => {
@@ -792,6 +796,54 @@ for (const tool of ['bins', 'plates']) {
       await stillThere(page, tool, 'Back from the cache');
       expect(errors).toEqual([]);
     });
+}
+
+/* Two tabs of one tool on one drawer. The first changes a setting, and the second puts
+   it back, so the drawer holds the very save the first tab had before its change. A
+   reload of the first tab, or its page coming back from the back-forward cache, still
+   finds the drawer moved on, and comes up as the drawer has it. The address's mark used
+   to name the save before its own, so the reload took the drawer as not moved on, kept
+   its change, and its first save wrote it back over the other tab's. */
+for (const tool of ['bins', 'plates']) {
+  const ready = tool === 'bins' ? binsReady : platesReady;
+  const [field, key, older, newer] = tool === 'bins' ? ['gap', 'bgap', '6', '7']
+    : ['connector', 'cn', 'dovetail', 'hclip'];
+  const set = (p, v) => (tool === 'bins' ? H.setField(p, field, v) : p.selectOption('#' + field, v));
+  for (const cache of [false, true]) {
+    test(`a ${tool} tab ${cache ? 'shown again from the back-forward cache' : 'reloaded'} after ` +
+      'another tab put the drawer back to an earlier save', async ({ page, context }) => {
+      const errors = await openPlates(page);
+      if (tool === 'bins') await toBins(page);
+      await set(page, older);
+      await settle(page);
+      await saveAs(page, 'Kitchen');
+      await set(page, newer);
+      await expect.poll(() => stored(page).then((s) => s.Kitchen[key]),
+        { message: 'the first tab\'s change saved', timeout: 20000 }).toBe(newer);
+
+      const other = await context.newPage();
+      other.on('pageerror', (e) => errors.push(String(e)));
+      await other.goto(base + (tool === 'bins' ? 'bins/' : ''));
+      await ready(other);
+      await expect(other.locator('#drawerName')).toHaveText('Kitchen');
+      await set(other, older);
+      await expect.poll(() => stored(other).then((s) => s.Kitchen[key]),
+        { message: 'the second tab put it back', timeout: 20000 }).toBe(older);
+
+      if (cache) {
+        await Promise.all([page.waitForEvent('load'), page.evaluate(() =>
+          dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })))]);
+      } else await page.reload();
+      await expect.poll(() => page.inputValue('#' + field).catch(() => ''),
+        { message: 'the drawer as the other tab left it', timeout: 20000 }).toBe(older);
+      await ready(page);
+      await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+      await expect(page.locator('#setAside')).toBeHidden();
+      await settle(page);
+      expect((await stored(page)).Kitchen[key], 'and the drawer keeps it').toBe(older);
+      expect(errors).toEqual([]);
+    });
+  }
 }
 
 test('export, clear the browser, import: the same design comes back', async ({ page }) => {

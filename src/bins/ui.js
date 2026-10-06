@@ -3882,13 +3882,16 @@ function saveNow() {
       writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
+  saveLocal(h);
+  drawers.wrote(h);   // and into the saved drawer this is, if it is one
   /* Marked as this tab's own, or as someone's link's while the page still holds it as
-     it arrived (see ownMark). */
+     it arrived (see ownMark). After the drawer's save, so the mark names the save in the
+     drawer the address is at: marked before it, a reload took the save before for its
+     own, and after another tab put the drawer back to that one, the reload wrote this
+     page's later change back over it. */
   try { history.replaceState(drawers.stamp(h, linkedNow && bootDesc !== null), '', '#' + h); }
   catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                    worth an exception that stops the rest of the page working */ }
-  saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
-  drawers.wrote(h);   // and into the saved drawer this is, if it is one
 }
 /* A reload takes the address as it stands when it starts, and the page runs on until the
    new one arrives. A save still waiting would land in that gap and record in the saved
