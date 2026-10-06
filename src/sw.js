@@ -30,11 +30,14 @@
  * the browser keeps in memory cannot go round this worker either (see marked()).
  * Then a page the server could not give comes from this cache, and so do the scripts
  * that page loads, even if the connection comes back while it loads. A page the server
- * did give gets its scripts from the server alone: one the server cannot give fails, as
- * it would with no worker, rather than come from a cache that may be another deploy.
- * Unless the page is the deploy this cache holds, as its ETag says (see sameDeploy()):
- * then the cache has the very scripts the server would send, and one the server cannot
- * give comes from the cache, as anything else does.
+ * did give gets its scripts and stylesheets from the server alone: one the server cannot
+ * give fails, as it would with no worker, rather than come from a cache that may be
+ * another deploy. Unless the page is the deploy this cache holds, as its ETag says (see
+ * sameDeploy()): then the cache has the very scripts the server would send, and one the
+ * server cannot give comes from the cache, as anything else does. And only scripts and
+ * stylesheets, which are what a page runs and is drawn with: the favicon the browser asks
+ * for once the page has loaded comes from the server and then the cache whatever the
+ * page, because an icon from another deploy breaks nothing.
  *
  * A request to another site, or for anything this site did not cache, is never answered
  * here at all. The browser handles it as it would without a worker, and nothing from
@@ -208,11 +211,20 @@ self.addEventListener('fetch', (e) => {
      it came. The cache only when the server gave nothing, and if the browser has evicted
      that too, its own offline page.
 
-     But never the cache for a script whose page came from the server as another deploy
-     than this cache's, or one that cannot be told. The page is the deploy the server has
-     now, and the cache can be another, so a failure is answered as a failure: the page
-     breaks as it would with no worker, and opened again with no connection it comes from
-     the cache, its scripts and all.
+     But never the cache for a script or a stylesheet whose page came from the server as
+     another deploy than this cache's, or one that cannot be told. The page is the deploy
+     the server has now, and the cache can be another, so a failure is answered as a
+     failure: the page breaks as it would with no worker, and opened again with no
+     connection it comes from the cache, its scripts and all.
+
+     Only those two, by what the browser says a request is for (request.destination). A
+     page runs its scripts and is drawn by its stylesheets, so another deploy's would be
+     the mismatch this guards against. Anything else it asks for is the server's and then
+     the cache's, as any other request is. The pages fetch nothing of their own, so that
+     is the icons and the manifest the browser asks for on a page's behalf — the favicon
+     lazily, once the page has loaded, and so perhaps once the connection has gone. Another
+     deploy's icon is at worst a little out of date, and failing it only put an error in
+     the console for nothing.
 
      Which deploy a page is gets settled before the page is handed over, so it is recorded
      before the page can ask for anything. The cached page is looked up while the server
@@ -224,7 +236,8 @@ self.addEventListener('fetch', (e) => {
   const fromServer = fetch(ask).then((r) => (page
     ? ours.then((hit) => { if (!sameDeploy(r, hit)) note('server'); return r; })
     : r));
-  const answer = pageFrom === 'server' ? fromServer : fromServer.catch(() => cached().then((hit) => {
+  const serverAlone = pageFrom === 'server' && (req.destination === 'script' || req.destination === 'style');
+  const answer = serverAlone ? fromServer : fromServer.catch(() => cached().then((hit) => {
     if (!hit) return Response.error();
     note('cache');
     return hit;

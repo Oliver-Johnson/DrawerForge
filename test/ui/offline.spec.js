@@ -143,15 +143,16 @@ test('online, a page and its files are what the server has now, not the cached c
    its script came from. The worker's cache is filled with A; a visit after B is deployed
    leaves the browser holding B for ten minutes, as if B's worker had failed. Each page
    also has a second script it loads only when asked, later(), for a page still loading
-   when the connection comes back. */
+   when the connection comes back; it says "script undefined" when that one fails. */
 const deploy = (d) => {
   site.files['/guide/'] = '<!doctype html><title>-</title><script src="../vendor/jszip.min.js"></script>' +
     `<script>document.title = 'page ${d}, script ' + self.deploy;\n` +
     'window.later = () => new Promise((done) => { const s = document.createElement("script");' +
-    ` s.src = "../vendor/three.min.js"; s.onload = () => done("page ${d}, script " + self.later);` +
+    ' s.src = "../vendor/three.min.js";' +
+    ` s.onload = s.onerror = () => done("page ${d}, script " + self.deployLater);` +
     ' document.head.append(s); });</script>';
   site.files['/vendor/jszip.min.js'] = `self.deploy = '${d}';`;
-  site.files['/vendor/three.min.js'] = `self.later = '${d}';`;
+  site.files['/vendor/three.min.js'] = `self.deployLater = '${d}';`;
 };
 async function cacheDeployA(page) {
   deploy('A');
@@ -209,10 +210,9 @@ test('a page from the server whose script cannot be fetched does not get the cac
     site.cut = ['/vendor/jszip.min.js'];
     await page.goto(site.base + 'guide/');
     await expect(page).toHaveTitle('page B, script undefined');
-    // nor anything it asks for once the server has gone
+    // nor any script it asks for once the server has gone
     await offline(context);
-    expect(await page.evaluate(() => fetch('../vendor/three.min.js').then((r) => r.text(), () => 'no answer')))
-      .toBe('no answer');
+    expect(await page.evaluate(() => window.later())).toBe('page B, script undefined');
     // and opened again, it is all deploy A
     await page.reload();
     await expect(page).toHaveTitle('page A, script A');
@@ -223,7 +223,7 @@ test('a page from the server whose script cannot be fetched does not get the cac
    the cache could have finished. The server's ETag for the page says which deploy it is,
    and the cached page still has the one it came with, so when they match the script
    comes from the server and then the cache, as it did before the rule above. */
-test('a page from the server that is the deploy the cache holds gets the cached three.js when the server\'s cannot be fetched',
+test('with nothing deployed since, a page from the server whose three.js cannot be fetched gets the cached one',
   async ({ page }) => {
     const errors = watch(page);
     site.maxAge = 600;   // as GitHub Pages
@@ -251,6 +251,36 @@ test('a page from the server with no ETag to say which deploy it is gets its scr
     site.maxAge = 600;                  // and with one on the server's page alone
     await page.goto(site.base + 'guide/');
     await expect(page).toHaveTitle('page A, script undefined');
+  });
+
+/* The server alone is for what a page runs or is styled by, its scripts and stylesheets,
+   which have to be its own deploy. Everything else it asks for is the server's and then
+   the cache's, as any other request is: the favicon the browser asks for once the page
+   has loaded, an image, a file the page fetches. A favicon from another deploy breaks
+   nothing, and failing it once the connection has gone only puts an error in the console.
+   An image stands in for the favicon, whose request the test cannot time. The server here
+   sends no ETag, so the page is one whose scripts the worker keeps to the server alone. */
+test('a page from the server, once offline, still gets its favicon from the cache',
+  async ({ page, context }) => {
+    const errors = watch(page);
+    await page.goto(site.base + 'guide/');
+    await controlled(page);
+    const res = await page.reload();    // through the worker, and from the server
+    expect(res.fromServiceWorker()).toBe(true);
+    await offline(context);
+    const load = (tag, src) => page.evaluate(([tag, src]) => new Promise((done) => {
+      const el = document.createElement(tag);
+      el.onload = () => done('loaded');
+      el.onerror = () => done('failed');
+      el.src = src;
+      document.head.append(el);
+    }), [tag, src]);
+    expect(await load('img', '../favicon.svg')).toBe('loaded');
+    expect(await page.evaluate(() => fetch('../manifest.webmanifest').then((r) => r.ok, () => false)))
+      .toBe(true);
+    expect(errors).toEqual([]);
+    // while a script it asks for is still the server's alone
+    expect(await load('script', '../vendor/jszip.min.js')).toBe('failed');
   });
 
 /* The cache is named for a hash of what it holds, so a deploy that changes anything is a
