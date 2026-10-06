@@ -165,6 +165,15 @@ const CASES = [
   { name: '3x2x5-railed', u: 3, v: 2, hUnits: 5, divX: 2, divY: 1, divRemovable: true },
   { name: '1x1x1', u: 1, v: 1, hUnits: 1 },
   { name: '2x1x3-scoop', u: 2, v: 1, hUnits: 3, scoop: 8 },
+  /* A scoop deeper than a lowered front wall is tall stood above it, past the height
+     the bin quotes, its README and the bed check use: 14.45 mm built against 11.5 quoted
+     here, and 17.95 against 15 below. It stops at the front wall's height now. Walls
+     of part height stand up to a BLOAT under the quote (see binTop), so these may be
+     that much under it, never over. */
+  { name: '2x1x4-low-scoop', u: 2, v: 1, hUnits: 4, scoop: 8.5, under: 0.05,
+    edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 } },
+  { name: '2x1x6-low-scoop', u: 2, v: 1, hUnits: 6, scoop: 12, under: 0.05,
+    edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 } },
   { name: '2x1x3-label', u: 2, v: 1, hUnits: 3, label: 12 },
   /* A shelf deeper than the cavity is tall: its 45 degree underside used to run down
      through the floor and out among the feet, 4 open edges from 8 mm on a 1-unit bin. */
@@ -263,7 +272,7 @@ for (const cs of CASES) {
   /* The stacking PITCH is always hUnits*7 — that is what a bin occupies in a stack.
      The real height can be less: a tray with every wall open is just its floor, so
      compare zmax against meta.totalH and check the pitch separately. */
-  const hOk = Math.abs(zmax - r.meta.totalH) < 0.02 &&
+  const hOk = zmax - r.meta.totalH < 0.02 && r.meta.totalH - zmax < (cs.under || 0.02) &&
               Math.abs(r.meta.H - cs.hUnits * 7) < 0.001 &&
               zmin > -0.001;
 
