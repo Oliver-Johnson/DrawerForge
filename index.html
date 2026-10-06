@@ -3274,6 +3274,98 @@ function mountLimits(cfg) {
   };
 }
 
+/* What a keyed joint cuts, worked out once for buildPiece and for keysMeet: which of
+   keySiteOps' housings, the key's shape, its dimensions and clearance, and whether a
+   site needs a wall junction — a key housed in the wall does, and so does every housing
+   put in from above, so a seam's mid-cell site gets none of those.
+
+   `kind` is from jointKind, like everyone else. src/ui.js activeJoint asks it for the
+   loose part and the fit coupon, and the audit asks it too; buildPiece was the fourth
+   copy of the rule and the last one, written out longhand under a comment saying the
+   decision lived elsewhere.
+
+   It was never a live defect. jointKind falls back to the connector's own name where
+   that expression said 'recess', so the two disagree for dovetail, puzzle and none — and
+   every reader of the kind is inside a loop over `keyed`, which pieceConnectors leaves
+   empty for exactly those three (isTab, and the early return for 'none'). The one thing
+   to keep true, then, is that emptiness: if `keyed` ever carries sites for a tabbed
+   connector, this starts answering a question it used to duck. Byte-identical output
+   across the 112-config matrix either way.
+
+   The snap's clip is one part at one size whatever the housing, so its fit comes from
+   the full key's clearance; a flat key takes its own housing's. */
+function keyPlan(cfg) {
+  const isHclip = cfg.connector === 'hclip';
+  const wallKeys = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector) && cfg.keyMount === 'wall';
+  const dims = wallKeys ? cfg.keySlim : cfg.key;
+  const kind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
+  return { kind, dims,
+           shape: isHclip ? 'snap' : cfg.keyType,
+           prm: isHclip ? hclipPrm(cfg.hclip) : dims,
+           clr: kind === 'snaptop' ? cfg.key.clr : isHclip ? cfg.hclip.clr : dims.clr,
+           junction: kind !== 'recess' || wallKeys || isHclip };
+}
+// a keyed site a quarter cell or more from any cell junction, in the piece's own frame
+// and from its first whole cell, which differ by its margin
+function offJunction(bo, pitch, piece) {
+  const g0 = bo.edge === '+x' || bo.edge === '-x' ? piece.mF : piece.mL;
+  const off = (v) => Math.abs(v / pitch - Math.round(v / pitch)) > 0.25;
+  return off(bo.s) && off(bo.s - g0);
+}
+/* The pieces in which two key housings would meet, as [{ id, needs }]: `needs` is how
+ * deep the piece would have to be, in mm, for the pair that comes closest to stand a
+ * BLOAT apart — which for a piece one cell deep is the pitch it needs.
+ *
+ * A piece one cell deep with a seam on each side takes a key from each, at the same place
+ * along the two seams wherever the cuts line up, which is always for a midpoint. Each key's
+ * housing reaches half the key and its clearance into the piece — 7.15 mm for the full key —
+ * so below about 14.3 mm of pitch the two housings run into each other. buildPiece hands
+ * them to one subtraction as two overlapping solids, which a BSP cannot classify (ENGINE.md
+ * §1, one cutter solid per subtraction), and subtracting them one after the other leaks
+ * as well. A 13.5 mm plate cut into rows one cell deep leaked 47 to 117 open edges in its
+ * middle row with the bowtie, the puzzle key and the snap in the floor, and 90 and 96 with
+ * a key in the wall put in from above, whose cup reaches 7.17.
+ *
+ * Unioning the two cutters first closes the mesh of a key in the floor, and it would still
+ * be wrong, which is why this refuses rather than repairs. The key is 14 mm long, so
+ * below 14 mm the two keys themselves overlap and the second will not go in, and from 14
+ * up to where the housings clear they would share one slot, tip to tip. The page puts
+ * this in Checks, where a moved cut or a larger pitch clears it; nothing here can.
+ *
+ * Measured off the solids keySiteOps cuts, so it is the same housing buildPiece makes,
+ * with the same sites: pieceConnectors' list less any a wall junction rules out. */
+function keysMeet(cfg, layout) {
+  if (!['bowtie', 'puzzlekey', 'snap', 'hclip'].includes(cfg.connector)) return [];
+  const plan = keyPlan(cfg), H = platePad(cfg) + cfg.plateHeight;
+  const APART = 0.05;   // buildPiece's BLOAT
+  const out = [];
+  for (const piece of layout.pieces) {
+    const hs = [];
+    for (const bo of pieceConnectors(cfg, layout, piece).keyed) {
+      if (plan.junction && offJunction(bo, cfg.pitch, piece)) continue;
+      const b = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const p of keySiteOps(plan.kind, plan.shape, plan.prm, plan.clr, bo.edge, bo.e, bo.s, H).cut)
+        for (const v of p.verts) {
+          b[0] = Math.min(b[0], v[0]); b[1] = Math.min(b[1], v[1]);
+          b[2] = Math.max(b[2], v[0]); b[3] = Math.max(b[3], v[1]);
+        }
+      // how far it reaches into the piece from the seam it is cut from
+      const reach = bo.edge === '-x' ? b[2] - bo.e : bo.edge === '+x' ? bo.e - b[0]
+                  : bo.edge === '-y' ? b[3] - bo.e : bo.e - b[1];
+      hs.push({ b, reach });
+    }
+    let needs = 0;
+    for (let i = 0; i < hs.length; i++) for (let j = i + 1; j < hs.length; j++) {
+      const a = hs[i].b, c = hs[j].b;
+      const near = (lo, hi) => lo < hi + APART - 1e-9;
+      if (near(a[0], c[2]) && near(c[0], a[2]) && near(a[1], c[3]) && near(c[1], a[3]))
+        needs = Math.max(needs, hs[i].reach + hs[j].reach + APART);
+    }
+    if (needs) out.push({ id: piece.id, needs });
+  }
+  return out;
+}
+
 /* Region-decomposed build: no global CSG. Each piece = margin/corner regions (plain
    extrusions) + one region per cell (extrusion minus its socket cutter and holes).
    Regions are clipped from the global outline (rounded corners, connector bites)
@@ -3284,29 +3376,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const pad = platePad(cfg);
   const isHclip = cfg.connector === 'hclip';
   const topInsert = cfg.keyInsert === 'top';
-  const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
-  const wallKeys = (keyedConn && cfg.keyMount === 'wall');
-  const keyDims = wallKeys ? cfg.keySlim : cfg.key;
-  /* Which of keySiteOps' three housings this configuration builds — from jointKind,
-     like everyone else. src/ui.js activeJoint asks it for the loose part and the fit
-     coupon, and the audit asks it too; this was the fourth copy of the rule and the
-     last one, written out longhand under a comment saying the decision lived elsewhere.
-
-     It was never a live defect. jointKind falls back to the connector's own name where
-     this expression said 'recess', so the two disagree for dovetail, puzzle and none —
-     and every reader of keyKind is inside a loop over `keyed`, which pieceConnectors
-     leaves empty for exactly those three (isTab, and the early return for 'none'). The
-     one thing to keep true, then, is that emptiness: if `keyed` ever carries sites for
-     a tabbed connector, this line starts answering a question it used to duck.
-     Byte-identical output across the 112-config matrix either way.
-
-     The snap's clip is one part at one size whatever the housing, so its fit comes from
-     the full key's clearance; a flat key takes its own housing's. */
-  const keyShape = isHclip ? 'snap' : cfg.keyType;
-  const keyPrm = isHclip ? hclipPrm(cfg.hclip) : keyDims;
-  const keyKind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
-  const keyClr = keyKind === 'snaptop' ? cfg.key.clr
-               : isHclip ? cfg.hclip.clr : keyDims.clr;
+  // the key housings, as keysMeet works them out too: see keyPlan
+  const plan = keyPlan(cfg);
+  const keyDims = plan.dims;
+  const keyShape = plan.shape, keyPrm = plan.prm, keyKind = plan.kind, keyClr = plan.clr;
   const H = pad + cfg.plateHeight;
   const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
   const dTop = cfg.topCutoff, dMid = 2.15 + tol, dBot = 2.85 + tol;
@@ -3534,9 +3607,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
         }
       }
       for (const bo of keyed) {
-        if ((wallKeys || isHclip) && Math.abs(bo.s / pitch - Math.round(bo.s / pitch)) > 0.25 &&
-            Math.abs((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch -
-                     Math.round((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch)) > 0.25)
+        if (plan.junction && offJunction(bo, pitch, piece))
           continue;   // wall mode: keys need a wall junction, skip mid-cell seams
         const halfW = isHclip ? cfg.hclip.flangeW : keyDims.wEnd;
         const reach = isHclip ? hclipPrm(cfg.hclip).len/2 + 1 : keyDims.len/2 + 1;
@@ -3659,10 +3730,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
                            a[2] < b[5] && b[2] < a[5];
     const sites = [];
     for (const bo of keyed) {
-      if (Math.abs(bo.s / pitch - Math.round(bo.s / pitch)) > 0.25 &&
-          Math.abs((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch -
-                   Math.round((bo.s - (bo.edge === '+x' || bo.edge === '-x' ? gy0 : gx0)) / pitch)) > 0.25)
-        continue;
+      if (plan.junction && offJunction(bo, pitch, piece)) continue;
       const op = keySiteOps(keyKind, keyShape, keyPrm, keyClr, bo.edge, bo.e, bo.s, H);
       sites.push({ cut: op.cut, add: op.add, box: box(op.cut) });
     }
@@ -4119,7 +4187,7 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, keysMeet, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
@@ -6052,6 +6120,24 @@ function warningsList() {
   if (!heightFits())
     out.push({ err: true, t: `The plate is ${roundMm(plateHeightMm())} mm tall, more than ` +
       `your printer's ${state.bedH} mm build height — lower the extra floor, or check the bed height.` });
+  /* A key on each side of a piece one cell across, facing each other. Their housings run
+     into each other below about 14.35 mm and the plate leaks; keysMeet in core.js has the
+     measurements and why this is refused rather than built. Only a moved cut or a larger
+     pitch clears it. Not on a grid past the caps above, which is refused already and
+     would be thousands of housings to measure on every redraw. */
+  if (!overCap()) {
+    const meet = keysMeet(state, layout);
+    if (meet.length) {
+      const ids = meet.map((m) => m.id), one = ids.length === 1;
+      const needs = Math.ceil(Math.max(...meet.map((m) => m.needs)) * 100 - 1e-6) / 100;
+      const named = one ? `Piece ${ids[0]} is`
+        : `Pieces ${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]} are`;
+      out.push({ err: true, t: `${named} one cell across between two seams, and at this ` +
+        `${state.pitch} mm pitch the keys on ${one ? 'its' : 'their'} two sides are too close: ` +
+        'their housings run into each other, which leaves holes in the plate. Move a cut so ' +
+        `${one ? 'it is' : 'they are'} two cells across, or use a pitch of ${needs} mm or more.` });
+    }
+  }
   if (layout.pieces.some(pc => pc.nx*pc.ny === 1 && !pc.hR && !pc.hB))
     out.push({ t: 'A piece is a single cell — printable, but consider moving a cut for a sturdier layout.' });
   /* One axis at a time. It fired on either and then printed both, so a drawer narrower
