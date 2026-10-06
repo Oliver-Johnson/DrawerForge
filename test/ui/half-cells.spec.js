@@ -47,6 +47,15 @@ async function slotPoint(page, sx, sy) {
     return { x: q.x, y: q.y };
   }, { sx, sy, CELL: H.CELL });
 }
+/* The same point where the map is now, without scrolling it into the middle first: for
+   the cases that measure the page as it opened, where a scroll would be what they see. */
+const slotHere = (page, sx, sy) => page.evaluate(({ sx, sy, CELL }) => {
+  const svg = $('fillmap'), ny = svg.getAttribute('viewBox').split(' ').map(Number)[3] / CELL;
+  const p = svg.createSVGPoint();
+  p.x = (sx + 0.5) * CELL / 2; p.y = (2 * ny - 1 - sy + 0.5) * CELL / 2;
+  const q = p.matrixTransform(svg.getScreenCTM());
+  return { x: q.x, y: q.y };
+}, { sx, sy, CELL: H.CELL });
 async function dragSlots(page, from, to) {
   const a = await slotPoint(page, ...from), b = await slotPoint(page, ...to);
   await page.mouse.move(a.x, a.y);
@@ -301,12 +310,13 @@ test('a carved bin made half-size says its shape has gone, and Undo brings it ba
   expect(await now()).toEqual([2, 2, true]);
   await expect(page.locator('#sizeWhy'), 'gone with what it was about').toHaveText('');
 
-  // and with shift and an arrow on the map, in half steps, said under the map
+  // and with shift and an arrow on the map, in half steps, said under the map, in the
+  // one line there is room for there
   expect((await steps(page)).half, 'still on from the half-size bin a moment ago').toBe(true);
   await select(page, 0);
   await page.keyboard.press('Shift+ArrowLeft');
   expect(await now()).toEqual([1.5, 2, false]);
-  await expect(page.locator('#stepWhy')).toHaveText(note);
+  await expect(page.locator('#stepWhy')).toHaveText('A half-size bin cannot be carved.');
   await page.keyboard.press('Control+z');
   await settle(page);
   expect(await now()).toEqual([2, 2, true]);
@@ -514,14 +524,7 @@ test('at 1366 x 768 the map, its front, the reason under it and the coverage bar
   inView(await at());
 
   // a whole cell drawn half a cell in from the left, which the map refuses and says so
-  const slot = (sx, sy) => page.evaluate(({ sx, sy, CELL }) => {
-    const svg = $('fillmap'), ny = svg.getAttribute('viewBox').split(' ').map(Number)[3] / CELL;
-    const p = svg.createSVGPoint();
-    p.x = (sx + 0.5) * CELL / 2; p.y = (2 * ny - 1 - sy + 0.5) * CELL / 2;
-    const q = p.matrixTransform(svg.getScreenCTM());
-    return { x: q.x, y: q.y };
-  }, { sx, sy, CELL: H.CELL });
-  const a = await slot(1, 4), b = await slot(2, 5);
+  const a = await slotHere(page, 1, 4), b = await slotHere(page, 2, 5);
   await page.mouse.move(a.x, a.y);
   await page.mouse.down();
   await page.mouse.move(b.x, b.y, { steps: 6 });
@@ -531,4 +534,77 @@ test('at 1366 x 768 the map, its front, the reason under it and the coverage bar
   expect(m.said).toBe('A whole-size bin sits on whole cells.');
   inView(m);
   expect(await page.evaluate(() => document.querySelector('.stage').scrollTop), 'nothing scrolled').toBe(0);
+});
+
+/* The reason under the map says it on the front marker's line, over the marker, so that
+   saying it never moves the map or the coverage bar. That held for the one-line reason it
+   was made for, but a carved bin made half-size on the map said three lines there: at
+   1366 x 768 they ran from the marker to 23 px under the window, over the coverage bar,
+   and on a phone they were a 58 px block over it. Under the map that is now said in a
+   line of its own length, the long sentence stays under the size fields, and the line
+   stays one line whatever it is given: an overlong one is cut short rather than let
+   loose over the bar. Checked at each window size the page is laid out for, by Shift
+   and an arrow, and at 1366 x 768 by a grip too, and with a reason too long for its line. */
+test('a reason under the map stays on the front marker\'s line, at any window size', async ({ page }) => {
+  const L = [3, 3, 2, 2, 3, 1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, '1110', 0, 0, 0, 15].join('-');
+  const hash = 'bl=' + bin(0.5, 0, 1.5, 1) + '_' + L;
+  const short = 'A half-size bin cannot be carved.';
+  const at = () => page.evaluate(() => {
+    const r = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom }; };
+    const why = $('stepWhy'), bar = document.querySelector('#s-layout .covbar');
+    const b = bar.getBoundingClientRect();
+    return { said: why.textContent, whole: why.scrollWidth <= why.clientWidth,
+             why: r(why), front: r(why.previousElementSibling), bar: r(bar), map: r($('fillmap')),
+             covered: document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2) === why,
+             fold: innerHeight, scrolled: document.querySelector('.stage').scrollTop };
+  });
+  const onItsLine = (m, where) => {
+    expect(m.why.bottom, `${where}: on the marker's line`).toBeLessThanOrEqual(m.front.bottom + 0.5);
+    expect(m.why.bottom, `${where}: clear of the coverage bar`).toBeLessThanOrEqual(m.bar.top);
+    expect(m.covered, `${where}: the bar is not under the reason`).toBe(false);
+  };
+  const inView = (m, where) => {
+    for (const k of ['map', 'front', 'why', 'bar'])
+      expect(m[k].bottom, `${where}: ${k} inside the ${m.fold} px window`).toBeLessThanOrEqual(m.fold);
+    expect(m.scrolled, `${where}: nothing scrolled`).toBe(0);
+  };
+
+  for (const [w, h] of [[1366, 768], [1024, 768], [1440, 900], [1920, 1080], [390, 844], [320, 640]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await openAt(page, hash);
+    await select(page, 1);
+    await page.keyboard.press('Shift+ArrowLeft');
+    await settle(page);
+    expect(await page.evaluate(() => [B()[1].u, B()[1].v, isCarved(B()[1])])).toEqual([1.5, 2, false]);
+    const m = await at();
+    expect(m.said, `${w} x ${h}`).toBe(short);
+    expect(m.whole, `${w} x ${h}: said in full`).toBe(true);
+    onItsLine(m, `${w} x ${h}`);
+    if (w === 1366) inView(m, '1366 x 768');
+  }
+
+  // a grip pulled half a cell in on the same L, at 1366 x 768
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openAt(page, hash);
+  await select(page, 1);
+  const g = await page.locator('#fillmap .grip[data-handle="rb"]').boundingBox();
+  const to = await slotHere(page, 8, 9);
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  await page.mouse.up();
+  await settle(page);
+  expect(await page.evaluate(() => [B()[1].u, B()[1].v, isCarved(B()[1])])).toEqual([1.5, 2, false]);
+  let m = await at();
+  expect(m.said, 'by a grip').toBe(short);
+  onItsLine(m, 'by a grip');
+  inView(m, 'by a grip');
+
+  // and a reason far longer than the line has room for is cut short, not let over the bar
+  await page.evaluate(() => mapSay(SHAPE_DROPPED));
+  m = await at();
+  expect(m.said.length, 'fixture: a long reason').toBeGreaterThan(100);
+  expect(m.whole, 'too long for one line').toBe(false);
+  onItsLine(m, 'a long reason');
+  inView(m, 'a long reason');
 });

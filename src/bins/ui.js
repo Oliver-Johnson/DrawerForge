@@ -1318,8 +1318,14 @@ function sizeSay(t) {
 }
 /* A carve is counted in whole cells, so a carved bin made half-size is the plain
    rectangle its box is (setFootprint). That happened without a word: the L simply went.
-   Said where the size was changed, under the fields or under the map. */
+   Said where the size was changed, under the fields or under the map.
+   Under the map it is said in a line, the one it has there (#stepWhy in style.css): the
+   sentence took three on a 1366 × 768 window, from the front marker to 23 px under the
+   window, over the coverage bar, and a 58 px block over it on a phone. There the map has
+   just shown the shape go, so the line need only say why; it fits a 320 px phone with
+   room to spare, as WHOLE_ON_WHOLE does. */
 const SHAPE_DROPPED = 'A half-size bin cannot keep a carved shape, so this one is a plain rectangle now. Undo brings the shape back.';
+const SHAPE_DROPPED_MAP = 'A half-size bin cannot be carved.';
 const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
 
 /* Width and Depth while they are being typed into. A size refused under the caret was
@@ -1865,7 +1871,7 @@ function initMap() {
     /* A refusal the map cannot show is said (mapSay); any other outcome clears it, so
        it describes where the pointer is now rather than somewhere it passed. Except that
        a carved shape a resize made half-size has gone for good, so that stays said. */
-    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why : drag.dropped ? SHAPE_DROPPED : '');
+    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why : drag.dropped ? SHAPE_DROPPED_MAP : '');
     /* A move or a resize files its undo step with the layout as the press found it, at
        its first real change. Filed at the press, a click that only selected a bin was a
        step of its own: the next Undo spent itself on a layout that had not changed, and
@@ -4566,7 +4572,7 @@ document.addEventListener('keydown', (e) => {
       why = placeWhy(b.x + dx * move, b.y + dy * move, b.u, b.v, selected);
       if (!why) { pushUndo(); b.x += dx * move; b.y += dy * move; }
     }
-    mapSay(why === WHOLE_ON_WHOLE ? why : dropped ? SHAPE_DROPPED : '');
+    mapSay(why === WHOLE_ON_WHOLE ? why : dropped ? SHAPE_DROPPED_MAP : '');
     writeControls(b); readControls(); drawMap(); refresh();
   }
 });

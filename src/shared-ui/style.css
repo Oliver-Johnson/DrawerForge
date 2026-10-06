@@ -425,10 +425,17 @@ footer .mono{font-family:var(--mono);font-size:11px}
 /* #stepWhy says its reason on the front marker's line, covering the marker until the
    next press on the map: drawMap counts one line under the map, so a reason arriving
    neither pushes the coverage bar below the window nor makes the map change size under
-   the pointer. Empty, it is transparent and the marker shows through. */
+   the pointer. Empty, it is transparent and the marker shows through.
+   One line and no more, whatever it is given. Above the bar and out of the flow, a
+   reason that wrapped did not push anything down but grew over the bar instead, and
+   off the bottom of a 1366 × 768 window: the carved-shape sentence did both before it
+   was given a line of its own length (SHAPE_DROPPED_MAP). The reasons said here fit a
+   320 px phone; one that ever does not is cut short, with an ellipsis, rather than let
+   loose over the bar, and a screen reader still hears all of it. */
 .mapfoot{position:relative}
 #stepWhy{position:absolute;left:0;right:0;top:0;min-height:100%;padding:2px 14px 0;
-  text-align:center;color:var(--red);background:var(--panel)}
+  text-align:center;color:var(--red);background:var(--panel);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #stepWhy:empty{background:none}
 #sizeWhy{color:var(--red)}
 #sizeWhy:not(:empty){margin-top:6px}
