@@ -183,6 +183,13 @@ const CASES = [
   { name: '1x1x3-wall0.4-scoop-label', u: 1, v: 1, hUnits: 3, wall: 0.4, scoop: 8, label: 12 },
   { name: '2x1x4-wall1-scoop-label', u: 2, v: 1, hUnits: 4, wall: 1, scoop: 8, label: 10 },
   { name: '0.5x1x3-wall0.4-scoop-label', u: 0.5, v: 1, hUnits: 3, wall: 0.4, scoop: 8, label: 10 },
+  /* Dividers and rails packed up to a thin wall's corner stood out through it the same
+     way: 0.36 mm for 32 dividers across a 1x1, 0.92 for 16 pairs of rails. Both ways at
+     once, with a scoop and a shelf, is the four shells that meet at one corner. */
+  { name: '1x1x3-wall0.4-div32', u: 1, v: 1, hUnits: 3, wall: 0.4, divX: 32 },
+  { name: '1x1x3-wall0.4-rails16', u: 1, v: 1, hUnits: 3, wall: 0.4, divX: 16, divRemovable: true },
+  { name: '1x1x3-wall0.4-rails-both', u: 1, v: 1, hUnits: 3, wall: 0.4, divX: 16, divY: 16,
+    divRemovable: true, scoop: 8, label: 12 },
   { name: '1x1x1-wall0.4-low-scoop', u: 1, v: 1, hUnits: 1, wall: 0.4, scoop: 8, under: 0.05,
     edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 }, magnets: true, screws: true, holesEvery: true },
   /* A shelf deeper than the cavity is tall: its 45 degree underside used to run down
@@ -240,6 +247,23 @@ const orientQuarantine = (cs, r) => cs.orientQuarantine
   ? (r.ok ? '  ORIENTATION NOW CLEAN — take it out of quarantine' : `  known: ${cs.orientQuarantine}`)
   : '';
 
+/* How far a bin stands out through the spec's outline, rounded corners and all, above
+   the feet. The bounding box cannot see a corner: the scoop's square ends stood 1.06 mm
+   out through a 0.4 mm wall's corners with the box exactly right, and so did dividers
+   and rails packed up to one. Carved shapes have outlines of their own and are left to
+   the box. */
+function outsideBy(r, cfg) {
+  if (cfg.cells) return 0;
+  const ox = ((cfg.u - 1) * 42 + 41.5) / 2 - 3.75, oy = ((cfg.v - 1) * 42 + 41.5) / 2 - 3.75;
+  let out = 0;
+  for (const p of r.polys) for (const v of p.verts) {
+    if (v[2] <= 4.75 + 1e-6) continue;
+    const dx = Math.max(0, Math.abs(v[0]) - ox), dy = Math.max(0, Math.abs(v[1]) - oy);
+    out = Math.max(out, Math.hypot(dx, dy) - 3.75);
+  }
+  return out;
+}
+
 let bad = 0;
 console.log('case            tris   W x D x H (mm)        zmin   zmax   mesh');
 for (const cs of CASES) {
@@ -279,19 +303,8 @@ for (const cs of CASES) {
      and 0.1 mm over on the flats. */
   const tol = 0.02;
   const wOk = Math.abs((xmax - xmin) - expW) < tol && Math.abs((ymax - ymin) - expD) < tol;
-  /* ...and inside the spec's outline, rounded corners and all, above the feet. The
-     bounding box cannot see a corner: the scoop's square ends stood 1.06 mm out through
-     a 0.4 mm wall's corners with the box exactly right. Carved shapes have outlines of
-     their own and are left to the box. */
-  let out = 0;
-  if (!cs.cells) {
-    const ox = expW / 2 - 3.75, oy = expD / 2 - 3.75;
-    for (const p of r.polys) for (const v of p.verts) {
-      if (v[2] <= 4.75 + 1e-6) continue;
-      const dx = Math.max(0, Math.abs(v[0]) - ox), dy = Math.max(0, Math.abs(v[1]) - oy);
-      out = Math.max(out, Math.hypot(dx, dy) - 3.75);
-    }
-  }
+  // ...and inside the spec's outline, rounded corners and all: see outsideBy
+  const out = outsideBy(r, cs);
   const oOk = out < 0.001;
   /* The stacking PITCH is always hUnits*7 — that is what a bin occupies in a stack.
      The real height can be less: a tray with every wall open is just its floor, so
@@ -954,8 +967,10 @@ const cleanBuild = (cfg) => {
   const H = cfg.hUnits * SPEC.unitH;
   // nothing but the stacking lip may stand above the bin's own height
   const lipTop = H + (r.meta.hasLip ? r.meta.lipH : 0) + 0.001;
+  const out = outsideBy(r, cfg);
   return [m.bad ? `${m.bad} bad edges` : '', ori.ok ? '' : orientationNote(ori),
           zmax > lipTop ? `${(zmax - lipTop).toFixed(2)} mm above the top` : '',
+          out >= 0.001 ? `${out.toFixed(3)} mm outside the outline` : '',
           cfg.magnets || cfg.screws ? holeFaults(r, cfg) : '']
     .filter(Boolean).join(', ');
 };

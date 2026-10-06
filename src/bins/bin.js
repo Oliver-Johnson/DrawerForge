@@ -123,10 +123,41 @@ function labelPrism(G, hwI, hdI, H, depth, t) {
    corners, 1.06 mm at the 0.4 minimum and 0.21 at 1.0. Such a bin builds the scoop and
    the shelf over the cavity's own rounded outline instead, grown a BLOAT into the wall
    all round, so their ends follow the corners. The usual wall keeps the prisms, and with
-   them the same bytes. `arcInside` is how far in the outline's chords come from the arc. */
+   them the same bytes. Dividers and their rails are boxes with the same trouble, and
+   are built the same way when they have it (see the dividers in buildBin). */
 function cornersPoke(hw, hd, hwI, hdI, n) {
-  const arcInside = SPEC.r * Math.cos(Math.PI / (4 * n));
-  return Math.hypot(hwI + BLOAT - (hw - SPEC.r), hdI + BLOAT - (hd - SPEC.r)) > arcInside - 1e-6;
+  return outsideArc(hw, hd, hwI + BLOAT, hdI + BLOAT, n);
+}
+
+/* Whether a point stands out through the outline's rounded corner, or on it. Measured
+   against the outline as built, chords and all: in the direction of the point, the chord
+   it faces comes in to SPEC.r * cos(half a segment) at its middle and out to SPEC.r at
+   its ends. Held to the chord's middle everywhere, a scoop's corner, which lies exactly
+   on a vertex at 45 degrees, counted as out at walls 1.148 to 1.154 that never were. */
+function outsideArc(hw, hd, x, y, n) {
+  const dx = Math.abs(x) - (hw - SPEC.r), dy = Math.abs(y) - (hd - SPEC.r);
+  if (dx <= 0 || dy <= 0) return Math.max(dx, dy) > SPEC.r - 1e-6;
+  const seg = Math.PI / (2 * n), a = Math.atan2(dy, dx);
+  const mid = (Math.min(n - 1, Math.floor(a / seg)) + 0.5) * seg;
+  return Math.hypot(dx, dy) > SPEC.r * Math.cos(seg / 2) / Math.cos(a - mid) - 1e-6;
+}
+
+// the part of a convex outline with keep * (p[axis] - v) >= 0, the cut along it set to v
+function clipSide(pts, axis, v, keep) {
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const da = keep * (a[axis] - v), db = keep * (b[axis] - v);
+    if (da >= 0) out.push(a);
+    if (da * db < 0) {
+      const o = 1 - axis;
+      const p = [];
+      p[o] = a[o] + (b[o] - a[o]) * da / (da - db);
+      p[axis] = v;
+      out.push(p);
+    }
+  }
+  return out;
 }
 
 /* A solid standing over a convex outline in plan, between a bottom and a top that
@@ -142,17 +173,7 @@ function cornersPoke(hw, hd, hwI, hdI, n) {
    is moved onto it, and the bottom stays a little way under the top's lowest point. */
 const WELD = 0.002;
 function bandSolid(G, ring, ylo, yhi, stations, zTop, zBot) {
-  const clip = (pts, y0, keep) => {                 // the part with keep * (y - y0) >= 0
-    const out = [];
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[i], b = pts[(i + 1) % pts.length];
-      const da = keep * (a[1] - y0), db = keep * (b[1] - y0);
-      if (da >= 0) out.push(a);
-      if (da * db < 0) out.push([a[0] + (b[0] - a[0]) * da / (da - db), y0]);
-    }
-    return out;
-  };
-  const pts = clip(clip(ring, ylo, 1), yhi, -1);
+  const pts = clipSide(clipSide(ring, 1, ylo, 1), 1, yhi, -1);
   let lo = Infinity, hi = -Infinity;
   for (const p of pts) { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }
   const cuts = [];
@@ -219,8 +240,8 @@ function piecewise(prof) {
 }
 
 // the cavity's outline grown a BLOAT into the wall, without the straights' split points
-function cavityRing(hwI, hdI, wall, n) {
-  return roundRect(hwI + BLOAT, hdI + BLOAT, Math.max(0.4, SPEC.r - wall) + BLOAT, n,
+function cavityRing(hwI, hdI, wall, n, grow = BLOAT) {
+  return roundRect(hwI + grow, hdI + grow, Math.max(0.4, SPEC.r - wall) + grow, n,
                    [[], [], [], []]);
 }
 function scoopRounded(G, hwI, hdI, wall, floorZ, r, segs, n) {
@@ -1631,12 +1652,33 @@ function buildBin(G, cfg) {
     const reach = (inner) => (c.divRemovable
       ? [[-inner - BLOAT, -inner + RAIL_D], [inner - RAIL_D, inner + BLOAT]]
       : [[-inner - BLOAT, inner + BLOAT]]);
+    /* A box that would stand out through a rounded corner, as one packed up to a corner
+       does (16 pairs of rails across a 1x1 with a 0.4 mm wall: 0.92 mm out; the most
+       rails both ways the fields allow, at the usual 1.2: 0.67), is
+       the cavity's outline grown a BLOAT into the wall, cut to the box instead: the same
+       outline the scoop and shelf follow there, so it meets the wall the same way. A box
+       left with almost nothing inside the outline is all wall, and is not built.
+       Each direction's boxes take the outline grown a little less than a BLOAT, and by a
+       different amount, so that two cut at one corner, or one and the shelf, never share
+       a vertical edge at the same outline vertex: 8 edges used four times when they did. */
+    const box = (pts, grow) => {
+      if (!pts.some(([x, y]) => outsideArc(hw, hd, x, y, n)))
+        return G.extrudePoly(pts, floorZ - BLOAT, H);
+      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      let cut = cavityRing(iw, id, c.wall, n, grow);
+      cut = clipSide(clipSide(cut, 0, Math.min(...xs), 1), 0, Math.max(...xs), -1);
+      cut = clipSide(clipSide(cut, 1, Math.min(...ys), 1), 1, Math.max(...ys), -1);
+      cut = cut.filter((p, i) => Math.hypot(p[0] - cut[(i + 1) % cut.length][0],
+                                            p[1] - cut[(i + 1) % cut.length][1]) >= WELD);
+      return cut.length >= 3 && Math.abs(G.polyArea2D(cut)) > 0.01
+        ? G.extrudePoly(cut, floorZ - BLOAT, H) : [];
+    };
     for (const [a, b] of spans(c.divX, iw))
       for (const [lo, hi] of reach(id))
-        polys.push(...G.extrudePoly([[a, lo], [b, lo], [b, hi], [a, hi]], floorZ - BLOAT, H));
+        polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
     for (const [a, b] of spans(c.divY, id))
       for (const [lo, hi] of reach(iw))
-        polys.push(...G.extrudePoly([[lo, a], [hi, a], [hi, b], [lo, b]], floorZ - BLOAT, H));
+        polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT));
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */
