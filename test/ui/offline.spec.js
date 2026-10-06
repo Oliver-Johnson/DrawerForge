@@ -192,13 +192,18 @@ test('online, a page and its scripts are what the server has now, even inside th
     await expect(page).toHaveTitle('page B, script B');
   });
 
-/* And a page from the server gets its scripts from the server alone. The cache may be
-   another deploy than the page, and the server's page with the cache's script is the same
-   mismatch as the other way round. So when one of them cannot be fetched — the connection
-   drops as the page loads — the script fails, as it would with no worker at all, and the
-   page can be opened again, page and scripts together, from the cache. */
+/* And a page from the server of another deploy than the cache gets its scripts from the
+   server alone. The server's page with the cache's script is the same mismatch as the
+   other way round. So when one of them cannot be fetched — the connection drops as the
+   page loads — the script fails, as it would with no worker at all, and the page can be
+   opened again, page and scripts together, from the cache.
+
+   The server sends ETags here, as GitHub Pages always does, so the worker tells the two
+   deploys apart by them, rather than merely having none to go by, which is a case of its
+   own below. */
 test('a page from the server whose script cannot be fetched does not get the cached one',
   async ({ page, context }) => {
+    site.maxAge = 600;   // as GitHub Pages: an ETag on everything, and every deploy a new one
     await cacheDeployA(page);
     deploy('B');
     site.cut = ['/vendor/jszip.min.js'];
@@ -211,6 +216,41 @@ test('a page from the server whose script cannot be fetched does not get the cac
     // and opened again, it is all deploy A
     await page.reload();
     await expect(page).toHaveTitle('page A, script A');
+  });
+
+/* But with nothing deployed since the worker installed, the cache is the page's own
+   deploy, and a connection that drops while three.js is coming should not break a tool
+   the cache could have finished. The server's ETag for the page says which deploy it is,
+   and the cached page still has the one it came with, so when they match the script
+   comes from the server and then the cache, as it did before the rule above. */
+test('a page from the server that is the deploy the cache holds gets the cached three.js when the server\'s cannot be fetched',
+  async ({ page }) => {
+    const errors = watch(page);
+    site.maxAge = 600;   // as GitHub Pages
+    await page.goto(site.base);
+    await platesReady(page);
+    await controlled(page);
+    site.cut = ['/vendor/three.min.js'];
+    site.log = [];
+    const res = await page.reload();
+    expect(res.fromServiceWorker()).toBe(true);
+    expect(site.log.map((l) => l.path)).toContain('/');   // the page is the server's
+    await platesReady(page);
+    expect(errors).toEqual([]);
+  });
+
+/* With no ETag to go by, which deploy the page is cannot be told, and it is the server
+   alone, as for another deploy: two missing ETags are not two equal ones, and one missing
+   is no match. */
+test('a page from the server with no ETag to say which deploy it is gets its scripts from the server alone',
+  async ({ page }) => {
+    await cacheDeployA(page);           // from a server that sends no ETags, so the cache has none
+    site.cut = ['/vendor/jszip.min.js'];
+    await page.goto(site.base + 'guide/');
+    await expect(page).toHaveTitle('page A, script undefined');
+    site.maxAge = 600;                  // and with one on the server's page alone
+    await page.goto(site.base + 'guide/');
+    await expect(page).toHaveTitle('page A, script undefined');
   });
 
 /* The cache is named for a hash of what it holds, so a deploy that changes anything is a
