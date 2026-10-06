@@ -419,9 +419,10 @@ footer .mono{font-family:var(--mono);font-size:11px}
    kept wide enough for the row with two layers (drawMap), so there that is only with
    three or more. #stepWhy, under the map, is the reason a place was refused.
    On a row of their own the tabs may shrink, and their labels wrap, as they did before
-   they shared it: held at the width of every label in a line, six layers ran 20 px out
-   of the map's card at 1366 × 768, and on a phone four or more ran off the card, and
-   off the screen, where the last tabs could not be reached. */
+   they shared it. Held at the width of every label in a line, they ran out of any card
+   narrower than that: off the card and off the screen on a phone, from four layers at
+   320 px wide and six at 390, and beside the preview, where the card now stops at two
+   layers' width, from six. */
 .maptools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 .maptools #layerTabs{flex:1 1 auto}
 .steps{display:flex;align-items:center;gap:8px}

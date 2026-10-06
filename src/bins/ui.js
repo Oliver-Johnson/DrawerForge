@@ -1333,9 +1333,9 @@ function sizeSay(t) {
    Said where the size was changed, under the fields or under the map.
    Under the map it is said in a line, the one it has there (#stepWhy in style.css): the
    sentence took three on a 1366 × 768 window, from the front marker to 23 px under the
-   window, over the coverage bar, and a 58 px block over it on a phone. There the map has
-   just shown the shape go, so the line need only say why; it fits a 320 px phone with
-   room to spare, as WHOLE_ON_WHOLE does. */
+   window, over the coverage bar, and a block of up to 58 px over it on a phone. The map
+   has just shown the shape go, so the line need only say why; it fits a 320 px phone
+   with room to spare, as WHOLE_ON_WHOLE does. */
 const SHAPE_DROPPED = 'A half-size bin cannot keep a carved shape, so this one is a plain rectangle now. Undo brings the shape back.';
 const SHAPE_DROPPED_MAP = 'A half-size bin cannot be carved.';
 const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
