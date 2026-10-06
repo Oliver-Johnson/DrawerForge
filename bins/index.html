@@ -40,6 +40,15 @@
 "featureList":["Whole-drawer bin layout","Multi-layer stacking","Non-rectangular L and U shaped bins","Dividers, scoops and label shelves","Per-edge wall heights","Translucent drawer preview around the bins","Split a bin to fit the print bed","Filament estimate","Pre-arranged 3MF print plates","STL export"],
 "isAccessibleForFree":true}
 </script>
+<!-- Whether this browser has been here before, decided before anything is drawn: the full
+     header for a first visit, a one-line bar after it. The baseplates template explains it;
+     the two copies are the same lines. -->
+<script>
+try {
+  if (['plates', 'bins', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
+    document.documentElement.classList.add('returning');
+} catch (e) { /* storage blocked: the full header */ }
+</script>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later
  * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
@@ -192,7 +201,36 @@ header h1{font-size:21px;letter-spacing:.16em;font-weight:700}
 header h1 .tm{color:var(--cyan)}
 header p{color:var(--dim);margin-top:5px;max-width:640px}
 header .privacy{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:7px}
-header .privacy::before{content:"● ";color:var(--cyan)}
+header .privacy::before,footer .privacy::before{content:"● ";color:var(--cyan)}
+/* After the first visit: one line.
+   The title, a two-line pitch and the privacy line took 202 px of a 1080 px window on
+   Baseplates and 245 on Bins, and on a phone 304 and 287 of 844 — every visit, to say
+   what the visitor already knew. The inline script in each tool's <head> puts
+   `returning` on <html> once this browser holds a saved layout or drawer, before the
+   header is laid out, so a returning visit is drawn short from the first frame rather
+   than drawn long and then collapsed. The pitch and the privacy line go (the privacy
+   line is in the footer, word for word); the name, the pages, the drawer and the bins
+   page's way in to a single bin stay, on one row wherever the window is wide enough
+   for them. Only the tools carry the script, so the guide pages keep their header. */
+html.returning header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;
+  padding:10px 26px}
+html.returning header>p,html.returning header>.privacy{display:none}
+html.returning header nav,html.returning header .drawerbar,
+html.returning header .quickstart{margin-top:0}
+/* the drawer and the way in to one bin sit at the far end, away from the page tabs */
+html.returning header .drawerbar{margin-left:auto}
+html.returning header .quickstart span{display:none}
+/* Narrower, the name and the tabs give up a little width so the row still holds them:
+   at 844 × 390, a phone on its side, that is the difference between one row and two, and
+   the window there is 390 px tall. Upright at 390 px they cannot share a row whatever is
+   done to them, so the bar wraps instead: the name, then the tabs with the drawer beside
+   them, and on the bins page the way in to a single bin under those. */
+@media(max-width:980px){
+  html.returning header{padding:8px 16px;gap:8px 12px}
+  html.returning header h1{font-size:17px;letter-spacing:.12em}
+  html.returning header nav a{padding:0 12px}
+  html.returning header .drawerbar{margin-right:0}
+}
 /* The working area is exactly the window below the header.
    It was `calc(100vh - 96px)` on .app, the rail and the stage, and 96 was nobody's
    header: the real one is 164 px on Baseplates, 207 px on Bins (the quickstart row),
@@ -1172,7 +1210,9 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
 <footer>
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these bins follow the published spec, so they fit any spec baseplate.</div>
   <div style="margin-top:10px">Free software under the <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/LICENSE" rel="noopener">AGPL</a>, and the models you make with it <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/NOTICE" rel="noopener">are yours</a>. <a href="https://github.com/Oliver-Johnson/DrawerForge" rel="noopener">Source code</a>, <a href="https://github.com/Oliver-Johnson/DrawerForge/issues" rel="noopener">issues and feature requests</a> on GitHub. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
-  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL output is mm scale.</div>
+  <!-- The header's privacy line, word for word: after the first visit the header leaves it
+       out, so this is where it stays said. -->
+  <div class="mono privacy" style="margin-top:8px">Runs entirely in your browser — nothing is uploaded, no account, no tracking. Your layout is kept on this device so you can come back to it. All geometry is computed locally; STL output is mm scale.</div>
 </footer>
 
 <!-- The download dialog. It sits before the UI script because that script wires it up
