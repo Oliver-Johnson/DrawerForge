@@ -105,13 +105,17 @@ test('hints name gestures the device actually has', async ({ page }) => {
   // no wheel and no shift key on a phone, so the hint must not promise them
   await expect(page.locator('#threehint')).toHaveText(/pinch/);
   await expect(page.locator('#threehint')).not.toHaveText(/wheel|shift/);
+  /* The map's help opens on its first sentence and keeps the rest behind "more", which is
+     where the gestures are, so it is opened the way a reader opens it. */
+  const mapHint = page.locator('.hint').filter({ hasText: 'Drag across empty cells' });
+  await mapHint.locator('button.more').tap();
   // keyboard shortcuts are unreachable without a keyboard
   expect(await page.locator('.haskeys').first().isVisible()).toBe(false);
   expect(await page.locator('.hastouch').first().isVisible()).toBe(true);
   /* Nor is Alt. The map's help taught carving as Alt-click and nothing else, so the one
      sentence about making an L or a U described something a phone cannot do. innerText,
      because the hidden half of the hint is still in textContent. */
-  const hint = await page.locator('.hint').filter({ hasText: 'Drag across empty cells' }).innerText();
+  const hint = await mapHint.innerText();
   expect(hint).not.toMatch(/alt-click/i);
   expect(hint, 'the touch route to carving is the Carve button').toContain('Carve this bin into a shape');
 });
@@ -125,7 +129,9 @@ test.describe('with a mouse', () => {
   test('the map hint offers Alt-click, not the touch wording', async ({ page }) => {
     await page.goto(H.BINS_URL);
     await page.waitForTimeout(400);
-    const hint = await page.locator('.hint').filter({ hasText: 'Drag across empty cells' }).innerText();
+    const mapHint = page.locator('.hint').filter({ hasText: 'Drag across empty cells' });
+    await mapHint.locator('button.more').click();
+    const hint = await mapHint.innerText();
     expect(hint).toMatch(/Alt-click/);
     expect(hint).not.toMatch(/\btap\b/);
   });

@@ -298,7 +298,7 @@ function readControls() {
   $('baseModeRow').style.display = (state.magnets || state.screws) ? '' : 'none';
   $('cornerRow').style.display = $('perCorner').checked ? '' : 'none';
   $('cornerHint').style.display = $('perCorner').checked ? '' : 'none';
-  $('plateStyleHint').textContent = plateStyleHint();
+  DF.hint($('plateStyleHint'), ...plateStyleHint());
   showFieldErrors();
 }
 
@@ -307,17 +307,20 @@ function readControls() {
    sits on the first screen and is the first use of four terms nothing has defined:
    skeleton, socket, rim, wall band. The socket is the one you cannot guess from the
    word, so it is glossed here, once, in whichever hint is showing. The pitch is read
-   from the state rather than written as 42, because panel 06 can move it. */
+   from the state rather than written as 42, because panel 06 can move it.
+   Two parts: the first sentence, which stays in view and carries the gloss, and the rest,
+   behind the hint's "more" (DF.hint). */
 function plateStyleHint() {
   const socket = `the socket, the ${state.pitch} mm recess a bin's foot drops into`;
   return state.plateStyle === 'skeleton'
-    ? `Skeleton keeps ${socket}, along with the rim round the outside of the plate and ` +
-      'the band of wall between neighbouring cells, and leaves out the bulk underneath — ' +
-      'lighter, and quicker to print. Cells carrying a joint stay solid, ' +
-      'and it turns off entirely with magnets or screws, which need that material.'
-    : `Solid backs ${socket} with material all the way down to the drawer floor. ` +
-      'The sturdy default: the heaviest and slowest to print, and the only style that ' +
-      'works with magnets, screws, or a joint that needs a floor to house its keys.';
+    ? [`Skeleton keeps ${socket}, along with the rim round the outside of the plate and ` +
+       'the band of wall between neighbouring cells, and leaves out the bulk underneath — ' +
+       'lighter, and quicker to print.',
+       'Cells carrying a joint stay solid, ' +
+       'and it turns off entirely with magnets or screws, which need that material.']
+    : [`Solid backs ${socket} with material all the way down to the drawer floor.`,
+       'The sturdy default: the heaviest and slowest to print, and the only style that ' +
+       'works with magnets, screws, or a joint that needs a floor to house its keys.'];
 }
 
 // ---------- layout & validation ----------
@@ -1873,6 +1876,12 @@ const writeKey = (k, v) => {
   catch (err) { /* private mode: the guard and the backup go, the page does not */ }
 };
 let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* Set the first time anyone changes a design on either tool, and never cleared. The
+   template's <head> reads it, with the saved drawers, to draw the one-line header for a
+   browser that has used the tools rather than only opened them: the save above is written
+   within moments of any visit, so its being there said nothing, and a first visit that went
+   from one tool to the other arrived at the second with its header already shortened. */
+const USED_KEY = 'drawerforge:used:v1';
 /* What an untouched page saves, and what this one held when the boot finished — null
    from the first change on. Until that change a stalled page saves nothing: saving the
    defaults it stands in with put them over the layout it declined, and one more reload
@@ -1940,6 +1949,7 @@ function saveNow() {
       bootDesc = null; $('setAside').style.display = 'none';
       // what a stalled page goes on from is its defaults, not the link it declined
       if (stalled) writeKey(LINKED_KEY, '');
+      writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
   /* Marked as this tab's own, or as someone's link's while the page still holds it as
@@ -2219,6 +2229,23 @@ for (const btn of document.querySelectorAll('section.p>h2>button')) {
   btn.addEventListener('click', () => {
     btn.setAttribute('aria-expanded', String(!sec.classList.toggle('closed')));
   });
+}
+/* On a phone the rail is not a column beside the map but the top of one long page, and
+   with panels 01 to 05 open the cut map started 2.4 screens below the drawer size. So
+   there only panel 01, the drawer, opens on arrival; the rest arrive folded, a tap each,
+   and the section bar jumps past them. Decided once, as the page opens: a window that
+   changes width later keeps its panels as they are.
+   The decision is made in the <head>, as html.fold, because by the time this script runs
+   the browser has already drawn the rail: done only here, the four panels showed open
+   for the first frames and then snapped shut. style.css folds them by look from the first
+   frame; this makes it real — the class each panel's button reads, and aria-expanded —
+   and then takes the stand-in away. */
+if (document.documentElement.classList.contains('fold')) {
+  for (const id of ['s-printer', 's-split', 's-conn', 's-mag']) {
+    $(id).classList.add('closed');
+    $(id).querySelector(':scope>h2>button').setAttribute('aria-expanded', 'false');
+  }
+  document.documentElement.classList.remove('fold');
 }
 document.querySelectorAll('#splitSeg button').forEach(b => b.addEventListener('click', () => {
   state.splitMode = b.dataset.v;

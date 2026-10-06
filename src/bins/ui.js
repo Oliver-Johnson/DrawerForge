@@ -376,6 +376,100 @@ function setPanel(id, open) {
 let hadSelection = false;
 let hadErrors = false;
 
+/* ---------- the bin sheet (phone) -----------------------------------------
+   On a phone the selected bin's settings are a sheet over the foot of the screen with
+   the map above it, instead of panel 03 opening 1,500 px of settings above the map (the
+   rules, and the reason, are in style.css). This keeps the class that makes it a sheet
+   in step with the selection, and does the three things the stylesheet cannot. */
+const PHONE = matchMedia('(max-width: 980px)');
+let sheetWas = false, sheetReveal = false;
+function applySheet() {
+  /* A new bin drawn on the map above the sheet starts by letting go of the selection
+     (pointerdown), and with nothing selected the sheet would go — mid-drag. Put away,
+     panel 03 drops back into the column above the map and moves the map down under a
+     finger that is still on it, so a drag from row 3 to row 5 made a bin four or five rows
+     deep. So a sheet that was up stays up while a bin is being drawn; the release selects
+     the new bin, which keeps it up, or places nothing, which puts it away then. */
+  const on = !focused && (selAll().length > 0 ||
+    (!!drag && drag.mode === 'create' && sheetWas));
+  /* Put away, the panel's header goes back into the column above the map and pushes the
+     map down by its height, under whatever you were looking at, or under the finger that
+     has just let go of a drag. So the map is held where it is: measured before, and the
+     page scrolled by however far it moved. Not on the way into single-bin mode, which
+     hides the map. Done here, at once, because scroll anchoring will not: the padding the
+     sheet gives the page's foot comes off in the same change, and a change of padding on
+     an element round the anchor is one the browser declines to correct for. */
+  const map = $('fillmap');
+  const held = PHONE.matches && sheetWas && !on && !focused && map.getClientRects().length
+    ? map.getBoundingClientRect().top : null;
+  document.body.classList.toggle('binsheet', on);
+  if (PHONE.matches && on !== sheetWas) {
+    /* Opening, the sheet comes up over the bottom half of the screen, which is where the
+       bin you just tapped may well be. Not while a finger is still dragging it: the page
+       moving under a drag would move the bin. The release redraws, and comes back here. */
+    if (on) sheetReveal = true;
+    /* Put away, the panel goes back into the column above the map, and open it would be
+       the 1,500 px the sheet exists to keep out of the way — so it goes back folded, as
+       the page first showed it. Not on the way into single-bin mode, which is about
+       nothing but this panel. */
+    else if (!focused) setPanel('s-bin', false);
+  }
+  sheetWas = on;
+  if (held !== null) scrollBy(0, map.getBoundingClientRect().top - held);
+  /* Two frames on, not one. The panel leaving the column (it was in it in single-bin
+     mode, all 1,500 px of it, above the map) moves everything under it, and the browser's
+     scroll anchoring corrects for that in the frame's own update, after a callback in the
+     first frame has already measured the page as it was. */
+  if (sheetReveal && !drag) {
+    sheetReveal = false;
+    requestAnimationFrame(() => requestAnimationFrame(revealSelected));
+  }
+}
+/* Scroll the selected bin clear of the sheet, without pushing the top of it under the
+   section bar. The bin's box comes from the map's own transform (see cellFromEvent). */
+function revealSelected() {
+  const b = selected >= 0 ? B()[selected] : null;
+  if (!b || !document.body.classList.contains('binsheet')) return;
+  const svg = $('fillmap'), m = svg.getScreenCTM && svg.getScreenCTM();
+  if (!m || !svg.getClientRects().length) return;
+  const g = grid(), p = svg.createSVGPoint();
+  p.x = 0; p.y = (g.ny - b.y - b.v) * S; const top = p.matrixTransform(m).y;
+  p.y = (g.ny - b.y) * S; const bottom = p.matrixTransform(m).y;
+  /* Where the sheet's top will be, not where it is: it is still sliding up at this point,
+     and a transform moves the box getBoundingClientRect reports. It sits on the bottom of
+     the window, so its height is enough. */
+  const sheetTop = innerHeight - $('s-bin').offsetHeight - 12;
+  /* the bar's height, not where it is now: it comes down once the header has scrolled away,
+     which the scroll below may well be what does */
+  const bar = $('jumpbar').offsetHeight + 8;
+  if (bottom > sheetTop) scrollBy(0, Math.min(bottom - sheetTop, top - bar));
+  // or scrolled past it — leaving single-bin mode brings the map back above the fold
+  else if (top < bar) scrollBy(0, top - bar);
+}
+/* Size, height and dividers are what a bin gets changed for, and a sheet has room for a
+   few rows before it scrolls, so on a phone the dividers come up under the height. Moved
+   in the document rather than reordered with CSS, so that Tab goes the way the eye does;
+   and moved back on a wider window, where the panel is the rail's and does not change. */
+function placeDividers() {
+  const after = PHONE.matches ? $('binSizeHint') : $('thickRow');
+  if (after.nextElementSibling !== $('divRow')) after.after($('divRow'), $('divHint'));
+}
+PHONE.addEventListener('change', placeDividers);
+placeDividers();
+function closeSheet() {
+  const inside = $('s-bin').contains(document.activeElement);
+  /* What was typed a moment ago is still waiting for its redraw (schedule, below), and
+     landing after the selection has gone it would go to the next bin drawn instead of
+     this one: so it lands now, while the bin is still the selected one. Escape straight
+     after typing a note was the case that lost it. */
+  clearTimeout(timer); readControls();
+  clearSel(); readControls(); drawMap(); refresh();
+  /* The X has gone with the sheet, and focus with it unless it is put somewhere: on the
+     panel's own header, folded back into the column, which is where the sheet went. */
+  if (inside) $('s-bin').querySelector(':scope>h2>button').focus({ preventScroll: true });
+}
+$('binSheetClose').addEventListener('click', closeSheet);
+
 /* ---------- single-bin focus ----------------------------------------------
    The one place that says what focus mode looks like. It sets a class and lets the
    stylesheet do the hiding, for the reason written above that CSS block: this
@@ -811,6 +905,8 @@ function readControls() {
      decides what focus hides is applied after every other visibility decision above,
      rather than being quietly undone by one of them. */
   applyFocus();
+  // and whether this is a sheet on a phone follows from the selection and the mode
+  applySheet();
 }
 function writeControls(src) {
   $('u').value = src.u; $('v').value = src.v; $('hUnits').value = src.hUnits;
@@ -1356,7 +1452,9 @@ function initMap() {
     drag = null;
     readControls(); drawLayerTabs(); drawMap(); refresh();
   });
-  svg.addEventListener('pointercancel', () => { drag = null; drawMap(); refresh(); });
+  /* and a sheet kept up for a drag that never finished goes the way a release over
+     nothing would put it */
+  svg.addEventListener('pointercancel', () => { drag = null; applySheet(); drawMap(); refresh(); });
 }
 
 /* ---------- actions ------------------------------------------------------- */
@@ -3255,6 +3353,12 @@ const writeKey = (k, v) => {
   catch (err) { /* private mode: the guard and the backup go, the page does not */ }
 };
 let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* Set the first time anyone changes a design on either tool, and never cleared. The
+   template's <head> reads it, with the saved drawers, to draw the one-line header for a
+   browser that has used the tools rather than only opened them: the save above is written
+   within moments of any visit, so its being there said nothing, and a first visit that went
+   from one tool to the other arrived at the second with its header already shortened. */
+const USED_KEY = 'drawerforge:used:v1';
 /* What an untouched page saves, and what this one held when the boot finished — null
    from the first change on. Until that change a stalled page saves nothing: saving the
    defaults it stands in with put them over the layout it declined, and one more reload
@@ -3323,6 +3427,7 @@ function saveNow() {
       bootDesc = null; $('setAside').style.display = 'none';
       // what a stalled page goes on from is its defaults, not the link it declined
       if (stalled) writeKey(LINKED_KEY, '');
+      writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
   /* Marked as this tab's own, or as someone's link's while the page still holds it as
@@ -3530,7 +3635,16 @@ function duplicateSelected() {
    just as invisibly. */
 document.addEventListener('keydown', (e) => {
   const t = e.target;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+  /* A key typed into a field is the field's, and goes no further — except Escape in a field
+     of the phone's bin sheet. The sheet is in the way of the map the way a dialog is, and
+     its fields are where focus mostly is while it is up, so the key that puts it away has
+     to work from them. Nothing in it means anything else there: a number or a checkbox
+     does nothing with Escape, an open menu's list takes the key for itself and closes, and
+     the note's text is not touched. An IME still composing keeps it. */
+  const sheetField = e.key === 'Escape' && !e.isComposing && PHONE.matches &&
+    document.body.classList.contains('binsheet') && $('s-bin').contains(t);
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA') &&
+      !sheetField) return;
   if (document.querySelector('dialog[open]')) return;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -3540,6 +3654,14 @@ document.addEventListener('keydown', (e) => {
   /* Carving first, focus second — so Escape backs out one layer at a time rather than
      dropping you all the way to the drawer from inside the carve grid. */
   if (e.key === 'Escape' && focused) { e.preventDefault(); leaveFocus(); return; }
+  /* And the phone's bin sheet, which is in the way of the map the way a dialog is. Not
+     when the Escape was for something else: the right-click menu marks its own, and the
+     expanded preview is closed by chrome.js on the same key. */
+  if (e.key === 'Escape' && !e.defaultPrevented && PHONE.matches &&
+      document.body.classList.contains('binsheet') &&
+      !document.body.classList.contains('previewlock')) {
+    e.preventDefault(); closeSheet(); return;
+  }
   if (selected < 0) return;
   const b = B()[selected];
   if (e.key === 'Delete' || e.key === 'Backspace') {
