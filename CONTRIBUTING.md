@@ -27,6 +27,13 @@ Edit the files in `src/`, run the build, and commit **both** the source and the
 regenerated page. `node build.js --check` fails if they are out of step, and CI runs
 it, so a change to only one of them will not merge.
 
+**A merge conflict in a generated file is never resolved by hand: take either side and
+run `node build.js`.** `sw.js` is the one you will meet. It carries a hash of every page,
+so two branches that change different pages both change it, and the only right version
+is the one the build writes from the merged sources. For the same reason, a branch that
+changes a page needs the current main merged in and rebuilt before it merges, or main
+ends up with a `sw.js` that names the wrong hash.
+
 ## Running the checks
 
 ```bash
@@ -67,6 +74,44 @@ Setting `core.autocrlf` to fight this brings those false failures back.
 
 If a clone predates this and `--check` fails on pages you have not touched, run
 `node build.js` and then `git add --renormalize .`. Neither changes any content.
+
+## Taking the service worker out
+
+`sw.js` keeps a copy of the whole site in every visitor's browser. If that ever has to
+stop — it is serving something it must not, or a browser turns out to have a bug with
+it — **do not delete `sw.js`.** A browser that asks for it and gets a 404 keeps the
+worker it already has, and that worker goes on answering from its cache whenever the
+connection drops. Replace it with a worker that removes itself:
+
+1. Delete the block at the end of `src/shared-ui/chrome.js` that registers the worker,
+   so no page installs it again.
+2. Replace everything in `src/sw.js` below the licence header with this. `build.js`
+   still fills in the two markers; nothing reads them.
+
+   ```js
+   'use strict';
+   const VERSION = /*__VERSION__*/'';
+   const FILES = /*__FILES__*/[];
+
+   self.addEventListener('install', () => self.skipWaiting());
+   self.addEventListener('activate', (e) => {
+     const prefix = 'drawerforge ' + self.registration.scope + ' ';
+     e.waitUntil(caches.keys()
+       .then((keys) => Promise.all(keys.filter((k) => k.startsWith(prefix)).map((k) => caches.delete(k))))
+       .then(() => self.registration.unregister()));
+   });
+   ```
+
+3. Run `node build.js`, take out `test/ui/offline.spec.js`, which tests the worker that
+   is going, and merge.
+
+A browser with the old worker asks for `sw.js` again whenever one of the pages is
+opened, so a visitor's next visit installs this one. It deletes the caches — only the
+ones with the worker's own prefix, for the reason in `src/sw.js` — and unregisters, and
+from the visit after that every page comes straight from the server, as if there had
+never been a worker. It has no fetch handler, so it answers nothing in between. Leave it
+in place for good: someone who comes back in a year still has the old worker, and this
+is what takes it away.
 
 ## Geometry, before you change any of it
 

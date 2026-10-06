@@ -10,16 +10,26 @@
  *
  * The cache holds one deploy: every page, everything the pages load, and the app's icons
  * and manifest, fetched together when the worker installs and never written to again.
- * A deploy that changes any of those files changes the hash in sw.js, so the browser
- * installs a new worker with a new cache the next time a page is opened, and the old
- * cache is deleted when the new worker takes over.
+ * A deploy that changes any of those files, or this script, changes the hash in sw.js, so
+ * the browser installs a new worker with a new cache the next time a page is opened, and
+ * the old cache is deleted when the new worker takes over. A cache is only ever one
+ * worker's.
  *
- * Online, everything comes from the network, exactly as it would with no worker, so a fix
- * shows the moment it is deployed rather than one visit late. The cache is only the
- * answer when the network gives none. That applies to the scripts as well as the pages:
- * vendor/three.min.js keeps its name across upgrades, and a library served from the
- * cache beside a page served from the network would put a new page with an old three.js
- * for the one visit between a deploy and the new worker taking over.
+ * Online, everything comes from the server, so a fix shows the moment it is deployed
+ * rather than one visit late. The cache is only the answer when the server gives none.
+ *
+ * And a page's scripts come from wherever the page came from. vendor/three.min.js keeps
+ * its name across upgrades, so a page from one deploy with a three.js from another is a
+ * tool that may not work, with nothing to say why. Besides the server and this cache,
+ * the browser keeps its own copies of what it was last sent, which GitHub Pages lets it
+ * use for ten minutes without asking, and those can be a deploy this cache is not — one
+ * the visitor saw since, whose own worker failed to install or has not finished. So they
+ * are never the answer on their own. Every request goes to the server with cache:
+ * 'no-cache', which asks even when the browser holds a copy and uses the copy only when
+ * the server says it has not changed, and what a page loads is marked so that the copy
+ * the browser keeps in memory cannot go round this worker either (see marked()).
+ * Then a page the server could not give comes from this cache, and so do the scripts
+ * that page loads, even if the connection comes back while it loads.
  *
  * A request to another site, or for anything this site did not cache, is never answered
  * here at all. The browser handles it as it would without a worker, and nothing from
@@ -32,8 +42,9 @@
 
 /* Filled in by build.js. FILES is every page in tools/manifest.js, everything those pages
    load from this site, and the app's icons and manifest, as paths from the root. VERSION
-   is a hash of all of those files, names and bytes. */
-const VERSION = "d0144cc6639e";
+   is a hash of all of those files, names and bytes, and of this script as it stands in
+   src/sw.js. */
+const VERSION = "4ca80ae2729a";
 const FILES = [
   "./",
   "bins/",
@@ -77,13 +88,24 @@ self.addEventListener('install', (e) => {
      the next visit. A half-filled cache would open a tool offline with no three.js in it,
      which is worse than the browser's own message that it is offline. */
   e.waitUntil(caches.open(CACHE).then((cache) => Promise.all(URLS.map((u) =>
-    /* cache: 'reload' goes past the browser's HTTP cache. GitHub Pages lets anything be
-       cached for ten minutes, so without it a worker installed just after a deploy could
-       fill its new cache with the previous deploy's files. */
-    fetch(new Request(u, { cache: 'reload' })).then((r) => {
+    /* cache: 'no-cache' asks the server about every file, however recently the browser
+       stored it. GitHub Pages lets anything be cached for ten minutes, so without it a
+       worker installed just after a deploy could fill its new cache with the previous
+       deploy's files. Asking, rather than fetching everything again ('reload'), is just
+       as fresh, and a file the server says has not changed comes back as a 304 and is
+       taken from the browser's copy — most of the 1.9 MB, in a deploy that changed one
+       page. */
+    fetch(new Request(u, { cache: 'no-cache' })).then((r) => {
       if (!r.ok) throw new Error(u + ' answered ' + r.status);
       return plain(r).then((p) => cache.put(u, p));
     }))))
+    /* And a failed install takes its half-filled cache with it, rather than leaving it in
+       the visitor's storage until the next good install deletes it. The cache is this
+       worker's alone (VERSION covers this script too, see tools/app.js), so the worker
+       still serving the site loses nothing. The error goes on, so the install still fails
+       and the browser still tries again on the next visit. Fetches still in flight finish
+       into the deleted cache, which the browser then throws away. */
+    .catch((err) => caches.delete(CACHE).then(() => { throw err; }))
     /* Straight to active rather than waiting for every tab to close. The pages hold
        everything they need once loaded and ask this worker for nothing afterwards, so an
        open page loses nothing by the cache under it changing. */
@@ -116,15 +138,50 @@ function cachedAs(req) {
   return PAGES.has(u.href) ? u.href : null;
 }
 
+/* The pages answered from the cache, by the id of the client (the tab or frame) each
+   opened in, so that the scripts they load come from the cache as well. Kept in memory,
+   which lasts only as long as the worker does, but a page asks for its scripts within
+   moments of arriving. A page this has no id for — a browser that gives none, a worker
+   started since — gets what every other request gets: the server, then the cache. */
+const fromCache = new Set();
+
+/* What a page loads is marked to be asked for again before it is used again
+   (Cache-Control: no-cache). A browser keeps the scripts a page loaded in memory and
+   hands them to the next page that asks, without that request ever reaching this worker,
+   for as long as the server's headers allow — ten minutes on GitHub Pages. So a script
+   one page got from the server would go to the next page even when that page came from
+   this cache, and the other way round. Marked, the next page's request comes here. Only
+   the copy the page holds is marked: what the server sent, and what this cache holds,
+   are left as they are. The page itself is not kept that way, so it is left alone. */
+function marked(r) {
+  if (r.type !== 'basic' && r.type !== 'default') return r;   // an error, or a redirect to follow
+  const headers = new Headers(r.headers);
+  headers.set('cache-control', 'no-cache');
+  return new Response(r.body, { status: r.status, statusText: r.statusText, headers });
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   if (new URL(req.url).origin !== self.location.origin) return;   // never another site's
   const key = cachedAs(req);
   if (!key) return;
-  /* The network's answer whatever it is, a 404 included: it answered. The cache only
-     when it did not, and if the browser has evicted that too, its own offline page. */
-  e.respondWith(fetch(req).catch(() => caches.open(CACHE)
-    .then((c) => c.match(key))
-    .then((hit) => hit || Response.error())));
+  const cached = () => caches.open(CACHE).then((c) => c.match(key));
+  // a script for a page from the cache: the same deploy, without asking the server
+  if (req.mode !== 'navigate' && fromCache.has(e.clientId)) {
+    e.respondWith(cached().then((hit) => hit || fetch(req)).then(marked));
+    return;
+  }
+  /* The server's answer whatever it is, a 404 included: it answered. 'no-cache' makes it
+     the server's and not the browser's copy (see the top of this file). A browser that
+     will not copy a navigation into a new request, as older ones would not, sends it as
+     it came. The cache only when the server gave nothing, and if the browser has evicted
+     that too, its own offline page. */
+  let ask = req;
+  try { ask = new Request(req, { cache: 'no-cache' }); } catch (err) { /* as it came */ }
+  e.respondWith(fetch(ask).catch(() => cached().then((hit) => {
+    if (!hit) return Response.error();
+    if (req.mode === 'navigate' && e.resultingClientId) fromCache.add(e.resultingClientId);
+    return hit;
+  })).then((r) => (req.mode === 'navigate' ? r : marked(r))));
 });
