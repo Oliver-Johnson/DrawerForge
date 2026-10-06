@@ -339,6 +339,28 @@ test('with inches on, the length is typed in inches', async ({ page }) => {
   await expect(page.locator('#hMm')).toHaveValue('42');
 });
 
+/* The inside depth too, with the bin's own floor left as it is: the floor field is in
+   millimetres whichever unit the drawer is in, so the 1.2 mm floor stays 1.2 mm and 6
+   units still hold 36 mm, 1.417 in, shown rounded down so typing it back is 6 again. */
+test('with inches on, an inside depth is typed in inches', async ({ page }) => {
+  await oneBin(page);
+  await page.evaluate(() => document.getElementById('unitIn').click());
+  await page.waitForTimeout(300);
+  await page.selectOption('#hMode', 'inside');
+  await expect(page.locator('#hMmLabel')).toHaveText('Inside depth (in)');
+  await expect(page.locator('#hMm')).toHaveValue('0.59');      // 3 units hold 15 mm
+  await typeHeight(page, 1.41);           // 35.81 mm: the 6 units that hold 36
+  expect(await units(page)).toBe(6);
+  expect(await page.evaluate(() => B()[0].floorT)).toBe(1.2);
+  expect(await result(page)).toBe('6 units · 42 mm / 1.65 in overall + 3.95 mm lip · 36 mm / 1.41 in inside');
+  await leave(page);
+  await expect(page.locator('#hMm')).toHaveValue('1.41');
+  await typeHeight(page, 1.42);           // 36.07 mm, more than 6 units hold
+  expect(await units(page)).toBe(7);
+  await leave(page);
+  await expect(page.locator('#hMm')).toHaveValue('1.69');      // 43 mm
+});
+
 /* The drawer-height check always worked in millimetres. It now says the unit count that
    fits, which is the number the field takes. 60 mm usable less a 4.25 mm baseplate is
    55.75; with a 3.95 mm lip that is 7 units (49 mm), and 8 would be 59.95. */
