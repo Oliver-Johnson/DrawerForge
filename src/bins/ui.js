@@ -67,9 +67,20 @@ const fBin = () => (!focused ? null : scratch || (selected >= 0 ? B()[selected] 
 const LIP_H = lipHeight(0.55);
 
 /* ---------- model --------------------------------------------------------- */
+/* The largest drawer the map will lay out, and so the most cells a side. Every draw
+   walks every cell, and a 21 m drawer typed by accident — 500 cells a side — froze the
+   page for over a minute. 2000 mm is the largest drawer or bed the baseplates page and
+   a shared link accept, read from the drawer field's own max so the spinner and the
+   clamp agree; that is 47 cells. Past it Checks says the drawer was cut down rather
+   than the tab hanging. */
+const DRAWER_MAX = parseFloat($('drawerW').max) || 2000;
+const GRID_MAX = Math.floor(DRAWER_MAX / SPEC.pitch);
+$('gridX').max = $('gridY').max = GRID_MAX;
+// the drawer size as typed, before the clamp; Checks names it when the two differ
+let drawerAsked = { w: 0, d: 0 };
 function grid() {
-  const nx = Math.max(1, Math.floor(state.drawerW / SPEC.pitch));
-  const ny = Math.max(1, Math.floor(state.drawerD / SPEC.pitch));
+  const nx = Math.max(1, Math.min(GRID_MAX, Math.floor(state.drawerW / SPEC.pitch)));
+  const ny = Math.max(1, Math.min(GRID_MAX, Math.floor(state.drawerD / SPEC.pitch)));
   const avail = state.drawerH - state.plateH;
   return { nx, ny, avail, maxUnits: Math.max(1, Math.floor((avail - LIP_H) / SPEC.unitH)) };
 }
@@ -226,14 +237,32 @@ const allBins = () => layers.flatMap((L, k) => L.bins.map((b) => ({ b, k })));
 const scoped = () => { const b = fBin(); return b ? [{ b, k: scratch ? 0 : cur }] : allBins(); };
 
 /* ---------- geometry + volume --------------------------------------------- */
+/* The key names everything the build reads, so an edit that changes a bin finds a new
+   key and one that does not — a note, the infill — finds the old build. That is what
+   lets the cache stay put across edits instead of being thrown away on every one. */
+const geoKey = (b) => typeKey(b) + '-s' + state.arcSegs;
 function geomFor(b) {
-  const k = typeKey(b) + '-s' + state.arcSegs;
-  if (geoCache.has(k)) return geoCache.get(k);
-  const r = buildBin(G, binCfg(b));
+  const k = geoKey(b);
+  let r = geoCache.get(k);
+  if (!r) { r = buildBin(G, binCfg(b)); geoCache.set(k, r); }
+  /* Read fresh every time rather than cached with the mesh: it moves with the infill
+     setting, which the key deliberately leaves out, and it is arithmetic, not a build. */
   const vv = volumeMm3(b);
   r.vol = vv.filament; r.rawVol = vv.raw;
-  geoCache.set(k, r);
   return r;
+}
+/* Forget builds no bin uses any more, and hand their buffers back to the GPU. Clearing
+   the caches on every edit without dispose() kept every old buffer alive: twelve bins,
+   250 edits, 1757 geometries and 620 MB of GPU memory. With the cache kept, this is
+   what bounds it — to the shapes actually in the drawer. */
+function pruneGeometry() {
+  const live = new Set(allBins().map(({ b }) => geoKey(b)));
+  if (scratch) live.add(geoKey(scratch));
+  for (const [k, gm] of geoCache) {
+    if (live.has(k)) continue;
+    if (gm.three) gm.three.dispose();
+    geoCache.delete(k);
+  }
 }
 function areaRR(hw, hd, r) { return 4 * hw * hd - (4 - Math.PI) * r * r; }
 function perimRR(hw, hd, r) { return 4 * hw + 4 * hd - 8 * r + 2 * Math.PI * r; }
@@ -290,12 +319,13 @@ function volumeMm3(c) {
 
   /* thin parts — solid whatever the infill setting */
   const e = (k) => (c.edges && c.edges[k] !== undefined ? Math.max(0, Math.min(1, c.edges[k])) : 1);
-  const hwI = hwO - c.wall, hdI = hdO - c.wall;
-  const wallsFull = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - c.wall)))
+  const wall = Math.max(WALL_MIN, c.wall);        // as built: buildBin holds it there too
+  const hwI = hwO - wall, hdI = hdO - wall;
+  const wallsFull = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - wall)))
                     * (H - floorZ);
   const perim = 4 * hwO + 4 * hdO;
   const wallFrac = (e('f') * 2 * hwO + e('b') * 2 * hwO + e('l') * 2 * hdO + e('r') * 2 * hdO) / perim;
-  const divs = (c.divX * c.wall * 2 * hdI + c.divY * c.wall * 2 * hwI) * (H - floorZ);
+  const divs = (c.divX * wall * 2 * hdI + c.divY * wall * 2 * hwI) * (H - floorZ);
   const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
   return { raw: baseRaw + thin, filament: baseFil + thin };
@@ -518,13 +548,45 @@ $('focusRedo').addEventListener('click', () => redo());
 const LENGTH_IDS = ['drawerW', 'drawerD', 'drawerH', 'drawerFrontH'];
 let unit = 'mm';   // what the length fields are showing; the saved choice is applied at boot
 
+/* A typed value held to its field's own min and max, so each limit is written in one
+   place and the spinner stops where the clamp does. The limits are the ones a shared
+   link is held to, so nothing can be typed that the page's own link would not carry
+   back. A negative floor used to reach the geometry and the link, and a 100 mm wall
+   built inside out and weighed -430 g. A drawer length is clamped in millimetres: its
+   field shows its limits in inches too when it does, and keeps the millimetres beside
+   them (FIELDS.convert). */
+function fieldClamp(id, x) {
+  const el = $(id), mm = (k, attr) => parseFloat(k in el.dataset ? el.dataset[k] : el[attr]);
+  const lo = mm('minMm', 'min'), hi = mm('maxMm', 'max');
+  return Math.min(isFinite(hi) ? hi : Infinity, Math.max(isFinite(lo) ? lo : -Infinity, x));
+}
+const BIN_FIELDS = ['u', 'v', 'hUnits', 'wall', 'floorT', 'divX', 'divY', 'scoop', 'label'];
+/* The most dividers that fit across a bin `cells` wide: as many as leave every
+   compartment at least one wall thick, never counting a wall as thinner than a 1.2 mm
+   rail. The link uses the same rule. */
+const mostDividers = (cells, wall) => Math.max(0,
+  Math.floor(((cells - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall) / Math.max(wall, RAIL_T)) - 1);
+/* The limits that depend on the bin itself, written onto the fields: the floor and the
+   scoop up to the bin's height, the label shelf up to its depth, the dividers up to
+   what fits across. */
+function setBinLimits(u, v, hUnits, wall) {
+  const H = hUnits * SPEC.unitH;
+  $('floorT').max = H; $('scoop').max = H;
+  $('label').max = v * SPEC.pitch;
+  $('divX').max = mostDividers(u, wall); $('divY').max = mostDividers(v, wall);
+}
+
 function readControls() {
   const num = (id, d) => { const x = parseFloat($(id).value); return isFinite(x) ? x : d; };
   const int = (id, d) => { const x = parseInt($(id).value, 10); return isFinite(x) ? x : d; };
+  /* Counts are rounded, not truncated: parseInt read "2.7" dividers as 2 and "1e3" as 1. */
+  const count = (id, d) => fieldClamp(id, Math.round(num(id, d)));
   const len = (id, d) => { const x = FIELDS.lengthOf($(id), unit); return isFinite(x) ? x : d; };
-  state.drawerW = len('drawerW', 306);
-  state.drawerD = len('drawerD', 380);
-  state.drawerH = len('drawerH', 84);
+  const mm = (id, d) => fieldClamp(id, len(id, d));
+  drawerAsked = { w: len('drawerW', 306), d: len('drawerD', 380) };
+  state.drawerW = mm('drawerW', 306);
+  state.drawerD = mm('drawerD', 380);
+  state.drawerH = mm('drawerH', 84);
   state.plateH = num('plateH', 4.25);
   state.showDrawer = $('showDrawer').checked;
   state.drawerFrontH = len('drawerFrontH', 0);
@@ -535,19 +597,19 @@ function readControls() {
      removable dividers is per bin and rides `t` above. */
   state.divT = Math.max(0.8, Math.min(5, num('divT', 1.6)));
   state.divClr = Math.max(0, Math.min(1, num('divClr', 0.25)));
-  state.bedW = num('bedW', 256);
-  state.bedD = num('bedD', 256);
-  state.bedH = num('bedH', 256);
+  state.bedW = mm('bedW', 256);
+  state.bedD = mm('bedD', 256);
+  state.bedH = mm('bedH', 256);
   state.gap = num('gap', 3);
 
   const t = {
-    u: Math.max(1, int('u', 1)), v: Math.max(1, int('v', 1)),
-    hUnits: Math.max(1, int('hUnits', 3)),
-    wall: num('wall', 1.2), floorT: num('floorT', 1.2),
-    divX: Math.max(0, int('divX', 0)), divY: Math.max(0, int('divY', 0)),
+    u: count('u', 1), v: count('v', 1),
+    hUnits: count('hUnits', 3),
+    wall: mm('wall', 1.2),
     solid: $('solid').checked,
-    scoop: Math.max(0, num('scoop', 0)), label: Math.max(0, num('label', 0)),
-    note: $('note').value.slice(0, 28),
+    /* By character, not by UTF-16 unit: slicing units cut an emoji in half and left a
+       lone surrogate in the note, the link and the README. */
+    note: [...$('note').value].slice(0, 28).join(''),
     divRemovable: $('divRemovable').checked,
     lid: $('lid').checked,
     lidSides: { f: $('lidF').checked, b: $('lidB').checked,
@@ -566,48 +628,71 @@ function readControls() {
      have every bin drawn after a mark born already printed. print-queue.spec.js fails
      on exactly that pair of changes. */
   const sel = selAll();
+  const b = !scratch && sel.length ? B()[selected] : null;
+  /* The footprint is settled first: the floor, the label shelf and the dividers are
+     limited by the bin's real size, so they wait for it. A loose bin has no drawer to
+     collide with, so its footprint is held only by the fields' own 50 cells — with no
+     limit at all a 100×100 took 14 s to rebuild on every keystroke — and Checks and the
+     Add button say when it is too big for the bed or the grid. */
+  if (!scratch && sel.length > 1) {
+    /* Footprint is per bin and must never be bulk-assigned. Writing the primary's
+       size onto the others silently resized every bin in the selection to match it,
+       which quietly destroyed their shapes. */
+    delete t.u; delete t.v;
+    $('u').value = b.u; $('v').value = b.v;
+  } else if (b && (t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected)) {
+    t.u = b.u; t.v = b.v; $('u').value = b.u; $('v').value = b.v;
+  }
+  /* Several bins take the same settings, so the smallest of them sets the limit: the
+     dividers that fit a 1x1 are the most any of them can be given. */
+  const sizes = sel.length > 1 && !scratch ? sel.map((i) => B()[i]) : [t];
+  setBinLimits(Math.min(...sizes.map((x) => x.u)), Math.min(...sizes.map((x) => x.v)),
+               t.hUnits, t.wall);
+  Object.assign(t, { floorT: mm('floorT', 1.2), scoop: mm('scoop', 0), label: mm('label', 0),
+                     divX: count('divX', 0), divY: count('divY', 0) });
+  /* Show the value actually used once you have left the field: typed past a limit, the
+     box would otherwise go on saying 100 while the bin is built at 10. Never under the
+     caret, where emptying the box to type a new number would have it filled back in
+     before the first digit landed. */
+  for (const id of BIN_FIELDS)
+    if (t[id] !== undefined && document.activeElement !== $(id) && parseFloat($(id).value) !== t[id])
+      $(id).value = t[id];
   /* Whether a bin has been printed is a fact about one sitting in the drawer. A loose
      bin is not in a drawer, so the question does not arise. */
   $('doneRow').style.display = sel.length && !scratch ? '' : 'none';
   const anyDiv = t.divX > 0 || t.divY > 0;
   $('divRemovableRow').style.display = anyDiv ? '' : 'none';
   $('divRemovableHint').style.display = anyDiv && $('divRemovable').checked ? '' : 'none';
-  /* A lid needs a lip to grip, and a lowered wall takes the lip away. Say which it is
-     rather than hiding the control, or ticking it and getting nothing looks like a bug. */
-  const lipOk = EDGES.every((k) => !t.edges || !isFinite(t.edges[k]) || t.edges[k] >= 1);
-  $('lidRow').style.display = t.solid ? 'none' : '';
-  $('lidNoLip').style.display = !t.solid && !lipOk && $('lid').checked ? '' : 'none';
-  $('lidHint').style.display = !t.solid && lipOk && $('lid').checked ? '' : 'none';
   if (scratch) {
-    /* No drawer, so nothing to collide with: a loose bin's footprint is limited only by
-       the bed, and the checks say so rather than the field silently refusing the digit
-       you typed. u and v still go through setFootprint, because a carved shape has to
-       reconcile its mask whichever kind of bin it is. */
+    /* u and v still go through setFootprint, because a carved shape has to reconcile
+       its mask whichever kind of bin it is. */
     const nu = t.u, nv = t.v; delete t.u; delete t.v;
+    noteSettingsEdit([scratch], t, nu, nv);
     Object.assign(scratch, t, { edges: Object.assign({}, t.edges) });
     if (nu !== undefined && (nu !== scratch.u || nv !== scratch.v))
       setFootprint(scratch, nu, nv);
   } else if (sel.length) {
-    // size only applies to a single bin; several at once would have to overlap
-    const b = B()[selected];
-    if (sel.length > 1) {
-      /* Footprint is per bin and must never be bulk-assigned. Writing the primary's
-         size onto the others silently resized every bin in the selection to match it,
-         which quietly destroyed their shapes. */
-      delete t.u; delete t.v;
-      $('u').value = b.u; $('v').value = b.v;
-    } else if ((t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected)) {
-      t.u = b.u; t.v = b.v; $('u').value = b.u; $('v').value = b.v;
-    }
     /* u and v never ride the bulk assign — a footprint change has to reconcile the
        carve mask, so it goes through setFootprint. */
     const nu = t.u, nv = t.v; delete t.u; delete t.v;
+    noteSettingsEdit(sel.map((i) => B()[i]), t, nu, nv);
     for (const i of sel) Object.assign(B()[i], t, { edges: Object.assign({}, t.edges) });
     if (sel.length === 1 && nu !== undefined && (nu !== b.u || nv !== b.v))
       setFootprint(b, nu, nv);
   } else {
     Object.assign(state, t);
   }
+  /* A lid needs a lip to grip, and a lowered wall takes the lip away. Say which it is
+     rather than hiding the control, or ticking it and getting nothing looks like a bug.
+     A carved bin keeps its lip, but the lid is a rectangle: it would hang over the cells
+     cut away, so it is not made for one either, and that gets its own sentence. */
+  const lipOk = EDGES.every((k) => !t.edges || !isFinite(t.edges[k]) || t.edges[k] >= 1);
+  const target = scratch || (sel.length ? B()[selected] : null);
+  const carvedNow = !!target && isCarved(target);
+  $('lidRow').style.display = t.solid ? 'none' : '';
+  $('lidNoLip').style.display = !t.solid && !lipOk && $('lid').checked ? '' : 'none';
+  $('lidCarved').style.display = !t.solid && lipOk && carvedNow && $('lid').checked ? '' : 'none';
+  $('lidHint').style.display = !t.solid && lipOk && !carvedNow && $('lid').checked ? '' : 'none';
   // the front measurement is only worth asking for once the drawer is being drawn
   $('drawerFrontRow').style.display = state.showDrawer ? '' : 'none';
   $('drawerViewHint').style.display = state.showDrawer ? '' : 'none';
@@ -958,8 +1043,9 @@ function drawMap() {
       svg.appendChild(el('rect', { class: 'ghostbin', x: b.x * S + 3, y: sy(b.y, b.v) + 3,
         width: b.u * S - 6, height: b.v * S - 6, rx: 5 }));
 
+  const claims = { [cur]: layerClaims(cur) };
   B().forEach((b, i) => {
-    const issues = binIssues(b, cur).filter((x) => typeof x === 'string' || !x.note);
+    const issues = binIssues(b, cur, claims).filter((x) => typeof x === 'string' || !x.note);
     const cls = 'bin' + (selAll().includes(i) ? ' sel' : '') + (issues.length ? ' clash' : '')
                       + (b.done ? ' done' : '');
     const cells = binCells(b);
@@ -1247,13 +1333,24 @@ $('splitFit').addEventListener('click', () => {
   if (!sp) return;
   pushUndo();
   const src = Object.assign({}, b);
+  /* A carved bin's mask is in its own box's coordinates, so every piece takes the part
+     of it that falls in the piece's box, rebased to that box. Copying the whole mask
+     into each piece read cells meant for the first piece in all of them — and outside
+     the first, where nothing matched, the mask was ignored and the piece came out full,
+     on top of the cell another bin held. */
+  const kept = binCells(src);
   B().splice(selected, 1);
   let oy = src.y;
   for (const vv of sp.ys) {
     let ox = src.x;
     for (const uu of sp.xs) {
-      B().push(Object.assign({}, src, { x: ox, y: oy, u: uu, v: vv,
-                                        edges: Object.assign({}, src.edges) }));
+      const rx = ox - src.x, ry = oy - src.y;
+      const cells = kept.filter(([x, y]) => x >= rx && x < rx + uu && y >= ry && y < ry + vv)
+                        .map(([x, y]) => [x - rx, y - ry]);
+      if (cells.length)                       // a piece the carve emptied is not a bin
+        B().push(Object.assign({}, src, { x: ox, y: oy, u: uu, v: vv,
+                                          cells: cells.length === uu * vv ? null : cells,
+                                          edges: Object.assign({}, src.edges) }));
       ox += uu;
     }
     oy += vv;
@@ -1328,6 +1425,44 @@ function pushOn(U, R, snap) {
   updateUndoButtons();
 }
 function pushUndo() { pushOn(uStack(), rStack(), snapshot()); }
+/* A settings edit to a bin is an undo step of its own. readControls wrote the panel
+   straight onto the selection and banked nothing, so draw a bin, change its height,
+   Undo — and the step spent was the draw, taking the bin with it.
+
+   Pushed BEFORE the change, as everything else here is, and only when the panel really
+   differs from the bin: readControls also runs on every selection and redraw, and those
+   must not file steps. A burst of edits to one field of one selection is one step —
+   typing "12" or a note a letter at a time — as long as nothing else has been banked
+   in between and the next keystroke follows within a second. */
+const SETTINGS_COALESCE_MS = 1000;
+let settingsBurst = null;
+const sameNum = (a, b) => a === b || (Number.isNaN(a) && Number.isNaN(b));
+const edgeAt = (o, k) => (o.edges && o.edges[k] !== undefined ? o.edges[k] : 1);
+// the first setting the panel would change on this bin, or '' for none
+function settingsChange(b, t, nu, nv) {
+  if (nu !== undefined && (nu !== b.u || nv !== b.v)) return 'size';
+  for (const k of ['hUnits', 'wall', 'floorT', 'divX', 'divY']) if (!sameNum(t[k], b[k])) return k;
+  for (const k of ['solid', 'divRemovable', 'lid']) if (!!t[k] !== !!b[k]) return k;
+  for (const k of ['scoop', 'label']) if (!sameNum(t[k] || 0, b[k] || 0)) return k;
+  if ((t.note || '') !== (b.note || '')) return 'note';
+  if (lidSideBits(t.lidSides) !== lidSideBits(b.lidSides)) return 'lidSides';
+  return EDGES.some((k) => !sameNum(edgeAt(t, k), edgeAt(b, k))) ? 'edges' : '';
+}
+function noteSettingsEdit(bins, t, nu, nv) {
+  let field = '';
+  for (const b of bins) if ((field = settingsChange(b, t, nu, nv))) break;
+  if (!field) return;
+  const sig = (scratch ? 'loose' : `${cur}:${selAll().join(',')}`) + ':' + field;
+  const U = uStack(), now = Date.now();
+  if (settingsBurst && settingsBurst.sig === sig && now - settingsBurst.at < SETTINGS_COALESCE_MS &&
+      U[U.length - 1] === settingsBurst.snap) {
+    settingsBurst.at = now;
+    return;
+  }
+  const snap = snapshot();
+  pushOn(U, rStack(), snap);
+  settingsBurst = { sig, at: now, snap };
+}
 /* Adding a layer while a loose bin is on screen edits the DRAWER, and the loose bin has
    its own history that captures only itself. Routing this through pushUndo would file the
    entry on the scratch stack, where undoing it restores the bin and leaves the new layer
@@ -1418,7 +1553,28 @@ function describeSplit(u, v) {
    One place decides what is wrong with a bin, so the badge on the map and the
    text in Checks can never disagree. Nothing here blocks placement — you may be
    about to fill in the thing that fixes it. */
-function binIssues(b, k) {
+/* Who claims each cell of a layer: -1, one bin's index, or an array of them when two or
+   more bins sit on the same cell. occupancyOf keeps only the last bin per cell, which is
+   right for "what is here" and blind to the case that matters for Checks — a link
+   holding two bins on one cell drew one, counted both, and reported nothing. */
+function layerClaims(k) {
+  const g = grid();
+  const cl = Array.from({ length: g.ny }, () => new Array(g.nx).fill(-1));
+  (layers[k] ? layers[k].bins : []).forEach((b, i) => {
+    for (const [dx, dy] of binCells(b)) {
+      const x = b.x + dx, y = b.y + dy;
+      if (y < 0 || y >= g.ny || x < 0 || x >= g.nx) continue;
+      const c = cl[y][x];
+      if (c === -1) cl[y][x] = i;
+      else if (Array.isArray(c)) c.push(i);
+      else cl[y][x] = [c, i];
+    }
+  });
+  return cl;
+}
+/* `claims`, when given, is layerClaims per layer index, worked out once by a caller
+   that is about to ask about every bin rather than once per bin. */
+function binIssues(b, k, claims) {
   const g = grid(), out = [];
   /* A loose bin is not in the drawer, so the questions the drawer asks — does it fit
      the grid, what holds it up, does the stack clear the lid — have no answer here,
@@ -1426,9 +1582,23 @@ function binIssues(b, k) {
      the grid is not where it lives. What still bites is the printer: the bed, the Z
      height, the wall thickness, and whether a carved shape holds together. */
   const loose = b === scratch;
-  if (!loose && (b.x + b.u > g.nx || b.y + b.v > g.ny)) {
+  if (!loose && (b.x < 0 || b.y < 0 || b.x + b.u > g.nx || b.y + b.v > g.ny)) {
     out.push('sits outside the drawer grid');
     return out;
+  }
+  if (!loose) {
+    const cl = (claims && claims[k]) || layerClaims(k), others = new Set();
+    for (const [dx, dy] of binCells(b)) {
+      const c = cl[b.y + dy][b.x + dx];
+      if (Array.isArray(c)) for (const i of c) if (layers[k].bins[i] !== b) others.add(i);
+    }
+    if (others.size) {
+      const o = layers[k].bins[[...others][0]];
+      out.push((others.size === 1
+        ? `shares cells with the ${o.u}×${o.v} bin at column ${o.x + 1} row ${o.y + 1}`
+        : `shares cells with ${others.size} other bins`) +
+        ' — two bins cannot fill the same cell, so one of them has to move');
+    }
   }
   const st = loose ? { z: 0, flat: true, solidBelow: true } : seat(b, k);
   // layer 0 sits on the baseplate, which every bin fits; the rest sit on other bins
@@ -1508,19 +1678,33 @@ function binIssues(b, k) {
   if (!loose && st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001)
     out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available`);
   if (!b.solid && b.wall < 0.8)
-    out.push(`${b.wall} mm walls are thinner than two perimeters at a 0.4 mm nozzle`);
+    /* Below one nozzle line the engine builds the thinnest wall it can rather than an
+       open shell, so the file holds more wall than the field says; say so. */
+    out.push(`${b.wall} mm walls are thinner than two perimeters at a 0.4 mm nozzle` +
+             (b.wall < WALL_MIN ? `; they are built at ${WALL_MIN} mm, a single line, since nothing thinner prints` : ''));
+  /* Past the stacking lip's base a thicker wall buys nothing at the top edge — the lip
+     already stands on it — and every tenth of a millimetre comes out of the inside on
+     both sides. Worth saying, because the inside is what the bin is for; not a fault,
+     because it prints fine. */
+  const lipBase = LIP[0][1];
+  if (!b.solid && b.wall > lipBase)
+    out.push({ note: true, t: `has ${b.wall} mm walls, thicker than the ${lipBase} mm the stacking lip stands on — ` +
+      `each side takes ${(b.wall - BIN_DEFAULTS.wall).toFixed(1)} mm more of the inside than the usual ${BIN_DEFAULTS.wall} mm` });
   return out;
 }
 
 /* ---------- checks -------------------------------------------------------- */
 function stackHeight() {
   const g = grid();
+  /* Each layer's occupancy once, not once per cell: rebuilt inside the cell loop it was
+     cells squared times layers, 4.2 s a redraw on a 100 × 100 grid of five layers. */
+  const occs = layers.map((_, L) => occupancyOf(L));
   let top = 0;
   for (let y = 0; y < g.ny; y++)
     for (let x = 0; x < g.nx; x++) {
       let h = 0;
       for (let L = 0; L < layers.length; L++) {
-        const occ = occupancyOf(L), i = occ[y][x];
+        const i = occs[L][y][x];
         if (i !== -1) h += layers[L].bins[i].hUnits * SPEC.unitH;
       }
       if (h > top) top = h;
@@ -1542,14 +1726,17 @@ function warnings() {
     }
     return out;
   }
+  if (drawerAsked.w > DRAWER_MAX || drawerAsked.d > DRAWER_MAX)
+    out.push({ err: true, t: `A ${drawerAsked.w} × ${drawerAsked.d} mm drawer is bigger than the ${DRAWER_MAX} mm a side this tool lays out, so it is drawn as ${state.drawerW} × ${state.drawerD} mm — a ${g.nx} × ${g.ny} grid. Check the drawer size; split a drawer that really is this big into parts.` });
   const tot = stackHeight();
   if (tot > g.avail + 0.001)
     out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate.` });
   else if (tot > 0)
     out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${(g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip).` });
 
+  const claims = layers.map((_, k) => layerClaims(k));
   layers.forEach((L, k) => L.bins.forEach((b) => {
-    for (const it of binIssues(b, k)) {
+    for (const it of binIssues(b, k, claims)) {
       const x = typeof it === 'string' ? { err: true, t: it } : it;
       out.push({ err: !x.note, note: x.note,
                  t: `Layer ${k + 1}, the ${b.u}×${b.v} bin at column ${b.x + 1} row ${b.y + 1}: ${x.t}.` });
@@ -1629,11 +1816,16 @@ const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
    that could not attach. binHasLip is the same test buildBin uses to decide. */
 const binHasLip = (b) => !b.solid &&
   EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
+/* A carved bin keeps its lip, but lidPart only makes a rectangle: on an L it was a full
+   125.5 × 83.5 plate over a shape with a corner missing, overhanging the cut-away cells
+   by a whole cell. Shaping the lid to the cells is a lid builder of its own, so carved
+   bins are not offered one, and the panel says why. */
+const lidFits = (b) => binHasLip(b) && !isCarved(b);
 const L_LID = (b) => lidPart(G, Object.assign({}, binCfg(b), { lidSides: b.lidSides }));
 function lidParts() {
   const m = new Map();
   for (const t of types()) {
-    if (!t.b.lid || !binHasLip(t.b)) continue;
+    if (!t.b.lid || !lidFits(t.b)) continue;
     const L = L_LID(t.b);
     const key = `${t.b.u}x${t.b.v}:${L.meta.sides.join('')}`;
     if (!m.has(key)) m.set(key, { key, b: t.b, meta: L.meta, qty: 0 });
@@ -1641,15 +1833,20 @@ function lidParts() {
   }
   return [...m.values()].sort((a, b) => b.qty - a.qty);
 }
-const lidName = (d) => `lid-${d.b.u}x${d.b.v}-${d.meta.sides.join('')}`;
+const lidName = (d) => `lid-${d.b.u}x${d.b.v}-${d.meta.sides.join('') || 'flat'}`;
 
 function dividerParts() {
   const m = new Map();
   for (const t of types()) {
-    if (!t.b.divRemovable) continue;
+    /* Plates only for a bin that has rails to hold them. buildBin leaves the rails off a
+       solid or carved bin, and off one whose floor fills it — and a floor as thick as
+       the bin is tall, which the floor field allows, made a plate of negative height:
+       an STL turned inside out. */
+    if (!t.b.divRemovable || t.b.solid || isCarved(t.b)) continue;
     for (const [axis, n] of [['y', t.b.divX || 0], ['x', t.b.divY || 0]]) {
       if (!n) continue;
       const d = B_DIV(t.b, axis);
+      if (d.meta.tall < 1) continue;
       const key = `${d.meta.span.toFixed(1)}x${d.meta.tall.toFixed(1)}x${d.meta.t}`;
       if (!m.has(key)) m.set(key, { key, axis, b: t.b, meta: d.meta, qty: 0 });
       m.get(key).qty += n * t.qty;
@@ -1702,7 +1899,11 @@ function refresh() {
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
 
-  const used = B().reduce((a, b) => a + binCells(b).length, 0);
+  /* Cells covered, not cells claimed: summing every bin's cells counted two bins on one
+     cell twice and a bin off the grid in full, which is how 500 copies of one bin read
+     "794%". Checks names the overlap; this is just how full the grid is. */
+  let used = 0;
+  for (const row of occupancy()) for (const c of row) if (c !== -1) used++;
   const total = g.nx * g.ny;
   const pct = total ? Math.round(100 * used / total) : 0;
   /* The drawer is named here because nothing else on the stage names it. Arriving from
@@ -1763,6 +1964,7 @@ function refresh() {
   drawPlan();
   updateExportTail();
   showScene();
+  pruneGeometry();
   rememberState();
 }
 
@@ -1879,7 +2081,32 @@ let lookY = 20;
 const clampDist = (d) => Math.min(Math.max(4000, fitDist * 2), Math.max(80, d));
 function initThree() {
   const canvas = $('three');
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  /* No WebGL — disabled by policy, blocklisted GPU, a remote desktop. The renderer's
+     constructor throws, and thrown here it stopped the boot: no map, no table, no export,
+     no saving, and the Start fresh button never wired. The preview is the one part that
+     needs a GPU, so it is the one part that goes; renderer stays null, which every
+     preview function already treats as "nothing to draw". */
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  } catch (err) {
+    renderer = null;
+    $('threeempty').textContent = '3D preview unavailable — this browser could not start WebGL. ' +
+      'Everything else, downloads included, still works.';
+    $('threeempty').style.display = '';
+    $('threehint').style.display = 'none';
+    canvas.setAttribute('aria-label', '3D preview unavailable: this browser could not start WebGL.');
+    /* Nothing to expand, so no Expand button. chrome.js makes it, and runs as the
+       page's last script, so during the boot there is no button yet and looking for
+       one here hid nothing; once the page has parsed, every script has run. */
+    const hideExpand = () => {
+      const expand = $('threewrap').querySelector('.previewbtn');
+      if (expand) expand.style.display = 'none';
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hideExpand);
+    else hideExpand();
+    window.addEventListener('resize', () => drawMap());
+    return;
+  }
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(38, 1, 1, 8000);
   scene.add(new THREE.AmbientLight(0xffffff, 0.62));
@@ -2017,12 +2244,15 @@ function geoOf(b) {
   return gm.three;
 }
 /* Divider and lid geometry, cached by the part rather than by the bin: two bins wanting
-   the same lid want the same buffer. Cleared wherever geoCache is, because both are
-   invalidated by the same thing — a change to the bin the parts are cut from. */
+   the same lid want the same buffer. The key is the part's full shape, and each scene
+   draw records the keys it used so showScene can dispose of the rest — the same rule as
+   pruneGeometry, for the same leak. */
 const partGeoCache = new Map();
+let partsUsed = new Set();
 function partGeoOf(key, make) {
   let g = partGeoCache.get(key);
   if (!g) { g = polysToGeo(make()); partGeoCache.set(key, g); }
+  partsUsed.add(key);
   return g;
 }
 /* The pieces that come off the printer ALONGSIDE the bin, drawn where you can see them.
@@ -2055,7 +2285,9 @@ function addLooseParts(b) {
      camera at the angle the preview opens on. */
   let z = binD / 2 + PART_GAP;
   for (const d of dividerParts()) {
-    const geo = partGeoOf('div:' + d.key, () => B_DIV(d.b, d.axis).polys);
+    // d.key rounds to 0.1 mm for grouping; the buffer wants the exact plate
+    const exact = [d.meta.span, d.meta.tall, d.meta.t].map((n) => n.toFixed(3)).join('x');
+    const geo = partGeoOf('div:' + exact, () => B_DIV(d.b, d.axis).polys);
     for (let i = 0; i < d.qty; i++) {
       const m = new THREE.Mesh(geo, partMat);
       m.position.set(0, 0, z + d.meta.tall / 2);
@@ -2076,7 +2308,9 @@ function addLooseParts(b) {
      places — which is where they land on the printed part turned over the same way.
      Flipping about x instead put a Front-only skirt over the back of the bin. */
   for (const d of lidParts()) {
-    const m = new THREE.Mesh(partGeoOf('lid:' + d.key, () => L_LID(d.b).polys), partMat);
+    // the lid's corner arcs follow the smoothness setting, which d.key leaves out
+    const m = new THREE.Mesh(partGeoOf(`lid:${d.key}-s${state.arcSegs}`, () => L_LID(d.b).polys),
+                             partMat);
     m.rotation.z = Math.PI;
     m.position.set(0, binTop + PART_GAP + d.meta.totalH, 0);
     group.add(m);
@@ -2186,8 +2420,29 @@ function syncDrawer() {
   panel(b.W, b.front, T, 0, b.floor, hd + T / 2);
 }
 
+/* One baseplate mesh, resized only when its size changes. A new BoxGeometry and
+   material on every draw was one more live geometry per refresh, never freed. */
+let plateMesh = null, plateKey = '';
+function plateOf(w, d) {
+  const h = state.plateH, key = `${w}x${h}x${d}`;
+  if (!plateMesh || key !== plateKey) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    if (plateMesh) { plateMesh.geometry.dispose(); plateMesh.geometry = geo; }
+    else plateMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x2b3947 }));
+    plateKey = key;
+  }
+  plateMesh.position.set(0, -h / 2, 0);
+  return plateMesh;
+}
 function showScene() {
   if (!renderer) return;
+  partsUsed = new Set();
+  drawScene();
+  // loose parts are only drawn in focus; anything this draw did not use is let go
+  for (const [k, g] of partGeoCache)
+    if (!partsUsed.has(k)) { g.dispose(); partGeoCache.delete(k); }
+}
+function drawScene() {
   while (group.children.length) group.remove(group.children[0]);
   const g = grid();
   const gw = g.nx * SPEC.pitch, gd = g.ny * SPEC.pitch;
@@ -2220,11 +2475,7 @@ function showScene() {
      showing you. */
   if (fBin()) {
     const b = fBin();
-    const plate1 = new THREE.Mesh(
-      new THREE.BoxGeometry(b.u * SPEC.pitch, state.plateH, b.v * SPEC.pitch),
-      new THREE.MeshLambertMaterial({ color: 0x2b3947 }));
-    plate1.position.set(0, -state.plateH / 2, 0);
-    group.add(plate1);
+    group.add(plateOf(b.u * SPEC.pitch, b.v * SPEC.pitch));
     if (!matCache[cur]) matCache[cur] = new THREE.MeshLambertMaterial({
       color: MATS[cur % MATS.length], side: THREE.DoubleSide, flatShading: true });
     /* Fading is about what is stacked ABOVE the layer being edited. Nothing is stacked
@@ -2242,10 +2493,7 @@ function showScene() {
     return;
   }
 
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(gw, state.plateH, gd),
-    new THREE.MeshLambertMaterial({ color: 0x2b3947 }));
-  plate.position.set(0, -state.plateH / 2, 0);
-  group.add(plate);
+  group.add(plateOf(gw, gd));
 
   layers.forEach((L, k) => {
     if (!matCache[k]) matCache[k] = new THREE.MeshLambertMaterial({
@@ -2404,7 +2652,7 @@ function layoutReadme() {
     L.push(`Size: ${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip`);
     if (b.divX || b.divY) L.push(`Compartments: ${(b.divX + 1) * (b.divY + 1)}` +
       (b.divRemovable ? '  (removable divider plates, printed loose)' : ''));
-    if (b.lid) L.push('Lid: yes — prints upside down, no supports.');
+    if (b.lid && lidFits(b)) L.push('Lid: yes — prints upside down, no supports.');
     L.push(`Material: about ${(gm.vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill.`);
     L.push('');
     L.push(scratch
@@ -2478,6 +2726,11 @@ function platePolysAndItems(idx) {
   }
   return objs;
 }
+/* Deflated, for the reason the baseplates page gives beside its own copy in src/ui.js:
+   JSZip stores files unless asked, and a 3MF is a ZIP of XML text, so every plate and
+   every ZIP left this page several times the size it needed to be. A copy, because the
+   two pages share no script that zips. Slicers read either. */
+const ZIP_DEFLATE = { compression: 'DEFLATE', compressionOptions: { level: 6 } };
 async function plate3mfBytes(idx) {
   const x = build3mfXML(platePolysAndItems(idx).map((o) => ({
     name: o.name, polys: transformPolys(o.polys, 0, 0, 0, o.rot), tx: o.tx, ty: o.ty, tz: o.tz, rot: 0 })));
@@ -2485,7 +2738,7 @@ async function plate3mfBytes(idx) {
   pz.file('[Content_Types].xml', x.contentTypes);
   pz.file('_rels/.rels', x.rels);
   pz.file('3D/3dmodel.model', x.model);
-  return pz.generateAsync({ type: 'uint8array' });
+  return pz.generateAsync({ type: 'uint8array', ...ZIP_DEFLATE });
 }
 const goodPlates = () =>
   printPlan ? printPlan.plates.map((p, i) => [p, i]).filter(([p]) => !p.overflow) : [];
@@ -2508,7 +2761,7 @@ async function downloadAllPlates() {
   if (good.length === 1) return downloadPlate(0);
   const zip = new JSZip();
   for (let k = 0; k < good.length; k++) zip.file(plateName(k), await plate3mfBytes(good[k][1]));
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }),
                 `drawerforge-bin-plates-x${good.length}.zip`);
 }
 async function downloadBinZip() {
@@ -2523,7 +2776,7 @@ async function downloadBinZip() {
   for (const d of lidParts())
     zip.file(lidName(d) + '.stl', G.stlBinary(L_LID(d.b).polys, 'lid'));
   zip.file('README.txt', layoutReadme());
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }),
                 `drawerforge-bins-${grid().nx}x${grid().ny}.zip`);
 }
 function saveBlobAsync(blob, name) {
@@ -2660,9 +2913,13 @@ function renderExport() {
     exGroup('Meshes');
     exRow('Every bin type, with a README', `${plural(ts.length, 'STL file')} + README.txt · ZIP`,
           'Download', downloadBinZip, { 'data-ex': 'zip' });
+    /* With every side unticked the lid is a flat plate, and "( sides) · 4.2 mm tall"
+       described a part that does not exist. */
     for (const d of lidParts())
-      exRow(`Lid ${d.b.u}×${d.b.v}${d.meta.sides.length < 4 ? ` (${d.meta.sides.join('')} sides)` : ''} × ${d.qty}`,
-            `${d.meta.totalH.toFixed(1)} mm tall, prints upside down · STL`, 'STL',
+      exRow(`Lid ${d.b.u}×${d.b.v}` + (!d.meta.sides.length ? ', flat — no skirt'
+              : d.meta.sides.length < 4 ? ` (${d.meta.sides.join('')} sides)` : '') + ` × ${d.qty}`,
+            `${d.meta.totalH.toFixed(1)} mm ` +
+              (d.meta.sides.length ? 'tall, prints upside down' : 'thick') + ' · STL', 'STL',
             () => saveBlob(G.stlBinary(L_LID(d.b).polys, 'lid'), lidName(d) + '.stl'),
             { 'data-ex': 'lid' });
     for (const d of dividerParts())
@@ -2702,13 +2959,20 @@ $('exportDlg').addEventListener('click', (e) => {
 });
 
 /* ---------- shared project descriptor -------------------------------------- */
-/* The bed rides in the link as well. It used to be carried through untouched and never
-   read, so the printer picked on the baseplates page arrived here as the 256 mm default,
-   and a bed set on this page was gone on the next reload. The keys are the ones the
-   baseplates page already writes, so the printer now crosses in both directions, like
-   the drawer. */
+/* The bed, infill and gap were missing, so a reload put them back to 256 mm, 15 % and
+   3 mm, and the bed set on the baseplates page — which sends bw, bd and bh — never
+   arrived. They use that page's own names, so the two tools share one bed and one
+   infill whichever way a link goes; the gap is ours, and baseplates carries it back. */
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH',
-               dfh: 'drawerFrontH', bw: 'bedW', bd: 'bedD', bh: 'bedH' };
+               dfh: 'drawerFrontH', bw: 'bedW', bd: 'bedD', bh: 'bedH', if: 'infill',
+               bgap: 'gap' };
+/* What each may be when it arrives in a link: never negative, and never past the
+   largest bed the baseplates page accepts. The drawer is held to the same 2000 mm by
+   readControls, which says so in Checks — a 100 m drawer froze this page laying out its
+   grid. A drawer or bed of no size is not one ("1 × 1 grid in a -500 × -500 mm drawer"
+   is what accepting it said), so that keeps the default. */
+const KEY_MAX = { if: 100 };
+const NEEDS_SIZE = new Set(['w', 'd', 'dh', 'bw', 'bd', 'bh']);
 /* Keys that describe how the design is being LOOKED at rather than what it is. They
    travel in a shared link, because a link that does not reproduce what the sender saw
    is not much of a share — but they are struck out of the link the README carries.
@@ -2742,7 +3006,50 @@ function descriptor() {
   if (notes.some((L) => L.some((n) => n))) o.bnotes = JSON.stringify(notes);
   return o;
 }
-const encodeDesc = (o) => Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+/* Names are encoded as well as values. Keys from the other tool ride through here as
+   they came, and the baseplates page decodes them, so one written raw ("%=1") made
+   every later visit there throw URIError; a raw line break would have reached the
+   README. */
+const encodeDesc = (o) => Object.entries(o)
+  .map(([k, x]) => `${encodeURIComponent(k)}=${encodeURIComponent(x)}`).join('&');
+/* packBin no longer throws, but if packing ever fails again it must cost that save and
+   no more: an empty string, which the save skips, rather than an exception through the
+   share, hand-over and README links that all build from here. An older string standing
+   in was worse than none, since a layout that failed from the start stood in for by the
+   boot's defaults saved those over it. `strip` names keys to leave out, for the README's
+   link. */
+function descString(strip) {
+  try {
+    const o = descriptor();
+    for (const k of strip || []) delete o[k];
+    return encodeDesc(o);
+  } catch (err) { return ''; }
+}
+/* One bad pair costs that pair. A malformed escape (%E0%A4%A) used to throw out of the
+   whole load, which took the page with it. */
+function parseHash(h) {
+  const q = Object.create(null);
+  for (const kv of h.split('&')) {
+    const i = kv.indexOf('=');
+    if (i < 1) continue;
+    try { q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1)); }
+    catch (err) { /* not valid percent-encoding: drop it, keep the rest */ }
+  }
+  return q;
+}
+/* A note from a link is one short line of text, as the field would have made it. Notes
+   reach the README, which is plain text read at the printer: a number in their place
+   threw ".trim is not a function" on every refresh, and a line break let a link write
+   lines of its own into the file. Cut to the 28 characters the field takes, counted the
+   way the field and a design file count them, and never halfway through an emoji. */
+function cleanNote(n) {
+  let out = '';
+  for (const ch of String(n).replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ')) {
+    if (out.length + ch.length > 28) break;
+    out += ch;
+  }
+  return out;
+}
 /* Keep the address bar holding the current design, so a reload does not throw it away.
  *
  * The tool has no accounts and no server, which is the point of it — but it also meant
@@ -2793,10 +3100,103 @@ const saveLocal = (h) => {
                    an exception that stops the page working */ }
 };
 const readLocal = () => { try { return localStorage.getItem(SAVE_KEY) || ''; } catch (err) { return ''; } };
+/* Only a fragment that carries settings is a layout. The page has fragments of its own —
+   the skip link's #stage — and one arriving as if it were a shared link loaded nothing,
+   then saved the empty default over the drawer this browser had kept. */
+const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
   location.href = location.origin + location.pathname;   // drop the hash and reload clean
 }
+/* Wired here, before the boot below reads any link: a link that throws there must not
+   also take away the button that gets you out of it, or stop the next link working. */
+$('startFresh').addEventListener('click', startFresh);
+/* A hash this page did not write means someone navigated to a link — pasted a share URL
+   into the address bar, or picked a bookmark — and changing only the fragment is a
+   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
+   Before local saving that was merely confusing; now it means a shared layout loses to
+   whatever this browser had stored, which is the one case that must never happen.
+   Reloading applies the link. replaceState does not fire this event, so the saves this
+   page makes every few seconds cannot trigger it. A fragment with no settings in it is
+   an anchor, not a link to a drawer, and reloading for one threw the drawer away. */
+addEventListener('hashchange', () => {
+  if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
+});
+
+/* More slots beside the save, so a layout is set aside rather than lost.
+ *
+ * PREV_KEY: following a link overwrote the save within 400 ms with no way back, so
+ * whatever is about to replace it — a link, or the defaults standing in for a layout
+ * that would not load — copies it here first, and the page offers to put it back.
+ *
+ * LINKED_KEY: the save a link wrote, while nobody has changed it. That save is the
+ * sender's drawer, not yours, so a second link replacing it leaves PREV_KEY holding
+ * yours; setting it aside instead lost your layout to the first link you had opened.
+ * Changed, it is kept while the page still uses any of the link's drawer, bed and infill.
+ *
+ * PREV_LINKED_KEY: the LINKED_KEY of the layout in PREV_KEY. Whether a layout is a link's
+ * travels with it, so a link put back is still the link's and your own put back is not;
+ * left behind, it went to whatever was put back in its place.
+ *
+ * LOADING_KEY: names the layout being loaded, and is cleared once the page has drawn
+ * it. Still there at the next visit, for the same layout, means the last attempt hung or
+ * crashed the tab; loading it again would only do that again, on every visit. */
+const PREV_KEY = SAVE_KEY + ':prev', LINKED_KEY = SAVE_KEY + ':linked',
+  PREV_LINKED_KEY = PREV_KEY + ':linked', LOADING_KEY = SAVE_KEY + ':loading';
+const readKey = (k) => { try { return localStorage.getItem(k) || ''; } catch (err) { return ''; } };
+const writeKey = (k, v) => {
+  try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); }
+  catch (err) { /* private mode: the guard and the backup go, the page does not */ }
+};
+let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* What an untouched page saves, and what this one held when the boot finished — null
+   from the first change on. Until that change a stalled page saves nothing: saving the
+   defaults it stands in with put them over the layout it declined, and one more reload
+   lost that layout for good. */
+let pristine = '', bootDesc = null;
+/* Someone's link this page holds, or ''. Each of its drawer, bed and infill values the
+   page still uses is the link's, not yours, whatever else has been changed: so taking
+   the design to the other page does not replace yours there without setting it aside.
+   Key by key: compared as one group, changing only the infill made the drawer yours. */
+let heldLink = '';
+// the drawer, bed and infill settings in which a design still has a link's values
+function linkKeys(h, link) {
+  if (!link) return [];
+  const p = parseHash(h), q = parseHash(link);
+  return [...SHARED_KEYS].filter((k) => k in q && p[k] === q[k]);
+}
+function leaveFor(url) {
+  hashReady = false; clearTimeout(hashSaveT);   // no save of this page's may land after
+  location.href = url;
+}
+/* Swapped rather than copied over: what is here now goes aside in its place, so putting
+   a layout back is never the step that loses one. */
+function putBack() {
+  const prev = readKey(PREV_KEY);
+  if (!prev) return;
+  const prevLinked = readKey(PREV_LINKED_KEY);
+  const cur = descString();
+  if (cur && cur !== pristine && !(stalled && cur === bootDesc)) {
+    writeKey(PREV_KEY, cur);
+    writeKey(PREV_LINKED_KEY, heldLink);
+  }
+  saveLocal(prev);
+  writeKey(LINKED_KEY, prevLinked);
+  leaveFor(location.href.split('#')[0]);   // a bare visit restores it, and says so
+}
+function tryAnyway() {
+  writeKey(LOADING_KEY, '');
+  leaveFor(location.href.split('#')[0] + '#' + stalled);
+  location.reload();   // a change of fragment alone reloads nothing
+}
+function showSetAside(msg, canPutBack, canTry) {
+  $('setAsideMsg').textContent = msg;
+  $('putBack').style.display = canPutBack ? '' : 'none';
+  $('tryAnyway').style.display = canTry ? '' : 'none';
+  $('setAside').style.display = '';
+}
+$('putBack').addEventListener('click', putBack);
+$('tryAnyway').addEventListener('click', tryAnyway);
 
 function rememberState() {
   if (!hashReady) return;
@@ -2807,7 +3207,18 @@ function rememberState() {
 function saveNow() {
   clearTimeout(hashSaveT);
   removeEventListener('beforeunload', dropSave);
-  const h = encodeDesc(descriptor());
+  const h = descString();
+  if (!h) return;
+  /* The first change is the moment the banner stops being true: "put my layout back"
+     would now also throw away the edit, so it goes. */
+  if (bootDesc !== null) {
+    if (sameDesign(h, bootDesc)) { if (stalled) return; }
+    else {
+      bootDesc = null; $('setAside').style.display = 'none';
+      // what a stalled page goes on from is its defaults, not the link it declined
+      if (stalled) writeKey(LINKED_KEY, '');
+    }
+  }
   try { history.replaceState(null, '', '#' + h); }
   catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                    worth an exception that stops the rest of the page working */ }
@@ -2828,26 +3239,24 @@ function dropSave() {
   removeEventListener('beforeunload', dropSave);
 }
 function shareLink() {
-  return location.origin + location.pathname + '#' + encodeDesc(descriptor());
+  return location.origin + location.pathname + '#' + descString();
 }
 // the same layout with the view stripped, so the README's bytes depend on the design
 function designLink() {
-  const o = descriptor();
-  for (const k of VIEW_KEYS) delete o[k];
-  return location.origin + location.pathname + '#' + encodeDesc(o);
+  return location.origin + location.pathname + '#' + descString(VIEW_KEYS);
 }
 function loadFromHash(src) {
   const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
   if (!h) return;
-  const q = {};
-  for (const kv of h.split('&')) {
-    const i = kv.indexOf('=');
-    if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1));
-  }
+  const q = parseHash(h);
   for (const [k, val] of Object.entries(q)) {
     if (k === 'v') continue;
     if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
-    if (k === 'bseg') { $('arcSegs').value = val; continue; }
+    // a menu takes only a value it offers; anything else leaves it blank and reads NaN
+    if (k === 'bseg') {
+      if ([...$('arcSegs').options].some((o) => o.value === val)) $('arcSegs').value = val;
+      continue;
+    }
     if (k === 'bdt') { $('divT').value = val; continue; }
     if (k === 'bdc') { $('divClr').value = val; continue; }
     // a checkbox, so it cannot ride the generic .value path below
@@ -2856,12 +3265,18 @@ function loadFromHash(src) {
     if (k === 'bf') { pendingFocus = val; continue; }
     if (k === 'bs') { pendingScratch = val; continue; }
     if (k === 'pr') continue;             // applied below, once the bed is in
-    const id = KEYS[k];
+    // not Object.hasOwn, which Safari only has from 15.4
+    const id = Object.prototype.hasOwnProperty.call(KEYS, k) ? KEYS[k] : '';
     if (!id) { hashExtras[k] = val; continue; }
-    /* The link is millimetres, always; a drawer length is written into its field in
-       whatever unit the field is showing. */
-    if (LENGTH_IDS.includes(id) && val !== '' && isFinite(+val)) FIELDS.setLength($(id), +val, unit);
-    else if ($(id)) $(id).value = val;
+    const x = Number(val);
+    if (val === '' || !isFinite(x) || x < 0 || (x === 0 && NEEDS_SIZE.has(k))) continue;
+    /* Not the drawer: readControls holds it to the field's limit and Checks says so, as
+       for a typed one. Cut down here, a 5 m drawer from a link was drawn 2 m wide with
+       nothing said. The link is millimetres, always; a drawer length is written into its
+       field in whatever unit the field is showing. */
+    const max = k === 'w' || k === 'd' ? Infinity : KEY_MAX[k] || 2000;
+    if (LENGTH_IDS.includes(id)) FIELDS.setLength($(id), Math.min(x, max), unit);
+    else if ($(id)) $(id).value = String(Math.min(x, max));
   }
   // the list follows the bed: a link with a 180 mm bed must not reopen naming a 256 one
   $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
@@ -2885,19 +3300,27 @@ const drawers = DRAWERS.create({
     importBtn: $('drawersImportBtn'), importInput: $('drawersImport'),
   },
 });
-/* Each hand-over is told to the saved drawer first, so the page at the other end
-   recognises the design it arrives with as that drawer — see attach in drawers.js. And a
-   change still waiting to be saved is saved now, not dropped as the page goes: Back
+/* Each hand-over leaves one note in this tab for the page at the other end to read once
+   (handoff in drawers.js, which also tells the saved drawer, if this is one, so that page
+   recognises the design it arrives with as that drawer — see attach there). A design
+   arriving from the other tool may carry a drawer or bed changed there, and that is the
+   same layout moving on, not a link replacing it. The guide passes the address through
+   untouched, so going by way of it is the same.
+   The note names any drawer, bed and infill settings still at someone's link's values:
+   those are not yours to carry over, and the other page compares them as a link's, so
+   they do not replace yours there without setting it aside. Left out of the comparison,
+   they did, after any edit at all.
+   A change still waiting to be saved is saved now, not dropped as the page goes: Back
    comes to this page's address, and that and the drawer must both have the change. */
 function leave(href) {
   if (hashReady) saveNow();
-  drawers.handoff(href.slice(href.indexOf('#') + 1));
+  drawers.handoff(href.slice(href.indexOf('#') + 1), linkKeys(descString(), heldLink));
   location.href = href;
 }
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  leave('../guide/#' + encodeDesc(descriptor()));
+  leave('../guide/#' + descString());
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
@@ -2906,14 +3329,18 @@ $('shareBtn').addEventListener('click', () => {
     () => prompt('Copy this link:', link));
 });
 // the whole bins descriptor travels; baseplates re-emits what it doesn't own
-function platesHref() { return '../#' + encodeDesc(descriptor()); }
+function platesHref() { return '../#' + descString(); }
 for (const id of ['toPlates', 'navPlates'])
   $(id).addEventListener('click', (e) => { e.preventDefault(); leave(platesHref()); });
 
 /* ---------- boot ---------------------------------------------------------- */
 let timer = null;
+/* No cache clearing here any more: the geometry caches are keyed by everything a build
+   reads, so an edit that changes a bin misses the cache by itself, and refresh() lets go
+   of the builds nothing uses. Clearing on every input rebuilt every type in the drawer
+   because a note was typed, and leaked the old buffers each time. */
 const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
-  readControls(); geoCache.clear(); partGeoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
+  readControls(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
@@ -2921,20 +3348,21 @@ for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', '
                   'divRemovable', 'divT', 'divClr',
                   'lid', 'lidF', 'lidB', 'lidL', 'lidR'])
   $(id).addEventListener('input', schedule);
+/* The bin's number fields too: leaving one is when a value typed past its limit is put
+   back to the one in use, and leaving fires change, not input. */
 for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable',
-                  'lid', 'lidF', 'lidB', 'lidL', 'lidR'])
+                  'lid', 'lidF', 'lidB', 'lidL', 'lidR', ...BIN_FIELDS])
   $(id).addEventListener('change', schedule);
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
   $('solid').checked = false;
-  readControls(); geoCache.clear(); partGeoCache.clear(); drawMap(); refresh();
+  readControls(); drawMap(); refresh();
 });
 $('solid').addEventListener('change', schedule);
 $('arcSegs').addEventListener('change', schedule);
-/* The drawer shell deliberately does not go through schedule(). That path clears the
-   geometry cache and rebuilds every bin mesh, which is the right thing for anything
-   that changes what gets printed and pure waste for something that changes only what
-   is drawn around it. */
+/* The drawer shell deliberately does not go through schedule(). That path redraws the
+   map, the checks and the plan, which is the right thing for anything that changes what
+   gets printed and pure waste for something that changes only what is drawn around it. */
 const drawerViewChanged = () => { readControls(); showScene(); };
 for (const id of ['showDrawer', 'drawerFrontH']) {
   $(id).addEventListener('input', drawerViewChanged);
@@ -3024,23 +3452,100 @@ if (FIELDS.savedUnit() !== unit) {
   for (const id of LENGTH_IDS) $(id).value = $(id).defaultValue;
   applyUnit(FIELDS.savedUnit());
 }
+/* Whether two saves hold the same bins, compared setting by setting on what this page
+   owns. Compared as strings, the baseplates page handing the drawer back — its keys in
+   its own order, with its own extras — was a link that had replaced your layout, on
+   every trip there and back. A hand-over also leaves out the drawer and the bed, the
+   settings the two pages share: changing them on the other page is not a different
+   layout, unless the other page still had them from someone's link. A link from someone
+   keeps them, since a drawer of another size is exactly what one brings. The view keys
+   are left out always: how the design is looked at is not what it is. */
+// the drawer, the bed and its printer, and the infill: drawers.js keeps the same list
+const SHARED_KEYS = new Set([...DRAWERS.SHARED].filter((k) => k !== 'v'));
+const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bseg', 'bdt', 'bdc', 'bnotes']
+  .filter((k) => k !== 'ph' && !VIEW_KEYS.includes(k));
+function sameDesign(a, b, skip = []) {
+  const p = parseHash(a), q = parseHash(b);
+  return OWN_KEYS.every((k) => skip.includes(k) || p[k] === q[k]);
+}
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
-let arrivedWith = '';                     // the design string this page was opened with
-if (incomingHash.length > 2) { loadFromHash(); arrivedWith = incomingHash; }
-else {
+let linkedNow = false;   // this page holds a link's layout, not yet changed by anyone
+let linkNew = false;     // ...one that arrived on this visit, so is recorded afresh
+let linkKept = '';       // the link this page last opened, unless a hand-over came since
+let notLinked = [];      // settings a link arrived with that were yours on the other page
+let arrivedWith = '';    // the design string this page was opened with
+{
+  const fromLink = isLayoutHash(incomingHash);
   const saved = readLocal();
-  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; arrivedWith = saved; }
+  const src = fromLink ? incomingHash : saved.length > 2 ? saved : '';
+  /* What this page saves when nobody has touched it. A save that is only that is no
+     one's work, so replacing it sets nothing aside — or every link would offer the
+     defaults back. */
+  readControls();
+  pristine = descString();
+  stalled = src && readKey(LOADING_KEY) === src ? src : '';
+  /* The tab's note of what this page arrives with, if it is this design: the other tool
+     or the guide handing it over, or a saved drawer opened. Read every time, so a stale
+     note never lingers. */
+  const note = drawers.arrival(incomingHash);
+  const handOver = fromLink ? note : null;
+  // a saved drawer opened from the list is yours, whatever it replaces
+  const opened = !!handOver && handOver.open;
+  // your own drawer, bed and infill settings, as the other page had them
+  const yours = handOver ? [...SHARED_KEYS].filter((k) => !handOver.link.includes(k)) : [];
+  // the other page had nothing of anyone's link: your own layout come back
+  const handedOver = !!handOver && (opened || !handOver.link.length);
+  notLinked = handOver ? yours : [];
+  const replaces = fromLink && !opened &&
+    (saved.length <= 2 || !sameDesign(saved, src, yours));
+  const linked = readKey(LINKED_KEY);
+  linkKept = handedOver ? '' : linked;
+  /* Compared on what the record holds: one made without the settings that came with
+     the link as yours does not count those, or your own drawer made it "changed", and a
+     second link set it aside over the layout the first had. */
+  const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked,
+    [...SHARED_KEYS].filter((k) => !(k in parseHash(linked))));
+  /* Set aside whatever is about to be replaced: by a different layout, or by the defaults
+     standing in for one that would not load. Not a link's own layout, untouched: what that
+     link replaced is already set aside, and it is the one you would want back. */
+  const aside = saved.length > 2 && saved !== pristine && !savedLinked &&
+    (replaces || !!stalled);
+  if (aside) {
+    writeKey(PREV_KEY, saved);
+    writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
+  }
+  const canPutBack = replaces && (aside || (savedLinked && !!readKey(PREV_KEY)));
+  if (stalled) {
+    showSetAside('This layout did not finish loading last time, so the page has started ' +
+      'from its defaults rather than try it again.', canPutBack, true);
+  } else if (src) {
+    writeKey(LOADING_KEY, src);
+    loadFromHash(src);
+    if (!fromLink) $('restored').style.display = '';
+    else if (canPutBack) showSetAside('This link replaced the layout you had here.', true, false);
+    /* A hand-over is your own layout come back from the other page, never someone's
+       link, even onto an empty save; and one that moved the drawer or bed on has been
+       changed, by you, there. One still holding a link's settings is that link's. */
+    linkedNow = handedOver ? false
+      : fromLink ? replaces || (savedLinked && sameDesign(saved, src))
+      : savedLinked;
+    linkNew = fromLink && replaces && !handedOver;
+    arrivedWith = src;
+  }
 }
 /* Applied after the layout so indices line up, and only in the shape descriptor writes:
-   a list per layer of notes, each a string no longer than the note field takes. Anything
-   else is left out whole. A number where a note should be stopped the map's labels
-   drawing, and a mangled link should not stop the tool loading. */
+   a list per layer of notes. A note that is not a string is left out, and one that is
+   is cleaned to what the field could have made. A number where a note should be
+   stopped the map's labels drawing, and a mangled link should not stop the tool
+   loading. */
 if (pendingNotes) {
-  const notes = DRAWERS.binNotes(pendingNotes);
-  if (notes) notes.forEach((ns, k) =>
-    ns.forEach((n, i) => { if (layers[k] && layers[k].bins[i]) layers[k].bins[i].note = n; }));
+  let all = null;
+  try { all = JSON.parse(pendingNotes); } catch (err) { /* left out whole */ }
+  (Array.isArray(all) ? all : []).forEach((ns, k) => (Array.isArray(ns) ? ns : []).forEach((n, i) => {
+    if (typeof n === 'string' && layers[k] && layers[k].bins[i]) layers[k].bins[i].note = cleanNote(n);
+  }));
 }
 readControls();
 hashReady = true;                         // loadFromHash has had its say; ours may start
@@ -3075,19 +3580,42 @@ if (pendingScratch) {
     enterFocus();
   }
 }
+bootDesc = descString();
+/* Laid out and drawn, so the marker has done its job. A stalled layout keeps its marker:
+   reloading the same link must be declined again, not tried again. */
+if (!stalled) {
+  writeKey(LOADING_KEY, '');
+  /* A link that arrived on this visit is recorded as it is, less any drawer, bed or infill
+     settings that came with it as yours: kept, they were the link's from then on, and a
+     later trip that changed them on the other page was a link replacing your layout
+     there. The same link reloaded or reopened keeps its record, which writing it afresh
+     filled back in. A changed one is kept while the page still uses any of its values,
+     so a reload does not turn those into yours. */
+  const keep = !linkedNow ? (linkKeys(bootDesc, linkKept).length ? linkKept : '')
+    : !linkNew ? linkKept
+    : bootDesc.split('&').filter((kv) =>
+      !notLinked.includes(kv.slice(0, kv.indexOf('=')))).join('&');
+  writeKey(LINKED_KEY, keep);
+  heldLink = keep;
+}
 // after focus is restored too, so the design it compares against is the one on screen
 drawers.attach(arrivedWith);
 
 /* Applied straight to the selection rather than through readControls, for the reason
    given where doneRow is hidden: readControls also writes `state`, the template for the
    next bin you draw. */
+/* The snapshot goes on BEFORE the change, like every other edit. Taken after, it was
+   the marked state itself, so the first Undo restored what was already there and
+   appeared to do nothing. */
 $('done').addEventListener('change', () => {
+  pushUndo();
   for (const i of selAll()) B()[i].done = $('done').checked;
-  pushUndo(); drawMap(); refresh();
+  drawMap(); refresh();
 });
 const markAll = (v) => () => {
+  pushUndo();
   for (const L of layers) for (const b of L.bins) b.done = v;
-  pushUndo(); drawMap(); refresh();
+  drawMap(); refresh();
 };
 $('markAllDone').addEventListener('click', markAll(true));
 $('markNoneDone').addEventListener('click', markAll(false));
@@ -3162,9 +3690,13 @@ function openMenu(clientX, clientY, layerIdx, idx) {
   const sep = document.createElement('div'); sep.className = 'sep'; m.appendChild(sep);
   const targets = layers.map((_, k) => k).filter((k) => k !== layerIdx);
   if (!targets.length) m.appendChild(menuItem('Move to layer\u2026', null, { disabled: true }));
+  /* Cell against cell, not box against box: an L and a bin sitting in its notch have
+     overlapping boxes and no cell in common, and the box test called that layer
+     occupied. */
+  const mine = new Set(binCells(b).map(([dx, dy]) => (b.x + dx) + ',' + (b.y + dy)));
   for (const k of targets) {
-    const clash = layers[k].bins.some((o) => !(b.x + b.u <= o.x || o.x + o.u <= b.x ||
-                                               b.y + b.v <= o.y || o.y + o.v <= b.y));
+    const clash = layers[k].bins.some((o) =>
+      binCells(o).some(([dx, dy]) => mine.has((o.x + dx) + ',' + (o.y + dy))));
     m.appendChild(menuItem(`Move to layer ${k + 1}${clash ? ' (occupied)' : ''}`, () => {
       pushUndo();
       const [moved] = layers[layerIdx].bins.splice(idx, 1);
@@ -3213,15 +3745,4 @@ $('ctxmenu').addEventListener('keydown', (e) => {
 addEventListener('pointerdown', (e) => { if (!$('ctxmenu').contains(e.target)) closeMenu(); }, true);
 addEventListener('blur', closeMenu);
 addEventListener('resize', closeMenu);
-
-if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);
-
-/* A hash this page did not write means someone navigated to a link — pasted a share URL
-   into the address bar, or picked a bookmark — and changing only the fragment is a
-   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
-   Before local saving that was merely confusing; now it means a shared layout loses to
-   whatever this browser had stored, which is the one case that must never happen.
-   Reloading applies the link. replaceState does not fire this event, so the saves this
-   page makes every few seconds cannot trigger it. */
-addEventListener('hashchange', () => location.reload());
 

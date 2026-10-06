@@ -62,11 +62,22 @@ console.log('\nmulti-bin, multi-layer');
 
 console.log('\nseparators cannot appear inside a value');
 {
-  // the guard should refuse rather than silently emit something unparseable
-  let threw = false;
-  try { packBin(bin({ wall: -1 })); } catch (e) { threw = true; }
-  console.log(`  a negative field is rejected           ${threw ? 'guarded' : 'NOT GUARDED'}`);
-  if (!threw) bad++;
+  /* The guard used to throw, and the throw landed in the save, the share link, the
+     hand-over and the README: saving stopped without a word. A value that would carry
+     a separator is written so that it cannot, and packing never throws. */
+  for (const [name, b, key, want] of [
+    ['a negative wall is written as 0', bin({ wall: -0.5 }), 'wall', 0],
+    ['a negative floor is written as 0', bin({ floorT: -1 }), 'floorT', 0],
+    ['a tiny value is spelled out, not 1e-7', bin({ wall: 1e-7 }), 'wall', 1e-7],
+  ]) {
+    let packed = '', why = '';
+    try { packed = packBin(b); } catch (e) { why = 'THREW: ' + e.message; }
+    if (!why && packed.split('-').length !== 21) why = `shifted to ${packed.split('-').length} fields`;
+    if (!why && /e/.test(packed)) why = `exponent form in ${packed}`;
+    if (!why && unpackBin(packed)[key] !== want) why = `read back as ${unpackBin(packed)[key]}`;
+    console.log(`  ${name.padEnd(38)} ${why ? 'FAILED — ' + why : 'packs'}`);
+    if (why) bad++;
+  }
   /* 21 since a bin can carry a lid and the sides its skirt sits on: position IS the format, so this
      number is deliberate and changing it changes what every link means. Update it on
      purpose or not at all.
@@ -111,6 +122,32 @@ console.log('\nseparators cannot appear inside a value');
   if (!sidesOk) bad++;
 }
 
+/* A number that is not one. Nothing on the page is known to make a NaN, but one used to
+   be written as 0, and 0 is a real value for most fields: it came back as a bin with no
+   wall, no floor or an open side, where a field that says nothing should read as its
+   default, the way a missing one does. */
+console.log('\na value that is not a number comes back as the default');
+{
+  for (const [name, b, read, want] of [
+    ['a NaN wall', bin({ wall: NaN }), (x) => x.wall, BIN_DEFAULTS.wall],
+    ['a NaN floor', bin({ floorT: NaN }), (x) => x.floorT, BIN_DEFAULTS.floorT],
+    ['a NaN height', bin({ hUnits: NaN }), (x) => x.hUnits, BIN_DEFAULTS.hUnits],
+    ['a NaN front edge', bin({ edges: { f: NaN, b: 0.5, l: 1, r: 1 } }),
+      (x) => [x.edges.f, x.edges.b].join(' '), '1 0.5'],
+    ['an infinite wall', bin({ wall: Infinity }), (x) => x.wall, BIN_DEFAULTS.wall],
+    ['a floor of minus infinity', bin({ floorT: -Infinity }), (x) => x.floorT, BIN_DEFAULTS.floorT],
+  ]) {
+    let why = '';
+    try {
+      const packed = packBin(b);
+      if (packed.split('-').length !== 21) why = `shifted to ${packed.split('-').length} fields`;
+      else if (read(unpackBin(packed)) !== want) why = `read back as ${read(unpackBin(packed))}, not ${want}`;
+    } catch (e) { why = 'THREW: ' + e.message; }
+    console.log(`  ${name.padEnd(38)} ${why ? 'FAILED — ' + why : 'default'}`);
+    if (why) bad++;
+  }
+}
+
 /* A hash is in the address bar, so it gets hand-edited, truncated by a chat client and
    pasted back short. None of that may throw, and none of it may produce a bin the
    geometry cannot build — a white screen over a typo loses the whole layout, while a
@@ -149,6 +186,57 @@ console.log('\nmalformed hashes fall back instead of throwing');
   try { unpackLayers('~~junk_more junk~'); } catch (e) { threw = true; }
   console.log(`  ${'a hash of nothing but separators'.padEnd(42)}${threw ? 'FAILED — threw' : 'loads'}`);
   if (threw) bad++;
+}
+
+/* A link can ask for anything, and the geometry builds what it is asked for: a
+   million dividers froze the tab for half a minute, a footprint of 1e9 cells crashed
+   it, a height of 1e308 printed as "Infinity mm", a y of 0.5 threw in the map, and a
+   wall height the edge menu does not offer turned into NaN on the next edit. Each case
+   here is a link someone could paste; what comes back must be buildable, whole where
+   it counts something, and inside the range the page can show. */
+console.log('\nwhat a link asks for is held to what can be built');
+{
+  const { LINK_MAX } = require('../src/bins/bin.js');
+  const HUGE = ['1e308', '1e9', '1000000'];
+  const CASES = [
+    ['a million dividers across', '0-0-1-1-3-1.2-1.2-1000000-1000000',
+      (b) => b.divX >= 1 && b.divX <= 31 && b.divY <= 31],
+    ['half a divider', '0-0-1-1-3-1.2-1.2-2.5-0.4',
+      (b) => Number.isInteger(b.divX) && Number.isInteger(b.divY)],
+    ['a footprint of 1e9 cells', '0-0-1e9-1e9-3',
+      (b) => b.u === LINK_MAX.cells && b.v === LINK_MAX.cells],
+    ['a height of 1e308', '0-0-1-1-1e308', (b) => b.hUnits === LINK_MAX.hUnits],
+    ['a fractional position, then a stray dash', '0.5--3-1-1-3',
+      (b) => Number.isInteger(b.x) && Number.isInteger(b.y) && b.x >= 0 && b.y >= 0],
+    ['an enormous position', '1e308-1e308-1-1-3',
+      (b) => b.x === LINK_MAX.cells && b.y === LINK_MAX.cells],
+    ['walls and floor of every size', `0-0-1-1-3-${HUGE[0]}-${HUGE[0]}`,
+      (b) => b.wall <= LINK_MAX.wall && b.floorT <= b.hUnits * 7],
+    ['a scoop and label past the bin', `0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-${HUGE[1]}-${HUGE[2]}`,
+      (b) => b.scoop <= 21 && b.label <= 42],
+    ['wall heights the menu does not offer', '0-0-1-1-3-1.2-1.2-0-0-0-0.3-0.6-7-0.1',
+      (b) => b.edges.f === 0.25 && b.edges.b === 0.66 && b.edges.l === 1 && b.edges.r === 0],
+  ];
+  const G = require('../src/core.js');
+  const { buildBin } = require('../src/bins/bin.js');
+  for (const [name, s, ok] of CASES) {
+    let why = '';
+    try {
+      const b = unpackBin(s);
+      const nums = ['x', 'y', 'u', 'v', 'hUnits', 'wall', 'floorT', 'divX', 'divY', 'scoop', 'label'];
+      const odd = nums.filter((k) => !(isFinite(b[k]) && b[k] >= 0));
+      if (odd.length) why = 'out of range: ' + odd.join(', ');
+      else if (!ok(b)) why = JSON.stringify(b).slice(0, 160);
+      else {
+        const t = Date.now();
+        const r = buildBin(G, Object.assign({}, b, { edges: b.edges }));
+        if (!r.polys.length) why = 'built an empty mesh';
+        else if (Date.now() - t > 8000) why = `took ${Date.now() - t} ms to build`;
+      }
+    } catch (e) { why = 'THREW: ' + e.message; }
+    console.log(`  ${name.padEnd(42)}${why ? 'FAILED — ' + why : 'held'}`);
+    if (why) bad++;
+  }
 }
 
 /* Carved footprints ride in the last field as an occupancy bitmap. A rectangle

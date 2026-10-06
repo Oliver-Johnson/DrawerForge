@@ -813,6 +813,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <span>Picked up the layout you left here last time.</span>
   <button type="button" id="startFresh">Start fresh</button>
 </div>
+<!-- Shown when a layout of yours was set aside instead of lost: a link replaced it, or
+     the last visit never finished loading one and this visit declined to try again. -->
+<div id="setAside" class="restored" style="display:none" role="status">
+  <span id="setAsideMsg"></span>
+  <button type="button" id="putBack" style="display:none">Put my layout back</button>
+  <button type="button" id="tryAnyway" style="display:none">Try it anyway</button>
+</div>
 <!-- Right-click menu for a bin, on the map and in the preview. Built fresh each time
      it opens, because half its entries depend on the bin under the cursor — which layer
      it can move to, and whether it is already marked printed. -->
@@ -860,8 +867,8 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-drawer"><span class="n">01</span> Drawer &amp; grid <span class="caret">▾</span></button></h2>
   <div class="body" id="b-drawer">
     <div class="row">
-      <label class="f"><b>Drawer width (<span data-unit>mm</span>)</b><input id="drawerW" type="number" step="0.5" value="306"></label>
-      <label class="f"><b>Drawer depth (<span data-unit>mm</span>)</b><input id="drawerD" type="number" step="0.5" value="380"></label>
+      <label class="f"><b>Drawer width (<span data-unit>mm</span>)</b><input id="drawerW" type="number" step="0.5" min="1" max="2000" value="306"></label>
+      <label class="f"><b>Drawer depth (<span data-unit>mm</span>)</b><input id="drawerD" type="number" step="0.5" min="1" max="2000" value="380"></label>
     </div>
     <!-- Inches are a way of typing the drawer and nothing more: the four drawer
          measurements show the unit picked here, and the model, the link and every export
@@ -886,7 +893,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     </div>
     <div class="hint">Count the cells of the baseplate you already have and these fill the drawer size in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
     <div class="row">
-      <label class="f"><b>Usable height (<span data-unit>mm</span>)</b><input id="drawerH" type="number" step="0.5" value="84"></label>
+      <label class="f"><b>Usable height (<span data-unit>mm</span>)</b><input id="drawerH" type="number" step="0.5" min="1" max="2000" value="84"></label>
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
     <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
@@ -919,9 +926,9 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
 <option value="custom">Custom…</option>
       </select></label>
     <div class="row3">
-      <label class="f"><b>Bed width (mm)</b><input id="bedW" type="number" value="256"></label>
-      <label class="f"><b>Bed depth (mm)</b><input id="bedD" type="number" value="256"></label>
-      <label class="f"><b>Height (Z)</b><input id="bedH" type="number" value="256"></label>
+      <label class="f"><b>Bed width (mm)</b><input id="bedW" type="number" min="1" max="2000" value="256"></label>
+      <label class="f"><b>Bed depth (mm)</b><input id="bedD" type="number" min="1" max="2000" value="256"></label>
+      <label class="f"><b>Height (Z)</b><input id="bedH" type="number" min="1" max="2000" value="256"></label>
     </div>
     <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Gap between parts (mm)</b><input id="gap" type="number" step="0.5" value="3"></label>
@@ -938,16 +945,16 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-bin"><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></button></h2>
   <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
-      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" value="1"></label>
-      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" value="1"></label>
+      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" max="50" value="1"></label>
+      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" max="50" value="1"></label>
     </div>
-    <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" value="3"></label>
+    <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
     <div class="hint" id="binSizeHint">—</div>
     <label class="f" id="noteRow"><b>What goes in it (optional)</b><input id="note" type="text" maxlength="28" placeholder="M3 screws, drill bits…"></label>
     <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
     <div class="row" id="thickRow">
-      <label class="f"><b>Wall thickness (mm)</b><input id="wall" type="number" step="0.1" value="1.2"></label>
-      <label class="f"><b>Floor thickness (mm)</b><input id="floorT" type="number" step="0.1" value="1.2"></label>
+      <label class="f"><b>Wall thickness (mm)</b><input id="wall" type="number" step="0.1" min="0" max="10" value="1.2"></label>
+      <label class="f"><b>Floor thickness (mm)</b><input id="floorT" type="number" step="0.1" min="0" value="1.2"></label>
     </div>
     <div class="row" id="divRow">
       <label class="f"><b>Dividers across</b><input id="divX" type="number" step="1" min="0" value="0"></label>
@@ -1010,6 +1017,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       </div>
     </div>
     <div class="hint" id="lidNoLip" style="display:none;color:var(--red)">This bin has a lowered wall, so it has no stacking lip for a lid to grip. Set every wall to full height to give it one.</div>
+    <div class="hint" id="lidCarved" style="display:none;color:var(--red)">A lid is a plain rectangle, so on a carved bin it would hang out over the cells you cut away. It is left off the downloads; lids are made for rectangular bins.</div>
     <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. Corner posts stay full height and a lowered wall ramps up to meet them, so the side walls keep their ends — a wall that stopped square against the post snapped off there. The ramp is 8.5 mm at each end whatever the bin&rsquo;s footprint, so a wider bin keeps the same corner and gains a longer flat opening. Lowering any wall removes the stacking lip — nothing can sit on it.</div>
     <button class="ghost" id="presetTray" style="margin-top:8px">Make this a flat tray</button>
     <label class="f"><b>Corner smoothness</b>
@@ -1963,6 +1971,131 @@ function clipToRect(pts, x0, y0, x1, y1) {
 }
 
 // ---------- layout ----------
+/* The biggest grid the page will build in one go, a 1.26 m square at the spec pitch. It
+   lives here because computeLayout has to honour it too (see the 'plates' split); the
+   page's MAX_CELLS is this number. */
+const PLATE_MAX_CELLS = 900;
+/* The range the page accepts for each setting that reaches the geometry with nothing
+   else bounding it. They live here, beside the geometry they protect, because
+   test/plate-audit.js builds every joint at their ends — a limit the audit cannot read
+   is a limit nobody re-measures when the geometry changes. The page adds the labels and
+   the wording; src/ui.js LIMITS.
+ *
+ *   pitch      Below 13.5 the joints stop closing: keys, snaps and puzzle lobes run into
+ *              their neighbours or out of their cells, and every joint leaked somewhere in
+ *              5–13 mm. 13.3 still leaks a 1-cell-wide piece on four of them. 13.5 is
+ *              where all fifteen configurations the audit builds there close, on both its
+ *              layouts, at the default clearance. That is not a promise that every design
+ *              above it closes: a puzzle key in the walls, dropped in from above, leaks at
+ *              14 (12 edges on 2 × 2 pieces, 3 on 1-cell ones), and a 35 mm pitch with a
+ *              magnet and the widest screw head leaks 3. Neither is new — both built the
+ *              same before there were ranges — and each is one setting, the sliver class
+ *              ENGINE.md describes, not a reason to move the floor. It was 5, which only
+ *              stopped the grid dividing by zero.
+ *   topCutoff  0 puts the socket's top edge on the plate's own outline, and the rim there
+ *              is a face of no width: every joint leaked. It closes from about 0.02, and
+ *              0.1 keeps well clear of that edge (a few isolated values inside the range
+ *              still fold or leak a handful of edges, as they did before there was a
+ *              range: the sliver class ENGINE.md describes, not this limit). From 0.75 the socket's top edge
+ *              is narrower than a spec bin's chamfer at that height, so the bin stops
+ *              reaching the socket floor and rides on the rim — by 0.25 mm at 1, and the
+ *              chamfer turns over entirely at 2.15. 1 is as far as that is worth taking.
+ *   connClr    1 is where a number stops being a fit and starts being a slip: a
+ *              millimetre a side is more play than any joint holds. Most joints stop
+ *              sooner, and where depends on the joint, how its key goes in and the pitch,
+ *              so the ceiling is connClrCeiling's, below, and not a number here.
+ *   bottomPad  Nothing breaks above 20; a plate that tall is a typing slip, and the bed
+ *              check is what stops one taller than the printer.
+ *   magnet and screw minimums keep a cutter from sitting flush with a face — a 0 mm
+ *              magnet is a pocket whose roof is the plate's floor, and coplanar cuts are
+ *              ENGINE.md §1's oldest rule. The diameters' maximums depend on the pitch
+ *              and come from mountLimits. */
+const PLATE_RANGES = {
+  pitch: { min: 13.5, max: 200 },
+  topCutoff: { min: 0.1, max: 1 },
+  connClr: { min: 0, max: 1, dovetail: 0.3, snapTop: 0.3, puzzleKey: 0.8,
+             smallPitch: 20, small: 0.3, puzzleRoom: 6.5 },
+  bottomPad: { min: 0, max: 20 },
+  magnetD: { min: 1 }, magnetH: { min: 0.5, max: 10 },
+  screwHoleD: { min: 1 }, screwHeadD: { min: 1 }, screwHeadDepth: { min: 0.5, max: 10 },
+};
+/* The one fit-clearance field, as each joint's housing is cut to it. readControls in
+   src/ui.js worked this out and the audit copied it by hand, and the ceiling below is a
+   field value whose meaning depends on it — a top-inserted snap is cut to the key's
+   figure, 0.05 under the field — so all three read it from here. */
+function fitClearances(field) {
+  return { tab: field, puzzle: field,
+           key: Math.max(0.1, field - 0.05), hclip: Math.max(0.08, field - 0.05) };
+}
+/* The fit clearance's ceiling for one design, as { max, by }; `by` says what sets it, for
+ * the page to put in words: 'dovetail', 'snaptop', 'pitch', 'joint', or 'slip' for the
+ * plain 1 mm. One function, because four things have to agree on it — the field's range,
+ * the clamp on a number a link brings in, the message saying why, and the fit coupon's
+ * slackest pair — and it takes the whole design because the answer depends on the joint,
+ * which way its key goes in and the pitch. It took a connector name, and a 1 mm ceiling
+ * for everything but the dovetail let a snap clip's housing into the next piece and let
+ * small pitches leak.
+ *
+ * Measured on 2 × 2 and 1-cell pieces from 13.5 to 60 mm, every 0.5 mm of pitch — at
+ * every 0.05 of clearance for the puzzle, the bowtie and the puzzle key, at six for the
+ * rest — and at every 0.01 of clearance at 20, 25, 30, 35, 42 and 60:
+ *
+ *   dovetail  0.3. Past it the pocket, cut 1.9 mm + this into the piece, breaks through
+ *             the 2.15 mm socket wall and crosses the chamfer cone; it leaked from 0.34.
+ *             The hint's own advice stops at 0.25.
+ *   snaptop   0.3, in either housing. The clip's slot puts its seam-side wall
+ *             0.3 − (the key's clearance) from the seam, so past a field of 0.35 that
+ *             wall stands in the next piece — by 0.65 mm at 1 — and two pieces that print
+ *             overlapping cannot butt together; on the coupon the pairs met at the seam.
+ *             At 0.35 itself nothing overlaps, but the wall lies in the piece's own seam
+ *             face, about 9.4 mm² of face shared — the coplanar face ENGINE.md keeps
+ *             every shell off, with no bad edge to show for it — and the coupon's 0.3
+ *             pair did the same for any field from 0.3 up. 0.3 holds the wall one BLOAT,
+ *             0.05, inside the piece, the overlap the cell regions keep; the coupon's
+ *             slackest pair is this ceiling cut the key's way, so it stops there too.
+ *   pitch     0.3 below 20 mm, for the three housings the field cuts that leaked there:
+ *             the puzzle, and the bowtie and puzzle key in the floor. Past 0.3 they left
+ *             holes from 13.5 to 19 mm — a puzzle key at 14 from 0.4, a bowtie at 18 at
+ *             1, a puzzle at 19 from 0.35 — and from the default 0.2 to 0.3 none did. The
+ *             puzzle's lobe also needs room in its cell: it opens the plate once its
+ *             clearance passes half the pitch less 6.475 mm, so it stops at half the pitch
+ *             less 6.5 — 0.25 at 13.5, and 0.3 from 13.6.
+ *   joint     0.8 for a puzzle key in the floor from 20 mm up: between 0.82 and 0.96 its
+ *             recess leaked at every pitch measured, 20 to 60.
+ *   slip      1 for the rest. A key in the walls is cut to keySlim's own clearance, which
+ *             the field does not move. The snap and the H-clip did not leak above 0.3 at
+ *             any pitch measured but in one band — an H-clip dropped in from above leaks
+ *             at 0.74 to 0.745 and nowhere else. From 20 mm up the bowtie and the puzzle
+ *             leak only at isolated values: the bowtie at 25 mm at 0.64, the puzzle at
+ *             0.39–0.4 at 21 and 32.5–35 mm and here and there from 0.52 to 0.87. That is
+ *             the sliver class again, not a ceiling — no limit short of 0.38 misses them,
+ *             and the same class turns up under the default too: a snap at 20 mm at 0.29,
+ *             a bowtie at 17 mm at 0.15 and under. */
+function connClrCeiling(cfg) {
+  const R = PLATE_RANGES.connClr;
+  const kind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
+  if (kind === 'dovetail') return { max: R.dovetail, by: 'dovetail' };
+  if (kind === 'snaptop') return { max: R.snapTop, by: 'snaptop' };
+  const floorKey = ['bowtie', 'puzzlekey'].includes(cfg.connector) && cfg.keyMount !== 'wall';
+  if (cfg.connector !== 'puzzle' && !floorKey) return { max: R.max, by: 'slip' };
+  if (cfg.pitch < R.smallPitch) {
+    const room = cfg.connector === 'puzzle'
+      ? Math.floor((cfg.pitch / 2 - R.puzzleRoom) * 100 + 1e-9) / 100 : Infinity;
+    return { max: Math.min(R.small, room), by: 'pitch' };
+  }
+  if (cfg.connector === 'puzzlekey') return { max: R.puzzleKey, by: 'joint' };
+  return { max: R.max, by: 'slip' };
+}
+/* A piece's column letters, spreadsheet-style: A … Z, AA, AB … The id was
+   String.fromCharCode(65 + s), which runs on past Z into '[', '\' and the lower case — a
+   33-piece row shipped `baseplate-\1.stl`, and both `baseplate-A1.stl` and
+   `baseplate-a1.stl`, which are one file on Windows and macOS. */
+function pieceColumn(s) {
+  let out = '';
+  for (let n = s + 1; n > 0; n = Math.floor((n - 1) / 26))
+    out = String.fromCharCode(65 + (n - 1) % 26) + out;
+  return out;
+}
 /* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
    splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
 function computeLayout(p) {
@@ -2010,7 +2143,13 @@ function computeLayout(p) {
   // row bands
   let rowCuts;
   if (p.splitMode === 'plates') {
-    const opt = optimizeForPlates(Object.assign({}, p, { splitMode: 'balanced' }));
+    /* Past the cell cap the page will refuse the job whatever split it gets, and this
+       search runs first, inside the layout, before the page can say so. That ordering
+       is how a stray 5 mm pitch on a big drawer froze the tab for 21 s to end at "not
+       building" anyway — and every keystroke in the pitch field passes through values
+       like that on its way to the one being typed. */
+    const opt = nx * ny <= PLATE_MAX_CELLS
+      ? optimizeForPlates(Object.assign({}, p, { splitMode: 'balanced' })) : null;
     if (opt) return computeLayout(Object.assign({}, p, { splitMode: 'manual', rowCuts: opt.rowCuts, colCuts: opt.colCuts }));
     return computeLayout(Object.assign({}, p, { splitMode: 'balanced' }));
   }
@@ -2067,7 +2206,7 @@ function computeLayout(p) {
     const segEnds = [...colCuts[b], nx];
     for (let s = 0; s < segStarts.length; s++) {
       pieces.push({
-        id: `${String.fromCharCode(65 + s)}${b + 1}`,
+        id: `${pieceColumn(s)}${b + 1}`,
         band: b, seg: s,
         cellX0: segStarts[s], cellY0: bandStarts[b],
         nx: segEnds[s] - segStarts[s], ny: bandEnds[b] - bandStarts[b],
@@ -2861,6 +3000,103 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
 }
 
 // ---------- plate builder ----------
+/* One print layer, at the 0.2 mm the page's material estimate assumes (its 0.8 mm top
+   and bottom skins are four layers). The thinnest plastic a slicer can be counted on to
+   lay down: between two faces closer than this it may put nothing at all, so a floor
+   that thin can print as a hole however closed the mesh is. */
+const PRINT_LAYER = 0.2;
+/* Plastic left between a mounting pocket and the face it stops short of: one layer. The
+   solid floor was a fixed 2.8 mm, so a 6 × 3 mm magnet, as common as the 6 × 2 the spec
+   draws, was cut clean through it: from above it fell out of the bottom, from below it
+   stood 0.2 mm proud of the socket floor.
+   One layer and no more, because more raises plates that were sound: 2.8 mm holds the
+   spec's 6.5 × 2.4 magnet over 0.4 of plastic and always printed it, and a 0.6 skin makes
+   that plate 0.2 mm taller — and the height the Bins page is handed with it — for
+   nothing. So the floor stays 2.8 for anything up to 2.6 deep, as it always was, and
+   grows only past that, where what is left under the pocket might not print. A corner
+   boss is held to the same line: 2.6 tall, so 2.4 deep at most. */
+const MOUNT_SKIN = PRINT_LAYER;
+/* The corner bosses of baseMode 'bosses': a quarter square this far in from each cell
+   corner, its inner corner rounded, never taller than BOSS_H. Named because mountLimits
+   has to know how much room a boss leaves around its pocket. */
+const BOSS_W = 12.5, BOSS_R = 3.5, BOSS_H = 2.6;
+
+/* How thick the solid floor under the sockets is: what was asked for, raised to whatever
+   the plate is carrying needs. A pocket cut into the floor — a magnet from either side, a
+   screw head's counterbore from below — has to be shallower than the floor by
+   MOUNT_SKIN, or it is a hole.
+   Its own function because the page needs the plate's height before anything is built:
+   a plate taller than the printer can build is a check, not a surprise in the slicer. */
+function platePad(cfg) {
+  let pad = cfg.bottomPad;
+  /* Rounded to the micron, because 2.6 + 0.2 is 2.8000000000000003 and that is not a
+     reason to move every face of a plate that was 2.8 before. */
+  const under = (depth) => Math.round((depth + MOUNT_SKIN) * 1e6) / 1e6;
+  if ((cfg.magnets || cfg.screws) && cfg.baseMode !== 'bosses') {
+    pad = Math.max(pad, cfg.magnetBase || 2.8);
+    if (cfg.magnets) pad = Math.max(pad, under(cfg.magnetH));
+    if (cfg.screws && cfg.screwHeadD > cfg.screwHoleD)
+      pad = Math.max(pad, under(cfg.screwHeadDepth));
+  }
+  const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
+  if (keyedConn && cfg.keyMount !== 'wall') pad = Math.max(pad, cfg.key.depth + 0.8);
+  if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
+  return pad;
+}
+
+/* Plastic left round a mounting cut, to whatever holds it. 1 mm rather than a token
+   wall, and measured: the sites sit holeOffset from each cell centre whatever the
+   pitch, and with less than this between them and the socket floor's edge the cutter's
+   facets graze the floor's own triangulation — screws at a 36 mm pitch leaked 192 edges
+   with 0.65 mm to spare. */
+const MOUNT_WALL = 1.0;
+/* The largest mounting cuts this configuration has room for, as diameters and depths in
+   the units the page's fields use. Magnets and screws sit holeOffset (13 mm, the spec's)
+   from each cell centre at ANY pitch, so the room round them shrinks with the pitch:
+   below about 34 mm a stock magnet pocket no longer fits inside its cell at all, and every
+   magnet-and-screw leak a pitch sweep found, 24.5 to 36 mm, was a cutter out past the
+   socket floor or the cell edge.
+ *
+ * Three kinds of room, by where the cut opens:
+ *   - into the socket (a magnet from above, the screw shank): it must stay on the socket
+ *     floor, or it crosses the floor's chamfer cone — see ENGINE.md §2;
+ *   - under the floor (a magnet from below, the counterbore): it must stay in its cell;
+ *   - in a corner boss: it must stay in the boss, which is shorter than the solid floor
+ *     and does not grow with the pocket, so it also caps the depth.
+ *
+ * These are measurements, not field ranges, and can come out below the field's minimum
+ * or negative — a screw shank at a 34 mm pitch has −0.1 mm. That means no cut of any size
+ * fits there; the page turns it into a check on the design rather than a range for the
+ * field (src/ui.js readNumber), since no number typed into the field could fix it. */
+function mountLimits(cfg) {
+  const half = cfg.pitch / 2, off = cfg.holeOffset;
+  const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
+  // distance from a point at (s, s) to the edge of a rounded square of half-size h,
+  // corner radius r, centred on the origin
+  const roomIn = (h, r, s) => {
+    const q = s - (h - r);
+    return q > 0 ? r - Math.SQRT2 * q : h - s;
+  };
+  // the socket floor ring, as buildPiece's profile and roundedSquareRing make it
+  const dBot = 2.85 + tol, hf = half - dBot;
+  const rf = Math.max(0.3, Math.min(cfg.socketRadius - (dBot - cfg.topCutoff), hf - 0.01));
+  const onFloor = roomIn(hf, rf, off) - MOUNT_WALL;
+  const inCell = half - off - MOUNT_WALL;
+  const s = half - off;              // the site's distance in from the cell's edges
+  const inBoss = Math.min(roomIn(BOSS_W, BOSS_R, s), s) - MOUNT_WALL;
+  const bosses = cfg.baseMode === 'bosses';
+  const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
+  const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // the fields step in tenths
+  return {
+    // a magnet pocket is cut 0.1 mm over the magnet's radius
+    magnetD: r10(2 * ((cfg.magnetSide === 'top' ? top : under) - 0.1)),
+    screwHoleD: r10(2 * top),
+    screwHeadD: r10(2 * under),
+    // in the solid floor the pad grows to suit, so only a boss caps the depth
+    depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
+  };
+}
+
 /* Region-decomposed build: no global CSG. Each piece = margin/corner regions (plain
    extrusions) + one region per cell (extrusion minus its socket cutter and holes).
    Regions are clipped from the global outline (rounded corners, connector bites)
@@ -2868,7 +3104,7 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
 function buildPiece(cfg, layout, piece, onStatus) {
   const pitch = cfg.pitch, half = pitch/2;
   const solidBase = cfg.baseMode !== 'bosses';
-  let pad = ((cfg.magnets || cfg.screws) && solidBase) ? Math.max(cfg.bottomPad, cfg.magnetBase || 2.8) : cfg.bottomPad;
+  const pad = platePad(cfg);
   const isHclip = cfg.connector === 'hclip';
   const topInsert = cfg.keyInsert === 'top';
   const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
@@ -2894,8 +3130,6 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const keyKind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
   const keyClr = keyKind === 'snaptop' ? cfg.key.clr
                : isHclip ? cfg.hclip.clr : keyDims.clr;
-  if (keyedConn && !wallKeys) pad = Math.max(pad, cfg.key.depth + 0.8);
-  if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
   const H = pad + cfg.plateHeight;
   const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
   const dTop = cfg.topCutoff, dMid = 2.15 + tol, dBot = 2.85 + tol;
@@ -3116,8 +3350,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
   // ---- corner bosses (pocket-style mounting, saves filament) ----
   if ((cfg.magnets || cfg.screws) && !solidBase) {
     const off = cfg.holeOffset;
-    const bossW = 12.5, rIn = 3.5;
-    const bossH = Math.min(2.6, Math.max(
+    const bossW = BOSS_W, rIn = BOSS_R;
+    // never more than BOSS_H, so a pocket deeper than BOSS_H − MOUNT_SKIN would come out
+    // through the top: mountLimits refuses one rather than this growing past it
+    const bossH = Math.min(BOSS_H, Math.max(
       cfg.magnets ? cfg.magnetH + 0.8 : 0,
       cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
     const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
@@ -3278,7 +3514,8 @@ function checkManifold(polys) {
  * building.
  *
  * `joint.kind` names the housing for every connector, `joint.part` is present only for
- * the ones that ship a loose part.
+ * the ones that ship a loose part, and `joint.clrMax`, where there is one, is the
+ * slackest this joint's clearance can be set to.
  */
 /* Which housing a configuration uses. Pure, so it lives here rather than in the UI:
    the coupon, the plate and the audit all have to agree, and the last three bugs in
@@ -3294,7 +3531,14 @@ function jointKind(connector, keyMount, keyInsert) {
 
 function buildFitSample(cfg, H, joint) {
   H = H || 4.25;
-  const clrs = [-0.05, 0, 0.05, 0.1].map(d => Math.max(0.02, joint.clr + d));
+  /* From 0.05 under the joint's clearance to 0.1 over, and no further than the joint is
+     allowed to go. At the top of the range the two slack pairs were clearances the field
+     refuses — a dovetail at 0.25 printed a 0.35 pair, which tells you to set a number the
+     page will not take — so the four slide down until the slackest is the ceiling. Slid,
+     not cut off: four pairs at four fits still answers the question; three at one does not. */
+  const most = joint.clrMax ?? Infinity;
+  const slide = Math.max(0, joint.clr + 0.1 - most);
+  const clrs = [-0.05, 0, 0.05, 0.1].map(d => Math.min(most, Math.max(0.02, joint.clr + d - slide)));
   /* 10 deep, not 8. A top-inserted cup's outer wall stands 0.6 further into the tile than
      the key it houses, and the full-size key is 14 long, so on an 8 mm tile the wall
      landed 0.25 mm from the back edge — inside the tile's own corner arc. That printed a
@@ -3417,7 +3661,14 @@ function build3mfXML(items) {
    Shelf packing with rotation; stackable identical footprints pile up with zGap. */
 function packPlates(items, bedW, bedD, gap, opts) {
   opts = opts || {};
-  const zGap = opts.zGap || 0.24;
+  // a gap below zero overlaps the parts it separates — they print fused — so neither is
+  // allowed to be one, whoever is calling
+  gap = Math.max(0, gap || 0);
+  /* Nor is a stack gap under one layer. Side by side, 0 is two parts touching, and they
+     come apart; one on another, 0 puts the upper piece's first layer straight onto the
+     lower's top, and the slicer prints them as one part. A layer of air is the least
+     that leaves a seam to snap them apart at. */
+  const zGap = Math.max(PRINT_LAYER, opts.zGap ?? 0.24);
   const bedH = opts.bedH || 1e9;
   const stack = !!opts.stack;
   // expand qty into units
@@ -3487,11 +3738,22 @@ function packPlates(items, bedW, bedD, gap, opts) {
 }
 
 // ---- split optimizer: choose cuts minimizing print plates ----
-function compositions(n, maxPart, maxParts) {
+/* Every way to write n as an ordered sum of at most maxParts parts of at most maxPart,
+   largest parts first — up to `limit` of them.
+ *
+ * It used to walk the whole tree and keep what reached zero, which is fine for a drawer
+ * and 24 million nodes for 200 cells into parts of 70: a branch whose remaining parts
+ * could not carry what is left was walked to the bottom anyway. Pruning those changes
+ * nothing about what comes out or in what order — they never produced anything — and
+ * the limit is there for the cases that are genuinely that big, which a real drawer
+ * never reaches: none of the plans test/plate-audit.js holds comes near it. */
+const COMPOSITION_LIMIT = 5000;
+function compositions(n, maxPart, maxParts, limit = COMPOSITION_LIMIT) {
   const out = [];
   function rec(rem, parts) {
-    if (parts.length > maxParts) return;
+    if (out.length >= limit) return;
     if (rem === 0) { if (parts.length) out.push(parts.slice()); return; }
+    if (rem > (maxParts - parts.length) * maxPart) return;   // cannot finish from here
     for (let p = Math.min(rem, maxPart); p >= 1; p--) { parts.push(p); rec(rem - p, parts); parts.pop(); }
   }
   rec(n, []);
@@ -3510,6 +3772,11 @@ function optimizeForPlates(p) {
     .filter(c => c.every((v, i) => v*pitch + extra + (i === 0 ? mF : 0) + (i === c.length-1 ? mB : 0) <= p.bedD + 1e-6));
   const colComps = compositions(nx, maxCols, Math.min(kColMin + 1, 4))
     .filter(c => c.every((v, i) => v*pitch + extra + (i === 0 ? mL : 0) + (i === c.length-1 ? mR : 0) <= p.bedW + 1e-6));
+  /* No way to cut the columns at all — every split that fits the count puts a full-width
+     segment against a margin that tips it over the bed. The loop below indexed into the
+     empty list and threw, so a 1000 × 600 drawer on a 256 mm bed took the page down when
+     Fewest plates was picked. The balanced split the caller falls back to copes. */
+  if (!rowComps.length || !colComps.length) return null;
   let best = null, tried = 0;
   for (const rc of rowComps) {
     if (tried > 4000) break;
@@ -3587,6 +3854,8 @@ const DEFAULTS = {
 
 if (typeof module !== 'undefined') {
   module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+    platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
+    connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };
@@ -4012,10 +4281,10 @@ const DRAWERS = (function () {
   const encodePairs = (pairs) =>
     pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 
-  /* The keys both pages write: the drawer's size, the printer, and the format version,
-     which is the same on both. Every other key belongs to one page or the other. The UI
-     spec checks this list against what the two pages actually own. */
-  const SHARED = new Set(['w', 'd', 'bw', 'bd', 'bh', 'pr', 'v']);
+  /* The keys both pages write: the drawer's size, the printer, the slicer infill, and the
+     format version, which is the same on both. Every other key belongs to one page or the
+     other. The UI spec checks this list against what the two pages actually own. */
+  const SHARED = new Set(['w', 'd', 'bw', 'bd', 'bh', 'pr', 'if', 'v']);
 
   /* One drawer, two pages writing to it. Each page's design string carries the other
      page's keys too — that is how the carry works — but its copy of them is only as new
@@ -4202,8 +4471,9 @@ const DRAWERS = (function () {
   /* Two small records beside the list, of which drawer each tool last saved into (see
      attach). One is per tab, in sessionStorage, which a reload and Back keep and a new tab
      starts without. The other is per device, and goes with the local save the bare site
-     restores. The tab's record also carries the note for the next page to load in it:
-     which drawer the design it arrives with belongs to. */
+     restores. The tab's record also carries the note for the next page to load in it,
+     the one note there is about an arrival: which drawer the design it arrives with
+     belongs to, if any, and whether it is someone's link (see arrival). */
   const TAB = 'drawerforge:drawers:tab';
   const LAST = 'drawerforge:drawers:last';
   function readNote(area, key) {
@@ -4266,12 +4536,16 @@ const DRAWERS = (function () {
         if (n[o.tool] !== id) { n[o.tool] = id; writeNote(area, key, n); }
       }
     }
-    /* The note for the next page to load in this tab: the drawer, and the fingerprint of
-       the design that page will arrive with. Read once, by attach. False if the browser
-       would not keep it. */
-    function handOver(id, h, caughtUp) {
+    /* The note for the next page to load in this tab: the drawer ('' for none), and the
+       fingerprint of the design that page will arrive with. `link` lists the drawer, bed
+       and infill settings in it that are still someone's link's, not yours (the tool's
+       ui.js works that out); `open` says a drawer was opened from the list, or caught up,
+       rather than handed over. Read once, by the page's boot (see arrival). False if the
+       browser would not keep it. */
+    function handOver(id, h, caughtUp, more) {
       const n = readNote('sessionStorage', TAB);
-      n.next = { id, fp: fingerprint(h), caughtUp: !!caughtUp };
+      n.next = { id, fp: fingerprint(h), caughtUp: !!caughtUp,
+                 link: (more && more.link) || [], open: !!(more && more.open) };
       return writeNote('sessionStorage', TAB, n);
     }
     function takeHandOver() {
@@ -4282,6 +4556,9 @@ const DRAWERS = (function () {
       writeNote('sessionStorage', TAB, n);
       return isPlain(next) ? next : null;
     }
+    // taken once per page, by whichever of arrival and attach asks first
+    let taken;
+    const takeOnce = () => (taken === undefined ? (taken = takeHandOver()) : taken);
     /* Replaces the page with design `h`. replaceState and a reload rather than a
        navigation: the design being replaced is not a page you went back from, and the
        back button should not offer it. */
@@ -4304,7 +4581,7 @@ const DRAWERS = (function () {
       const merged = encodePairs(pairs.map(([k, v]) => [k, moved.includes(k) ? stored.get(k) : v])
         .concat(moved.filter((k) => !pairs.some((p) => p[0] === k)).map((k) => [k, stored.get(k)])));
       // without the note the reloaded page could not tell it is this drawer, so stay put
-      if (!handOver(d.id, merged, true)) return false;
+      if (!handOver(d.id, merged, true, { open: true })) return false;
       go(merged);
       return true;
     }
@@ -4476,7 +4753,7 @@ const DRAWERS = (function () {
       }
       /* The note is how the reloaded page knows the design it finds in its address bar is
          this drawer, and not another drawer holding the same design — see attach. */
-      handOver(d.id, d.hash);
+      handOver(d.id, d.hash, false, { open: true });
       go(d.hash);
     }
 
@@ -4659,11 +4936,21 @@ const DRAWERS = (function () {
        *
        * Called once the page has loaded its design and drawn it, so that `bootDesign` is
        * what an untouched page looks like. */
+      /* The note left for this page, if the design `h` it arrives with is the one the
+         note is about, else null: with `link` and `open` as handOver writes them. Read
+         every time, so a stale note never lingers; attach reads the same one. */
+      arrival(h) {
+        const next = takeOnce();
+        if (!next || !h || next.fp !== fingerprint(h)) return null;
+        return { id: typeof next.id === 'string' ? next.id : '',
+                 link: Array.isArray(next.link) ? next.link.filter((k) => typeof k === 'string') : [],
+                 open: next.open === true };
+      },
       attach(arrivedWith) {
         fresh = !arrivedWith;
         bootDesign = o.design();
         attached = null;
-        const next = takeHandOver();      // read every time, so a stale note never lingers
+        const next = takeOnce();          // read every time, so a stale note never lingers
         if (arrivedWith) {
           const s = loadAll();
           const fp = fingerprint(arrivedWith);
@@ -4713,16 +5000,17 @@ const DRAWERS = (function () {
       },
       /* Before the page navigates to the other tool or the guide with `h` in the address.
          Also saves: the debounced save may not have run yet, and this is the last chance.
-         And leaves the note that tells the page at the other end which drawer it is. */
-      handoff(h) {
-        if (!attached) return;
-        const s = loadAll();
-        const d = find(s, attached);
-        if (!d) return;
-        d.hash = mergeDesign(d.hash, h, o.owns, base);
-        d.saved = Date.now();
-        if (saveAll(s)) base = sharedOf(h);
-        handOver(d.id, h);
+         And leaves the note that tells the page at the other end it is a hand-over, which
+         drawer it is if any, and which settings in it are still someone's link's. */
+      handoff(h, link) {
+        const s = attached && loadAll();
+        const d = s && find(s, attached);
+        if (d) {
+          d.hash = mergeDesign(d.hash, h, o.owns, base);
+          d.saved = Date.now();
+          if (saveAll(s)) base = sharedOf(h);
+        }
+        handOver(d ? d.id : '', h, false, { link });
       },
     };
   }
@@ -4777,6 +5065,15 @@ const BLOAT = 0.05;     // shell overlap; never rely on coincident faces
    the wall. 1.2 is two perimeters at a 0.4 nozzle, so a rib prints solid and stiff
    rather than as two skins with a void between them. */
 const RAIL_T = 1.2, RAIL_D = 1.2;
+
+/* The thinnest wall the engine will build, whatever it is asked for. A wall of 0 puts
+   the cavity's skin exactly on the outer one — the coincident faces this file exists to
+   avoid — and came out with 64 open edges and shells inside out; at 0.2 a carved shape
+   still left 3. 0.4 is one line from a 0.4 mm nozzle, so nothing thinner prints anyway.
+   The page and a shared link both accept walls down to 0, so the floor is kept here,
+   where every way of handing the engine a bin passes, and Checks says when it bites. */
+const WALL_MIN = 0.4;
+const withWall = (c) => Object.assign(c, { wall: isFinite(c.wall) ? Math.max(WALL_MIN, c.wall) : BIN_DEFAULTS.wall });
 
 // Everything buildBin reaches for through G. The bins UI checks itself against this
 // at load; keep it in step when a new primitive is used.
@@ -5096,8 +5393,8 @@ function wallRing(G, outer, inner, z0, zTop) {
 }
 
 // Closed lip ring: a socket-profiled rim standing on top of the bin walls.
-// A separate overlapping shell, so it works whether the wall is thinner or
-// thicker than the lip's inward reach — no special-casing either way.
+// A separate overlapping shell. How it meets the wall depends on whether the wall
+// is thinner than the lip's base or not; see the chamfer below.
 function lipRing(G, c, hwO, hdO, H, n) {
   const ring = (t) => roundRect(hwO - t, hdO - t, SPEC.r - t, n);
   const lipH = lipHeight(c.lipMin);
@@ -5113,9 +5410,26 @@ function lipRing(G, c, hwO, hdO, H, n) {
      Clamped to the wall height available: a 1-unit bin has only 1.05 mm of wall
      below the lip, so it gets a steeper chamfer rather than one that starts below
      the floor. Steeper still beats a flat overhang. */
-  const drop = Math.min(Math.max(0, steps[0][1] - c.wall),
-                        Math.max(BLOAT, H - (SPEC.footH + c.floorT) - 0.3));
-  inner.unshift(ring(c.wall)); zsI.unshift(H - drop);
+  const base = steps[0][1];                         // 2.70, the socket floor's inset
+  const room = Math.max(BLOAT, H - (SPEC.footH + c.floorT) - 0.3);
+  if (base - c.wall >= BLOAT) {
+    inner.unshift(ring(c.wall)); zsI.unshift(H - Math.min(base - c.wall, room));
+  } else {
+    /* A wall as thick as the lip's base has nothing to chamfer: the lip stands on it.
+       But the chamfer above collapsed to zero height there, putting the lip's bottom
+       cap on the wall's top face — 256 edges used four times from 2.70 mm, 72 and
+       coplanar folds from 3.5. Burying the cap a BLOAT down is not enough on its own:
+       at exactly 2.70 the wall's top inner edge IS the lip's base corner (2.70, H),
+       so the two shells still share that ring of edges whatever the cap does.
+
+       So the buried part stays strictly inside the wall, a BLOAT in from its inner
+       face, and the lip's next ring sits a BLOAT up its own 45 degree chamfer instead
+       of on that corner. The cost is a 0.05 mm triangle off the corner where the
+       chamfer meets the wall top, in the loose direction, under any nozzle. */
+    inner[0] = ring(base - BLOAT); zsI[0] = H + BLOAT;
+    inner.unshift(ring(Math.min(c.wall, base) - BLOAT)); zsI.unshift(H - Math.min(1, room));
+  }
+  const drop = H - zsI[0];
 
   const outer = ring(0);
   const polys = [];
@@ -5468,7 +5782,7 @@ function carvedBody(G, c, mask, H, floorZ, zTop, lipSteps) {
  * the split.
  */
 function dividerPart(G, cfg, axis) {
-  const c = Object.assign({}, BIN_DEFAULTS, cfg);
+  const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const iw = hw - c.wall, id = hd - c.wall;
@@ -5577,12 +5891,16 @@ function lidPart(G, cfg) {
   side('l', 'x', -1); side('r', 'x', +1);
   side('f', 'y', -1); side('b', 'y', +1);
 
-  return { polys, meta: { W: 2 * hw, D: 2 * hd, totalH: t + skirt, t, skirt,
-                          sides: ['l', 'r', 'f', 'b'].filter(wantSide) } };
+  /* With every side unticked there is no skirt, so the part is the plate alone and
+     stands t tall. Counting the skirt anyway told the plate packer and the download
+     list a 1.2 mm plate was 4.2 mm tall. */
+  const sides = ['l', 'r', 'f', 'b'].filter(wantSide);
+  return { polys, meta: { W: 2 * hw, D: 2 * hd, totalH: sides.length ? t + skirt : t, t,
+                          skirt: sides.length ? skirt : 0, sides } };
 }
 
 function buildBin(G, cfg) {
-  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg || {}));
   const n = c.arcSegs;
   const H = c.hUnits * SPEC.unitH;
   if (H <= SPEC.footH + 0.5)
@@ -5639,7 +5957,15 @@ function buildBin(G, cfg) {
        assume a rectangle and are left off rather than guessed at. The stacking lip is
        not one of them: it rides on the wall panels, so a carved bin still stacks. */
     const zTop = (c.solid || floorZ >= H - 0.2) ? H : H;
-    polys.push(...carvedBody(G, c, mask, H, c.solid ? H - 0.01 : floorZ, zTop,
+    /* A floor at or past the top is held a quarter of a millimetre under it. The panels
+       run from the floor up to the top, so one starting above the top was a wall swept
+       downwards — shells inside out and folded back on themselves, and with the floor as
+       thick as the bin is tall the cell slabs stood 0.85 mm above the top of the lip —
+       and one starting a tenth below it left 40 open edges. A rectangle's body goes
+       solid instead, but here the panels are what carry the stacking lip, so they keep
+       a sliver of wall to stand on. */
+    const carvedFloor = c.solid ? H - 0.01 : Math.min(floorZ, H - 0.25);
+    polys.push(...carvedBody(G, c, mask, H, carvedFloor, zTop,
                              c.solid ? null : lipSteps));
   } else if (c.solid || floorZ >= H - 0.2) {
     polys.push(...G.extrudePoly(outer, bodyBase - BLOAT, H));
@@ -5674,7 +6000,16 @@ function buildBin(G, cfg) {
       if (r > 0.05) polys.push(...scoopPrism(G, iw, id, floorZ, r, Math.max(4, n)));
     }
     if (c.label > 0.05 && eB > 0.99) {
-      const d = Math.min(c.label, id * 0.8);
+      /* Limited by height as well as depth. The shelf's underside runs down at 45
+         degrees, so a shelf deeper than the bin is tall pokes its foot through the
+         floor and out among the feet: 4 open edges from 8 mm on a 1-unit bin. Into
+         the floor is fine, it is solid, and overlap is how every shell here meets the
+         next; out of it is not. The slab starts a BLOAT below the body, so the foot
+         stops at the top of the feet, a BLOAT above it, whatever the floor — which is
+         where a whole-millimetre shelf on whole units bottoms out, so none of those
+         moves. Held 0.2 above the floor, it cut shelves that had always built
+         cleanly: a 14 mm label on a 1x1x3 came out 13.65. */
+      const d = Math.min(c.label, id * 0.8, H - c.labelT - (bodyBase + BLOAT));
       if (d > 0.05) polys.push(...labelPrism(G, iw, id, H, d, c.labelT));
     }
 
@@ -5692,37 +6027,45 @@ function buildBin(G, cfg) {
      * between them are the same slot made out of added material.
      */
     const t = c.wall / 2;
-    const rails = (centre, along) => {
-      /* `along` is the axis the divider plane runs along: 'y' for a divider standing at
-         a fixed x. The rails sit on the two walls that face each other across it. */
-      const half = c.divT / 2 + c.divClr;          // inner face of each rail
-      const outer = half + RAIL_T;
-      const ends = along === 'y' ? [[-id, -id + RAIL_D], [id - RAIL_D, id]]
-                                 : [[-iw, -iw + RAIL_D], [iw - RAIL_D, iw]];
-      for (const [a, b] of ends)
-        for (const [lo, hi] of [[-outer, -half], [half, outer]]) {
-          const rect = along === 'y'
-            ? [[centre + lo, a - BLOAT], [centre + hi, a - BLOAT],
-               [centre + hi, b], [centre + lo, b]]
-            : [[a - BLOAT, centre + lo], [b, centre + lo],
-               [b, centre + hi], [a - BLOAT, centre + hi]];
-          polys.push(...G.extrudePoly(rect, floorZ - BLOAT, H));
-        }
+    const slot = c.divT / 2 + c.divClr;            // inner face of each rail: the slot
+    const rail = slot + RAIL_T;                    // outer face of each rail
+    /* Where the dividers of one direction cross the cavity, as spans of the axis they
+       stand on — a fixed divider is one span, a removable one the two rails either side
+       of its slot — merged wherever two meet. Packed as closely as the divider fields
+       allow, neighbours did meet: at the most dividers that fit, a wall of 4.15 mm put
+       fixed ones exactly side by side and a spacing of 1.2 mm put one rail's face on its
+       neighbour's, and two shells face to face cost 24 to 1616 edges used four times. A
+       span that runs into the next is one prism, so there is no face between them to
+       coincide; at any sensible count nothing meets and nothing changes. */
+    const spans = (n, inner) => {
+      const out = [];
+      for (let k = 1; k <= n; k++) {
+        const p = -inner + (2 * inner) * k / (n + 1);
+        if (c.divRemovable) out.push([p - rail, p - slot], [p + slot, p + rail]);
+        else out.push([p - t, p + t]);
+      }
+      out.sort((a, b) => a[0] - b[0]);
+      const merged = [];
+      for (const [lo, hi] of out) {
+        const last = merged[merged.length - 1];
+        if (last && lo <= last[1] + BLOAT) last[1] = Math.max(last[1], hi);
+        else merged.push([lo, hi]);
+      }
+      return merged;
     };
-    for (let k = 1; k <= c.divX; k++) {
-      const x = -iw + (2 * iw) * k / (c.divX + 1);
-      if (c.divRemovable) { rails(x, 'y'); continue; }
-      polys.push(...G.extrudePoly(
-        [[x - t, -id - BLOAT], [x + t, -id - BLOAT], [x + t, id + BLOAT], [x - t, id + BLOAT]],
-        floorZ - BLOAT, H));
-    }
-    for (let k = 1; k <= c.divY; k++) {
-      const y = -id + (2 * id) * k / (c.divY + 1);
-      if (c.divRemovable) { rails(y, 'x'); continue; }
-      polys.push(...G.extrudePoly(
-        [[-iw - BLOAT, y - t], [iw + BLOAT, y - t], [iw + BLOAT, y + t], [-iw - BLOAT, y + t]],
-        floorZ - BLOAT, H));
-    }
+    /* Across the cavity for a fixed divider, from wall to wall and BLOAT into each; for a
+       removable one, a rail's depth out from each of the two walls the plate slides
+       between, again BLOAT into the wall. The far rail used to stop exactly on the wall's
+       inner face, the near one BLOAT inside its wall; both now reach in. */
+    const reach = (inner) => (c.divRemovable
+      ? [[-inner - BLOAT, -inner + RAIL_D], [inner - RAIL_D, inner + BLOAT]]
+      : [[-inner - BLOAT, inner + BLOAT]]);
+    for (const [a, b] of spans(c.divX, iw))
+      for (const [lo, hi] of reach(id))
+        polys.push(...G.extrudePoly([[a, lo], [b, lo], [b, hi], [a, hi]], floorZ - BLOAT, H));
+    for (const [a, b] of spans(c.divY, id))
+      for (const [lo, hi] of reach(iw))
+        polys.push(...G.extrudePoly([[lo, a], [hi, a], [hi, b], [lo, b]], floorZ - BLOAT, H));
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */
@@ -5754,7 +6097,7 @@ function buildBin(G, cfg) {
  * survive the values it carries: the original separator was '.', and wall
  * thickness 1.2 split into "1" and "2", shifting every later field so a bin came
  * back with dividers it never had. Separators are now characters that cannot
- * occur in a non-negative number, and packBin refuses to emit one that could.
+ * occur in a plain non-negative decimal, and packBin writes every number as one.
  *
  * Field positions are the format. A bin is 17 fields and everything after a change
  * shifts, so adding or removing one invalidates every link already in circulation.
@@ -5784,6 +6127,23 @@ function bitsToCells(bits, u, v) {
     if (bits[i] === '1') out.push([x, y]);
   return out.length ? out : null;
 }
+/* Every number goes out as a plain non-negative decimal. packBin used to throw on any
+   value with a '-' in it, and two ordinary ones have one: a negative wall or floor, and
+   a tiny value, which String() writes in exponent form (1e-7). The throw landed in the
+   save, the share link, the hand-over to baseplates and the README, so saving stopped
+   without a word and those buttons died with it. No field can be negative, so a
+   negative is written as 0, and an exponent is spelled out in full instead.
+   A value that is no number at all goes out as "NaN", which unpackBin reads back as
+   the field's default. Written as 0 it came back as a real value instead: a NaN wall
+   as no wall, a NaN edge as an open side. An empty field would not do, since
+   Number('') is 0. */
+const plainNum = (v) => {
+  if (typeof v !== 'number') return v;     // the carve mask: already 0s and 1s
+  if (!isFinite(v)) return 'NaN';          // NaN and both infinities
+  if (!(v > 0)) return 0;                  // negative and -0
+  const s = String(v);
+  return s.includes('e') ? v.toFixed(20).replace(/\.?0+$/, '') : s;
+};
 function packBin(b) {
   const f = [b.x, b.y, b.u, b.v, b.hUnits, b.wall, b.floorT, b.divX, b.divY,
              b.solid ? 1 : 0]
@@ -5796,29 +6156,64 @@ function packBin(b) {
                 field rather than four: the sides are only meaningful when there is a
                 lid, and the format is positional so every field costs every link. */
              b.lid ? 1 : 0, lidSideBits(b.lidSides)]);
-  for (const v of f)
-    if (String(v).includes(SEP.field) || String(v).includes(SEP.bin) || String(v).includes(SEP.layer))
-      throw new Error(`bin field ${v} contains a separator — packing would corrupt it`);
-  return f.join(SEP.field);
+  /* Still checked, but answered with a 0 rather than a throw: a bad field then costs
+     that one field, where a separator inside it would shift every field after it. */
+  const seps = Object.values(SEP);
+  return f.map((v) => {
+    const s = String(plainNum(v));
+    return seps.some((c) => s.includes(c)) ? '0' : s;
+  }).join(SEP.field);
 }
+/* The most a link can ask for. Nothing here was bounded and the geometry does what it
+   is told: a million dividers froze the tab for half a minute and were then saved, so
+   every visit froze it again; a footprint of 1e9 cells crashed it; a height of 1e308
+   came out as "Infinity mm". Each limit is past anything that can be printed or put in
+   a drawer — 2000 mm is the largest drawer or bed the baseplates page accepts — so
+   clamping to it loses nothing a person could have meant. */
+const LINK_MAX = {
+  cells: 50,                               // 2100 mm, for a footprint or a position
+  hUnits: Math.floor(2000 / SPEC.unitH),   // as tall as the tallest bed
+  wall: 10,                                // already half the inside of a 1x1 bin
+};
+/* The wall heights the edge menus offer. One that is not in the list put the menu on a
+   blank entry, the next edit read that back as NaN, and the bin was built from NaN. */
+const EDGE_STEPS = [0, 0.25, 0.5, 0.66, 1];
+const snapEdge = (x) => (!isFinite(x) ? 1
+  : EDGE_STEPS.reduce((a, s) => (Math.abs(s - x) < Math.abs(a - x) ? s : a)));
+/* How many dividers fit across `inside` mm. Each is one wall thick, and closer together
+   than that they only overlap into solid plastic: more cannot change the part, only how
+   long it takes to build. Never counted thinner than a rail, two lines of a 0.4 mm
+   nozzle, so a zero wall cannot make the limit infinite. */
+const maxDividers = (inside, wall) =>
+  Math.max(0, Math.floor(inside / Math.max(wall, RAIL_T)) - 1);
 /* Anything can arrive here: the hash is in the address bar, so it gets hand-edited,
    truncated by a chat client and pasted back a field short. Every field therefore
    falls back to its default rather than passing NaN through to the geometry — a bin
    with a NaN footprint builds no polygons at all, so the page comes up blank, which
-   looks exactly like losing the layout rather than like a typo. */
-const numAt = (p, i, d) => (isFinite(p[i]) ? p[i] : d);
-const countAt = (p, i, d) => (isFinite(p[i]) ? Math.max(1, Math.round(p[i])) : d);
+   looks exactly like losing the layout rather than like a typo. Every field is also
+   held to the range it can really take: none is negative, and counts are whole —
+   a y of 0.5 threw in the map, and 2.5 dividers were reported as 3.5 compartments. */
+const numAt = (p, i, d, hi) => (isFinite(p[i]) ? Math.min(hi, Math.max(0, p[i])) : d);
+const countAt = (p, i, d, lo, hi) =>
+  (isFinite(p[i]) ? Math.min(hi, Math.max(lo, Math.round(p[i]))) : d);
 function unpackBin(t) {
   const raw = String(t).split(SEP.field);
   const p = raw.map(Number);
   const edges = {};
-  PACK_EDGES.forEach((k, i) => { edges[k] = isFinite(p[10 + i]) ? p[10 + i] : 1; });
-  const u = countAt(p, 2, BIN_DEFAULTS.u), v = countAt(p, 3, BIN_DEFAULTS.v);
-  return { x: numAt(p, 0, 0), y: numAt(p, 1, 0), u, v,
-           hUnits: countAt(p, 4, BIN_DEFAULTS.hUnits),
-           wall: numAt(p, 5, BIN_DEFAULTS.wall), floorT: numAt(p, 6, BIN_DEFAULTS.floorT),
-           divX: numAt(p, 7, 0), divY: numAt(p, 8, 0), solid: !!p[9],
-           edges, scoop: numAt(p, 14, 0), label: numAt(p, 15, 0),
+  PACK_EDGES.forEach((k, i) => { edges[k] = snapEdge(p[10 + i]); });
+  const u = countAt(p, 2, BIN_DEFAULTS.u, 1, LINK_MAX.cells);
+  const v = countAt(p, 3, BIN_DEFAULTS.v, 1, LINK_MAX.cells);
+  const hUnits = countAt(p, 4, BIN_DEFAULTS.hUnits, 1, LINK_MAX.hUnits);
+  const H = hUnits * SPEC.unitH;
+  const wall = numAt(p, 5, BIN_DEFAULTS.wall, LINK_MAX.wall);
+  const inside = (n) => (n - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall;
+  /* A floor or scoop past the bin's height, or a label shelf past its depth, builds
+     the same part as one at it: the geometry already stops them there. */
+  return { x: countAt(p, 0, 0, 0, LINK_MAX.cells), y: countAt(p, 1, 0, 0, LINK_MAX.cells),
+           u, v, hUnits, wall, floorT: numAt(p, 6, BIN_DEFAULTS.floorT, H),
+           divX: countAt(p, 7, 0, 0, maxDividers(inside(u), wall)),
+           divY: countAt(p, 8, 0, 0, maxDividers(inside(v), wall)), solid: !!p[9],
+           edges, scoop: numAt(p, 14, 0, H), label: numAt(p, 15, 0, v * SPEC.pitch),
            cells: bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v),
            done: !!p[17], divRemovable: !!p[18],
            lid: !!p[19], lidSides: lidSidesFrom(p[20]) };
@@ -5832,7 +6227,7 @@ if (typeof module !== 'undefined') {
   module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
-    packBin, unpackBin, packLayers, unpackLayers };
+    packBin, unpackBin, packLayers, unpackLayers, LINK_MAX };
 }
 </script>
 <script>/* SPDX-License-Identifier: AGPL-3.0-or-later
@@ -5904,9 +6299,20 @@ const fBin = () => (!focused ? null : scratch || (selected >= 0 ? B()[selected] 
 const LIP_H = lipHeight(0.55);
 
 /* ---------- model --------------------------------------------------------- */
+/* The largest drawer the map will lay out, and so the most cells a side. Every draw
+   walks every cell, and a 21 m drawer typed by accident — 500 cells a side — froze the
+   page for over a minute. 2000 mm is the largest drawer or bed the baseplates page and
+   a shared link accept, read from the drawer field's own max so the spinner and the
+   clamp agree; that is 47 cells. Past it Checks says the drawer was cut down rather
+   than the tab hanging. */
+const DRAWER_MAX = parseFloat($('drawerW').max) || 2000;
+const GRID_MAX = Math.floor(DRAWER_MAX / SPEC.pitch);
+$('gridX').max = $('gridY').max = GRID_MAX;
+// the drawer size as typed, before the clamp; Checks names it when the two differ
+let drawerAsked = { w: 0, d: 0 };
 function grid() {
-  const nx = Math.max(1, Math.floor(state.drawerW / SPEC.pitch));
-  const ny = Math.max(1, Math.floor(state.drawerD / SPEC.pitch));
+  const nx = Math.max(1, Math.min(GRID_MAX, Math.floor(state.drawerW / SPEC.pitch)));
+  const ny = Math.max(1, Math.min(GRID_MAX, Math.floor(state.drawerD / SPEC.pitch)));
   const avail = state.drawerH - state.plateH;
   return { nx, ny, avail, maxUnits: Math.max(1, Math.floor((avail - LIP_H) / SPEC.unitH)) };
 }
@@ -6063,14 +6469,32 @@ const allBins = () => layers.flatMap((L, k) => L.bins.map((b) => ({ b, k })));
 const scoped = () => { const b = fBin(); return b ? [{ b, k: scratch ? 0 : cur }] : allBins(); };
 
 /* ---------- geometry + volume --------------------------------------------- */
+/* The key names everything the build reads, so an edit that changes a bin finds a new
+   key and one that does not — a note, the infill — finds the old build. That is what
+   lets the cache stay put across edits instead of being thrown away on every one. */
+const geoKey = (b) => typeKey(b) + '-s' + state.arcSegs;
 function geomFor(b) {
-  const k = typeKey(b) + '-s' + state.arcSegs;
-  if (geoCache.has(k)) return geoCache.get(k);
-  const r = buildBin(G, binCfg(b));
+  const k = geoKey(b);
+  let r = geoCache.get(k);
+  if (!r) { r = buildBin(G, binCfg(b)); geoCache.set(k, r); }
+  /* Read fresh every time rather than cached with the mesh: it moves with the infill
+     setting, which the key deliberately leaves out, and it is arithmetic, not a build. */
   const vv = volumeMm3(b);
   r.vol = vv.filament; r.rawVol = vv.raw;
-  geoCache.set(k, r);
   return r;
+}
+/* Forget builds no bin uses any more, and hand their buffers back to the GPU. Clearing
+   the caches on every edit without dispose() kept every old buffer alive: twelve bins,
+   250 edits, 1757 geometries and 620 MB of GPU memory. With the cache kept, this is
+   what bounds it — to the shapes actually in the drawer. */
+function pruneGeometry() {
+  const live = new Set(allBins().map(({ b }) => geoKey(b)));
+  if (scratch) live.add(geoKey(scratch));
+  for (const [k, gm] of geoCache) {
+    if (live.has(k)) continue;
+    if (gm.three) gm.three.dispose();
+    geoCache.delete(k);
+  }
 }
 function areaRR(hw, hd, r) { return 4 * hw * hd - (4 - Math.PI) * r * r; }
 function perimRR(hw, hd, r) { return 4 * hw + 4 * hd - 8 * r + 2 * Math.PI * r; }
@@ -6127,12 +6551,13 @@ function volumeMm3(c) {
 
   /* thin parts — solid whatever the infill setting */
   const e = (k) => (c.edges && c.edges[k] !== undefined ? Math.max(0, Math.min(1, c.edges[k])) : 1);
-  const hwI = hwO - c.wall, hdI = hdO - c.wall;
-  const wallsFull = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - c.wall)))
+  const wall = Math.max(WALL_MIN, c.wall);        // as built: buildBin holds it there too
+  const hwI = hwO - wall, hdI = hdO - wall;
+  const wallsFull = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - wall)))
                     * (H - floorZ);
   const perim = 4 * hwO + 4 * hdO;
   const wallFrac = (e('f') * 2 * hwO + e('b') * 2 * hwO + e('l') * 2 * hdO + e('r') * 2 * hdO) / perim;
-  const divs = (c.divX * c.wall * 2 * hdI + c.divY * c.wall * 2 * hwI) * (H - floorZ);
+  const divs = (c.divX * wall * 2 * hdI + c.divY * wall * 2 * hwI) * (H - floorZ);
   const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
   return { raw: baseRaw + thin, filament: baseFil + thin };
@@ -6355,13 +6780,45 @@ $('focusRedo').addEventListener('click', () => redo());
 const LENGTH_IDS = ['drawerW', 'drawerD', 'drawerH', 'drawerFrontH'];
 let unit = 'mm';   // what the length fields are showing; the saved choice is applied at boot
 
+/* A typed value held to its field's own min and max, so each limit is written in one
+   place and the spinner stops where the clamp does. The limits are the ones a shared
+   link is held to, so nothing can be typed that the page's own link would not carry
+   back. A negative floor used to reach the geometry and the link, and a 100 mm wall
+   built inside out and weighed -430 g. A drawer length is clamped in millimetres: its
+   field shows its limits in inches too when it does, and keeps the millimetres beside
+   them (FIELDS.convert). */
+function fieldClamp(id, x) {
+  const el = $(id), mm = (k, attr) => parseFloat(k in el.dataset ? el.dataset[k] : el[attr]);
+  const lo = mm('minMm', 'min'), hi = mm('maxMm', 'max');
+  return Math.min(isFinite(hi) ? hi : Infinity, Math.max(isFinite(lo) ? lo : -Infinity, x));
+}
+const BIN_FIELDS = ['u', 'v', 'hUnits', 'wall', 'floorT', 'divX', 'divY', 'scoop', 'label'];
+/* The most dividers that fit across a bin `cells` wide: as many as leave every
+   compartment at least one wall thick, never counting a wall as thinner than a 1.2 mm
+   rail. The link uses the same rule. */
+const mostDividers = (cells, wall) => Math.max(0,
+  Math.floor(((cells - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall) / Math.max(wall, RAIL_T)) - 1);
+/* The limits that depend on the bin itself, written onto the fields: the floor and the
+   scoop up to the bin's height, the label shelf up to its depth, the dividers up to
+   what fits across. */
+function setBinLimits(u, v, hUnits, wall) {
+  const H = hUnits * SPEC.unitH;
+  $('floorT').max = H; $('scoop').max = H;
+  $('label').max = v * SPEC.pitch;
+  $('divX').max = mostDividers(u, wall); $('divY').max = mostDividers(v, wall);
+}
+
 function readControls() {
   const num = (id, d) => { const x = parseFloat($(id).value); return isFinite(x) ? x : d; };
   const int = (id, d) => { const x = parseInt($(id).value, 10); return isFinite(x) ? x : d; };
+  /* Counts are rounded, not truncated: parseInt read "2.7" dividers as 2 and "1e3" as 1. */
+  const count = (id, d) => fieldClamp(id, Math.round(num(id, d)));
   const len = (id, d) => { const x = FIELDS.lengthOf($(id), unit); return isFinite(x) ? x : d; };
-  state.drawerW = len('drawerW', 306);
-  state.drawerD = len('drawerD', 380);
-  state.drawerH = len('drawerH', 84);
+  const mm = (id, d) => fieldClamp(id, len(id, d));
+  drawerAsked = { w: len('drawerW', 306), d: len('drawerD', 380) };
+  state.drawerW = mm('drawerW', 306);
+  state.drawerD = mm('drawerD', 380);
+  state.drawerH = mm('drawerH', 84);
   state.plateH = num('plateH', 4.25);
   state.showDrawer = $('showDrawer').checked;
   state.drawerFrontH = len('drawerFrontH', 0);
@@ -6372,19 +6829,19 @@ function readControls() {
      removable dividers is per bin and rides `t` above. */
   state.divT = Math.max(0.8, Math.min(5, num('divT', 1.6)));
   state.divClr = Math.max(0, Math.min(1, num('divClr', 0.25)));
-  state.bedW = num('bedW', 256);
-  state.bedD = num('bedD', 256);
-  state.bedH = num('bedH', 256);
+  state.bedW = mm('bedW', 256);
+  state.bedD = mm('bedD', 256);
+  state.bedH = mm('bedH', 256);
   state.gap = num('gap', 3);
 
   const t = {
-    u: Math.max(1, int('u', 1)), v: Math.max(1, int('v', 1)),
-    hUnits: Math.max(1, int('hUnits', 3)),
-    wall: num('wall', 1.2), floorT: num('floorT', 1.2),
-    divX: Math.max(0, int('divX', 0)), divY: Math.max(0, int('divY', 0)),
+    u: count('u', 1), v: count('v', 1),
+    hUnits: count('hUnits', 3),
+    wall: mm('wall', 1.2),
     solid: $('solid').checked,
-    scoop: Math.max(0, num('scoop', 0)), label: Math.max(0, num('label', 0)),
-    note: $('note').value.slice(0, 28),
+    /* By character, not by UTF-16 unit: slicing units cut an emoji in half and left a
+       lone surrogate in the note, the link and the README. */
+    note: [...$('note').value].slice(0, 28).join(''),
     divRemovable: $('divRemovable').checked,
     lid: $('lid').checked,
     lidSides: { f: $('lidF').checked, b: $('lidB').checked,
@@ -6403,48 +6860,71 @@ function readControls() {
      have every bin drawn after a mark born already printed. print-queue.spec.js fails
      on exactly that pair of changes. */
   const sel = selAll();
+  const b = !scratch && sel.length ? B()[selected] : null;
+  /* The footprint is settled first: the floor, the label shelf and the dividers are
+     limited by the bin's real size, so they wait for it. A loose bin has no drawer to
+     collide with, so its footprint is held only by the fields' own 50 cells — with no
+     limit at all a 100×100 took 14 s to rebuild on every keystroke — and Checks and the
+     Add button say when it is too big for the bed or the grid. */
+  if (!scratch && sel.length > 1) {
+    /* Footprint is per bin and must never be bulk-assigned. Writing the primary's
+       size onto the others silently resized every bin in the selection to match it,
+       which quietly destroyed their shapes. */
+    delete t.u; delete t.v;
+    $('u').value = b.u; $('v').value = b.v;
+  } else if (b && (t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected)) {
+    t.u = b.u; t.v = b.v; $('u').value = b.u; $('v').value = b.v;
+  }
+  /* Several bins take the same settings, so the smallest of them sets the limit: the
+     dividers that fit a 1x1 are the most any of them can be given. */
+  const sizes = sel.length > 1 && !scratch ? sel.map((i) => B()[i]) : [t];
+  setBinLimits(Math.min(...sizes.map((x) => x.u)), Math.min(...sizes.map((x) => x.v)),
+               t.hUnits, t.wall);
+  Object.assign(t, { floorT: mm('floorT', 1.2), scoop: mm('scoop', 0), label: mm('label', 0),
+                     divX: count('divX', 0), divY: count('divY', 0) });
+  /* Show the value actually used once you have left the field: typed past a limit, the
+     box would otherwise go on saying 100 while the bin is built at 10. Never under the
+     caret, where emptying the box to type a new number would have it filled back in
+     before the first digit landed. */
+  for (const id of BIN_FIELDS)
+    if (t[id] !== undefined && document.activeElement !== $(id) && parseFloat($(id).value) !== t[id])
+      $(id).value = t[id];
   /* Whether a bin has been printed is a fact about one sitting in the drawer. A loose
      bin is not in a drawer, so the question does not arise. */
   $('doneRow').style.display = sel.length && !scratch ? '' : 'none';
   const anyDiv = t.divX > 0 || t.divY > 0;
   $('divRemovableRow').style.display = anyDiv ? '' : 'none';
   $('divRemovableHint').style.display = anyDiv && $('divRemovable').checked ? '' : 'none';
-  /* A lid needs a lip to grip, and a lowered wall takes the lip away. Say which it is
-     rather than hiding the control, or ticking it and getting nothing looks like a bug. */
-  const lipOk = EDGES.every((k) => !t.edges || !isFinite(t.edges[k]) || t.edges[k] >= 1);
-  $('lidRow').style.display = t.solid ? 'none' : '';
-  $('lidNoLip').style.display = !t.solid && !lipOk && $('lid').checked ? '' : 'none';
-  $('lidHint').style.display = !t.solid && lipOk && $('lid').checked ? '' : 'none';
   if (scratch) {
-    /* No drawer, so nothing to collide with: a loose bin's footprint is limited only by
-       the bed, and the checks say so rather than the field silently refusing the digit
-       you typed. u and v still go through setFootprint, because a carved shape has to
-       reconcile its mask whichever kind of bin it is. */
+    /* u and v still go through setFootprint, because a carved shape has to reconcile
+       its mask whichever kind of bin it is. */
     const nu = t.u, nv = t.v; delete t.u; delete t.v;
+    noteSettingsEdit([scratch], t, nu, nv);
     Object.assign(scratch, t, { edges: Object.assign({}, t.edges) });
     if (nu !== undefined && (nu !== scratch.u || nv !== scratch.v))
       setFootprint(scratch, nu, nv);
   } else if (sel.length) {
-    // size only applies to a single bin; several at once would have to overlap
-    const b = B()[selected];
-    if (sel.length > 1) {
-      /* Footprint is per bin and must never be bulk-assigned. Writing the primary's
-         size onto the others silently resized every bin in the selection to match it,
-         which quietly destroyed their shapes. */
-      delete t.u; delete t.v;
-      $('u').value = b.u; $('v').value = b.v;
-    } else if ((t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected)) {
-      t.u = b.u; t.v = b.v; $('u').value = b.u; $('v').value = b.v;
-    }
     /* u and v never ride the bulk assign — a footprint change has to reconcile the
        carve mask, so it goes through setFootprint. */
     const nu = t.u, nv = t.v; delete t.u; delete t.v;
+    noteSettingsEdit(sel.map((i) => B()[i]), t, nu, nv);
     for (const i of sel) Object.assign(B()[i], t, { edges: Object.assign({}, t.edges) });
     if (sel.length === 1 && nu !== undefined && (nu !== b.u || nv !== b.v))
       setFootprint(b, nu, nv);
   } else {
     Object.assign(state, t);
   }
+  /* A lid needs a lip to grip, and a lowered wall takes the lip away. Say which it is
+     rather than hiding the control, or ticking it and getting nothing looks like a bug.
+     A carved bin keeps its lip, but the lid is a rectangle: it would hang over the cells
+     cut away, so it is not made for one either, and that gets its own sentence. */
+  const lipOk = EDGES.every((k) => !t.edges || !isFinite(t.edges[k]) || t.edges[k] >= 1);
+  const target = scratch || (sel.length ? B()[selected] : null);
+  const carvedNow = !!target && isCarved(target);
+  $('lidRow').style.display = t.solid ? 'none' : '';
+  $('lidNoLip').style.display = !t.solid && !lipOk && $('lid').checked ? '' : 'none';
+  $('lidCarved').style.display = !t.solid && lipOk && carvedNow && $('lid').checked ? '' : 'none';
+  $('lidHint').style.display = !t.solid && lipOk && !carvedNow && $('lid').checked ? '' : 'none';
   // the front measurement is only worth asking for once the drawer is being drawn
   $('drawerFrontRow').style.display = state.showDrawer ? '' : 'none';
   $('drawerViewHint').style.display = state.showDrawer ? '' : 'none';
@@ -6795,8 +7275,9 @@ function drawMap() {
       svg.appendChild(el('rect', { class: 'ghostbin', x: b.x * S + 3, y: sy(b.y, b.v) + 3,
         width: b.u * S - 6, height: b.v * S - 6, rx: 5 }));
 
+  const claims = { [cur]: layerClaims(cur) };
   B().forEach((b, i) => {
-    const issues = binIssues(b, cur).filter((x) => typeof x === 'string' || !x.note);
+    const issues = binIssues(b, cur, claims).filter((x) => typeof x === 'string' || !x.note);
     const cls = 'bin' + (selAll().includes(i) ? ' sel' : '') + (issues.length ? ' clash' : '')
                       + (b.done ? ' done' : '');
     const cells = binCells(b);
@@ -7084,13 +7565,24 @@ $('splitFit').addEventListener('click', () => {
   if (!sp) return;
   pushUndo();
   const src = Object.assign({}, b);
+  /* A carved bin's mask is in its own box's coordinates, so every piece takes the part
+     of it that falls in the piece's box, rebased to that box. Copying the whole mask
+     into each piece read cells meant for the first piece in all of them — and outside
+     the first, where nothing matched, the mask was ignored and the piece came out full,
+     on top of the cell another bin held. */
+  const kept = binCells(src);
   B().splice(selected, 1);
   let oy = src.y;
   for (const vv of sp.ys) {
     let ox = src.x;
     for (const uu of sp.xs) {
-      B().push(Object.assign({}, src, { x: ox, y: oy, u: uu, v: vv,
-                                        edges: Object.assign({}, src.edges) }));
+      const rx = ox - src.x, ry = oy - src.y;
+      const cells = kept.filter(([x, y]) => x >= rx && x < rx + uu && y >= ry && y < ry + vv)
+                        .map(([x, y]) => [x - rx, y - ry]);
+      if (cells.length)                       // a piece the carve emptied is not a bin
+        B().push(Object.assign({}, src, { x: ox, y: oy, u: uu, v: vv,
+                                          cells: cells.length === uu * vv ? null : cells,
+                                          edges: Object.assign({}, src.edges) }));
       ox += uu;
     }
     oy += vv;
@@ -7165,6 +7657,44 @@ function pushOn(U, R, snap) {
   updateUndoButtons();
 }
 function pushUndo() { pushOn(uStack(), rStack(), snapshot()); }
+/* A settings edit to a bin is an undo step of its own. readControls wrote the panel
+   straight onto the selection and banked nothing, so draw a bin, change its height,
+   Undo — and the step spent was the draw, taking the bin with it.
+
+   Pushed BEFORE the change, as everything else here is, and only when the panel really
+   differs from the bin: readControls also runs on every selection and redraw, and those
+   must not file steps. A burst of edits to one field of one selection is one step —
+   typing "12" or a note a letter at a time — as long as nothing else has been banked
+   in between and the next keystroke follows within a second. */
+const SETTINGS_COALESCE_MS = 1000;
+let settingsBurst = null;
+const sameNum = (a, b) => a === b || (Number.isNaN(a) && Number.isNaN(b));
+const edgeAt = (o, k) => (o.edges && o.edges[k] !== undefined ? o.edges[k] : 1);
+// the first setting the panel would change on this bin, or '' for none
+function settingsChange(b, t, nu, nv) {
+  if (nu !== undefined && (nu !== b.u || nv !== b.v)) return 'size';
+  for (const k of ['hUnits', 'wall', 'floorT', 'divX', 'divY']) if (!sameNum(t[k], b[k])) return k;
+  for (const k of ['solid', 'divRemovable', 'lid']) if (!!t[k] !== !!b[k]) return k;
+  for (const k of ['scoop', 'label']) if (!sameNum(t[k] || 0, b[k] || 0)) return k;
+  if ((t.note || '') !== (b.note || '')) return 'note';
+  if (lidSideBits(t.lidSides) !== lidSideBits(b.lidSides)) return 'lidSides';
+  return EDGES.some((k) => !sameNum(edgeAt(t, k), edgeAt(b, k))) ? 'edges' : '';
+}
+function noteSettingsEdit(bins, t, nu, nv) {
+  let field = '';
+  for (const b of bins) if ((field = settingsChange(b, t, nu, nv))) break;
+  if (!field) return;
+  const sig = (scratch ? 'loose' : `${cur}:${selAll().join(',')}`) + ':' + field;
+  const U = uStack(), now = Date.now();
+  if (settingsBurst && settingsBurst.sig === sig && now - settingsBurst.at < SETTINGS_COALESCE_MS &&
+      U[U.length - 1] === settingsBurst.snap) {
+    settingsBurst.at = now;
+    return;
+  }
+  const snap = snapshot();
+  pushOn(U, rStack(), snap);
+  settingsBurst = { sig, at: now, snap };
+}
 /* Adding a layer while a loose bin is on screen edits the DRAWER, and the loose bin has
    its own history that captures only itself. Routing this through pushUndo would file the
    entry on the scratch stack, where undoing it restores the bin and leaves the new layer
@@ -7255,7 +7785,28 @@ function describeSplit(u, v) {
    One place decides what is wrong with a bin, so the badge on the map and the
    text in Checks can never disagree. Nothing here blocks placement — you may be
    about to fill in the thing that fixes it. */
-function binIssues(b, k) {
+/* Who claims each cell of a layer: -1, one bin's index, or an array of them when two or
+   more bins sit on the same cell. occupancyOf keeps only the last bin per cell, which is
+   right for "what is here" and blind to the case that matters for Checks — a link
+   holding two bins on one cell drew one, counted both, and reported nothing. */
+function layerClaims(k) {
+  const g = grid();
+  const cl = Array.from({ length: g.ny }, () => new Array(g.nx).fill(-1));
+  (layers[k] ? layers[k].bins : []).forEach((b, i) => {
+    for (const [dx, dy] of binCells(b)) {
+      const x = b.x + dx, y = b.y + dy;
+      if (y < 0 || y >= g.ny || x < 0 || x >= g.nx) continue;
+      const c = cl[y][x];
+      if (c === -1) cl[y][x] = i;
+      else if (Array.isArray(c)) c.push(i);
+      else cl[y][x] = [c, i];
+    }
+  });
+  return cl;
+}
+/* `claims`, when given, is layerClaims per layer index, worked out once by a caller
+   that is about to ask about every bin rather than once per bin. */
+function binIssues(b, k, claims) {
   const g = grid(), out = [];
   /* A loose bin is not in the drawer, so the questions the drawer asks — does it fit
      the grid, what holds it up, does the stack clear the lid — have no answer here,
@@ -7263,9 +7814,23 @@ function binIssues(b, k) {
      the grid is not where it lives. What still bites is the printer: the bed, the Z
      height, the wall thickness, and whether a carved shape holds together. */
   const loose = b === scratch;
-  if (!loose && (b.x + b.u > g.nx || b.y + b.v > g.ny)) {
+  if (!loose && (b.x < 0 || b.y < 0 || b.x + b.u > g.nx || b.y + b.v > g.ny)) {
     out.push('sits outside the drawer grid');
     return out;
+  }
+  if (!loose) {
+    const cl = (claims && claims[k]) || layerClaims(k), others = new Set();
+    for (const [dx, dy] of binCells(b)) {
+      const c = cl[b.y + dy][b.x + dx];
+      if (Array.isArray(c)) for (const i of c) if (layers[k].bins[i] !== b) others.add(i);
+    }
+    if (others.size) {
+      const o = layers[k].bins[[...others][0]];
+      out.push((others.size === 1
+        ? `shares cells with the ${o.u}×${o.v} bin at column ${o.x + 1} row ${o.y + 1}`
+        : `shares cells with ${others.size} other bins`) +
+        ' — two bins cannot fill the same cell, so one of them has to move');
+    }
   }
   const st = loose ? { z: 0, flat: true, solidBelow: true } : seat(b, k);
   // layer 0 sits on the baseplate, which every bin fits; the rest sit on other bins
@@ -7345,19 +7910,33 @@ function binIssues(b, k) {
   if (!loose && st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001)
     out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available`);
   if (!b.solid && b.wall < 0.8)
-    out.push(`${b.wall} mm walls are thinner than two perimeters at a 0.4 mm nozzle`);
+    /* Below one nozzle line the engine builds the thinnest wall it can rather than an
+       open shell, so the file holds more wall than the field says; say so. */
+    out.push(`${b.wall} mm walls are thinner than two perimeters at a 0.4 mm nozzle` +
+             (b.wall < WALL_MIN ? `; they are built at ${WALL_MIN} mm, a single line, since nothing thinner prints` : ''));
+  /* Past the stacking lip's base a thicker wall buys nothing at the top edge — the lip
+     already stands on it — and every tenth of a millimetre comes out of the inside on
+     both sides. Worth saying, because the inside is what the bin is for; not a fault,
+     because it prints fine. */
+  const lipBase = LIP[0][1];
+  if (!b.solid && b.wall > lipBase)
+    out.push({ note: true, t: `has ${b.wall} mm walls, thicker than the ${lipBase} mm the stacking lip stands on — ` +
+      `each side takes ${(b.wall - BIN_DEFAULTS.wall).toFixed(1)} mm more of the inside than the usual ${BIN_DEFAULTS.wall} mm` });
   return out;
 }
 
 /* ---------- checks -------------------------------------------------------- */
 function stackHeight() {
   const g = grid();
+  /* Each layer's occupancy once, not once per cell: rebuilt inside the cell loop it was
+     cells squared times layers, 4.2 s a redraw on a 100 × 100 grid of five layers. */
+  const occs = layers.map((_, L) => occupancyOf(L));
   let top = 0;
   for (let y = 0; y < g.ny; y++)
     for (let x = 0; x < g.nx; x++) {
       let h = 0;
       for (let L = 0; L < layers.length; L++) {
-        const occ = occupancyOf(L), i = occ[y][x];
+        const i = occs[L][y][x];
         if (i !== -1) h += layers[L].bins[i].hUnits * SPEC.unitH;
       }
       if (h > top) top = h;
@@ -7379,14 +7958,17 @@ function warnings() {
     }
     return out;
   }
+  if (drawerAsked.w > DRAWER_MAX || drawerAsked.d > DRAWER_MAX)
+    out.push({ err: true, t: `A ${drawerAsked.w} × ${drawerAsked.d} mm drawer is bigger than the ${DRAWER_MAX} mm a side this tool lays out, so it is drawn as ${state.drawerW} × ${state.drawerD} mm — a ${g.nx} × ${g.ny} grid. Check the drawer size; split a drawer that really is this big into parts.` });
   const tot = stackHeight();
   if (tot > g.avail + 0.001)
     out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate.` });
   else if (tot > 0)
     out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${(g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip).` });
 
+  const claims = layers.map((_, k) => layerClaims(k));
   layers.forEach((L, k) => L.bins.forEach((b) => {
-    for (const it of binIssues(b, k)) {
+    for (const it of binIssues(b, k, claims)) {
       const x = typeof it === 'string' ? { err: true, t: it } : it;
       out.push({ err: !x.note, note: x.note,
                  t: `Layer ${k + 1}, the ${b.u}×${b.v} bin at column ${b.x + 1} row ${b.y + 1}: ${x.t}.` });
@@ -7466,11 +8048,16 @@ const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
    that could not attach. binHasLip is the same test buildBin uses to decide. */
 const binHasLip = (b) => !b.solid &&
   EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
+/* A carved bin keeps its lip, but lidPart only makes a rectangle: on an L it was a full
+   125.5 × 83.5 plate over a shape with a corner missing, overhanging the cut-away cells
+   by a whole cell. Shaping the lid to the cells is a lid builder of its own, so carved
+   bins are not offered one, and the panel says why. */
+const lidFits = (b) => binHasLip(b) && !isCarved(b);
 const L_LID = (b) => lidPart(G, Object.assign({}, binCfg(b), { lidSides: b.lidSides }));
 function lidParts() {
   const m = new Map();
   for (const t of types()) {
-    if (!t.b.lid || !binHasLip(t.b)) continue;
+    if (!t.b.lid || !lidFits(t.b)) continue;
     const L = L_LID(t.b);
     const key = `${t.b.u}x${t.b.v}:${L.meta.sides.join('')}`;
     if (!m.has(key)) m.set(key, { key, b: t.b, meta: L.meta, qty: 0 });
@@ -7478,15 +8065,20 @@ function lidParts() {
   }
   return [...m.values()].sort((a, b) => b.qty - a.qty);
 }
-const lidName = (d) => `lid-${d.b.u}x${d.b.v}-${d.meta.sides.join('')}`;
+const lidName = (d) => `lid-${d.b.u}x${d.b.v}-${d.meta.sides.join('') || 'flat'}`;
 
 function dividerParts() {
   const m = new Map();
   for (const t of types()) {
-    if (!t.b.divRemovable) continue;
+    /* Plates only for a bin that has rails to hold them. buildBin leaves the rails off a
+       solid or carved bin, and off one whose floor fills it — and a floor as thick as
+       the bin is tall, which the floor field allows, made a plate of negative height:
+       an STL turned inside out. */
+    if (!t.b.divRemovable || t.b.solid || isCarved(t.b)) continue;
     for (const [axis, n] of [['y', t.b.divX || 0], ['x', t.b.divY || 0]]) {
       if (!n) continue;
       const d = B_DIV(t.b, axis);
+      if (d.meta.tall < 1) continue;
       const key = `${d.meta.span.toFixed(1)}x${d.meta.tall.toFixed(1)}x${d.meta.t}`;
       if (!m.has(key)) m.set(key, { key, axis, b: t.b, meta: d.meta, qty: 0 });
       m.get(key).qty += n * t.qty;
@@ -7539,7 +8131,11 @@ function refresh() {
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
 
-  const used = B().reduce((a, b) => a + binCells(b).length, 0);
+  /* Cells covered, not cells claimed: summing every bin's cells counted two bins on one
+     cell twice and a bin off the grid in full, which is how 500 copies of one bin read
+     "794%". Checks names the overlap; this is just how full the grid is. */
+  let used = 0;
+  for (const row of occupancy()) for (const c of row) if (c !== -1) used++;
   const total = g.nx * g.ny;
   const pct = total ? Math.round(100 * used / total) : 0;
   /* The drawer is named here because nothing else on the stage names it. Arriving from
@@ -7600,6 +8196,7 @@ function refresh() {
   drawPlan();
   updateExportTail();
   showScene();
+  pruneGeometry();
   rememberState();
 }
 
@@ -7716,7 +8313,32 @@ let lookY = 20;
 const clampDist = (d) => Math.min(Math.max(4000, fitDist * 2), Math.max(80, d));
 function initThree() {
   const canvas = $('three');
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  /* No WebGL — disabled by policy, blocklisted GPU, a remote desktop. The renderer's
+     constructor throws, and thrown here it stopped the boot: no map, no table, no export,
+     no saving, and the Start fresh button never wired. The preview is the one part that
+     needs a GPU, so it is the one part that goes; renderer stays null, which every
+     preview function already treats as "nothing to draw". */
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  } catch (err) {
+    renderer = null;
+    $('threeempty').textContent = '3D preview unavailable — this browser could not start WebGL. ' +
+      'Everything else, downloads included, still works.';
+    $('threeempty').style.display = '';
+    $('threehint').style.display = 'none';
+    canvas.setAttribute('aria-label', '3D preview unavailable: this browser could not start WebGL.');
+    /* Nothing to expand, so no Expand button. chrome.js makes it, and runs as the
+       page's last script, so during the boot there is no button yet and looking for
+       one here hid nothing; once the page has parsed, every script has run. */
+    const hideExpand = () => {
+      const expand = $('threewrap').querySelector('.previewbtn');
+      if (expand) expand.style.display = 'none';
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hideExpand);
+    else hideExpand();
+    window.addEventListener('resize', () => drawMap());
+    return;
+  }
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(38, 1, 1, 8000);
   scene.add(new THREE.AmbientLight(0xffffff, 0.62));
@@ -7854,12 +8476,15 @@ function geoOf(b) {
   return gm.three;
 }
 /* Divider and lid geometry, cached by the part rather than by the bin: two bins wanting
-   the same lid want the same buffer. Cleared wherever geoCache is, because both are
-   invalidated by the same thing — a change to the bin the parts are cut from. */
+   the same lid want the same buffer. The key is the part's full shape, and each scene
+   draw records the keys it used so showScene can dispose of the rest — the same rule as
+   pruneGeometry, for the same leak. */
 const partGeoCache = new Map();
+let partsUsed = new Set();
 function partGeoOf(key, make) {
   let g = partGeoCache.get(key);
   if (!g) { g = polysToGeo(make()); partGeoCache.set(key, g); }
+  partsUsed.add(key);
   return g;
 }
 /* The pieces that come off the printer ALONGSIDE the bin, drawn where you can see them.
@@ -7892,7 +8517,9 @@ function addLooseParts(b) {
      camera at the angle the preview opens on. */
   let z = binD / 2 + PART_GAP;
   for (const d of dividerParts()) {
-    const geo = partGeoOf('div:' + d.key, () => B_DIV(d.b, d.axis).polys);
+    // d.key rounds to 0.1 mm for grouping; the buffer wants the exact plate
+    const exact = [d.meta.span, d.meta.tall, d.meta.t].map((n) => n.toFixed(3)).join('x');
+    const geo = partGeoOf('div:' + exact, () => B_DIV(d.b, d.axis).polys);
     for (let i = 0; i < d.qty; i++) {
       const m = new THREE.Mesh(geo, partMat);
       m.position.set(0, 0, z + d.meta.tall / 2);
@@ -7913,7 +8540,9 @@ function addLooseParts(b) {
      places — which is where they land on the printed part turned over the same way.
      Flipping about x instead put a Front-only skirt over the back of the bin. */
   for (const d of lidParts()) {
-    const m = new THREE.Mesh(partGeoOf('lid:' + d.key, () => L_LID(d.b).polys), partMat);
+    // the lid's corner arcs follow the smoothness setting, which d.key leaves out
+    const m = new THREE.Mesh(partGeoOf(`lid:${d.key}-s${state.arcSegs}`, () => L_LID(d.b).polys),
+                             partMat);
     m.rotation.z = Math.PI;
     m.position.set(0, binTop + PART_GAP + d.meta.totalH, 0);
     group.add(m);
@@ -8023,8 +8652,29 @@ function syncDrawer() {
   panel(b.W, b.front, T, 0, b.floor, hd + T / 2);
 }
 
+/* One baseplate mesh, resized only when its size changes. A new BoxGeometry and
+   material on every draw was one more live geometry per refresh, never freed. */
+let plateMesh = null, plateKey = '';
+function plateOf(w, d) {
+  const h = state.plateH, key = `${w}x${h}x${d}`;
+  if (!plateMesh || key !== plateKey) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    if (plateMesh) { plateMesh.geometry.dispose(); plateMesh.geometry = geo; }
+    else plateMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x2b3947 }));
+    plateKey = key;
+  }
+  plateMesh.position.set(0, -h / 2, 0);
+  return plateMesh;
+}
 function showScene() {
   if (!renderer) return;
+  partsUsed = new Set();
+  drawScene();
+  // loose parts are only drawn in focus; anything this draw did not use is let go
+  for (const [k, g] of partGeoCache)
+    if (!partsUsed.has(k)) { g.dispose(); partGeoCache.delete(k); }
+}
+function drawScene() {
   while (group.children.length) group.remove(group.children[0]);
   const g = grid();
   const gw = g.nx * SPEC.pitch, gd = g.ny * SPEC.pitch;
@@ -8057,11 +8707,7 @@ function showScene() {
      showing you. */
   if (fBin()) {
     const b = fBin();
-    const plate1 = new THREE.Mesh(
-      new THREE.BoxGeometry(b.u * SPEC.pitch, state.plateH, b.v * SPEC.pitch),
-      new THREE.MeshLambertMaterial({ color: 0x2b3947 }));
-    plate1.position.set(0, -state.plateH / 2, 0);
-    group.add(plate1);
+    group.add(plateOf(b.u * SPEC.pitch, b.v * SPEC.pitch));
     if (!matCache[cur]) matCache[cur] = new THREE.MeshLambertMaterial({
       color: MATS[cur % MATS.length], side: THREE.DoubleSide, flatShading: true });
     /* Fading is about what is stacked ABOVE the layer being edited. Nothing is stacked
@@ -8079,10 +8725,7 @@ function showScene() {
     return;
   }
 
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(gw, state.plateH, gd),
-    new THREE.MeshLambertMaterial({ color: 0x2b3947 }));
-  plate.position.set(0, -state.plateH / 2, 0);
-  group.add(plate);
+  group.add(plateOf(gw, gd));
 
   layers.forEach((L, k) => {
     if (!matCache[k]) matCache[k] = new THREE.MeshLambertMaterial({
@@ -8241,7 +8884,7 @@ function layoutReadme() {
     L.push(`Size: ${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip`);
     if (b.divX || b.divY) L.push(`Compartments: ${(b.divX + 1) * (b.divY + 1)}` +
       (b.divRemovable ? '  (removable divider plates, printed loose)' : ''));
-    if (b.lid) L.push('Lid: yes — prints upside down, no supports.');
+    if (b.lid && lidFits(b)) L.push('Lid: yes — prints upside down, no supports.');
     L.push(`Material: about ${(gm.vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill.`);
     L.push('');
     L.push(scratch
@@ -8315,6 +8958,11 @@ function platePolysAndItems(idx) {
   }
   return objs;
 }
+/* Deflated, for the reason the baseplates page gives beside its own copy in src/ui.js:
+   JSZip stores files unless asked, and a 3MF is a ZIP of XML text, so every plate and
+   every ZIP left this page several times the size it needed to be. A copy, because the
+   two pages share no script that zips. Slicers read either. */
+const ZIP_DEFLATE = { compression: 'DEFLATE', compressionOptions: { level: 6 } };
 async function plate3mfBytes(idx) {
   const x = build3mfXML(platePolysAndItems(idx).map((o) => ({
     name: o.name, polys: transformPolys(o.polys, 0, 0, 0, o.rot), tx: o.tx, ty: o.ty, tz: o.tz, rot: 0 })));
@@ -8322,7 +8970,7 @@ async function plate3mfBytes(idx) {
   pz.file('[Content_Types].xml', x.contentTypes);
   pz.file('_rels/.rels', x.rels);
   pz.file('3D/3dmodel.model', x.model);
-  return pz.generateAsync({ type: 'uint8array' });
+  return pz.generateAsync({ type: 'uint8array', ...ZIP_DEFLATE });
 }
 const goodPlates = () =>
   printPlan ? printPlan.plates.map((p, i) => [p, i]).filter(([p]) => !p.overflow) : [];
@@ -8345,7 +8993,7 @@ async function downloadAllPlates() {
   if (good.length === 1) return downloadPlate(0);
   const zip = new JSZip();
   for (let k = 0; k < good.length; k++) zip.file(plateName(k), await plate3mfBytes(good[k][1]));
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }),
                 `drawerforge-bin-plates-x${good.length}.zip`);
 }
 async function downloadBinZip() {
@@ -8360,7 +9008,7 @@ async function downloadBinZip() {
   for (const d of lidParts())
     zip.file(lidName(d) + '.stl', G.stlBinary(L_LID(d.b).polys, 'lid'));
   zip.file('README.txt', layoutReadme());
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }),
                 `drawerforge-bins-${grid().nx}x${grid().ny}.zip`);
 }
 function saveBlobAsync(blob, name) {
@@ -8497,9 +9145,13 @@ function renderExport() {
     exGroup('Meshes');
     exRow('Every bin type, with a README', `${plural(ts.length, 'STL file')} + README.txt · ZIP`,
           'Download', downloadBinZip, { 'data-ex': 'zip' });
+    /* With every side unticked the lid is a flat plate, and "( sides) · 4.2 mm tall"
+       described a part that does not exist. */
     for (const d of lidParts())
-      exRow(`Lid ${d.b.u}×${d.b.v}${d.meta.sides.length < 4 ? ` (${d.meta.sides.join('')} sides)` : ''} × ${d.qty}`,
-            `${d.meta.totalH.toFixed(1)} mm tall, prints upside down · STL`, 'STL',
+      exRow(`Lid ${d.b.u}×${d.b.v}` + (!d.meta.sides.length ? ', flat — no skirt'
+              : d.meta.sides.length < 4 ? ` (${d.meta.sides.join('')} sides)` : '') + ` × ${d.qty}`,
+            `${d.meta.totalH.toFixed(1)} mm ` +
+              (d.meta.sides.length ? 'tall, prints upside down' : 'thick') + ' · STL', 'STL',
             () => saveBlob(G.stlBinary(L_LID(d.b).polys, 'lid'), lidName(d) + '.stl'),
             { 'data-ex': 'lid' });
     for (const d of dividerParts())
@@ -8539,13 +9191,20 @@ $('exportDlg').addEventListener('click', (e) => {
 });
 
 /* ---------- shared project descriptor -------------------------------------- */
-/* The bed rides in the link as well. It used to be carried through untouched and never
-   read, so the printer picked on the baseplates page arrived here as the 256 mm default,
-   and a bed set on this page was gone on the next reload. The keys are the ones the
-   baseplates page already writes, so the printer now crosses in both directions, like
-   the drawer. */
+/* The bed, infill and gap were missing, so a reload put them back to 256 mm, 15 % and
+   3 mm, and the bed set on the baseplates page — which sends bw, bd and bh — never
+   arrived. They use that page's own names, so the two tools share one bed and one
+   infill whichever way a link goes; the gap is ours, and baseplates carries it back. */
 const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH',
-               dfh: 'drawerFrontH', bw: 'bedW', bd: 'bedD', bh: 'bedH' };
+               dfh: 'drawerFrontH', bw: 'bedW', bd: 'bedD', bh: 'bedH', if: 'infill',
+               bgap: 'gap' };
+/* What each may be when it arrives in a link: never negative, and never past the
+   largest bed the baseplates page accepts. The drawer is held to the same 2000 mm by
+   readControls, which says so in Checks — a 100 m drawer froze this page laying out its
+   grid. A drawer or bed of no size is not one ("1 × 1 grid in a -500 × -500 mm drawer"
+   is what accepting it said), so that keeps the default. */
+const KEY_MAX = { if: 100 };
+const NEEDS_SIZE = new Set(['w', 'd', 'dh', 'bw', 'bd', 'bh']);
 /* Keys that describe how the design is being LOOKED at rather than what it is. They
    travel in a shared link, because a link that does not reproduce what the sender saw
    is not much of a share — but they are struck out of the link the README carries.
@@ -8579,7 +9238,50 @@ function descriptor() {
   if (notes.some((L) => L.some((n) => n))) o.bnotes = JSON.stringify(notes);
   return o;
 }
-const encodeDesc = (o) => Object.entries(o).map(([k, x]) => `${k}=${encodeURIComponent(x)}`).join('&');
+/* Names are encoded as well as values. Keys from the other tool ride through here as
+   they came, and the baseplates page decodes them, so one written raw ("%=1") made
+   every later visit there throw URIError; a raw line break would have reached the
+   README. */
+const encodeDesc = (o) => Object.entries(o)
+  .map(([k, x]) => `${encodeURIComponent(k)}=${encodeURIComponent(x)}`).join('&');
+/* packBin no longer throws, but if packing ever fails again it must cost that save and
+   no more: an empty string, which the save skips, rather than an exception through the
+   share, hand-over and README links that all build from here. An older string standing
+   in was worse than none, since a layout that failed from the start stood in for by the
+   boot's defaults saved those over it. `strip` names keys to leave out, for the README's
+   link. */
+function descString(strip) {
+  try {
+    const o = descriptor();
+    for (const k of strip || []) delete o[k];
+    return encodeDesc(o);
+  } catch (err) { return ''; }
+}
+/* One bad pair costs that pair. A malformed escape (%E0%A4%A) used to throw out of the
+   whole load, which took the page with it. */
+function parseHash(h) {
+  const q = Object.create(null);
+  for (const kv of h.split('&')) {
+    const i = kv.indexOf('=');
+    if (i < 1) continue;
+    try { q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1)); }
+    catch (err) { /* not valid percent-encoding: drop it, keep the rest */ }
+  }
+  return q;
+}
+/* A note from a link is one short line of text, as the field would have made it. Notes
+   reach the README, which is plain text read at the printer: a number in their place
+   threw ".trim is not a function" on every refresh, and a line break let a link write
+   lines of its own into the file. Cut to the 28 characters the field takes, counted the
+   way the field and a design file count them, and never halfway through an emoji. */
+function cleanNote(n) {
+  let out = '';
+  for (const ch of String(n).replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ')) {
+    if (out.length + ch.length > 28) break;
+    out += ch;
+  }
+  return out;
+}
 /* Keep the address bar holding the current design, so a reload does not throw it away.
  *
  * The tool has no accounts and no server, which is the point of it — but it also meant
@@ -8630,10 +9332,103 @@ const saveLocal = (h) => {
                    an exception that stops the page working */ }
 };
 const readLocal = () => { try { return localStorage.getItem(SAVE_KEY) || ''; } catch (err) { return ''; } };
+/* Only a fragment that carries settings is a layout. The page has fragments of its own —
+   the skip link's #stage — and one arriving as if it were a shared link loaded nothing,
+   then saved the empty default over the drawer this browser had kept. */
+const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
   location.href = location.origin + location.pathname;   // drop the hash and reload clean
 }
+/* Wired here, before the boot below reads any link: a link that throws there must not
+   also take away the button that gets you out of it, or stop the next link working. */
+$('startFresh').addEventListener('click', startFresh);
+/* A hash this page did not write means someone navigated to a link — pasted a share URL
+   into the address bar, or picked a bookmark — and changing only the fragment is a
+   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
+   Before local saving that was merely confusing; now it means a shared layout loses to
+   whatever this browser had stored, which is the one case that must never happen.
+   Reloading applies the link. replaceState does not fire this event, so the saves this
+   page makes every few seconds cannot trigger it. A fragment with no settings in it is
+   an anchor, not a link to a drawer, and reloading for one threw the drawer away. */
+addEventListener('hashchange', () => {
+  if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
+});
+
+/* More slots beside the save, so a layout is set aside rather than lost.
+ *
+ * PREV_KEY: following a link overwrote the save within 400 ms with no way back, so
+ * whatever is about to replace it — a link, or the defaults standing in for a layout
+ * that would not load — copies it here first, and the page offers to put it back.
+ *
+ * LINKED_KEY: the save a link wrote, while nobody has changed it. That save is the
+ * sender's drawer, not yours, so a second link replacing it leaves PREV_KEY holding
+ * yours; setting it aside instead lost your layout to the first link you had opened.
+ * Changed, it is kept while the page still uses any of the link's drawer, bed and infill.
+ *
+ * PREV_LINKED_KEY: the LINKED_KEY of the layout in PREV_KEY. Whether a layout is a link's
+ * travels with it, so a link put back is still the link's and your own put back is not;
+ * left behind, it went to whatever was put back in its place.
+ *
+ * LOADING_KEY: names the layout being loaded, and is cleared once the page has drawn
+ * it. Still there at the next visit, for the same layout, means the last attempt hung or
+ * crashed the tab; loading it again would only do that again, on every visit. */
+const PREV_KEY = SAVE_KEY + ':prev', LINKED_KEY = SAVE_KEY + ':linked',
+  PREV_LINKED_KEY = PREV_KEY + ':linked', LOADING_KEY = SAVE_KEY + ':loading';
+const readKey = (k) => { try { return localStorage.getItem(k) || ''; } catch (err) { return ''; } };
+const writeKey = (k, v) => {
+  try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); }
+  catch (err) { /* private mode: the guard and the backup go, the page does not */ }
+};
+let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* What an untouched page saves, and what this one held when the boot finished — null
+   from the first change on. Until that change a stalled page saves nothing: saving the
+   defaults it stands in with put them over the layout it declined, and one more reload
+   lost that layout for good. */
+let pristine = '', bootDesc = null;
+/* Someone's link this page holds, or ''. Each of its drawer, bed and infill values the
+   page still uses is the link's, not yours, whatever else has been changed: so taking
+   the design to the other page does not replace yours there without setting it aside.
+   Key by key: compared as one group, changing only the infill made the drawer yours. */
+let heldLink = '';
+// the drawer, bed and infill settings in which a design still has a link's values
+function linkKeys(h, link) {
+  if (!link) return [];
+  const p = parseHash(h), q = parseHash(link);
+  return [...SHARED_KEYS].filter((k) => k in q && p[k] === q[k]);
+}
+function leaveFor(url) {
+  hashReady = false; clearTimeout(hashSaveT);   // no save of this page's may land after
+  location.href = url;
+}
+/* Swapped rather than copied over: what is here now goes aside in its place, so putting
+   a layout back is never the step that loses one. */
+function putBack() {
+  const prev = readKey(PREV_KEY);
+  if (!prev) return;
+  const prevLinked = readKey(PREV_LINKED_KEY);
+  const cur = descString();
+  if (cur && cur !== pristine && !(stalled && cur === bootDesc)) {
+    writeKey(PREV_KEY, cur);
+    writeKey(PREV_LINKED_KEY, heldLink);
+  }
+  saveLocal(prev);
+  writeKey(LINKED_KEY, prevLinked);
+  leaveFor(location.href.split('#')[0]);   // a bare visit restores it, and says so
+}
+function tryAnyway() {
+  writeKey(LOADING_KEY, '');
+  leaveFor(location.href.split('#')[0] + '#' + stalled);
+  location.reload();   // a change of fragment alone reloads nothing
+}
+function showSetAside(msg, canPutBack, canTry) {
+  $('setAsideMsg').textContent = msg;
+  $('putBack').style.display = canPutBack ? '' : 'none';
+  $('tryAnyway').style.display = canTry ? '' : 'none';
+  $('setAside').style.display = '';
+}
+$('putBack').addEventListener('click', putBack);
+$('tryAnyway').addEventListener('click', tryAnyway);
 
 function rememberState() {
   if (!hashReady) return;
@@ -8644,7 +9439,18 @@ function rememberState() {
 function saveNow() {
   clearTimeout(hashSaveT);
   removeEventListener('beforeunload', dropSave);
-  const h = encodeDesc(descriptor());
+  const h = descString();
+  if (!h) return;
+  /* The first change is the moment the banner stops being true: "put my layout back"
+     would now also throw away the edit, so it goes. */
+  if (bootDesc !== null) {
+    if (sameDesign(h, bootDesc)) { if (stalled) return; }
+    else {
+      bootDesc = null; $('setAside').style.display = 'none';
+      // what a stalled page goes on from is its defaults, not the link it declined
+      if (stalled) writeKey(LINKED_KEY, '');
+    }
+  }
   try { history.replaceState(null, '', '#' + h); }
   catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                    worth an exception that stops the rest of the page working */ }
@@ -8665,26 +9471,24 @@ function dropSave() {
   removeEventListener('beforeunload', dropSave);
 }
 function shareLink() {
-  return location.origin + location.pathname + '#' + encodeDesc(descriptor());
+  return location.origin + location.pathname + '#' + descString();
 }
 // the same layout with the view stripped, so the README's bytes depend on the design
 function designLink() {
-  const o = descriptor();
-  for (const k of VIEW_KEYS) delete o[k];
-  return location.origin + location.pathname + '#' + encodeDesc(o);
+  return location.origin + location.pathname + '#' + descString(VIEW_KEYS);
 }
 function loadFromHash(src) {
   const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
   if (!h) return;
-  const q = {};
-  for (const kv of h.split('&')) {
-    const i = kv.indexOf('=');
-    if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1));
-  }
+  const q = parseHash(h);
   for (const [k, val] of Object.entries(q)) {
     if (k === 'v') continue;
     if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
-    if (k === 'bseg') { $('arcSegs').value = val; continue; }
+    // a menu takes only a value it offers; anything else leaves it blank and reads NaN
+    if (k === 'bseg') {
+      if ([...$('arcSegs').options].some((o) => o.value === val)) $('arcSegs').value = val;
+      continue;
+    }
     if (k === 'bdt') { $('divT').value = val; continue; }
     if (k === 'bdc') { $('divClr').value = val; continue; }
     // a checkbox, so it cannot ride the generic .value path below
@@ -8693,12 +9497,18 @@ function loadFromHash(src) {
     if (k === 'bf') { pendingFocus = val; continue; }
     if (k === 'bs') { pendingScratch = val; continue; }
     if (k === 'pr') continue;             // applied below, once the bed is in
-    const id = KEYS[k];
+    // not Object.hasOwn, which Safari only has from 15.4
+    const id = Object.prototype.hasOwnProperty.call(KEYS, k) ? KEYS[k] : '';
     if (!id) { hashExtras[k] = val; continue; }
-    /* The link is millimetres, always; a drawer length is written into its field in
-       whatever unit the field is showing. */
-    if (LENGTH_IDS.includes(id) && val !== '' && isFinite(+val)) FIELDS.setLength($(id), +val, unit);
-    else if ($(id)) $(id).value = val;
+    const x = Number(val);
+    if (val === '' || !isFinite(x) || x < 0 || (x === 0 && NEEDS_SIZE.has(k))) continue;
+    /* Not the drawer: readControls holds it to the field's limit and Checks says so, as
+       for a typed one. Cut down here, a 5 m drawer from a link was drawn 2 m wide with
+       nothing said. The link is millimetres, always; a drawer length is written into its
+       field in whatever unit the field is showing. */
+    const max = k === 'w' || k === 'd' ? Infinity : KEY_MAX[k] || 2000;
+    if (LENGTH_IDS.includes(id)) FIELDS.setLength($(id), Math.min(x, max), unit);
+    else if ($(id)) $(id).value = String(Math.min(x, max));
   }
   // the list follows the bed: a link with a 180 mm bed must not reopen naming a 256 one
   $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
@@ -8722,19 +9532,27 @@ const drawers = DRAWERS.create({
     importBtn: $('drawersImportBtn'), importInput: $('drawersImport'),
   },
 });
-/* Each hand-over is told to the saved drawer first, so the page at the other end
-   recognises the design it arrives with as that drawer — see attach in drawers.js. And a
-   change still waiting to be saved is saved now, not dropped as the page goes: Back
+/* Each hand-over leaves one note in this tab for the page at the other end to read once
+   (handoff in drawers.js, which also tells the saved drawer, if this is one, so that page
+   recognises the design it arrives with as that drawer — see attach there). A design
+   arriving from the other tool may carry a drawer or bed changed there, and that is the
+   same layout moving on, not a link replacing it. The guide passes the address through
+   untouched, so going by way of it is the same.
+   The note names any drawer, bed and infill settings still at someone's link's values:
+   those are not yours to carry over, and the other page compares them as a link's, so
+   they do not replace yours there without setting it aside. Left out of the comparison,
+   they did, after any edit at all.
+   A change still waiting to be saved is saved now, not dropped as the page goes: Back
    comes to this page's address, and that and the drawer must both have the change. */
 function leave(href) {
   if (hashReady) saveNow();
-  drawers.handoff(href.slice(href.indexOf('#') + 1));
+  drawers.handoff(href.slice(href.indexOf('#') + 1), linkKeys(descString(), heldLink));
   location.href = href;
 }
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  leave('../guide/#' + encodeDesc(descriptor()));
+  leave('../guide/#' + descString());
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
@@ -8743,14 +9561,18 @@ $('shareBtn').addEventListener('click', () => {
     () => prompt('Copy this link:', link));
 });
 // the whole bins descriptor travels; baseplates re-emits what it doesn't own
-function platesHref() { return '../#' + encodeDesc(descriptor()); }
+function platesHref() { return '../#' + descString(); }
 for (const id of ['toPlates', 'navPlates'])
   $(id).addEventListener('click', (e) => { e.preventDefault(); leave(platesHref()); });
 
 /* ---------- boot ---------------------------------------------------------- */
 let timer = null;
+/* No cache clearing here any more: the geometry caches are keyed by everything a build
+   reads, so an edit that changes a bin misses the cache by itself, and refresh() lets go
+   of the builds nothing uses. Clearing on every input rebuilt every type in the drawer
+   because a note was typed, and leaked the old buffers each time. */
 const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
-  readControls(); geoCache.clear(); partGeoCache.clear(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
+  readControls(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
@@ -8758,20 +9580,21 @@ for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', '
                   'divRemovable', 'divT', 'divClr',
                   'lid', 'lidF', 'lidB', 'lidL', 'lidR'])
   $(id).addEventListener('input', schedule);
+/* The bin's number fields too: leaving one is when a value typed past its limit is put
+   back to the one in use, and leaving fires change, not input. */
 for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable',
-                  'lid', 'lidF', 'lidB', 'lidL', 'lidR'])
+                  'lid', 'lidF', 'lidB', 'lidL', 'lidR', ...BIN_FIELDS])
   $(id).addEventListener('change', schedule);
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
   $('solid').checked = false;
-  readControls(); geoCache.clear(); partGeoCache.clear(); drawMap(); refresh();
+  readControls(); drawMap(); refresh();
 });
 $('solid').addEventListener('change', schedule);
 $('arcSegs').addEventListener('change', schedule);
-/* The drawer shell deliberately does not go through schedule(). That path clears the
-   geometry cache and rebuilds every bin mesh, which is the right thing for anything
-   that changes what gets printed and pure waste for something that changes only what
-   is drawn around it. */
+/* The drawer shell deliberately does not go through schedule(). That path redraws the
+   map, the checks and the plan, which is the right thing for anything that changes what
+   gets printed and pure waste for something that changes only what is drawn around it. */
 const drawerViewChanged = () => { readControls(); showScene(); };
 for (const id of ['showDrawer', 'drawerFrontH']) {
   $(id).addEventListener('input', drawerViewChanged);
@@ -8861,23 +9684,100 @@ if (FIELDS.savedUnit() !== unit) {
   for (const id of LENGTH_IDS) $(id).value = $(id).defaultValue;
   applyUnit(FIELDS.savedUnit());
 }
+/* Whether two saves hold the same bins, compared setting by setting on what this page
+   owns. Compared as strings, the baseplates page handing the drawer back — its keys in
+   its own order, with its own extras — was a link that had replaced your layout, on
+   every trip there and back. A hand-over also leaves out the drawer and the bed, the
+   settings the two pages share: changing them on the other page is not a different
+   layout, unless the other page still had them from someone's link. A link from someone
+   keeps them, since a drawer of another size is exactly what one brings. The view keys
+   are left out always: how the design is looked at is not what it is. */
+// the drawer, the bed and its printer, and the infill: drawers.js keeps the same list
+const SHARED_KEYS = new Set([...DRAWERS.SHARED].filter((k) => k !== 'v'));
+const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bseg', 'bdt', 'bdc', 'bnotes']
+  .filter((k) => k !== 'ph' && !VIEW_KEYS.includes(k));
+function sameDesign(a, b, skip = []) {
+  const p = parseHash(a), q = parseHash(b);
+  return OWN_KEYS.every((k) => skip.includes(k) || p[k] === q[k]);
+}
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
-let arrivedWith = '';                     // the design string this page was opened with
-if (incomingHash.length > 2) { loadFromHash(); arrivedWith = incomingHash; }
-else {
+let linkedNow = false;   // this page holds a link's layout, not yet changed by anyone
+let linkNew = false;     // ...one that arrived on this visit, so is recorded afresh
+let linkKept = '';       // the link this page last opened, unless a hand-over came since
+let notLinked = [];      // settings a link arrived with that were yours on the other page
+let arrivedWith = '';    // the design string this page was opened with
+{
+  const fromLink = isLayoutHash(incomingHash);
   const saved = readLocal();
-  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; arrivedWith = saved; }
+  const src = fromLink ? incomingHash : saved.length > 2 ? saved : '';
+  /* What this page saves when nobody has touched it. A save that is only that is no
+     one's work, so replacing it sets nothing aside — or every link would offer the
+     defaults back. */
+  readControls();
+  pristine = descString();
+  stalled = src && readKey(LOADING_KEY) === src ? src : '';
+  /* The tab's note of what this page arrives with, if it is this design: the other tool
+     or the guide handing it over, or a saved drawer opened. Read every time, so a stale
+     note never lingers. */
+  const note = drawers.arrival(incomingHash);
+  const handOver = fromLink ? note : null;
+  // a saved drawer opened from the list is yours, whatever it replaces
+  const opened = !!handOver && handOver.open;
+  // your own drawer, bed and infill settings, as the other page had them
+  const yours = handOver ? [...SHARED_KEYS].filter((k) => !handOver.link.includes(k)) : [];
+  // the other page had nothing of anyone's link: your own layout come back
+  const handedOver = !!handOver && (opened || !handOver.link.length);
+  notLinked = handOver ? yours : [];
+  const replaces = fromLink && !opened &&
+    (saved.length <= 2 || !sameDesign(saved, src, yours));
+  const linked = readKey(LINKED_KEY);
+  linkKept = handedOver ? '' : linked;
+  /* Compared on what the record holds: one made without the settings that came with
+     the link as yours does not count those, or your own drawer made it "changed", and a
+     second link set it aside over the layout the first had. */
+  const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked,
+    [...SHARED_KEYS].filter((k) => !(k in parseHash(linked))));
+  /* Set aside whatever is about to be replaced: by a different layout, or by the defaults
+     standing in for one that would not load. Not a link's own layout, untouched: what that
+     link replaced is already set aside, and it is the one you would want back. */
+  const aside = saved.length > 2 && saved !== pristine && !savedLinked &&
+    (replaces || !!stalled);
+  if (aside) {
+    writeKey(PREV_KEY, saved);
+    writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
+  }
+  const canPutBack = replaces && (aside || (savedLinked && !!readKey(PREV_KEY)));
+  if (stalled) {
+    showSetAside('This layout did not finish loading last time, so the page has started ' +
+      'from its defaults rather than try it again.', canPutBack, true);
+  } else if (src) {
+    writeKey(LOADING_KEY, src);
+    loadFromHash(src);
+    if (!fromLink) $('restored').style.display = '';
+    else if (canPutBack) showSetAside('This link replaced the layout you had here.', true, false);
+    /* A hand-over is your own layout come back from the other page, never someone's
+       link, even onto an empty save; and one that moved the drawer or bed on has been
+       changed, by you, there. One still holding a link's settings is that link's. */
+    linkedNow = handedOver ? false
+      : fromLink ? replaces || (savedLinked && sameDesign(saved, src))
+      : savedLinked;
+    linkNew = fromLink && replaces && !handedOver;
+    arrivedWith = src;
+  }
 }
 /* Applied after the layout so indices line up, and only in the shape descriptor writes:
-   a list per layer of notes, each a string no longer than the note field takes. Anything
-   else is left out whole. A number where a note should be stopped the map's labels
-   drawing, and a mangled link should not stop the tool loading. */
+   a list per layer of notes. A note that is not a string is left out, and one that is
+   is cleaned to what the field could have made. A number where a note should be
+   stopped the map's labels drawing, and a mangled link should not stop the tool
+   loading. */
 if (pendingNotes) {
-  const notes = DRAWERS.binNotes(pendingNotes);
-  if (notes) notes.forEach((ns, k) =>
-    ns.forEach((n, i) => { if (layers[k] && layers[k].bins[i]) layers[k].bins[i].note = n; }));
+  let all = null;
+  try { all = JSON.parse(pendingNotes); } catch (err) { /* left out whole */ }
+  (Array.isArray(all) ? all : []).forEach((ns, k) => (Array.isArray(ns) ? ns : []).forEach((n, i) => {
+    if (typeof n === 'string' && layers[k] && layers[k].bins[i]) layers[k].bins[i].note = cleanNote(n);
+  }));
 }
 readControls();
 hashReady = true;                         // loadFromHash has had its say; ours may start
@@ -8912,19 +9812,42 @@ if (pendingScratch) {
     enterFocus();
   }
 }
+bootDesc = descString();
+/* Laid out and drawn, so the marker has done its job. A stalled layout keeps its marker:
+   reloading the same link must be declined again, not tried again. */
+if (!stalled) {
+  writeKey(LOADING_KEY, '');
+  /* A link that arrived on this visit is recorded as it is, less any drawer, bed or infill
+     settings that came with it as yours: kept, they were the link's from then on, and a
+     later trip that changed them on the other page was a link replacing your layout
+     there. The same link reloaded or reopened keeps its record, which writing it afresh
+     filled back in. A changed one is kept while the page still uses any of its values,
+     so a reload does not turn those into yours. */
+  const keep = !linkedNow ? (linkKeys(bootDesc, linkKept).length ? linkKept : '')
+    : !linkNew ? linkKept
+    : bootDesc.split('&').filter((kv) =>
+      !notLinked.includes(kv.slice(0, kv.indexOf('=')))).join('&');
+  writeKey(LINKED_KEY, keep);
+  heldLink = keep;
+}
 // after focus is restored too, so the design it compares against is the one on screen
 drawers.attach(arrivedWith);
 
 /* Applied straight to the selection rather than through readControls, for the reason
    given where doneRow is hidden: readControls also writes `state`, the template for the
    next bin you draw. */
+/* The snapshot goes on BEFORE the change, like every other edit. Taken after, it was
+   the marked state itself, so the first Undo restored what was already there and
+   appeared to do nothing. */
 $('done').addEventListener('change', () => {
+  pushUndo();
   for (const i of selAll()) B()[i].done = $('done').checked;
-  pushUndo(); drawMap(); refresh();
+  drawMap(); refresh();
 });
 const markAll = (v) => () => {
+  pushUndo();
   for (const L of layers) for (const b of L.bins) b.done = v;
-  pushUndo(); drawMap(); refresh();
+  drawMap(); refresh();
 };
 $('markAllDone').addEventListener('click', markAll(true));
 $('markNoneDone').addEventListener('click', markAll(false));
@@ -8999,9 +9922,13 @@ function openMenu(clientX, clientY, layerIdx, idx) {
   const sep = document.createElement('div'); sep.className = 'sep'; m.appendChild(sep);
   const targets = layers.map((_, k) => k).filter((k) => k !== layerIdx);
   if (!targets.length) m.appendChild(menuItem('Move to layer\u2026', null, { disabled: true }));
+  /* Cell against cell, not box against box: an L and a bin sitting in its notch have
+     overlapping boxes and no cell in common, and the box test called that layer
+     occupied. */
+  const mine = new Set(binCells(b).map(([dx, dy]) => (b.x + dx) + ',' + (b.y + dy)));
   for (const k of targets) {
-    const clash = layers[k].bins.some((o) => !(b.x + b.u <= o.x || o.x + o.u <= b.x ||
-                                               b.y + b.v <= o.y || o.y + o.v <= b.y));
+    const clash = layers[k].bins.some((o) =>
+      binCells(o).some(([dx, dy]) => mine.has((o.x + dx) + ',' + (o.y + dy))));
     m.appendChild(menuItem(`Move to layer ${k + 1}${clash ? ' (occupied)' : ''}`, () => {
       pushUndo();
       const [moved] = layers[layerIdx].bins.splice(idx, 1);
@@ -9051,17 +9978,6 @@ addEventListener('pointerdown', (e) => { if (!$('ctxmenu').contains(e.target)) c
 addEventListener('blur', closeMenu);
 addEventListener('resize', closeMenu);
 
-if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);
-
-/* A hash this page did not write means someone navigated to a link — pasted a share URL
-   into the address bar, or picked a bookmark — and changing only the fragment is a
-   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
-   Before local saving that was merely confusing; now it means a shared layout loses to
-   whatever this browser had stored, which is the one case that must never happen.
-   Reloading applies the link. replaceState does not fire this event, so the saves this
-   page makes every few seconds cannot trigger it. */
-addEventListener('hashchange', () => location.reload());
-
 </script>
 <div id="tip"></div>
 <!-- The dismiss control is a sibling of the link, not a child of it: a <button> inside
@@ -9090,11 +10006,27 @@ addEventListener('hashchange', () => location.reload());
       return h && !/^(https?:|mailto:|#)/.test(h);
     });
   }
+  /* The link's own anchor gives way to the layout: an address holds one fragment, and
+     "../#heights" with the layout added was "#heights#w=…", which the tools read as a
+     layout missing its drawer. */
   for (const a of links)
     a.addEventListener('click', function (e) {
       if (!location.hash || location.hash.length < 3) return;
       e.preventDefault();
-      location.href = a.getAttribute('href') + location.hash;
+      location.href = a.getAttribute('href').split('#')[0] + location.hash;
+    });
+
+  /* Skip links move focus and leave the address alone. Followed the ordinary way, one
+     put #stage in the address bar where the tools keep the layout, and a hash change
+     reloads both tools — so the first thing Tab reaches wiped the drawer on screen and
+     then the save behind it. The target takes focus (tabindex="-1"), and focusing it
+     scrolls it into view, which is all the jump was for. */
+  for (const s of document.querySelectorAll('a.skip'))
+    s.addEventListener('click', function (e) {
+      var t = document.getElementById((s.getAttribute('href') || '').slice(1));
+      if (!t) return;
+      e.preventDefault();
+      t.focus();
     });
 
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"

@@ -161,3 +161,70 @@ test('a shared link beats the layout this browser saved', async ({ page }) => {
   expect(await page.inputValue('#drawerW')).toBe('333');
   await expect(page.locator('#restored')).toBeHidden();
 });
+
+/* The skip link is the first thing Tab reaches, so it is one keypress from a keyboard
+   user's very first action. Followed the ordinary way it put #stage in the address bar,
+   and a hash change reloads both tools — which then read "stage" as a shared link,
+   found no drawer in it, and saved the empty default over the work. Bins lost every
+   bin; baseplates went back to 306 × 380. Nothing on screen said so, and a bare visit
+   afterwards restored the empty save. */
+const backAgain = async (page) => {
+  await page.waitForTimeout(1500);                  // long enough for a reload to land
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+};
+
+test('the skip link on the bins page keeps the bins', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await H.dragCells(page, [3, 3], [3, 3]);
+  await settle(page);
+  expect((await H.bins(page)).length).toBe(2);
+
+  await page.focus('a.skip');
+  await page.keyboard.press('Enter');
+  await backAgain(page);
+  expect((await H.bins(page)).length).toBe(2);
+  // it still does its job: focus lands on the stage it skips to
+  expect(await page.evaluate(() => document.activeElement.id)).toBe('stage');
+  expect(await page.evaluate(() => location.hash)).not.toBe('#stage');
+
+  await page.goto(page.url().split('#')[0]);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect((await H.bins(page)).length).toBe(2);
+});
+
+test('the skip link on the baseplates page keeps the drawer', async ({ page }) => {
+  await H.openPlates(page);
+  await H.setField(page, 'drawerW', '512');
+  await settle(page);
+
+  await page.focus('a.skip');
+  await page.keyboard.press('Enter');
+  await backAgain(page);
+  expect(await page.inputValue('#drawerW')).toBe('512');
+  expect(await page.evaluate(() => document.activeElement.id)).toBe('stage');
+
+  await page.goto(page.url().split('#')[0]);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await page.inputValue('#drawerW')).toBe('512');
+});
+
+/* The same failure by another road: an outside link, a bookmark or a typed address
+   ending in a fragment that carries no settings. It is not a layout, so it must not
+   beat the one this browser saved. */
+test('an address with no settings in it does not replace the saved layout', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+
+  const bare = page.url().split('#')[0];
+  await page.goto('about:blank');           // a fresh arrival, not a same-page jump
+  await page.goto(bare + '#stage');
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect((await H.bins(page)).length).toBe(1);
+  await expect(page.locator('#restored')).toBeVisible();
+});

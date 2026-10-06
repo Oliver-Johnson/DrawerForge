@@ -54,30 +54,106 @@ const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFron
  * it and puts "306" out of reach behind "30", so state gets the clamp and the field
  * keeps what you wrote with the reason underneath it. `min` and `max` go on the markup
  * as well, so the browser's own validity — which reported `valid` for -50 — agrees. */
+/* Every other field that reaches the geometry is here too, because each of them built a
+   broken file while Download stayed on: a blank magnet depth read as 0 and cut a pocket
+   whose roof was the plate's floor; a rim cutoff of 0 left a rim of no width; a margin
+   of -100 laid a 378 mm grid into a 306 mm drawer; 1e308 anywhere reached the mesh as
+   Infinity. The numbers themselves come from core.js PLATE_RANGES and mountLimits,
+   which say why each one is where it is; this adds the words.
+ *
+ * `max` may be a function, for a range that depends on the rest of the design — a
+ * margin cannot exceed the drawer, a magnet pocket has to fit the cell the pitch makes.
+ * `when` says whether the field is in play: magnet sizes are not checked with magnets
+ * off, nor margins outside Custom, because a complaint about a field you cannot see is
+ * one you cannot act on. `why` finishes the too-big message where "check the figure is
+ * in millimetres" would be the wrong advice, and `off` names the switch that drops a cut
+ * the pitch has no room for. */
+const RANGES = PLATE_RANGES;
+const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
+const mount = () => mountLimits(state);
+// "an 18 mm pitch", "an 80 mm pitch": the article goes by how the number is said
+const atPitch = () => `at ${/^(8|1[18](\.|$))/.test(String(state.pitch)) ? 'an' : 'a'} ` +
+  `${state.pitch} mm pitch`;
+const mountWhy = (opens) => `${atPitch()} — mounting holes sit ` +
+  `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
+  (state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
+    : opens ? 'a cut open to the socket has to stay on the socket floor'
+    : 'a pocket under the floor has to stay inside its cell');
+const bossDepth = () => state.baseMode === 'bosses'
+  ? 'with corner pockets — a boss is 2.6 mm tall, while the solid floor grows to suit' : '';
 const LIMITS = {
   drawerW: { min: 1, max: 2000, label: 'Drawer width' },
   drawerD: { min: 1, max: 2000, label: 'Drawer depth' },
   bedW: { min: 20, max: 2000, label: 'Bed width' },
   bedD: { min: 20, max: 2000, label: 'Bed depth' },
   bedH: { min: 20, max: 2000, label: 'Bed height' },
-  // pitch divides into the drawer to get the cell count, so a zero here is not a bad
-  // plate, it is an infinite one — Math.floor(x / 0) is Infinity and the grid loops
-  // never come back
-  pitch: { min: 5, max: 200, label: 'Grid pitch' },
+  /* pitch divides into the drawer to get the cell count, so a zero here is not a bad
+     plate, it is an infinite one — Math.floor(x / 0) is Infinity and the grid loops
+     never come back. The floor is higher than that now: below it the joints leak. */
+  pitch: { ...RANGES.pitch, label: 'Grid pitch',
+    tooSmall: 'below that the sockets and joints no longer fit their cells, and the plate comes out with holes in it' },
+  mLeft: { min: 0, max: () => state.drawerW, label: 'Left margin', when: customMargins,
+    why: () => '— the drawer is only that wide' },
+  mRight: { min: 0, max: () => state.drawerW, label: 'Right margin', when: customMargins,
+    why: () => '— the drawer is only that wide' },
+  mFront: { min: 0, max: () => state.drawerD, label: 'Front margin', when: customMargins,
+    why: () => '— the drawer is only that deep' },
+  mBack: { min: 0, max: () => state.drawerD, label: 'Back margin', when: customMargins,
+    why: () => '— the drawer is only that deep' },
+  bottomPad: { ...RANGES.bottomPad, label: 'Extra floor' },
+  topCutoff: { ...RANGES.topCutoff, label: 'Rim cutoff',
+    tooSmall: 'at 0 the rim between sockets is a face with no width, and the plate comes out open',
+    why: () => '— past that a spec bin rides on the rim instead of seating in its socket' },
+  magnetD: { ...RANGES.magnetD, max: () => mount().magnetD, label: 'Magnet Ø', when: () => state.magnets,
+    why: () => mountWhy(state.magnetSide === 'top'), off: 'magnet pockets' },
+  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mount().depth), label: 'Magnet depth',
+    when: () => state.magnets, why: bossDepth },
+  screwHoleD: { ...RANGES.screwHoleD, max: () => mount().screwHoleD, label: 'Screw hole Ø',
+    when: () => state.screws, why: () => mountWhy(true), off: 'screw holes' },
+  screwHeadD: { ...RANGES.screwHeadD, max: () => mount().screwHeadD, label: 'Screw head Ø',
+    when: () => state.screws, why: () => mountWhy(false), off: 'screw holes' },
+  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mount().depth),
+    label: 'Screw head depth', when: () => state.screws, why: bossDepth },
+  // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
+  connClr: { min: RANGES.connClr.min, max: () => connClrCeiling(state).max, label: 'Fit clearance',
+    when: () => state.connector !== 'none', why: () => clrWhy(connClrCeiling(state).by) },
 };
+/* What sets the clearance's ceiling, in words: core.js connClrCeiling decides it and says
+   which reason applies. A ceiling that moves with the pitch names the pitch, as the mount
+   sizes do, because that is the number to change; 'slip' is the plain 1 mm and keeps the
+   millimetres advice. */
+const CLR_JOINT = { puzzle: 'puzzle tab', bowtie: 'bowtie key', puzzlekey: 'puzzle key' };
+const clrWhy = (by) => ({
+  dovetail: '— any looser and a dovetail pocket breaks through into the socket beside it',
+  snaptop: '— any looser and the housing of a snap clip dropped in from above runs up to ' +
+    'the seam and on into the next piece',
+  pitch: `${atPitch()} — on cells under ${RANGES.connClr.smallPitch} mm a ` +
+    `looser ${CLR_JOINT[state.connector]} opens holes in the plate`,
+  joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess opens holes in the plate`,
+})[by] || '';
 /* id -> the message that goes under it. Rebuilt from scratch on every read, so a field
    that has come good stops complaining without anything having to remember it once did. */
 const fieldErrors = new Map();
+// id -> the cut the pitch has no room for at all; a check on the design, see readNumber
+const noRoom = new Map();
 /* Named one field at a time rather than derived from the id: the build audits the
-   template by literal, and $('errDrawerW') is what it looks for. */
+   template by literal, and $('errDrawerW') is what it looks for. Fields that sit in one
+   row share the line under it. */
 const ERR_FIELDS = [
   ['drawerW', 'errDrawerW'], ['drawerD', 'errDrawerD'],
   ['bedW', 'errBedW'], ['bedD', 'errBedD'], ['bedH', 'errBedH'], ['pitch', 'errPitch'],
+  ['mLeft', 'errMargins'], ['mRight', 'errMargins'], ['mFront', 'errMargins'], ['mBack', 'errMargins'],
+  ['bottomPad', 'errFloor'], ['topCutoff', 'errFloor'],
+  ['magnetD', 'errMagnet'], ['magnetH', 'errMagnet'],
+  ['screwHoleD', 'errScrew'], ['screwHeadD', 'errScrew'], ['screwHeadDepth', 'errScrew'],
+  ['connClr', 'errConnClr'],
 ];
 const ERR_EL = { errDrawerW: () => $('errDrawerW'), errDrawerD: () => $('errDrawerD'),
   errBedW: () => $('errBedW'), errBedD: () => $('errBedD'), errBedH: () => $('errBedH'),
-  errPitch: () => $('errPitch') };
+  errPitch: () => $('errPitch'), errMargins: () => $('errMargins'), errFloor: () => $('errFloor'),
+  errMagnet: () => $('errMagnet'), errScrew: () => $('errScrew'), errConnClr: () => $('errConnClr') };
 
+const roundMm = (n) => +n.toFixed(2);
 /* The drawer's own measurements: the fields the unit switch in panel 01 converts. Every
    other number on the page — the bed, the pitch, magnet and screw sizes — stays in
    millimetres whatever the drawer was measured in, because millimetres are how every
@@ -91,25 +167,49 @@ function readNumber(id) {
   const len = LENGTH_IDS.includes(id);
   const v = len ? FIELDS.lengthOf($(id), unit) : parseFloat($(id).value.trim());
   if (!lim) return isFinite(v) ? v : 0;
+  /* Out of play, a field keeps its fixed range but not the one the rest of the design
+     sets, and does not complain: magnets off at a 30 mm pitch should not quietly shrink
+     the magnet size the link carries, to be found smaller when they go back on. */
+  const inPlay = !lim.when || lim.when();
+  const lo = lim.min;
+  let hi = typeof lim.max !== 'function' ? (lim.max ?? Infinity) : inPlay ? lim.max() : Infinity;
+  /* A range with nothing in it: the pitch leaves no room for a pocket of any size. No
+     number in this field answers that — a screw hole at a 34 mm pitch is refused at 1 mm
+     as at 3 — and putting it on the field left one whose maximum sat under its minimum,
+     red whatever it held. So it is a check on the design instead, under the cut map,
+     naming what does fix it; and the field keeps only its fixed range meanwhile, so the
+     size a link carries is still there when the pitch comes back up. */
+  if (hi < lo) {
+    if (inPlay) noRoom.set(id, `${lim.label}: there is no room for one ${lim.why()}. ` +
+      `Use a larger pitch, or turn off ${lim.off}.`);
+    hi = Infinity;
+  }
   /* The range is millimetres because the model is; in inches it is quoted in both, since
      "at least 1 mm" means nothing to the field you are typing inches into, and the
      millimetre figure is the one the tool actually holds you to. The advice for a huge
      number follows the unit too: typing millimetres into an inch field is the likeliest
-     way to get one. */
+     way to get one. The field's own min and max are in the unit it shows, as
+     FIELDS.convert sets them, or the browser called a sound inch figure out of range. */
   const inch = len && unit === 'in';
   const both = (mm) => inch ? `${mm} mm (${FIELDS.inchText(mm)} in)` : `${mm} mm`;
   const unitName = inch ? 'inches' : 'millimetres';
+  const shown = (mm) => String(inch ? mm / FIELDS.MM_PER_IN : mm);
+  $(id).min = shown(lo);
+  if (isFinite(hi)) $(id).max = shown(hi); else $(id).removeAttribute('max');
+  const say = (msg) => { if (inPlay) fieldErrors.set(id, msg); };
   if (!isFinite(v)) {
-    fieldErrors.set(id, `${lim.label} is blank — enter a measurement in ${unitName}.`);
-    return lim.min;
+    say(`${lim.label} is blank — enter a measurement in ${unitName}.`);
+    return lo;
   }
-  if (v < lim.min) {
-    fieldErrors.set(id, `${lim.label} must be at least ${both(lim.min)}.`);
-    return lim.min;
+  if (v < lo) {
+    say(`${lim.label} must be at least ${both(lo)}` + (lim.tooSmall ? ` — ${lim.tooSmall}.` : '.'));
+    return lo;
   }
-  if (v > lim.max) {
-    fieldErrors.set(id, `${lim.label} must be ${both(lim.max)} or less — check the figure is in ${unitName}.`);
-    return lim.max;
+  if (v > hi) {
+    const why = lim.why && lim.why();
+    say(`${lim.label} must be ${both(roundMm(hi))} or less ` +
+        (why ? `${why}.` : `— check the figure is in ${unitName}.`));
+    return hi;
   }
   return v;
 }
@@ -118,50 +218,59 @@ function readNumber(id) {
    not carrying it on its own: aria-invalid says it to a screen reader and the message
    below the field says it in words. */
 function showFieldErrors() {
+  const lines = new Map();
   for (const [id, errId] of ERR_FIELDS) {
     const msg = fieldErrors.get(id) || '';
-    const out = ERR_EL[errId]();
     $(id).setAttribute('aria-invalid', msg ? 'true' : 'false');
     $(id).style.borderColor = msg ? 'var(--red)' : '';
-    out.textContent = msg;
-    out.hidden = !msg;
+    if (!lines.has(errId)) lines.set(errId, []);
+    if (msg) lines.get(errId).push(msg);
+  }
+  for (const [errId, msgs] of lines) {
+    const out = ERR_EL[errId]();
+    out.textContent = msgs.join(' ');
+    out.hidden = !msgs.length;
   }
 }
 
 function readControls() {
-  fieldErrors.clear();
-  for (const id of numIds) state[id] = readNumber(id);
+  fieldErrors.clear(); noRoom.clear();
+  /* The switches before the numbers: which ranges apply, and how wide they are, depend
+     on them — see LIMITS. */
   state.alignX = $('alignX').value; state.alignY = $('alignY').value;
   const mm = $('marginMode').value;
   state.marginMode = mm === 'custom' ? 'custom' : 'auto';
   state.noMargin = mm === 'none';
-  if (state.noMargin) { state.marginMode = 'custom'; state.mLeft = state.mRight = state.mFront = state.mBack = 0; }
   state.connector = $('connector').value;
   state.keyType = KEY_CONN.includes(state.connector) ? state.connector : 'bowtie';
   state.keyMount = $('keyMount').value;
   state.keyInsert = $('keyInsert').value;
   state.baseMode = $('baseMode').value;
   state.plateStyle = $('plateStyle').value;
+  state.tolerance = $('tolerance').value;
+  state.magnets = $('magnets').checked;
+  state.screws = $('screws').checked;
+  state.magnetSide = $('magnetSide').value;
+  for (const id of numIds) state[id] = readNumber(id);
+  if (state.noMargin) { state.marginMode = 'custom'; state.mLeft = state.mRight = state.mFront = state.mBack = 0; }
+  // the per-corner radii need no range here: buildPiece caps each one at the socket's rim
   if ($('perCorner').checked) {
     state.cornerRadii = { ll: parseFloat($('rFL').value)||0, lr: parseFloat($('rFR').value)||0,
                           ul: parseFloat($('rBL').value)||0, ur: parseFloat($('rBR').value)||0 };
   } else state.cornerRadii = null;
-  state.tolerance = $('tolerance').value;
   /* Read with the other numbers above; clamped here because it is a percentage and
      the estimate divides by 100, so a stray 900 would quote a mass nothing can print. */
   state.infill = Math.max(0, Math.min(100, state.infill));
-  state.magnets = $('magnets').checked;
-  state.screws = $('screws').checked;
-  state.magnetSide = $('magnetSide').value;
-  const clr = parseFloat($('connClr').value) || 0.2;
-  state.tab = Object.assign({}, DEFAULTS.tab, { clr });
+  // `|| 0.2` made a clearance of 0 into 0.2, and let 100 through
+  const fit = fitClearances(readNumber('connClr'));
+  state.tab = Object.assign({}, DEFAULTS.tab, { clr: fit.tab });
   /* No state.bowtie: a bowtie is built from state.key like the other two keyed joints,
      and DEFAULTS.bowtie is gone. This line survived it by being harmless —
      Object.assign over undefined yields {} — which is exactly how a parameter block
      that configures nothing goes on looking like it configures something. */
-  state.key = Object.assign({}, DEFAULTS.key, { clr: Math.max(0.1, clr - 0.05) });
-  state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: Math.max(0.08, clr - 0.05) });
-  state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr });
+  state.key = Object.assign({}, DEFAULTS.key, { clr: fit.key });
+  state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: fit.hclip });
+  state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr: fit.puzzle });
   $('alignRow').style.display = mm === 'auto' ? '' : 'none';
   $('customMargins').style.display = mm === 'custom' ? '' : 'none';
   $('magRow').style.display = state.magnets ? '' : 'none';
@@ -242,9 +351,18 @@ function pieceExtent(pc) {
   const ext = state.connector === 'dovetail' ? state.tab.dp + 0.4 : 0;
   return [pc.mL + pc.nx*pitch + pc.mR + ext, pc.mF + pc.ny*pitch + pc.mB + ext];
 }
-function pieceFits(pc) {
+function footprintFits(pc) {
   const [w, d] = pieceExtent(pc);
   return w <= state.bedW + 1e-6 && d <= state.bedD + 1e-6;
+}
+/* The bed has three dimensions and only two were checked. An extra floor of 300 mm made
+   a 304 mm plate, the print plan quietly packed it onto nothing — four empty plates —
+   and the dialog said every piece fit while quoting 10 kg of PLA. The height is known
+   before anything is built: it is the floor platePad works out, under the profile. */
+const plateHeightMm = () => platePad(state) + state.plateHeight;
+const heightFits = () => plateHeightMm() <= state.bedH + 1e-6;
+function pieceFits(pc) {
+  return footprintFits(pc) && heightFits();
 }
 
 /* How big a job this tool will take on in one go.
@@ -252,8 +370,14 @@ function pieceFits(pc) {
    from 999 — gave a 238 × 238 grid, 1600 pieces, and a build that started working
    through them one real CSG at a time with nothing on the page to say it would not
    finish. Both numbers are well past any drawer: MAX_CELLS is a 1.26 m square of grid
-   at the spec pitch, MAX_PIECES more separate prints than anyone is going to run. */
-const MAX_CELLS = 900, MAX_PIECES = 60;
+   at the spec pitch, MAX_PIECES more separate prints than anyone is going to run.
+   MAX_CELLS is core.js's, because the Fewest plates search has to stop at it too.
+
+   MAX_PIECE_CELLS is the same idea for one piece, which is one synchronous build: the
+   bed fields go to 2 m, so a 1260 mm drawer on a "2000 mm bed" was one 900-cell piece,
+   22 s with the page frozen and a 189 MB STL at the end. 24 × 24 cells is a metre
+   square at the spec pitch — bigger than any printer's bed. */
+const MAX_CELLS = PLATE_MAX_CELLS, MAX_PIECES = 60, MAX_PIECE_CELLS = 576;
 const overCap = () => !!layout &&
   (layout.nx * layout.ny > MAX_CELLS || layout.pieces.length > MAX_PIECES);
 
@@ -267,6 +391,7 @@ function warningsList() {
   // first, and above everything: these say what is wrong with what you typed, which
   // nothing below can — every check after this one is reasoning about the clamped value
   for (const msg of fieldErrors.values()) out.push({ err: true, stop: true, t: msg });
+  for (const msg of noRoom.values()) out.push({ err: true, stop: true, t: msg });
   if (layout.nx * layout.ny > MAX_CELLS)
     out.push({ err: true, stop: true, t: `A ${layout.nx} × ${layout.ny} grid is ` +
       `${layout.nx * layout.ny} cells, past the ${MAX_CELLS} this tool will build in one ` +
@@ -275,13 +400,37 @@ function warningsList() {
     out.push({ err: true, stop: true, t: `This split makes ${layout.pieces.length} pieces, ` +
       `past the ${MAX_PIECES} this tool will build in one go. A larger printer bed, or ` +
       'fewer cuts on the map, brings it back down.' });
+  else {
+    const big = layout.pieces.find((pc) => pc.nx * pc.ny > MAX_PIECE_CELLS);
+    if (big)
+      out.push({ err: true, stop: true, t: `Piece ${big.id} is ${big.nx} × ${big.ny} = ` +
+        `${big.nx * big.ny} cells, past the ${MAX_PIECE_CELLS} this tool will build as one ` +
+        'piece — no printer bed is that big. Check the bed size, or add cuts on the map.' });
+  }
   // suppressed when the drawer fields are already complaining: "smaller than one cell"
   // is true of the clamped value and useless as a diagnosis of a blank or negative one
-  if (!fieldErrors.has('drawerW') && !fieldErrors.has('drawerD') &&
-      (layout.nx < 1 || layout.ny < 1 || state.drawerW < state.pitch || state.drawerD < state.pitch))
+  const tooSmall = !fieldErrors.has('drawerW') && !fieldErrors.has('drawerD') &&
+      (layout.nx < 1 || layout.ny < 1 || state.drawerW < state.pitch || state.drawerD < state.pitch);
+  if (tooSmall)
     out.push({ err: true, stop: true, t: `Drawer smaller than one ${state.pitch} mm cell — nothing to generate.` });
-  for (const pc of layout.pieces) if (!pieceFits(pc))
+  /* Each custom margin can be inside the drawer while the pair of them leaves no room
+     for a cell. computeLayout puts one there regardless and hands the far margin what
+     is left, which is then a negative width. */
+  else if (customMargins()) {
+    const freeW = state.drawerW - state.mLeft - state.mRight;
+    const freeD = state.drawerD - state.mFront - state.mBack;
+    if (freeW < state.pitch - 1e-6)
+      out.push({ err: true, stop: true, t: `The left and right margins leave ${roundMm(freeW)} mm ` +
+        `of the drawer's width — not enough for one ${state.pitch} mm cell.` });
+    if (freeD < state.pitch - 1e-6)
+      out.push({ err: true, stop: true, t: `The front and back margins leave ${roundMm(freeD)} mm ` +
+        `of the drawer's depth — not enough for one ${state.pitch} mm cell.` });
+  }
+  for (const pc of layout.pieces) if (!footprintFits(pc))
     out.push({ err: true, t: `Piece ${pc.id} (${(pc.mL+pc.nx*state.pitch+pc.mR).toFixed(0)} × ${(pc.mF+pc.ny*state.pitch+pc.mB).toFixed(0)} mm) exceeds the ${state.bedW} × ${state.bedD} bed — add a cut through it.` });
+  if (!heightFits())
+    out.push({ err: true, t: `The plate is ${roundMm(plateHeightMm())} mm tall, more than ` +
+      `your printer's ${state.bedH} mm build height — lower the extra floor, or check the bed height.` });
   if (layout.pieces.some(pc => pc.nx*pc.ny === 1))
     out.push({ t: 'A piece is a single cell — printable, but consider moving a cut for a sturdier layout.' });
   /* One axis at a time. It fired on either and then printed both, so a drawer narrower
@@ -326,8 +475,9 @@ function drawWarnings() {
      said "resolve the errors above to generate" and offered you the download in the
      same breath. See warningsList for why this is `stop` and not `err`. */
   const stop = ws.some(w => w.stop);
-  $('openExport').disabled = stop;
-  $('openExport').title = stop ? 'Fix the errors under the cut map first' : '';
+  $('openExport').disabled = stop || !!buildFailed;
+  $('openExport').title = stop ? 'Fix the errors under the cut map first'
+    : buildFailed ? `Piece ${buildFailed} failed to build — try different cuts` : '';
 }
 
 // ---------- interactive cut map ----------
@@ -566,7 +716,7 @@ function drawPieceTable() {
     const w = pc.mL + pc.nx*pitch + pc.mR, d = pc.mF + pc.ny*pitch + pc.mB;
     const fit = pieceFits(pc);
     const built = builds[pc.id];
-    let joints = '…';
+    let joints = pc.id === buildFailed ? 'failed' : '…';
     if (built) {
       const m = built.meta, parts = [];
       if (m.tabs) parts.push(plural(m.tabs, 'tab'));
@@ -580,7 +730,7 @@ function drawPieceTable() {
       <td class="mono">${pc.nx} × ${pc.ny}</td>
       <td class="mono">${w.toFixed(1)} × ${d.toFixed(1)}</td>
       <td class="mono">${joints || '—'}</td>
-      <td class="${fit?'':'bad'}">${fit ? 'fits' : 'TOO BIG'}</td>
+      <td class="${fit?'':'bad'}">${fit ? 'fits' : footprintFits(pc) ? 'TOO TALL' : 'TOO BIG'}</td>
       <td><button class="ghost" data-dl="${pc.id}" ${built?'':'disabled'}>STL</button></td>
     </tr>`;
   }).join('');
@@ -592,6 +742,7 @@ function drawPieceTable() {
      it would never reach, next to a status line saying the build could not start. */
   const blocked = ws.some(w => w.err);
   $('pieceTail').textContent = blocked ? 'not building — see the checks above'
+    : buildFailed ? `build failed at piece ${buildFailed} — try different cuts`
     : okc < tot ? `building ${okc}/${tot}…` : `${tot} ready`;
   updatePreviewLabel(blocked);
   // this runs once per piece as the build proceeds, which is exactly the cadence an
@@ -611,8 +762,13 @@ function drawPieceTable() {
    set once goes stale, and a stale label is worse than none because it is confident. */
 function updatePreviewLabel(blocked) {
   const n = layout.pieces.length, built = Object.keys(builds).length;
+  if (!threeOk) {
+    $('three').setAttribute('aria-label', '3D preview unavailable — this browser could not start WebGL.');
+    return;
+  }
   $('three').setAttribute('aria-label', blocked
     ? '3D preview: nothing to show — see the checks under the cut map.'
+    : buildFailed ? `3D preview: the build failed at piece ${buildFailed}.`
     : built < n
       ? `3D preview: building, ${built} of ${plural(n, 'piece')} so far.`
       : `3D preview: a ${layout.nx} by ${layout.ny} cell baseplate, ` +
@@ -628,9 +784,15 @@ function scheduleBuild() {
   clearTimeout(buildTimer);
   buildTimer = setTimeout(runBuild, 260);
 }
+/* The id of the piece whose build threw, until the next build starts. A failure used to
+   be a line in the preview's corner and nothing else: the piece table sat on "building
+   1/2…" for good, the dialog said "Still building", and Download stayed on — for a
+   build that had already given up. */
+let buildFailed = null;
 async function runBuild() {
   const token = ++buildToken;
   builds = {};
+  if (buildFailed) { buildFailed = null; drawWarnings(); }
   printPlan = null; renderPrintPlan();
   drawPieceTable();
   clearThree();
@@ -648,6 +810,9 @@ async function runBuild() {
     } catch (e) {
       console.error('build failed for', pc.id, e);
       $('status').textContent = `piece ${pc.id} failed — try different cuts`;
+      buildFailed = pc.id;
+      drawWarnings();
+      drawPieceTable();
       // the pieces that did build are what is on screen now, and the framing may still be
       // for the meshes this build cleared away (see frameKey)
       autoFrame();
@@ -662,6 +827,13 @@ async function runBuild() {
 
 // ---------- three.js ----------
 let scene, camera, renderer, root, sph = { theta: -0.7, phi: 1.05, r: 420, cx: 0, cy: 0, cz: 0 };
+/* The preview is the one part of the page that needs WebGL, and it was set up first, so
+   a browser without it — GPU blocklisted, hardware acceleration off, three.js not
+   loaded — threw on the renderer and took the rest of the boot with it: no layout, no
+   build, no downloads, for a tool whose files never touch the GPU. So a failed setup
+   says so in the preview box and leaves `threeOk` false, and every preview function
+   below checks it and does nothing. */
+let threeOk = false;
 /* Who is in charge of the framing, the page or the person looking at it.
  *
  * The preview re-framed itself at the end of every build, and a build follows every
@@ -677,6 +849,16 @@ let scene, camera, renderer, root, sph = { theta: -0.7, phi: 1.05, r: 420, cx: 0
  * it frames now and lets the page frame again from then on. */
 let viewOwned = false, framedKey = '', fitR = 0;
 function initThree() {
+  try {
+    setupThree();
+    threeOk = true;
+  } catch (e) {
+    console.warn('3D preview unavailable:', e && e.message);
+    $('noGl').style.display = 'grid';
+    $('threehint').style.display = 'none';
+  }
+}
+function setupThree() {
   const canvas = $('three');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   scene = new THREE.Scene();
@@ -767,6 +949,7 @@ function initThree() {
   })();
 }
 function clearThree() {
+  if (!threeOk) return;
   while (root.children.length) {
     const m = root.children.pop();
     m.geometry.dispose(); m.material.dispose();
@@ -779,6 +962,7 @@ function piecePlacement(pc) {
   return [gx + pc.seg * gap, gy + pc.band * gap];
 }
 function addPieceToThree(pc, res) {
+  if (!threeOk) return;
   const tris = polysToTriangles(res.polys);
   const pos = new Float32Array(tris.length * 9);
   let o = 0;
@@ -837,6 +1021,7 @@ const frameKey = () => {
    deliberate, for Fit as much as for the automatic case: the button answers "show me
    all of it", not "start again", and a reload is still there for that. */
 function fitThree() {
+  if (!threeOk) return;
   const cv = $('three');
   const w = cv.clientWidth, h = cv.clientHeight;
   framedKey = frameKey();
@@ -853,7 +1038,7 @@ function fitThree() {
   camera.updateProjectionMatrix();
 }
 function autoFrame() {
-  if (frameKey() === framedKey) return;
+  if (!threeOk || frameKey() === framedKey) return;
   if (viewOwned) framedKey = frameKey();
   else fitThree();
 }
@@ -862,6 +1047,7 @@ function autoFrame() {
    how either tool keeps its camera. */
 $('threewrap').addEventListener('previewfit', () => { viewOwned = false; fitThree(); });
 $('explode').addEventListener('change', () => {
+  if (!threeOk) return;
   for (const mesh of root.children) {
     const pc = layout.pieces.find(p => p.id === mesh.userData.pieceId);
     if (pc) { const [px, py] = piecePlacement(pc); mesh.position.set(px, py, 0); }
@@ -874,9 +1060,18 @@ $('explode').addEventListener('change', () => {
 let printPlan = null;
 function computePrintPlan() {
   if (!layout || Object.keys(builds).length < layout.pieces.length) { printPlan = null; renderPrintPlan(); return; }
-  const gap = parseFloat($('plateGap').value) || 4;
+  /* Never below zero. A negative spacing packed parts into each other, and a negative
+     stack gap sank the upper piece into the one under it, so the 3MF printed them as
+     one fused lump. A blank field means the default; a spacing of 0 is an answer and
+     stays 0 — the old `|| 4` turned it into 4. A stack gap of 0 is not: it prints the
+     two pieces fused just the same, so it is held to one layer, as packPlates holds it. */
+  const gapOf = (id, dflt) => {
+    const v = parseFloat($(id).value);
+    return isFinite(v) ? Math.max(0, v) : dflt;
+  };
+  const gap = gapOf('plateGap', 4);
   const stack = $('stackToggle').checked;
-  const zGap = parseFloat($('stackGap').value) || 0.24;
+  const zGap = Math.max(PRINT_LAYER, gapOf('stackGap', 0.24));
   $('stackHint').style.display = stack ? '' : 'none';
   const items = layout.pieces.map(pc => {
     const m = builds[pc.id].meta;
@@ -892,7 +1087,7 @@ function computePrintPlan() {
      Same for the size: measured off the mesh connectorPart returns, not off the
      parameters that made it. The two are the same rectangle for a flat key and are
      nothing like each other for the U-clip, whose prm describes a cross-section. */
-  if (KEYED.includes(state.connector)) {
+  if (shipsKeys()) {
     const ext = partExtent(connectorPart().polys);
     items.push({ id: 'key', w: ext.w, d: ext.d, h: ext.h,
                  qty: keysNeeded(), stackable: false });
@@ -939,13 +1134,18 @@ function platePolysAndItems(idx) {
   }
   return objs;
 }
+/* JSZip stores files uncompressed unless asked, and a 3MF is a ZIP of XML text — a
+   format that compresses several times over. Stored, every 3MF and ZIP was several
+   times the size it needed to be, which on a big plate is the difference between a
+   download and a stall. Slicers read either. */
+const ZIP_DEFLATE = { compression: 'DEFLATE', compressionOptions: { level: 6 } };
 async function plate3mfBytes(idx) {
   const x = build3mfXML(platePolysAndItems(idx));
   const pz = new JSZip();
   pz.file('[Content_Types].xml', x.contentTypes);
   pz.file('_rels/.rels', x.rels);
   pz.file('3D/3dmodel.model', x.model);
-  return pz.generateAsync({ type: 'uint8array' });
+  return pz.generateAsync({ type: 'uint8array', ...ZIP_DEFLATE });
 }
 async function downloadAllPlates() {
   if (!printPlan) return;
@@ -953,7 +1153,7 @@ async function downloadAllPlates() {
   if (n === 1) { saveBlob(await plate3mfBytes(0), 'print-plates.3mf'); return; }
   const zip = new JSZip();
   for (let i = 0; i < n; i++) zip.file(`plate-${i+1}.3mf`, await plate3mfBytes(i));
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }), `print-plates-x${n}.zip`);
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }), `print-plates-x${n}.zip`);
 }
 $('plateGap').addEventListener('input', computePrintPlan);
 $('stackToggle').addEventListener('change', computePrintPlan);
@@ -1034,19 +1234,37 @@ function connectorPart() {
  *
  * `pad` is read back off the height the build actually came out at rather than worked
  * out again from bottomPad and the joint's own minimum — the puzzle cavity is cut
- * relative to it, and the coupon has no other way to know. */
+ * relative to it, and the coupon has no other way to know.
+ *
+ * `clrMax` is the joint's clearance with the field at its ceiling, so the coupon offers
+ * no pair looser than the field will take: the same ceiling the field is held to
+ * (connClrCeiling), cut the way this joint cuts the field (fitClearances). It was the
+ * field's headroom added to the joint's clearance, which is the same thing only while
+ * the key's 0.1 floor is not in play, and it read a ceiling that knew the connector and
+ * nothing else — a snap clip dropped in from above got pairs to 0.95, whose housings
+ * met across the coupon's seam. Its slackest pair now stops at the key's 0.25, which
+ * holds the slot's seam-side wall one BLOAT inside its tile, off the tile's seam face,
+ * as the ceiling holds it on the plate; test/plate-audit.js measures both. A slim wall
+ * key's clearance is its own and the field does not move it, so it has no ceiling to
+ * keep to. */
 function activeJoint() {
   const pad = builtH() - state.plateHeight;
-  if (!KEYED.includes(state.connector))
+  const top = fitClearances(connClrCeiling(state).max);
+  if (!KEYED.includes(state.connector)) {
+    const puzzle = state.connector === 'puzzle';
     return { kind: state.connector === 'none' ? 'none' : state.connector, pad,
-             clr: state.connector === 'puzzle' ? state.puzzle.clr : state.tab.clr };
+             clr: puzzle ? state.puzzle.clr : state.tab.clr,
+             clrMax: puzzle ? top.puzzle : top.tab };
+  }
   const prm = activeKeyDims();
   // core.js owns this, so the coupon, the plate and the audit cannot disagree
   const kind = jointKind(state.connector, state.keyMount, state.keyInsert);
-  return { kind, shape: activeKeyShape(), prm, pad,
-           // the clip is one part at one size in either housing, so it is fitted to the
-           // full key's clearance — buildPiece says the same
-           clr: kind === 'snaptop' ? state.key.clr : prm.clr,
+  // the clip is one part at one size in either housing, so it is fitted to the full
+  // key's clearance — buildPiece says the same
+  const clr = kind === 'snaptop' ? state.key.clr : prm.clr;
+  const slim = kind !== 'snaptop' && state.connector !== 'hclip' && state.keyMount === 'wall';
+  return { kind, shape: activeKeyShape(), prm, pad, clr,
+           clrMax: slim ? Infinity : state.connector === 'hclip' ? top.hclip : top.key,
            part: connectorPart().polys };
 }
 /* ---------- material ------------------------------------------------------
@@ -1139,7 +1357,7 @@ function materialGrams() {
   let mm3 = layout.pieces.reduce((a, pc) => a + filamentOf(builds[pc.id].mat), 0);
   // the loose parts are part of the job: keysNeeded is the same count the STL lays out
   // and the print plan reserves bed space for
-  if (KEYED.includes(state.connector))
+  if (shipsKeys())
     mm3 += filamentOf(meshMaterial(connectorPart().polys)) * keysNeeded();
   return mm3 * PLA_DENSITY / 1000;
 }
@@ -1204,13 +1422,18 @@ function keyCount(wallOnly) {
     !wallish || Math.abs(j - Math.round(j)) <= 0.25).length, 0);
 }
 const topClips = () => state.connector === 'snap' && state.keyInsert === 'top';
-const keysNeeded = () => keyCount(topClips()) || 1;
+/* No floor of one. A plate that is a single piece has no seams, so it needs no keys —
+   the `|| 1` that used to sit here put a key in the ZIP, on the print plan and in the
+   file list for a design with nothing to join. shipsKeys is the one test for "is there
+   a loose part to offer at all", so the plan, the ZIP and the dialog agree on it. */
+const keysNeeded = () => keyCount(topClips());
+const shipsKeys = () => KEYED.includes(state.connector) && keysNeeded() > 0;
 async function downloadEverythingZip() {
   if (Object.keys(builds).length < layout.pieces.length) return;
   const zip = new JSZip();
   for (const pc of layout.pieces)
     zip.file(`baseplate-${pc.id}.stl`, stlBinary(builds[pc.id].polys, pc.id));
-  if (KEYED.includes(state.connector)) {
+  if (shipsKeys()) {
     const k = keysStl();
     zip.file(k.name, stlBinary(k.polys, k.mesh));
   }
@@ -1219,7 +1442,7 @@ async function downloadEverythingZip() {
       zip.file(`print-plates/plate-${i+1}.3mf`, await plate3mfBytes(i));
   }
   zip.file('README.txt', readmeText());
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }),
                 `gridfinity-baseplate-${layout.nx}x${layout.ny}.zip`);
 }
 function readmeText() {
@@ -1311,7 +1534,13 @@ const CONNECTOR_NAMES = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', bowt
    "Split: plates". An internal enum is not a name for anything. */
 const SPLIT_NAMES = { balanced: 'balanced', staggered: 'staggered',
   plates: 'fewest plates', manual: 'manual' };
-const splitName = () => SPLIT_NAMES[state.splitMode] || state.splitMode;
+/* hasOwn, not a bare lookup: SPLIT_NAMES.constructor is Object, so "sp=constructor" in a
+   link was a "function Object() { [native code] } split" on screen and in the README.
+   Not Object.hasOwn, which Safari only has from 15.4: before that it threw here, inside
+   drawing the map, and the page never laid out. */
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const splitName = () =>
+  (hasOwn(SPLIT_NAMES, state.splitMode) ? SPLIT_NAMES[state.splitMode] : state.splitMode);
 
 /* What goes wrong is tested before whether the build has finished, not after. Anything
    the checks call an error stops runBuild, so the pieces never finish and never will —
@@ -1323,13 +1552,20 @@ function bedFitText() {
   // guard, so the "largest piece" arithmetic below never reasons about an empty list
   if (!layout.pieces.length)
     return { cls: 'bad', t: 'There is nothing to generate yet — see the checks under the cut map.' };
-  const bad = layout.pieces.filter((pc) => !pieceFits(pc));
+  const bad = layout.pieces.filter((pc) => !footprintFits(pc));
   if (bad.length)
     return { cls: 'bad', t: `${plural(bad.length, 'piece')} — ${bad.map((pc) => pc.id).join(', ')} — ` +
       `will not fit your ${bed}. Add a cut through them on the cut map, or pick a split mode ` +
       'that makes smaller pieces; the files below would print oversized as they stand.' };
+  // a cut cannot fix this one, so it gets its own sentence rather than the one above
+  if (!heightFits())
+    return { cls: 'bad', t: `The plate is ${roundMm(plateHeightMm())} mm tall and your printer ` +
+      `builds ${state.bedH} mm high. Lower the extra floor, or check the bed height.` };
   const err = warningsList().find((w) => w.err);
   if (err) return { cls: 'bad', t: err.t + ' Nothing can be exported until that is fixed.' };
+  if (buildFailed)
+    return { cls: 'bad', t: `Piece ${buildFailed} could not be built, so the build stopped there. ` +
+      'Move a cut through it or pick another joint; the plates cannot be exported until every piece builds.' };
   const ready = Object.keys(builds).length;
   if (ready < layout.pieces.length)
     return { cls: 'wait', t: `Still building — ${ready} of ${plural(layout.pieces.length, 'piece')} ready. ` +
@@ -1416,7 +1652,7 @@ function renderExportFiles() {
           { 'data-ex': 'piece', 'aria-label': `Download piece ${pc.id} (STL)` });
     btn.disabled = !b;   // downloadPiece would otherwise fail silently
   }
-  if (KEYED.includes(state.connector)) {
+  if (shipsKeys()) {
     const kn = state.connector === 'snap' ? 'Snap clips' : 'Connector keys';
     exRow(kn, `${keysNeeded()} needed, laid out on one plate · STL`, 'STL', downloadKeys,
           { 'data-ex': 'keys', 'aria-label': `Download the ${kn.toLowerCase()} (STL)` });
@@ -1506,7 +1742,24 @@ function descriptor() {
   };
   return Object.assign({}, hashExtras, o, { v: 2 });
 }
-const encodeDesc = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+/* Names are encoded as well as values. Keys from other tools ride through here as they
+   came, and loadFromHash decodes them, so one written raw did not survive its own round
+   trip: "%25=1" was carried as "%=1", and every visit after that threw URIError reading
+   the save back. A raw line break in a name would also have reached the README. */
+const encodeDesc = (o) => Object.entries(o)
+  .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+/* One bad pair costs that pair. A malformed escape (%E0%A4%A) used to throw out of the
+   whole load, and a pair with no '=' was kept as a setting whose value was undefined. */
+function parseHash(h) {
+  const q = Object.create(null);
+  for (const kv of h.split('&')) {
+    const i = kv.indexOf('=');
+    if (i < 1) continue;
+    try { q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1)); }
+    catch (err) { /* not valid percent-encoding: drop it, keep the rest */ }
+  }
+  return q;
+}
 /* Keep the address bar holding the current design, so a reload does not throw it away.
  *
  * The tool has no accounts and no server, which is the point of it — but it also meant
@@ -1557,10 +1810,103 @@ const saveLocal = (h) => {
                    an exception that stops the page working */ }
 };
 const readLocal = () => { try { return localStorage.getItem(SAVE_KEY) || ''; } catch (err) { return ''; } };
+/* Only a fragment that carries settings is a layout. The page has fragments of its own —
+   the skip link's #stage — and one arriving as if it were a shared link loaded nothing,
+   then saved the empty default over the drawer this browser had kept. */
+const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
   location.href = location.origin + location.pathname;   // drop the hash and reload clean
 }
+/* Wired here, before the boot below reads any link: a link that throws there must not
+   also take away the button that gets you out of it, or stop the next link working. */
+$('startFresh').addEventListener('click', startFresh);
+/* A hash this page did not write means someone navigated to a link — pasted a share URL
+   into the address bar, or picked a bookmark — and changing only the fragment is a
+   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
+   Before local saving that was merely confusing; now it means a shared layout loses to
+   whatever this browser had stored, which is the one case that must never happen.
+   Reloading applies the link. replaceState does not fire this event, so the saves this
+   page makes every few seconds cannot trigger it. A fragment with no settings in it is
+   an anchor, not a link to a drawer, and reloading for one threw the drawer away. */
+addEventListener('hashchange', () => {
+  if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
+});
+
+/* More slots beside the save, so a layout is set aside rather than lost.
+ *
+ * PREV_KEY: following a link overwrote the save within 400 ms with no way back, so
+ * whatever is about to replace it — a link, or the defaults standing in for a layout
+ * that would not load — copies it here first, and the page offers to put it back.
+ *
+ * LINKED_KEY: the save a link wrote, while nobody has changed it. That save is the
+ * sender's drawer, not yours, so a second link replacing it leaves PREV_KEY holding
+ * yours; setting it aside instead lost your layout to the first link you had opened.
+ * Changed, it is kept while the page still uses any of the link's drawer, bed and infill.
+ *
+ * PREV_LINKED_KEY: the LINKED_KEY of the layout in PREV_KEY. Whether a layout is a link's
+ * travels with it, so a link put back is still the link's and your own put back is not;
+ * left behind, it went to whatever was put back in its place.
+ *
+ * LOADING_KEY: names the layout being loaded, and is cleared once the page has drawn
+ * it. Still there at the next visit, for the same layout, means the last attempt hung or
+ * crashed the tab; loading it again would only do that again, on every visit. */
+const PREV_KEY = SAVE_KEY + ':prev', LINKED_KEY = SAVE_KEY + ':linked',
+  PREV_LINKED_KEY = PREV_KEY + ':linked', LOADING_KEY = SAVE_KEY + ':loading';
+const readKey = (k) => { try { return localStorage.getItem(k) || ''; } catch (err) { return ''; } };
+const writeKey = (k, v) => {
+  try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); }
+  catch (err) { /* private mode: the guard and the backup go, the page does not */ }
+};
+let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* What an untouched page saves, and what this one held when the boot finished — null
+   from the first change on. Until that change a stalled page saves nothing: saving the
+   defaults it stands in with put them over the layout it declined, and one more reload
+   lost that layout for good. */
+let pristine = '', bootDesc = null;
+/* Someone's link this page holds, or ''. Each of its drawer, bed and infill values the
+   page still uses is the link's, not yours, whatever else has been changed: so taking
+   the design to the other page does not replace yours there without setting it aside.
+   Key by key: compared as one group, changing only the infill made the drawer yours. */
+let heldLink = '';
+// the drawer, bed and infill settings in which a design still has a link's values
+function linkKeys(h, link) {
+  if (!link) return [];
+  const p = parseHash(h), q = parseHash(link);
+  return [...SHARED_KEYS].filter((k) => k in q && p[k] === q[k]);
+}
+function leaveFor(url) {
+  hashReady = false; dropSave();   // no save of this page's may land after
+  location.href = url;
+}
+/* Swapped rather than copied over: what is here now goes aside in its place, so putting
+   a layout back is never the step that loses one. */
+function putBack() {
+  const prev = readKey(PREV_KEY);
+  if (!prev) return;
+  const prevLinked = readKey(PREV_LINKED_KEY);
+  const cur = encodeDesc(descriptor());
+  if (cur !== pristine && !(stalled && cur === bootDesc)) {
+    writeKey(PREV_KEY, cur);
+    writeKey(PREV_LINKED_KEY, heldLink);
+  }
+  saveLocal(prev);
+  writeKey(LINKED_KEY, prevLinked);
+  leaveFor(location.href.split('#')[0]);   // a bare visit restores it, and says so
+}
+function tryAnyway() {
+  writeKey(LOADING_KEY, '');
+  leaveFor(location.href.split('#')[0] + '#' + stalled);
+  location.reload();   // a change of fragment alone reloads nothing
+}
+function showSetAside(msg, canPutBack, canTry) {
+  $('setAsideMsg').textContent = msg;
+  $('putBack').style.display = canPutBack ? '' : 'none';
+  $('tryAnyway').style.display = canTry ? '' : 'none';
+  $('setAside').style.display = '';
+}
+$('putBack').addEventListener('click', putBack);
+$('tryAnyway').addEventListener('click', tryAnyway);
 
 function rememberState() {
   if (!hashReady) return;
@@ -1572,6 +1918,16 @@ function saveNow() {
   clearTimeout(hashSaveT);
   removeEventListener('beforeunload', dropSave);
   const h = encodeDesc(descriptor());
+  /* The first change is the moment the banner stops being true: "put my layout back"
+     would now also throw away the edit, so it goes. */
+  if (bootDesc !== null) {
+    if (sameDesign(h, bootDesc)) { if (stalled) return; }
+    else {
+      bootDesc = null; $('setAside').style.display = 'none';
+      // what a stalled page goes on from is its defaults, not the link it declined
+      if (stalled) writeKey(LINKED_KEY, '');
+    }
+  }
   try { history.replaceState(null, '', '#' + h); }
   catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                    worth an exception that stops the rest of the page working */ }
@@ -1621,21 +1977,33 @@ function binsHref() {
   // full baseplate state plus the plate height bins needs; extras ride along
   return 'bins/#' + encodeDesc(Object.assign(descriptor(), { ph: (+H).toFixed(2) }));
 }
-/* Each hand-over is told to the saved drawer first, so the page at the other end
-   recognises the design it arrives with as that drawer — see attach in drawers.js. And a
-   change still waiting to be saved is saved now, not dropped as the page goes: Back
+/* Each hand-over leaves one note in this tab for the page at the other end to read once
+   (handoff in drawers.js, which also tells the saved drawer, if this is one, so that page
+   recognises the design it arrives with as that drawer — see attach there). A design
+   arriving from the other tool may carry a drawer or bed changed there, and that is the
+   same layout moving on, not a link replacing it. The guide passes the address through
+   untouched, so going by way of it is the same.
+   The note names any drawer, bed and infill settings still at someone's link's values:
+   those are not yours to carry over, and the other page compares them as a link's, so
+   they do not replace yours there without setting it aside. Left out of the comparison,
+   they did, after any edit at all.
+   A change still waiting to be saved is saved now, not dropped as the page goes: Back
    comes to this page's address, and that and the drawer must both have the change. */
 function leave(href) {
   if (hashReady) saveNow();
-  drawers.handoff(href.slice(href.indexOf('#') + 1));
+  drawers.handoff(href.slice(href.indexOf('#') + 1),
+    linkKeys(encodeDesc(descriptor()), heldLink));
   location.href = href;
 }
 for (const id of ['toBins', 'navBins'])
   $(id).addEventListener('click', (e) => { e.preventDefault(); leave(binsHref()); });
-// the guide holds no state, so hand it ours and it can hand it back
+/* The guide holds no state, so hand it ours and it can hand it back — what the bins page
+   would be handed, plate height and all: it passes the layout on to either tool, and
+   without ph the bins page took a 4.25 mm plate. */
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  leave('guide/#' + encodeDesc(descriptor()));
+  const h = binsHref();
+  leave('guide/' + h.slice(h.indexOf('#')));
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
@@ -1646,15 +2014,20 @@ $('shareBtn').addEventListener('click', () => {
 function loadFromHash(src) {
   const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
   if (h.length < 2) return;
-  const q = Object.fromEntries(h.split('&').map(kv => kv.split('=').map(decodeURIComponent)));
+  const q = parseHash(h);
   for (const [k, v] of Object.entries(q)) if (!OWNED.has(k)) hashExtras[k] = v;
-  /* The link is millimetres, always; a drawer length is written into its field in
+  /* A menu takes only a value it offers. "cn=bogus" left the connector menu blank, so
+     the plates were cut for keys that were then never exported, and the fit sample was
+     named "-fit-sample-". Anything else keeps the default.
+     The link is millimetres, always; a drawer length is written into its field in
      whatever unit the field is showing. Anything that is not a number goes in as it
      came, so the field's own check can say what is wrong with it. */
   const set = (id, v) => {
-    if (v === undefined || !$(id)) return;
-    if (LENGTH_IDS.includes(id) && v !== '' && isFinite(+v)) FIELDS.setLength($(id), +v, unit);
-    else $(id).value = v;
+    const el = $(id);
+    if (v === undefined || !el) return;
+    if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === v)) return;
+    if (LENGTH_IDS.includes(id) && v !== '' && isFinite(+v)) FIELDS.setLength(el, +v, unit);
+    else el.value = v;
   };
   set('drawerW', q.w); set('drawerD', q.d); set('marginMode', q.mm);
   set('alignX', q.ax); set('alignY', q.ay);
@@ -1669,11 +2042,12 @@ function loadFromHash(src) {
   set('baseMode', q.bm); set('plateStyle', q.ps); set('infill', q.if);
   if (q.pc !== undefined) $('perCorner').checked = q.pc === '1';
   set('rFL', q.r1); set('rFR', q.r2); set('rBL', q.r3); set('rBR', q.r4);
-  if (q.sp) {
+  // only a split the page has; anything else is not a split, it is text for the README
+  if (q.sp && hasOwn(SPLIT_NAMES, q.sp)) {
     state.splitMode = q.sp; setSplitSeg(q.sp);
     if (q.sp === 'manual') {
-      state.rowCuts = q.rc ? q.rc.split(',').map(Number).filter(n => !isNaN(n)) : [];
-      state.colCuts = q.cc ? q.cc.split('_').map(s => s ? s.split('.').map(Number) : []) : [];
+      state.rowCuts = cutList(q.rc, ',');
+      state.colCuts = q.cc ? q.cc.split('_').slice(0, MAX_PIECES).map((s) => cutList(s, '.')) : [];
     }
   }
   /* The list follows the bed, not the other way round. It did not follow it at all: a
@@ -1681,6 +2055,14 @@ function loadFromHash(src) {
      the 256 mm entry above them. */
   $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
 }
+/* Cuts are whole cells, each one once, in order, and no more than the pieces this page
+   will build. "rc=2,2,2" built zero-height pieces, "rc=1.5" a fractional one, and 2,500
+   copies of one cut took 1.8 GB — and were saved, so every visit after took it again. */
+const CUT_TOP = Math.floor(LIMITS.drawerW.max / LIMITS.pitch.min);   // most cells on a side
+const cutList = (s, sep) => [...new Set(String(s || '').split(sep).map(Number))]
+  .filter((n) => Number.isInteger(n) && n > 0 && n < CUT_TOP)
+  .sort((a, b) => a - b).slice(0, MAX_PIECES - 1);
+
 const bedNow = () => [+$('bedW').value, +$('bedD').value, +$('bedH').value];
 
 /* ---------- undo -----------------------------------------------------------
@@ -1881,29 +2263,106 @@ if (FIELDS.savedUnit() !== unit) {
   for (const id of LENGTH_IDS) $(id).value = $(id).defaultValue;
   applyUnit(FIELDS.savedUnit());
 }
+/* Whether two saves hold the same plates, compared setting by setting on what this page
+   owns. Compared as strings, the bins page handing the drawer back — its keys in its own
+   order, with its own extras — was a link that had replaced your layout, on every trip
+   there and back. A hand-over also leaves out the drawer and the bed, the settings the
+   two pages share: changing them on the other page is not a different layout, unless
+   the other page still had them from someone's link. A link from someone keeps them,
+   since a drawer of another size is exactly what one brings. */
+// the drawer, the bed and its printer, and the infill: drawers.js keeps the same list
+const SHARED_KEYS = new Set([...DRAWERS.SHARED].filter((k) => k !== 'v'));
+function sameDesign(a, b, skip = []) {
+  const p = parseHash(a), q = parseHash(b);
+  return [...OWNED].every((k) => k === 'v' || k === 'ph' || skip.includes(k) || p[k] === q[k]);
+}
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
-let arrivedWith = '';                     // the design string this page was opened with
-if (incomingHash.length > 2) { loadFromHash(); arrivedWith = incomingHash; }
-else {
+let linkedNow = false;   // this page holds a link's layout, not yet changed by anyone
+let linkNew = false;     // ...one that arrived on this visit, so is recorded afresh
+let linkKept = '';       // the link this page last opened, unless a hand-over came since
+let notLinked = [];      // settings a link arrived with that were yours on the other page
+let arrivedWith = '';    // the design string this page was opened with, if it shows it
+{
+  const fromLink = isLayoutHash(incomingHash);
   const saved = readLocal();
-  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; arrivedWith = saved; }
+  const src = fromLink ? incomingHash : saved.length > 2 ? saved : '';
+  /* What this page saves when nobody has touched it. A save that is only that is no
+     one's work, so replacing it sets nothing aside — or every link would offer the
+     defaults back. */
+  readControls();
+  pristine = encodeDesc(descriptor());
+  stalled = src && readKey(LOADING_KEY) === src ? src : '';
+  /* The tab's note of what this page arrives with, if it is this design: the other tool
+     or the guide handing it over, or a saved drawer opened. Read every time, so a stale
+     note never lingers. */
+  const note = drawers.arrival(incomingHash);
+  const handOver = fromLink ? note : null;
+  // a saved drawer opened from the list is yours, whatever it replaces
+  const opened = !!handOver && handOver.open;
+  // your own drawer, bed and infill settings, as the other page had them
+  const yours = handOver ? [...SHARED_KEYS].filter((k) => !handOver.link.includes(k)) : [];
+  // the other page had nothing of anyone's link: your own layout come back
+  const handedOver = !!handOver && (opened || !handOver.link.length);
+  notLinked = handOver ? yours : [];
+  const replaces = fromLink && !opened &&
+    (saved.length <= 2 || !sameDesign(saved, src, yours));
+  const linked = readKey(LINKED_KEY);
+  linkKept = handedOver ? '' : linked;
+  /* Compared on what the record holds: one made without the settings that came with
+     the link as yours does not count those, or your own drawer made it "changed", and a
+     second link set it aside over the layout the first had. */
+  const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked,
+    [...SHARED_KEYS].filter((k) => !(k in parseHash(linked))));
+  /* Set aside whatever is about to be replaced: by a different layout, or by the defaults
+     standing in for one that would not load. Not a link's own layout, untouched: what that
+     link replaced is already set aside, and it is the one you would want back. */
+  const aside = saved.length > 2 && saved !== pristine && !savedLinked &&
+    (replaces || !!stalled);
+  if (aside) {
+    writeKey(PREV_KEY, saved);
+    writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
+  }
+  const canPutBack = replaces && (aside || (savedLinked && !!readKey(PREV_KEY)));
+  if (stalled) {
+    showSetAside('This layout did not finish loading last time, so the page has started ' +
+      'from its defaults rather than try it again.', canPutBack, true);
+  } else if (src) {
+    writeKey(LOADING_KEY, src);
+    loadFromHash(src);
+    if (!fromLink) $('restored').style.display = '';
+    else if (canPutBack) showSetAside('This link replaced the layout you had here.', true, false);
+    /* A hand-over is your own layout come back from the other page, never someone's
+       link, even onto an empty save; and one that moved the drawer or bed on has been
+       changed, by you, there. One still holding a link's settings is that link's. */
+    linkedNow = handedOver ? false
+      : fromLink ? replaces || (savedLinked && sameDesign(saved, src))
+      : savedLinked;
+    linkNew = fromLink && replaces && !handedOver;
+    arrivedWith = src;
+  }
 }
 hashReady = true;                         // loadFromHash has had its say; ours may start
 recomputeLayout();
 autoFrame();
+bootDesc = encodeDesc(descriptor());
+/* Laid out and drawn, so the marker has done its job. A stalled layout keeps its marker:
+   reloading the same link must be declined again, not tried again. */
+if (!stalled) {
+  writeKey(LOADING_KEY, '');
+  /* A link that arrived on this visit is recorded as it is, less any drawer, bed or infill
+     settings that came with it as yours: kept, they were the link's from then on, and a
+     later trip that changed them on the other page was a link replacing your layout
+     there. The same link reloaded or reopened keeps its record, which writing it afresh
+     filled back in. A changed one is kept while the page still uses any of its values,
+     so a reload does not turn those into yours. */
+  const keep = !linkedNow ? (linkKeys(bootDesc, linkKept).length ? linkKept : '')
+    : !linkNew ? linkKept
+    : bootDesc.split('&').filter((kv) =>
+      !notLinked.includes(kv.slice(0, kv.indexOf('=')))).join('&');
+  writeKey(LINKED_KEY, keep);
+  heldLink = keep;
+}
 drawers.attach(arrivedWith);              // is that a saved drawer this browser wrote?
-
-
-if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);
-
-/* A hash this page did not write means someone navigated to a link — pasted a share URL
-   into the address bar, or picked a bookmark — and changing only the fragment is a
-   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
-   Before local saving that was merely confusing; now it means a shared layout loses to
-   whatever this browser had stored, which is the one case that must never happen.
-   Reloading applies the link. replaceState does not fire this event, so the saves this
-   page makes every few seconds cannot trigger it. */
-addEventListener('hashchange', () => location.reload());
 

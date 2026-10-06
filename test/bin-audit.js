@@ -45,6 +45,10 @@ const CASES = [
   { name: '1x1x1', u: 1, v: 1, hUnits: 1 },
   { name: '2x1x3-scoop', u: 2, v: 1, hUnits: 3, scoop: 8 },
   { name: '2x1x3-label', u: 2, v: 1, hUnits: 3, label: 12 },
+  /* A shelf deeper than the cavity is tall: its 45 degree underside used to run down
+     through the floor and out among the feet, 4 open edges from 8 mm on a 1-unit bin. */
+  { name: '1x1x1-label12', u: 1, v: 1, hUnits: 1, label: 12 },
+  { name: '2x1x2-label20', u: 2, v: 1, hUnits: 2, label: 20 },
   { name: '2x1x3-openfront', u: 2, v: 1, hUnits: 3, edges: { f: 0 } },
   { name: '2x2x2-tray', u: 2, v: 2, hUnits: 2, edges: { f: 0, b: 0, l: 0, r: 0 } },
   { name: '6x4x5-everything', u: 6, v: 4, hUnits: 5, divX: 2, divY: 1, scoop: 6, label: 10 },
@@ -394,6 +398,192 @@ console.log('\na lid fits the lip it is made for');
     console.log(`  lid, ${name.padEnd(32)}${m.bad === 0 && wOk ? 'watertight, right footprint' :
       (m.bad ? m.bad + ' BAD EDGES' : `FOOTPRINT ${L.meta.W} vs ${expW}`)}`);
     if (m.bad || !wOk) bad++;
+  }
+
+  /* A lid with every skirt unticked is the plate alone. It was reported as plate plus
+     skirt, 4.2 mm, to the packer and to the download list, for a 1.2 mm part. */
+  const flat = lidPartOf(G, { u: 1, v: 1, lidSides: { f: false, b: false, l: false, r: false } });
+  const fm = G.checkManifold(flat.polys);
+  let fz = 0;
+  for (const p of flat.polys) for (const w of p.verts) fz = Math.max(fz, w[2]);
+  const flatOk = fm.bad === 0 && Math.abs(flat.meta.totalH - fz) < 0.001;
+  console.log(`  lid, ${'no skirt at all'.padEnd(32)}` + (flatOk
+    ? `watertight, ${flat.meta.totalH.toFixed(1)} mm as built`
+    : `says ${flat.meta.totalH.toFixed(1)} mm tall, built ${fz.toFixed(1)} mm` + (fm.bad ? `, ${fm.bad} BAD EDGES` : '')));
+  if (!flatOk) bad++;
+}
+
+/* Every wall the page will let you type, not just the 1.2 everyone uses.
+ *
+ * From 2.70 mm up — the inset of the stacking lip's base — a rectangular bin leaked:
+ * 256 edges used four times to 3 mm, 72 plus coplanar folds beyond. The lip's
+ * underside chamfer runs from the wall thickness out to that base, and at a wall that
+ * thick it had zero height, so the lip's bottom cap lay on the wall's top face. At
+ * exactly 2.70 the wall's top inner edge is the lip's base corner as well, which is
+ * why burying the cap alone did not close it.
+ *
+ * At the thin end, a wall of 0 put the cavity's skin on the outer one — 64 open edges
+ * and shells inside out — and 0.2 still left a carved shape 3; the engine now builds
+ * anything under 0.4 at 0.4. The page accepts 0 because a shared link does.
+ *
+ * The range comes from the page's own field, so raising the cap there without the
+ * geometry to back it fails here rather than in somebody's slicer. */
+console.log('\nwalls across the whole range the page accepts');
+{
+  const tpl = fs.readFileSync(path.join(__dirname, '..', 'src', 'bins', 'template.html'), 'utf8');
+  const attr = (id, a) => {
+    const m = tpl.match(new RegExp(`id="${id}"[^>]*\\b${a}="([^"]+)"`));
+    return m ? Number(m[1]) : NaN;
+  };
+  const lo = attr('wall', 'min'), hi = attr('wall', 'max');
+  if (!(lo >= 0 && hi > lo)) {
+    console.log(`  the wall field has no usable min/max (${lo}..${hi}) — the page would accept anything`);
+    bad++;
+  } else {
+    const walls = [lo, 0.1, 0.2, 0.3, 0.4, 0.8, 1.2, 2, 2.6, 2.65, 2.69, 2.7, 2.71, 2.75, 3, 3.5, 4, 5, hi]
+      .filter((w, i, a) => w >= lo && w <= hi && a.indexOf(w) === i);
+    const SHAPES = [
+      ['1x1x1', { u: 1, v: 1, hUnits: 1 }],
+      ['1x1x3', { u: 1, v: 1, hUnits: 3 }],
+      ['2x1x5', { u: 2, v: 1, hUnits: 5 }],
+      ['3x2x4 everything', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12 }],
+      ['2x2x3 railed', { u: 2, v: 2, hUnits: 3, divX: 1, divY: 1, divRemovable: true }],
+      ['2x1x3 open front', { u: 2, v: 1, hUnits: 3, edges: { f: 0.5 } }],
+      ['L-3x3', { u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) }],
+    ];
+    for (const [name, base] of SHAPES) {
+      const fails = [];
+      for (const wall of walls) {
+        const r = buildBin(G, Object.assign({}, base, { wall }));
+        const m = G.checkManifold(r.polys);
+        const ori = checkOrientation(r.polys);
+        let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+        for (const p of r.polys) for (const w of p.verts) {
+          xmin = Math.min(xmin, w[0]); xmax = Math.max(xmax, w[0]);
+          ymin = Math.min(ymin, w[1]); ymax = Math.max(ymax, w[1]);
+        }
+        const wOk = Math.abs(xmax - xmin - ((base.u - 1) * 42 + 41.5)) < 0.02 &&
+                    Math.abs(ymax - ymin - ((base.v - 1) * 42 + 41.5)) < 0.02;
+        if (m.bad || !ori.ok || !wOk)
+          fails.push(`${wall}: ` + [m.bad ? `${m.bad} bad edges` : '', ori.ok ? '' : orientationNote(ori),
+                                    wOk ? '' : `footprint ${(xmax - xmin).toFixed(2)}`].filter(Boolean).join(', '));
+      }
+      console.log(`  ${name.padEnd(18)} ${walls[0]}–${walls[walls.length - 1]} mm  ` +
+                  (fails.length ? 'FAILED at ' + fails.join('; ') : `${walls.length} walls, all clean`));
+      if (fails.length) bad++;
+    }
+  }
+}
+
+/* The other limits the page and a shared link share: a floor as thick as the bin is
+   tall, and as many dividers as fit across the inside. Each used to build broken at its
+   edge, so each is built here at the edge of what is allowed. */
+const cleanBuild = (cfg) => {
+  const r = buildBin(G, cfg);
+  const m = G.checkManifold(r.polys), ori = checkOrientation(r.polys);
+  let zmax = -Infinity;
+  for (const p of r.polys) for (const w of p.verts) zmax = Math.max(zmax, w[2]);
+  const H = cfg.hUnits * SPEC.unitH;
+  // nothing but the stacking lip may stand above the bin's own height
+  const lipTop = H + (r.meta.hasLip ? r.meta.lipH : 0) + 0.001;
+  return [m.bad ? `${m.bad} bad edges` : '', ori.ok ? '' : orientationNote(ori),
+          zmax > lipTop ? `${(zmax - lipTop).toFixed(2)} mm above the top` : '']
+    .filter(Boolean).join(', ');
+};
+const sweepReport = (label, rows) => {
+  const fails = rows.map(([name, cfg]) => { const f = cleanBuild(cfg); return f ? `${name}: ${f}` : ''; })
+    .filter(Boolean);
+  console.log(`  ${label.padEnd(34)} ` + (fails.length ? 'FAILED at ' + fails.join('; ') : `${rows.length} builds, all clean`));
+  if (fails.length) bad++;
+};
+const L3 = cellsExcept(2, 2, [[1, 1]]);
+
+console.log('\nfloors up to the bin\'s own height');
+/* A carved bin's wall panels run from the floor up to the top; a floor past the top
+   swept them downwards — inside out, folded, and standing above the lip. */
+for (const hUnits of [1, 3, 6]) {
+  const H = hUnits * SPEC.unitH, cavity = H - SPEC.footH;
+  const floors = [0, cavity - 0.3, cavity - 0.1, cavity, cavity + 0.5, H].filter((f) => f >= 0);
+  for (const [name, base] of [['rectangle', { u: 2, v: 1 }],
+                              ['rectangle, dividers', { u: 2, v: 2, divX: 1, divY: 1 }],
+                              ['rectangle, rails', { u: 2, v: 2, divX: 1, divRemovable: true }],
+                              ['rectangle, scoop + label', { u: 2, v: 1, scoop: H, label: 42 }],
+                              ['L-2x2', { u: 2, v: 2, cells: L3 }],
+                              ['L-2x2, 3 mm walls', { u: 2, v: 2, cells: L3, wall: 3 }]])
+    sweepReport(`${hUnits}u ${name}`, floors.map((floorT) =>
+      [`floor ${floorT.toFixed(2)}`, Object.assign({ hUnits, floorT }, base)]));
+}
+
+console.log('\nas many dividers as the fields allow');
+/* The divider fields stop at what fits across the inside at one wall thickness, never
+   counted thinner than 1.2 mm — the same rule the link uses. At exactly that many,
+   some walls space the dividers exactly one divider apart (4.15 mm in a 1x1, 8.35 in a
+   2x1) or the rails exactly one rail apart (0.95 mm, 0.9 in a 3x1), and neighbours
+   touched face to face. A wall of 0 is counted for a 0 mm wall and built at 0.4, which
+   packs the rails a hair closer than one apart. Those walls are swept along with a
+   spread of ordinary ones. */
+{
+  const most = (n, wall) =>
+    Math.max(0, Math.floor(((n - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall) / Math.max(wall, 1.2)) - 1);
+  for (const n of [1, 2, 3]) {
+    const walls = [0, 0.4, 0.9, 0.95, 1.2, 2, 4.15, 5, 8.35, 10];
+    for (const divRemovable of [false, true])
+      sweepReport(`${n}x1 ${divRemovable ? 'rails' : 'fixed'}`, walls.map((wall) =>
+        [`wall ${wall} x${most(n, wall)}`, { u: n, v: 1, hUnits: 2, wall, divX: most(n, wall), divRemovable }]));
+    sweepReport(`${n}x${n} both ways, rails`, [0, 0.4, 0.95, 1.2, 3].map((wall) =>
+      [`wall ${wall} x${most(n, wall)}`, { u: n, v: n, hUnits: 2, wall, divX: most(n, wall), divY: most(n, wall), divRemovable: true }]));
+  }
+}
+
+/* The label shelf's underside runs down at 45 degrees, so the deeper the shelf the
+   lower its foot, and one deeper than the bin is tall came out through the floor among
+   the feet. The limit that stopped it held the foot 0.2 above the floor, and that cut
+   shelves which had always built cleanly: a 14 mm label on a 1x1x3 came out 13.65, a
+   7 mm one on a 2x1x2 6.65. The foot may run into the floor slab, which is solid; it
+   must not leave it, and the slab ends at the top of the base. Measured off the mesh:
+   the shelf is whatever adding the label adds. */
+console.log('\nlabel shelves as deep as the bin\'s height allows');
+{
+  const key = (p) => p.verts.map((w) => w.map((x) => x.toFixed(4)).join(',')).join(' ');
+  const shelfOf = (cfg) => {
+    const without = new Set(buildBin(G, Object.assign({}, cfg, { label: 0 })).polys.map(key));
+    let ymin = Infinity, zmin = Infinity;
+    for (const p of buildBin(G, cfg).polys) if (!without.has(key(p)))
+      for (const w of p.verts) { ymin = Math.min(ymin, w[1]); zmin = Math.min(zmin, w[2]); }
+    if (!isFinite(zmin)) return { depth: 0, foot: NaN };          // no shelf built at all
+    const inner = (cfg.v - 1) * SPEC.pitch / 2 + SPEC.half - (cfg.wall || BIN_DEFAULTS.wall);
+    return { depth: inner - ymin, foot: zmin };
+  };
+  // [name, bin, what the shelf must be: its depth, or null for "as deep as the height allows"]
+  const SHELVES = [
+    ['1x1x3, 14 mm', { u: 1, v: 1, hUnits: 3, label: 14 }, 14],
+    ['2x1x2, 7 mm', { u: 2, v: 1, hUnits: 2, label: 7 }, 7],
+    ['2x1x3, 12 mm on a 3 mm floor', { u: 2, v: 1, hUnits: 3, floorT: 3, label: 12 }, 12],
+    // the deepest a whole-millimetre shelf on whole units reaches: its foot on the base
+    ['1x2x3, 15 mm', { u: 1, v: 2, hUnits: 3, label: 15 }, 15],
+    ['1x1x3, 16 mm', { u: 1, v: 1, hUnits: 3, label: 16 }, null],
+    ['1x1x1, 12 mm', { u: 1, v: 1, hUnits: 1, label: 12 }, null],
+    ['2x1x2, 20 mm on a 3 mm floor', { u: 2, v: 1, hUnits: 2, floorT: 3, label: 20 }, null],
+  ];
+  for (const [name, cfg, want] of SHELVES) {
+    const s = shelfOf(cfg);
+    const ok = want !== null ? Math.abs(s.depth - want) < 1e-6
+      : s.foot >= SPEC.footH && s.foot <= SPEC.footH + 0.1;
+    console.log(`  ${name.padEnd(30)} ${s.depth.toFixed(2).padStart(5)} mm deep, foot at ` +
+                `${s.foot.toFixed(2).padStart(4)}   ` + (ok ? 'ok'
+                  : want !== null ? `CUT SHORT of ${want} mm`
+                  : !s.depth ? 'NO SHELF where one fits'
+                  : s.foot < SPEC.footH ? 'BELOW THE BASE, among the feet' : 'HELD UP off the base'));
+    if (!ok) bad++;
+  }
+  for (const [name, base] of [['1x1x3 at its limit', { u: 1, v: 1, hUnits: 3 }],
+                              ['2x2x2 at its limit', { u: 2, v: 2, hUnits: 2 }]]) {
+    const rows = [], H = base.hUnits * SPEC.unitH;
+    // a wall of 1.148 puts the shelf's back corners on vertices of the foot's and wall's arcs
+    for (const floorT of [0, 0.6, 1.05, 1.1, 1.2, 3]) for (const wall of [0.4, 1.148, 1.2, 2])
+      for (const label of [H - 7, H - 6, H - 5, 42])
+        rows.push([`floor ${floorT} wall ${wall} label ${label}`, Object.assign({ floorT, wall, label }, base)]);
+    sweepReport(name, rows);
   }
 }
 

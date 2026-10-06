@@ -925,11 +925,27 @@ items, is a perfectly good design and uses far less filament.</p>
       return h && !/^(https?:|mailto:|#)/.test(h);
     });
   }
+  /* The link's own anchor gives way to the layout: an address holds one fragment, and
+     "../#heights" with the layout added was "#heights#w=…", which the tools read as a
+     layout missing its drawer. */
   for (const a of links)
     a.addEventListener('click', function (e) {
       if (!location.hash || location.hash.length < 3) return;
       e.preventDefault();
-      location.href = a.getAttribute('href') + location.hash;
+      location.href = a.getAttribute('href').split('#')[0] + location.hash;
+    });
+
+  /* Skip links move focus and leave the address alone. Followed the ordinary way, one
+     put #stage in the address bar where the tools keep the layout, and a hash change
+     reloads both tools — so the first thing Tab reaches wiped the drawer on screen and
+     then the save behind it. The target takes focus (tabindex="-1"), and focusing it
+     scrolls it into view, which is all the jump was for. */
+  for (const s of document.querySelectorAll('a.skip'))
+    s.addEventListener('click', function (e) {
+      var t = document.getElementById((s.getAttribute('href') || '').slice(1));
+      if (!t) return;
+      e.preventDefault();
+      t.focus();
     });
 
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"

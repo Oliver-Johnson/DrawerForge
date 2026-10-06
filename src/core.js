@@ -749,6 +749,131 @@ function clipToRect(pts, x0, y0, x1, y1) {
 }
 
 // ---------- layout ----------
+/* The biggest grid the page will build in one go, a 1.26 m square at the spec pitch. It
+   lives here because computeLayout has to honour it too (see the 'plates' split); the
+   page's MAX_CELLS is this number. */
+const PLATE_MAX_CELLS = 900;
+/* The range the page accepts for each setting that reaches the geometry with nothing
+   else bounding it. They live here, beside the geometry they protect, because
+   test/plate-audit.js builds every joint at their ends — a limit the audit cannot read
+   is a limit nobody re-measures when the geometry changes. The page adds the labels and
+   the wording; src/ui.js LIMITS.
+ *
+ *   pitch      Below 13.5 the joints stop closing: keys, snaps and puzzle lobes run into
+ *              their neighbours or out of their cells, and every joint leaked somewhere in
+ *              5–13 mm. 13.3 still leaks a 1-cell-wide piece on four of them. 13.5 is
+ *              where all fifteen configurations the audit builds there close, on both its
+ *              layouts, at the default clearance. That is not a promise that every design
+ *              above it closes: a puzzle key in the walls, dropped in from above, leaks at
+ *              14 (12 edges on 2 × 2 pieces, 3 on 1-cell ones), and a 35 mm pitch with a
+ *              magnet and the widest screw head leaks 3. Neither is new — both built the
+ *              same before there were ranges — and each is one setting, the sliver class
+ *              ENGINE.md describes, not a reason to move the floor. It was 5, which only
+ *              stopped the grid dividing by zero.
+ *   topCutoff  0 puts the socket's top edge on the plate's own outline, and the rim there
+ *              is a face of no width: every joint leaked. It closes from about 0.02, and
+ *              0.1 keeps well clear of that edge (a few isolated values inside the range
+ *              still fold or leak a handful of edges, as they did before there was a
+ *              range: the sliver class ENGINE.md describes, not this limit). From 0.75 the socket's top edge
+ *              is narrower than a spec bin's chamfer at that height, so the bin stops
+ *              reaching the socket floor and rides on the rim — by 0.25 mm at 1, and the
+ *              chamfer turns over entirely at 2.15. 1 is as far as that is worth taking.
+ *   connClr    1 is where a number stops being a fit and starts being a slip: a
+ *              millimetre a side is more play than any joint holds. Most joints stop
+ *              sooner, and where depends on the joint, how its key goes in and the pitch,
+ *              so the ceiling is connClrCeiling's, below, and not a number here.
+ *   bottomPad  Nothing breaks above 20; a plate that tall is a typing slip, and the bed
+ *              check is what stops one taller than the printer.
+ *   magnet and screw minimums keep a cutter from sitting flush with a face — a 0 mm
+ *              magnet is a pocket whose roof is the plate's floor, and coplanar cuts are
+ *              ENGINE.md §1's oldest rule. The diameters' maximums depend on the pitch
+ *              and come from mountLimits. */
+const PLATE_RANGES = {
+  pitch: { min: 13.5, max: 200 },
+  topCutoff: { min: 0.1, max: 1 },
+  connClr: { min: 0, max: 1, dovetail: 0.3, snapTop: 0.3, puzzleKey: 0.8,
+             smallPitch: 20, small: 0.3, puzzleRoom: 6.5 },
+  bottomPad: { min: 0, max: 20 },
+  magnetD: { min: 1 }, magnetH: { min: 0.5, max: 10 },
+  screwHoleD: { min: 1 }, screwHeadD: { min: 1 }, screwHeadDepth: { min: 0.5, max: 10 },
+};
+/* The one fit-clearance field, as each joint's housing is cut to it. readControls in
+   src/ui.js worked this out and the audit copied it by hand, and the ceiling below is a
+   field value whose meaning depends on it — a top-inserted snap is cut to the key's
+   figure, 0.05 under the field — so all three read it from here. */
+function fitClearances(field) {
+  return { tab: field, puzzle: field,
+           key: Math.max(0.1, field - 0.05), hclip: Math.max(0.08, field - 0.05) };
+}
+/* The fit clearance's ceiling for one design, as { max, by }; `by` says what sets it, for
+ * the page to put in words: 'dovetail', 'snaptop', 'pitch', 'joint', or 'slip' for the
+ * plain 1 mm. One function, because four things have to agree on it — the field's range,
+ * the clamp on a number a link brings in, the message saying why, and the fit coupon's
+ * slackest pair — and it takes the whole design because the answer depends on the joint,
+ * which way its key goes in and the pitch. It took a connector name, and a 1 mm ceiling
+ * for everything but the dovetail let a snap clip's housing into the next piece and let
+ * small pitches leak.
+ *
+ * Measured on 2 × 2 and 1-cell pieces from 13.5 to 60 mm, every 0.5 mm of pitch — at
+ * every 0.05 of clearance for the puzzle, the bowtie and the puzzle key, at six for the
+ * rest — and at every 0.01 of clearance at 20, 25, 30, 35, 42 and 60:
+ *
+ *   dovetail  0.3. Past it the pocket, cut 1.9 mm + this into the piece, breaks through
+ *             the 2.15 mm socket wall and crosses the chamfer cone; it leaked from 0.34.
+ *             The hint's own advice stops at 0.25.
+ *   snaptop   0.3, in either housing. The clip's slot puts its seam-side wall
+ *             0.3 − (the key's clearance) from the seam, so past a field of 0.35 that
+ *             wall stands in the next piece — by 0.65 mm at 1 — and two pieces that print
+ *             overlapping cannot butt together; on the coupon the pairs met at the seam.
+ *             At 0.35 itself nothing overlaps, but the wall lies in the piece's own seam
+ *             face, about 9.4 mm² of face shared — the coplanar face ENGINE.md keeps
+ *             every shell off, with no bad edge to show for it — and the coupon's 0.3
+ *             pair did the same for any field from 0.3 up. 0.3 holds the wall one BLOAT,
+ *             0.05, inside the piece, the overlap the cell regions keep; the coupon's
+ *             slackest pair is this ceiling cut the key's way, so it stops there too.
+ *   pitch     0.3 below 20 mm, for the three housings the field cuts that leaked there:
+ *             the puzzle, and the bowtie and puzzle key in the floor. Past 0.3 they left
+ *             holes from 13.5 to 19 mm — a puzzle key at 14 from 0.4, a bowtie at 18 at
+ *             1, a puzzle at 19 from 0.35 — and from the default 0.2 to 0.3 none did. The
+ *             puzzle's lobe also needs room in its cell: it opens the plate once its
+ *             clearance passes half the pitch less 6.475 mm, so it stops at half the pitch
+ *             less 6.5 — 0.25 at 13.5, and 0.3 from 13.6.
+ *   joint     0.8 for a puzzle key in the floor from 20 mm up: between 0.82 and 0.96 its
+ *             recess leaked at every pitch measured, 20 to 60.
+ *   slip      1 for the rest. A key in the walls is cut to keySlim's own clearance, which
+ *             the field does not move. The snap and the H-clip did not leak above 0.3 at
+ *             any pitch measured but in one band — an H-clip dropped in from above leaks
+ *             at 0.74 to 0.745 and nowhere else. From 20 mm up the bowtie and the puzzle
+ *             leak only at isolated values: the bowtie at 25 mm at 0.64, the puzzle at
+ *             0.39–0.4 at 21 and 32.5–35 mm and here and there from 0.52 to 0.87. That is
+ *             the sliver class again, not a ceiling — no limit short of 0.38 misses them,
+ *             and the same class turns up under the default too: a snap at 20 mm at 0.29,
+ *             a bowtie at 17 mm at 0.15 and under. */
+function connClrCeiling(cfg) {
+  const R = PLATE_RANGES.connClr;
+  const kind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
+  if (kind === 'dovetail') return { max: R.dovetail, by: 'dovetail' };
+  if (kind === 'snaptop') return { max: R.snapTop, by: 'snaptop' };
+  const floorKey = ['bowtie', 'puzzlekey'].includes(cfg.connector) && cfg.keyMount !== 'wall';
+  if (cfg.connector !== 'puzzle' && !floorKey) return { max: R.max, by: 'slip' };
+  if (cfg.pitch < R.smallPitch) {
+    const room = cfg.connector === 'puzzle'
+      ? Math.floor((cfg.pitch / 2 - R.puzzleRoom) * 100 + 1e-9) / 100 : Infinity;
+    return { max: Math.min(R.small, room), by: 'pitch' };
+  }
+  if (cfg.connector === 'puzzlekey') return { max: R.puzzleKey, by: 'joint' };
+  return { max: R.max, by: 'slip' };
+}
+/* A piece's column letters, spreadsheet-style: A … Z, AA, AB … The id was
+   String.fromCharCode(65 + s), which runs on past Z into '[', '\' and the lower case — a
+   33-piece row shipped `baseplate-\1.stl`, and both `baseplate-A1.stl` and
+   `baseplate-a1.stl`, which are one file on Windows and macOS. */
+function pieceColumn(s) {
+  let out = '';
+  for (let n = s + 1; n > 0; n = Math.floor((n - 1) / 26))
+    out = String.fromCharCode(65 + (n - 1) % 26) + out;
+  return out;
+}
 /* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
    splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
 function computeLayout(p) {
@@ -796,7 +921,13 @@ function computeLayout(p) {
   // row bands
   let rowCuts;
   if (p.splitMode === 'plates') {
-    const opt = optimizeForPlates(Object.assign({}, p, { splitMode: 'balanced' }));
+    /* Past the cell cap the page will refuse the job whatever split it gets, and this
+       search runs first, inside the layout, before the page can say so. That ordering
+       is how a stray 5 mm pitch on a big drawer froze the tab for 21 s to end at "not
+       building" anyway — and every keystroke in the pitch field passes through values
+       like that on its way to the one being typed. */
+    const opt = nx * ny <= PLATE_MAX_CELLS
+      ? optimizeForPlates(Object.assign({}, p, { splitMode: 'balanced' })) : null;
     if (opt) return computeLayout(Object.assign({}, p, { splitMode: 'manual', rowCuts: opt.rowCuts, colCuts: opt.colCuts }));
     return computeLayout(Object.assign({}, p, { splitMode: 'balanced' }));
   }
@@ -853,7 +984,7 @@ function computeLayout(p) {
     const segEnds = [...colCuts[b], nx];
     for (let s = 0; s < segStarts.length; s++) {
       pieces.push({
-        id: `${String.fromCharCode(65 + s)}${b + 1}`,
+        id: `${pieceColumn(s)}${b + 1}`,
         band: b, seg: s,
         cellX0: segStarts[s], cellY0: bandStarts[b],
         nx: segEnds[s] - segStarts[s], ny: bandEnds[b] - bandStarts[b],
@@ -1647,6 +1778,103 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
 }
 
 // ---------- plate builder ----------
+/* One print layer, at the 0.2 mm the page's material estimate assumes (its 0.8 mm top
+   and bottom skins are four layers). The thinnest plastic a slicer can be counted on to
+   lay down: between two faces closer than this it may put nothing at all, so a floor
+   that thin can print as a hole however closed the mesh is. */
+const PRINT_LAYER = 0.2;
+/* Plastic left between a mounting pocket and the face it stops short of: one layer. The
+   solid floor was a fixed 2.8 mm, so a 6 × 3 mm magnet, as common as the 6 × 2 the spec
+   draws, was cut clean through it: from above it fell out of the bottom, from below it
+   stood 0.2 mm proud of the socket floor.
+   One layer and no more, because more raises plates that were sound: 2.8 mm holds the
+   spec's 6.5 × 2.4 magnet over 0.4 of plastic and always printed it, and a 0.6 skin makes
+   that plate 0.2 mm taller — and the height the Bins page is handed with it — for
+   nothing. So the floor stays 2.8 for anything up to 2.6 deep, as it always was, and
+   grows only past that, where what is left under the pocket might not print. A corner
+   boss is held to the same line: 2.6 tall, so 2.4 deep at most. */
+const MOUNT_SKIN = PRINT_LAYER;
+/* The corner bosses of baseMode 'bosses': a quarter square this far in from each cell
+   corner, its inner corner rounded, never taller than BOSS_H. Named because mountLimits
+   has to know how much room a boss leaves around its pocket. */
+const BOSS_W = 12.5, BOSS_R = 3.5, BOSS_H = 2.6;
+
+/* How thick the solid floor under the sockets is: what was asked for, raised to whatever
+   the plate is carrying needs. A pocket cut into the floor — a magnet from either side, a
+   screw head's counterbore from below — has to be shallower than the floor by
+   MOUNT_SKIN, or it is a hole.
+   Its own function because the page needs the plate's height before anything is built:
+   a plate taller than the printer can build is a check, not a surprise in the slicer. */
+function platePad(cfg) {
+  let pad = cfg.bottomPad;
+  /* Rounded to the micron, because 2.6 + 0.2 is 2.8000000000000003 and that is not a
+     reason to move every face of a plate that was 2.8 before. */
+  const under = (depth) => Math.round((depth + MOUNT_SKIN) * 1e6) / 1e6;
+  if ((cfg.magnets || cfg.screws) && cfg.baseMode !== 'bosses') {
+    pad = Math.max(pad, cfg.magnetBase || 2.8);
+    if (cfg.magnets) pad = Math.max(pad, under(cfg.magnetH));
+    if (cfg.screws && cfg.screwHeadD > cfg.screwHoleD)
+      pad = Math.max(pad, under(cfg.screwHeadDepth));
+  }
+  const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
+  if (keyedConn && cfg.keyMount !== 'wall') pad = Math.max(pad, cfg.key.depth + 0.8);
+  if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
+  return pad;
+}
+
+/* Plastic left round a mounting cut, to whatever holds it. 1 mm rather than a token
+   wall, and measured: the sites sit holeOffset from each cell centre whatever the
+   pitch, and with less than this between them and the socket floor's edge the cutter's
+   facets graze the floor's own triangulation — screws at a 36 mm pitch leaked 192 edges
+   with 0.65 mm to spare. */
+const MOUNT_WALL = 1.0;
+/* The largest mounting cuts this configuration has room for, as diameters and depths in
+   the units the page's fields use. Magnets and screws sit holeOffset (13 mm, the spec's)
+   from each cell centre at ANY pitch, so the room round them shrinks with the pitch:
+   below about 34 mm a stock magnet pocket no longer fits inside its cell at all, and every
+   magnet-and-screw leak a pitch sweep found, 24.5 to 36 mm, was a cutter out past the
+   socket floor or the cell edge.
+ *
+ * Three kinds of room, by where the cut opens:
+ *   - into the socket (a magnet from above, the screw shank): it must stay on the socket
+ *     floor, or it crosses the floor's chamfer cone — see ENGINE.md §2;
+ *   - under the floor (a magnet from below, the counterbore): it must stay in its cell;
+ *   - in a corner boss: it must stay in the boss, which is shorter than the solid floor
+ *     and does not grow with the pocket, so it also caps the depth.
+ *
+ * These are measurements, not field ranges, and can come out below the field's minimum
+ * or negative — a screw shank at a 34 mm pitch has −0.1 mm. That means no cut of any size
+ * fits there; the page turns it into a check on the design rather than a range for the
+ * field (src/ui.js readNumber), since no number typed into the field could fix it. */
+function mountLimits(cfg) {
+  const half = cfg.pitch / 2, off = cfg.holeOffset;
+  const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
+  // distance from a point at (s, s) to the edge of a rounded square of half-size h,
+  // corner radius r, centred on the origin
+  const roomIn = (h, r, s) => {
+    const q = s - (h - r);
+    return q > 0 ? r - Math.SQRT2 * q : h - s;
+  };
+  // the socket floor ring, as buildPiece's profile and roundedSquareRing make it
+  const dBot = 2.85 + tol, hf = half - dBot;
+  const rf = Math.max(0.3, Math.min(cfg.socketRadius - (dBot - cfg.topCutoff), hf - 0.01));
+  const onFloor = roomIn(hf, rf, off) - MOUNT_WALL;
+  const inCell = half - off - MOUNT_WALL;
+  const s = half - off;              // the site's distance in from the cell's edges
+  const inBoss = Math.min(roomIn(BOSS_W, BOSS_R, s), s) - MOUNT_WALL;
+  const bosses = cfg.baseMode === 'bosses';
+  const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
+  const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // the fields step in tenths
+  return {
+    // a magnet pocket is cut 0.1 mm over the magnet's radius
+    magnetD: r10(2 * ((cfg.magnetSide === 'top' ? top : under) - 0.1)),
+    screwHoleD: r10(2 * top),
+    screwHeadD: r10(2 * under),
+    // in the solid floor the pad grows to suit, so only a boss caps the depth
+    depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
+  };
+}
+
 /* Region-decomposed build: no global CSG. Each piece = margin/corner regions (plain
    extrusions) + one region per cell (extrusion minus its socket cutter and holes).
    Regions are clipped from the global outline (rounded corners, connector bites)
@@ -1654,7 +1882,7 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
 function buildPiece(cfg, layout, piece, onStatus) {
   const pitch = cfg.pitch, half = pitch/2;
   const solidBase = cfg.baseMode !== 'bosses';
-  let pad = ((cfg.magnets || cfg.screws) && solidBase) ? Math.max(cfg.bottomPad, cfg.magnetBase || 2.8) : cfg.bottomPad;
+  const pad = platePad(cfg);
   const isHclip = cfg.connector === 'hclip';
   const topInsert = cfg.keyInsert === 'top';
   const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
@@ -1680,8 +1908,6 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const keyKind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
   const keyClr = keyKind === 'snaptop' ? cfg.key.clr
                : isHclip ? cfg.hclip.clr : keyDims.clr;
-  if (keyedConn && !wallKeys) pad = Math.max(pad, cfg.key.depth + 0.8);
-  if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
   const H = pad + cfg.plateHeight;
   const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
   const dTop = cfg.topCutoff, dMid = 2.15 + tol, dBot = 2.85 + tol;
@@ -1902,8 +2128,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
   // ---- corner bosses (pocket-style mounting, saves filament) ----
   if ((cfg.magnets || cfg.screws) && !solidBase) {
     const off = cfg.holeOffset;
-    const bossW = 12.5, rIn = 3.5;
-    const bossH = Math.min(2.6, Math.max(
+    const bossW = BOSS_W, rIn = BOSS_R;
+    // never more than BOSS_H, so a pocket deeper than BOSS_H − MOUNT_SKIN would come out
+    // through the top: mountLimits refuses one rather than this growing past it
+    const bossH = Math.min(BOSS_H, Math.max(
       cfg.magnets ? cfg.magnetH + 0.8 : 0,
       cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
     const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
@@ -2064,7 +2292,8 @@ function checkManifold(polys) {
  * building.
  *
  * `joint.kind` names the housing for every connector, `joint.part` is present only for
- * the ones that ship a loose part.
+ * the ones that ship a loose part, and `joint.clrMax`, where there is one, is the
+ * slackest this joint's clearance can be set to.
  */
 /* Which housing a configuration uses. Pure, so it lives here rather than in the UI:
    the coupon, the plate and the audit all have to agree, and the last three bugs in
@@ -2080,7 +2309,14 @@ function jointKind(connector, keyMount, keyInsert) {
 
 function buildFitSample(cfg, H, joint) {
   H = H || 4.25;
-  const clrs = [-0.05, 0, 0.05, 0.1].map(d => Math.max(0.02, joint.clr + d));
+  /* From 0.05 under the joint's clearance to 0.1 over, and no further than the joint is
+     allowed to go. At the top of the range the two slack pairs were clearances the field
+     refuses — a dovetail at 0.25 printed a 0.35 pair, which tells you to set a number the
+     page will not take — so the four slide down until the slackest is the ceiling. Slid,
+     not cut off: four pairs at four fits still answers the question; three at one does not. */
+  const most = joint.clrMax ?? Infinity;
+  const slide = Math.max(0, joint.clr + 0.1 - most);
+  const clrs = [-0.05, 0, 0.05, 0.1].map(d => Math.min(most, Math.max(0.02, joint.clr + d - slide)));
   /* 10 deep, not 8. A top-inserted cup's outer wall stands 0.6 further into the tile than
      the key it houses, and the full-size key is 14 long, so on an 8 mm tile the wall
      landed 0.25 mm from the back edge — inside the tile's own corner arc. That printed a
@@ -2203,7 +2439,14 @@ function build3mfXML(items) {
    Shelf packing with rotation; stackable identical footprints pile up with zGap. */
 function packPlates(items, bedW, bedD, gap, opts) {
   opts = opts || {};
-  const zGap = opts.zGap || 0.24;
+  // a gap below zero overlaps the parts it separates — they print fused — so neither is
+  // allowed to be one, whoever is calling
+  gap = Math.max(0, gap || 0);
+  /* Nor is a stack gap under one layer. Side by side, 0 is two parts touching, and they
+     come apart; one on another, 0 puts the upper piece's first layer straight onto the
+     lower's top, and the slicer prints them as one part. A layer of air is the least
+     that leaves a seam to snap them apart at. */
+  const zGap = Math.max(PRINT_LAYER, opts.zGap ?? 0.24);
   const bedH = opts.bedH || 1e9;
   const stack = !!opts.stack;
   // expand qty into units
@@ -2273,11 +2516,22 @@ function packPlates(items, bedW, bedD, gap, opts) {
 }
 
 // ---- split optimizer: choose cuts minimizing print plates ----
-function compositions(n, maxPart, maxParts) {
+/* Every way to write n as an ordered sum of at most maxParts parts of at most maxPart,
+   largest parts first — up to `limit` of them.
+ *
+ * It used to walk the whole tree and keep what reached zero, which is fine for a drawer
+ * and 24 million nodes for 200 cells into parts of 70: a branch whose remaining parts
+ * could not carry what is left was walked to the bottom anyway. Pruning those changes
+ * nothing about what comes out or in what order — they never produced anything — and
+ * the limit is there for the cases that are genuinely that big, which a real drawer
+ * never reaches: none of the plans test/plate-audit.js holds comes near it. */
+const COMPOSITION_LIMIT = 5000;
+function compositions(n, maxPart, maxParts, limit = COMPOSITION_LIMIT) {
   const out = [];
   function rec(rem, parts) {
-    if (parts.length > maxParts) return;
+    if (out.length >= limit) return;
     if (rem === 0) { if (parts.length) out.push(parts.slice()); return; }
+    if (rem > (maxParts - parts.length) * maxPart) return;   // cannot finish from here
     for (let p = Math.min(rem, maxPart); p >= 1; p--) { parts.push(p); rec(rem - p, parts); parts.pop(); }
   }
   rec(n, []);
@@ -2296,6 +2550,11 @@ function optimizeForPlates(p) {
     .filter(c => c.every((v, i) => v*pitch + extra + (i === 0 ? mF : 0) + (i === c.length-1 ? mB : 0) <= p.bedD + 1e-6));
   const colComps = compositions(nx, maxCols, Math.min(kColMin + 1, 4))
     .filter(c => c.every((v, i) => v*pitch + extra + (i === 0 ? mL : 0) + (i === c.length-1 ? mR : 0) <= p.bedW + 1e-6));
+  /* No way to cut the columns at all — every split that fits the count puts a full-width
+     segment against a margin that tips it over the bed. The loop below indexed into the
+     empty list and threw, so a 1000 × 600 drawer on a 256 mm bed took the page down when
+     Fewest plates was picked. The balanced split the caller falls back to copes. */
+  if (!rowComps.length || !colComps.length) return null;
   let best = null, tried = 0;
   for (const rc of rowComps) {
     if (tried > 4000) break;
@@ -2373,6 +2632,8 @@ const DEFAULTS = {
 
 if (typeof module !== 'undefined') {
   module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+    platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
+    connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };

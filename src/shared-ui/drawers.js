@@ -83,10 +83,10 @@ const DRAWERS = (function () {
   const encodePairs = (pairs) =>
     pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 
-  /* The keys both pages write: the drawer's size, the printer, and the format version,
-     which is the same on both. Every other key belongs to one page or the other. The UI
-     spec checks this list against what the two pages actually own. */
-  const SHARED = new Set(['w', 'd', 'bw', 'bd', 'bh', 'pr', 'v']);
+  /* The keys both pages write: the drawer's size, the printer, the slicer infill, and the
+     format version, which is the same on both. Every other key belongs to one page or the
+     other. The UI spec checks this list against what the two pages actually own. */
+  const SHARED = new Set(['w', 'd', 'bw', 'bd', 'bh', 'pr', 'if', 'v']);
 
   /* One drawer, two pages writing to it. Each page's design string carries the other
      page's keys too — that is how the carry works — but its copy of them is only as new
@@ -273,8 +273,9 @@ const DRAWERS = (function () {
   /* Two small records beside the list, of which drawer each tool last saved into (see
      attach). One is per tab, in sessionStorage, which a reload and Back keep and a new tab
      starts without. The other is per device, and goes with the local save the bare site
-     restores. The tab's record also carries the note for the next page to load in it:
-     which drawer the design it arrives with belongs to. */
+     restores. The tab's record also carries the note for the next page to load in it,
+     the one note there is about an arrival: which drawer the design it arrives with
+     belongs to, if any, and whether it is someone's link (see arrival). */
   const TAB = 'drawerforge:drawers:tab';
   const LAST = 'drawerforge:drawers:last';
   function readNote(area, key) {
@@ -337,12 +338,16 @@ const DRAWERS = (function () {
         if (n[o.tool] !== id) { n[o.tool] = id; writeNote(area, key, n); }
       }
     }
-    /* The note for the next page to load in this tab: the drawer, and the fingerprint of
-       the design that page will arrive with. Read once, by attach. False if the browser
-       would not keep it. */
-    function handOver(id, h, caughtUp) {
+    /* The note for the next page to load in this tab: the drawer ('' for none), and the
+       fingerprint of the design that page will arrive with. `link` lists the drawer, bed
+       and infill settings in it that are still someone's link's, not yours (the tool's
+       ui.js works that out); `open` says a drawer was opened from the list, or caught up,
+       rather than handed over. Read once, by the page's boot (see arrival). False if the
+       browser would not keep it. */
+    function handOver(id, h, caughtUp, more) {
       const n = readNote('sessionStorage', TAB);
-      n.next = { id, fp: fingerprint(h), caughtUp: !!caughtUp };
+      n.next = { id, fp: fingerprint(h), caughtUp: !!caughtUp,
+                 link: (more && more.link) || [], open: !!(more && more.open) };
       return writeNote('sessionStorage', TAB, n);
     }
     function takeHandOver() {
@@ -353,6 +358,9 @@ const DRAWERS = (function () {
       writeNote('sessionStorage', TAB, n);
       return isPlain(next) ? next : null;
     }
+    // taken once per page, by whichever of arrival and attach asks first
+    let taken;
+    const takeOnce = () => (taken === undefined ? (taken = takeHandOver()) : taken);
     /* Replaces the page with design `h`. replaceState and a reload rather than a
        navigation: the design being replaced is not a page you went back from, and the
        back button should not offer it. */
@@ -375,7 +383,7 @@ const DRAWERS = (function () {
       const merged = encodePairs(pairs.map(([k, v]) => [k, moved.includes(k) ? stored.get(k) : v])
         .concat(moved.filter((k) => !pairs.some((p) => p[0] === k)).map((k) => [k, stored.get(k)])));
       // without the note the reloaded page could not tell it is this drawer, so stay put
-      if (!handOver(d.id, merged, true)) return false;
+      if (!handOver(d.id, merged, true, { open: true })) return false;
       go(merged);
       return true;
     }
@@ -547,7 +555,7 @@ const DRAWERS = (function () {
       }
       /* The note is how the reloaded page knows the design it finds in its address bar is
          this drawer, and not another drawer holding the same design — see attach. */
-      handOver(d.id, d.hash);
+      handOver(d.id, d.hash, false, { open: true });
       go(d.hash);
     }
 
@@ -730,11 +738,21 @@ const DRAWERS = (function () {
        *
        * Called once the page has loaded its design and drawn it, so that `bootDesign` is
        * what an untouched page looks like. */
+      /* The note left for this page, if the design `h` it arrives with is the one the
+         note is about, else null: with `link` and `open` as handOver writes them. Read
+         every time, so a stale note never lingers; attach reads the same one. */
+      arrival(h) {
+        const next = takeOnce();
+        if (!next || !h || next.fp !== fingerprint(h)) return null;
+        return { id: typeof next.id === 'string' ? next.id : '',
+                 link: Array.isArray(next.link) ? next.link.filter((k) => typeof k === 'string') : [],
+                 open: next.open === true };
+      },
       attach(arrivedWith) {
         fresh = !arrivedWith;
         bootDesign = o.design();
         attached = null;
-        const next = takeHandOver();      // read every time, so a stale note never lingers
+        const next = takeOnce();          // read every time, so a stale note never lingers
         if (arrivedWith) {
           const s = loadAll();
           const fp = fingerprint(arrivedWith);
@@ -784,16 +802,17 @@ const DRAWERS = (function () {
       },
       /* Before the page navigates to the other tool or the guide with `h` in the address.
          Also saves: the debounced save may not have run yet, and this is the last chance.
-         And leaves the note that tells the page at the other end which drawer it is. */
-      handoff(h) {
-        if (!attached) return;
-        const s = loadAll();
-        const d = find(s, attached);
-        if (!d) return;
-        d.hash = mergeDesign(d.hash, h, o.owns, base);
-        d.saved = Date.now();
-        if (saveAll(s)) base = sharedOf(h);
-        handOver(d.id, h);
+         And leaves the note that tells the page at the other end it is a hand-over, which
+         drawer it is if any, and which settings in it are still someone's link's. */
+      handoff(h, link) {
+        const s = attached && loadAll();
+        const d = s && find(s, attached);
+        if (d) {
+          d.hash = mergeDesign(d.hash, h, o.owns, base);
+          d.saved = Date.now();
+          if (saveAll(s)) base = sharedOf(h);
+        }
+        handOver(d ? d.id : '', h, false, { link });
       },
     };
   }

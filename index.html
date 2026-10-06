@@ -804,6 +804,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <span>Picked up the layout you left here last time.</span>
   <button type="button" id="startFresh">Start fresh</button>
 </div>
+<!-- Shown when a layout of yours was set aside instead of lost: a link replaced it, or
+     the last visit never finished loading one and this visit declined to try again. -->
+<div id="setAside" class="restored" style="display:none" role="status">
+  <span id="setAsideMsg"></span>
+  <button type="button" id="putBack" style="display:none">Put my layout back</button>
+  <button type="button" id="tryAnyway" style="display:none">Try it anyway</button>
+</div>
 <main class="app">
 <div class="rail">
 
@@ -843,9 +850,10 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
         <select id="alignY"><option value="center">Centre</option><option value="start">Back (margin front)</option><option value="end">Front (margin back)</option></select></label>
     </div>
     <div class="row" id="customMargins" style="display:none">
-      <label class="f"><b>Left / Right (<span data-unit>mm</span>)</b><div class="row"><input id="mLeft" type="number" step="0.5" value="0"><input id="mRight" type="number" step="0.5" value="0"></div></label>
-      <label class="f"><b>Front / Back (<span data-unit>mm</span>)</b><div class="row"><input id="mFront" type="number" step="0.5" value="0"><input id="mBack" type="number" step="0.5" value="0"></div></label>
+      <label class="f"><b>Left / Right (<span data-unit>mm</span>)</b><div class="row"><input id="mLeft" type="number" step="0.5" min="0" value="0" aria-describedby="errMargins"><input id="mRight" type="number" step="0.5" min="0" value="0" aria-describedby="errMargins"></div></label>
+      <label class="f"><b>Front / Back (<span data-unit>mm</span>)</b><div class="row"><input id="mFront" type="number" step="0.5" min="0" value="0" aria-describedby="errMargins"><input id="mBack" type="number" step="0.5" min="0" value="0" aria-describedby="errMargins"></div></label>
     </div>
+    <span class="hint" id="errMargins" style="color:var(--red)" hidden></span>
     <div class="hint" id="gridSummary"></div>
     <label class="f"><b>Plate style</b>
       <select id="plateStyle">
@@ -941,7 +949,8 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
         <option value="wall">Inside the walls — slim keys, no extra filament</option>
       </select></label>
     <div class="hint" id="keyMountHint" style="display:none">Wall housing sinks slim keys into the grid walls at each junction — the plate stays open-bottomed and uses no extra filament. Keys are smaller, so the hold is lighter; solid floor gives the strongest joint.</div>
-    <label class="f"><b>Fit clearance (mm per side)</b><input id="connClr" type="number" step="0.05" value="0.2"></label>
+    <label class="f"><b>Fit clearance (mm per side)</b><input id="connClr" type="number" step="0.05" min="0" max="0.3" value="0.2" aria-describedby="errConnClr"></label>
+    <span class="hint" id="errConnClr" style="color:var(--red)" hidden></span>
     <div class="hint">0.2 suits most printers. Print the test tile pair first; tighten to 0.15 or loosen to 0.25 from there.</div>
   </div>
 </section>
@@ -951,22 +960,24 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <div class="body" id="b-mag">
     <label class="tog"><input id="magnets" type="checkbox"> Magnet pockets (4 per cell)</label>
     <div class="row3" id="magRow" style="display:none">
-      <label class="f"><b>Ø (mm)</b><input id="magnetD" type="number" step="0.5" value="6"></label>
-      <label class="f"><b>Depth</b><input id="magnetH" type="number" step="0.1" value="2"></label>
+      <label class="f"><b>Ø (mm)</b><input id="magnetD" type="number" step="0.5" min="1" value="6" aria-describedby="errMagnet"></label>
+      <label class="f"><b>Depth</b><input id="magnetH" type="number" step="0.1" min="0.5" max="10" value="2" aria-describedby="errMagnet"></label>
       <label class="f"><b>Open from</b><select id="magnetSide"><option value="bottom">Below</option><option value="top">Above</option></select></label>
     </div>
+    <span class="hint" id="errMagnet" style="color:var(--red)" hidden></span>
     <label class="tog"><input id="screws" type="checkbox"> Screw holes (counterbored, 4 per cell)</label>
     <div class="row3" id="screwRow" style="display:none">
-      <label class="f"><b>Hole Ø</b><input id="screwHoleD" type="number" step="0.5" value="3"></label>
-      <label class="f"><b>Head Ø</b><input id="screwHeadD" type="number" step="0.5" value="6"></label>
-      <label class="f"><b>Head depth</b><input id="screwHeadDepth" type="number" step="0.1" value="2"></label>
+      <label class="f"><b>Hole Ø</b><input id="screwHoleD" type="number" step="0.5" min="1" value="3" aria-describedby="errScrew"></label>
+      <label class="f"><b>Head Ø</b><input id="screwHeadD" type="number" step="0.5" min="1" value="6" aria-describedby="errScrew"></label>
+      <label class="f"><b>Head depth</b><input id="screwHeadDepth" type="number" step="0.1" min="0.5" max="10" value="2" aria-describedby="errScrew"></label>
     </div>
+    <span class="hint" id="errScrew" style="color:var(--red)" hidden></span>
     <label class="f" id="baseModeRow" style="display:none"><b>Mounting base</b>
       <select id="baseMode">
-        <option value="solid">Solid floor — full 2.8 mm base under everything</option>
+        <option value="solid">Solid floor — at least 2.8 mm base under everything</option>
         <option value="bosses">Corner pockets only — bosses at each position, saves filament</option>
       </select></label>
-    <div class="hint">A solid floor puts 2.8&nbsp;mm of plastic under the whole plate. Corner pockets put a small rounded boss under each magnet or screw position instead, leaving the rest open underneath: much less filament and a much shorter print, at some cost in stiffness. Gravity-fit drawers need neither magnets nor screws.</div>
+    <div class="hint">A solid floor puts at least 2.8&nbsp;mm of plastic under the whole plate, and more when a magnet or screw head is deeper than 2.6&nbsp;mm, so a pocket always keeps a layer under it. Corner pockets put a small rounded boss under each magnet or screw position instead, leaving the rest open underneath: much less filament and a much shorter print, at some cost in stiffness. Gravity-fit drawers need neither magnets nor screws.</div>
   </div>
 </section>
 
@@ -976,7 +987,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <label class="f"><b>Bin fit</b>
       <select id="tolerance"><option value="standard">Standard (spec 0.25 mm)</option><option value="tight">Tight (−0.1 mm)</option><option value="loose">Loose (+0.1 mm)</option></select></label>
     <div class="row">
-      <label class="f"><b>Grid pitch (mm)</b><input id="pitch" type="number" step="0.5" min="5" max="200" value="42" aria-describedby="errPitch"></label>
+      <label class="f"><b>Grid pitch (mm)</b><input id="pitch" type="number" step="0.5" min="13.5" max="200" value="42" aria-describedby="errPitch"></label>
       <label class="f"><b>Corner radius</b><input id="outerRadius" type="number" step="0.5" value="4"></label>
     </div>
     <span class="hint" id="errPitch" style="color:var(--red)" hidden></span>
@@ -987,9 +998,10 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     </div>
     <div class="hint" id="cornerHint" style="display:none">For drawers or containers with rounded corners — match each radius to the drawer, front of drawer at the bottom of the cut map.</div>
     <div class="row">
-      <label class="f"><b>Extra floor (mm)</b><input id="bottomPad" type="number" step="0.1" value="0"></label>
-      <label class="f"><b>Rim cutoff (mm)</b><input id="topCutoff" type="number" step="0.1" value="0.4"></label>
+      <label class="f"><b>Extra floor (mm)</b><input id="bottomPad" type="number" step="0.1" min="0" max="20" value="0" aria-describedby="errFloor"></label>
+      <label class="f"><b>Rim cutoff (mm)</b><input id="topCutoff" type="number" step="0.1" min="0.1" max="1" value="0.4" aria-describedby="errFloor"></label>
     </div>
+    <span class="hint" id="errFloor" style="color:var(--red)" hidden></span>
     <div class="hint">Defaults follow the Gridfinity spec (42&nbsp;mm pitch, three-part profile, 4.25&nbsp;mm plate). Change pitch only for non-standard bins.</div>
   </div>
 </section>
@@ -1023,7 +1035,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
 
 <div class="stagecard">
   <h3>Preview <span class="tail"><label class="tog"><input type="checkbox" id="explode"> exploded</label></span></h3>
-  <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the baseplate, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · middle-drag or shift-drag pan · wheel zoom</div></div>
+  <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the baseplate, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · middle-drag or shift-drag pan · wheel zoom</div><div id="noGl" class="hint" role="status" style="display:none;position:absolute;inset:0;place-items:center;padding:24px;text-align:center">3D preview unavailable — this browser could not start WebGL. Everything else still works: the pieces, the print plan and every download.</div></div>
 </div>
 
 </div>
@@ -1032,9 +1044,9 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <h3>Print plan <span class="tail" id="planTail"></span></h3>
   <div style="padding:10px 14px;display:grid;gap:10px">
     <div class="row3">
-      <label class="f"><b>Part spacing (mm)</b><input id="plateGap" type="number" step="0.5" value="4"></label>
+      <label class="f"><b>Part spacing (mm)</b><input id="plateGap" type="number" step="0.5" min="0" value="4"></label>
       <label class="f" style="align-self:end"><label class="tog"><input id="stackToggle" type="checkbox"> Stack pieces that fit on top</label></label>
-      <label class="f"><b>Stack gap (mm)</b><input id="stackGap" type="number" step="0.02" value="0.24"></label>
+      <label class="f"><b>Stack gap (mm)</b><input id="stackGap" type="number" step="0.02" min="0.2" value="0.24"></label>
     </div>
     <div class="hint" id="stackHint" style="display:none">Experimental: any piece that fits fully inside the footprint of the one below prints stacked on top, separated by the gap layer — snap apart afterwards. Needs well-tuned bridging (the layer above spans open sockets); test with two first. Respects your printer's Z height.</div>
     <div id="platesRow" style="display:flex;gap:12px;flex-wrap:wrap"></div>
@@ -1865,6 +1877,131 @@ function clipToRect(pts, x0, y0, x1, y1) {
 }
 
 // ---------- layout ----------
+/* The biggest grid the page will build in one go, a 1.26 m square at the spec pitch. It
+   lives here because computeLayout has to honour it too (see the 'plates' split); the
+   page's MAX_CELLS is this number. */
+const PLATE_MAX_CELLS = 900;
+/* The range the page accepts for each setting that reaches the geometry with nothing
+   else bounding it. They live here, beside the geometry they protect, because
+   test/plate-audit.js builds every joint at their ends — a limit the audit cannot read
+   is a limit nobody re-measures when the geometry changes. The page adds the labels and
+   the wording; src/ui.js LIMITS.
+ *
+ *   pitch      Below 13.5 the joints stop closing: keys, snaps and puzzle lobes run into
+ *              their neighbours or out of their cells, and every joint leaked somewhere in
+ *              5–13 mm. 13.3 still leaks a 1-cell-wide piece on four of them. 13.5 is
+ *              where all fifteen configurations the audit builds there close, on both its
+ *              layouts, at the default clearance. That is not a promise that every design
+ *              above it closes: a puzzle key in the walls, dropped in from above, leaks at
+ *              14 (12 edges on 2 × 2 pieces, 3 on 1-cell ones), and a 35 mm pitch with a
+ *              magnet and the widest screw head leaks 3. Neither is new — both built the
+ *              same before there were ranges — and each is one setting, the sliver class
+ *              ENGINE.md describes, not a reason to move the floor. It was 5, which only
+ *              stopped the grid dividing by zero.
+ *   topCutoff  0 puts the socket's top edge on the plate's own outline, and the rim there
+ *              is a face of no width: every joint leaked. It closes from about 0.02, and
+ *              0.1 keeps well clear of that edge (a few isolated values inside the range
+ *              still fold or leak a handful of edges, as they did before there was a
+ *              range: the sliver class ENGINE.md describes, not this limit). From 0.75 the socket's top edge
+ *              is narrower than a spec bin's chamfer at that height, so the bin stops
+ *              reaching the socket floor and rides on the rim — by 0.25 mm at 1, and the
+ *              chamfer turns over entirely at 2.15. 1 is as far as that is worth taking.
+ *   connClr    1 is where a number stops being a fit and starts being a slip: a
+ *              millimetre a side is more play than any joint holds. Most joints stop
+ *              sooner, and where depends on the joint, how its key goes in and the pitch,
+ *              so the ceiling is connClrCeiling's, below, and not a number here.
+ *   bottomPad  Nothing breaks above 20; a plate that tall is a typing slip, and the bed
+ *              check is what stops one taller than the printer.
+ *   magnet and screw minimums keep a cutter from sitting flush with a face — a 0 mm
+ *              magnet is a pocket whose roof is the plate's floor, and coplanar cuts are
+ *              ENGINE.md §1's oldest rule. The diameters' maximums depend on the pitch
+ *              and come from mountLimits. */
+const PLATE_RANGES = {
+  pitch: { min: 13.5, max: 200 },
+  topCutoff: { min: 0.1, max: 1 },
+  connClr: { min: 0, max: 1, dovetail: 0.3, snapTop: 0.3, puzzleKey: 0.8,
+             smallPitch: 20, small: 0.3, puzzleRoom: 6.5 },
+  bottomPad: { min: 0, max: 20 },
+  magnetD: { min: 1 }, magnetH: { min: 0.5, max: 10 },
+  screwHoleD: { min: 1 }, screwHeadD: { min: 1 }, screwHeadDepth: { min: 0.5, max: 10 },
+};
+/* The one fit-clearance field, as each joint's housing is cut to it. readControls in
+   src/ui.js worked this out and the audit copied it by hand, and the ceiling below is a
+   field value whose meaning depends on it — a top-inserted snap is cut to the key's
+   figure, 0.05 under the field — so all three read it from here. */
+function fitClearances(field) {
+  return { tab: field, puzzle: field,
+           key: Math.max(0.1, field - 0.05), hclip: Math.max(0.08, field - 0.05) };
+}
+/* The fit clearance's ceiling for one design, as { max, by }; `by` says what sets it, for
+ * the page to put in words: 'dovetail', 'snaptop', 'pitch', 'joint', or 'slip' for the
+ * plain 1 mm. One function, because four things have to agree on it — the field's range,
+ * the clamp on a number a link brings in, the message saying why, and the fit coupon's
+ * slackest pair — and it takes the whole design because the answer depends on the joint,
+ * which way its key goes in and the pitch. It took a connector name, and a 1 mm ceiling
+ * for everything but the dovetail let a snap clip's housing into the next piece and let
+ * small pitches leak.
+ *
+ * Measured on 2 × 2 and 1-cell pieces from 13.5 to 60 mm, every 0.5 mm of pitch — at
+ * every 0.05 of clearance for the puzzle, the bowtie and the puzzle key, at six for the
+ * rest — and at every 0.01 of clearance at 20, 25, 30, 35, 42 and 60:
+ *
+ *   dovetail  0.3. Past it the pocket, cut 1.9 mm + this into the piece, breaks through
+ *             the 2.15 mm socket wall and crosses the chamfer cone; it leaked from 0.34.
+ *             The hint's own advice stops at 0.25.
+ *   snaptop   0.3, in either housing. The clip's slot puts its seam-side wall
+ *             0.3 − (the key's clearance) from the seam, so past a field of 0.35 that
+ *             wall stands in the next piece — by 0.65 mm at 1 — and two pieces that print
+ *             overlapping cannot butt together; on the coupon the pairs met at the seam.
+ *             At 0.35 itself nothing overlaps, but the wall lies in the piece's own seam
+ *             face, about 9.4 mm² of face shared — the coplanar face ENGINE.md keeps
+ *             every shell off, with no bad edge to show for it — and the coupon's 0.3
+ *             pair did the same for any field from 0.3 up. 0.3 holds the wall one BLOAT,
+ *             0.05, inside the piece, the overlap the cell regions keep; the coupon's
+ *             slackest pair is this ceiling cut the key's way, so it stops there too.
+ *   pitch     0.3 below 20 mm, for the three housings the field cuts that leaked there:
+ *             the puzzle, and the bowtie and puzzle key in the floor. Past 0.3 they left
+ *             holes from 13.5 to 19 mm — a puzzle key at 14 from 0.4, a bowtie at 18 at
+ *             1, a puzzle at 19 from 0.35 — and from the default 0.2 to 0.3 none did. The
+ *             puzzle's lobe also needs room in its cell: it opens the plate once its
+ *             clearance passes half the pitch less 6.475 mm, so it stops at half the pitch
+ *             less 6.5 — 0.25 at 13.5, and 0.3 from 13.6.
+ *   joint     0.8 for a puzzle key in the floor from 20 mm up: between 0.82 and 0.96 its
+ *             recess leaked at every pitch measured, 20 to 60.
+ *   slip      1 for the rest. A key in the walls is cut to keySlim's own clearance, which
+ *             the field does not move. The snap and the H-clip did not leak above 0.3 at
+ *             any pitch measured but in one band — an H-clip dropped in from above leaks
+ *             at 0.74 to 0.745 and nowhere else. From 20 mm up the bowtie and the puzzle
+ *             leak only at isolated values: the bowtie at 25 mm at 0.64, the puzzle at
+ *             0.39–0.4 at 21 and 32.5–35 mm and here and there from 0.52 to 0.87. That is
+ *             the sliver class again, not a ceiling — no limit short of 0.38 misses them,
+ *             and the same class turns up under the default too: a snap at 20 mm at 0.29,
+ *             a bowtie at 17 mm at 0.15 and under. */
+function connClrCeiling(cfg) {
+  const R = PLATE_RANGES.connClr;
+  const kind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
+  if (kind === 'dovetail') return { max: R.dovetail, by: 'dovetail' };
+  if (kind === 'snaptop') return { max: R.snapTop, by: 'snaptop' };
+  const floorKey = ['bowtie', 'puzzlekey'].includes(cfg.connector) && cfg.keyMount !== 'wall';
+  if (cfg.connector !== 'puzzle' && !floorKey) return { max: R.max, by: 'slip' };
+  if (cfg.pitch < R.smallPitch) {
+    const room = cfg.connector === 'puzzle'
+      ? Math.floor((cfg.pitch / 2 - R.puzzleRoom) * 100 + 1e-9) / 100 : Infinity;
+    return { max: Math.min(R.small, room), by: 'pitch' };
+  }
+  if (cfg.connector === 'puzzlekey') return { max: R.puzzleKey, by: 'joint' };
+  return { max: R.max, by: 'slip' };
+}
+/* A piece's column letters, spreadsheet-style: A … Z, AA, AB … The id was
+   String.fromCharCode(65 + s), which runs on past Z into '[', '\' and the lower case — a
+   33-piece row shipped `baseplate-\1.stl`, and both `baseplate-A1.stl` and
+   `baseplate-a1.stl`, which are one file on Windows and macOS. */
+function pieceColumn(s) {
+  let out = '';
+  for (let n = s + 1; n > 0; n = Math.floor((n - 1) / 26))
+    out = String.fromCharCode(65 + (n - 1) % 26) + out;
+  return out;
+}
 /* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
    splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
 function computeLayout(p) {
@@ -1912,7 +2049,13 @@ function computeLayout(p) {
   // row bands
   let rowCuts;
   if (p.splitMode === 'plates') {
-    const opt = optimizeForPlates(Object.assign({}, p, { splitMode: 'balanced' }));
+    /* Past the cell cap the page will refuse the job whatever split it gets, and this
+       search runs first, inside the layout, before the page can say so. That ordering
+       is how a stray 5 mm pitch on a big drawer froze the tab for 21 s to end at "not
+       building" anyway — and every keystroke in the pitch field passes through values
+       like that on its way to the one being typed. */
+    const opt = nx * ny <= PLATE_MAX_CELLS
+      ? optimizeForPlates(Object.assign({}, p, { splitMode: 'balanced' })) : null;
     if (opt) return computeLayout(Object.assign({}, p, { splitMode: 'manual', rowCuts: opt.rowCuts, colCuts: opt.colCuts }));
     return computeLayout(Object.assign({}, p, { splitMode: 'balanced' }));
   }
@@ -1969,7 +2112,7 @@ function computeLayout(p) {
     const segEnds = [...colCuts[b], nx];
     for (let s = 0; s < segStarts.length; s++) {
       pieces.push({
-        id: `${String.fromCharCode(65 + s)}${b + 1}`,
+        id: `${pieceColumn(s)}${b + 1}`,
         band: b, seg: s,
         cellX0: segStarts[s], cellY0: bandStarts[b],
         nx: segEnds[s] - segStarts[s], ny: bandEnds[b] - bandStarts[b],
@@ -2763,6 +2906,103 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
 }
 
 // ---------- plate builder ----------
+/* One print layer, at the 0.2 mm the page's material estimate assumes (its 0.8 mm top
+   and bottom skins are four layers). The thinnest plastic a slicer can be counted on to
+   lay down: between two faces closer than this it may put nothing at all, so a floor
+   that thin can print as a hole however closed the mesh is. */
+const PRINT_LAYER = 0.2;
+/* Plastic left between a mounting pocket and the face it stops short of: one layer. The
+   solid floor was a fixed 2.8 mm, so a 6 × 3 mm magnet, as common as the 6 × 2 the spec
+   draws, was cut clean through it: from above it fell out of the bottom, from below it
+   stood 0.2 mm proud of the socket floor.
+   One layer and no more, because more raises plates that were sound: 2.8 mm holds the
+   spec's 6.5 × 2.4 magnet over 0.4 of plastic and always printed it, and a 0.6 skin makes
+   that plate 0.2 mm taller — and the height the Bins page is handed with it — for
+   nothing. So the floor stays 2.8 for anything up to 2.6 deep, as it always was, and
+   grows only past that, where what is left under the pocket might not print. A corner
+   boss is held to the same line: 2.6 tall, so 2.4 deep at most. */
+const MOUNT_SKIN = PRINT_LAYER;
+/* The corner bosses of baseMode 'bosses': a quarter square this far in from each cell
+   corner, its inner corner rounded, never taller than BOSS_H. Named because mountLimits
+   has to know how much room a boss leaves around its pocket. */
+const BOSS_W = 12.5, BOSS_R = 3.5, BOSS_H = 2.6;
+
+/* How thick the solid floor under the sockets is: what was asked for, raised to whatever
+   the plate is carrying needs. A pocket cut into the floor — a magnet from either side, a
+   screw head's counterbore from below — has to be shallower than the floor by
+   MOUNT_SKIN, or it is a hole.
+   Its own function because the page needs the plate's height before anything is built:
+   a plate taller than the printer can build is a check, not a surprise in the slicer. */
+function platePad(cfg) {
+  let pad = cfg.bottomPad;
+  /* Rounded to the micron, because 2.6 + 0.2 is 2.8000000000000003 and that is not a
+     reason to move every face of a plate that was 2.8 before. */
+  const under = (depth) => Math.round((depth + MOUNT_SKIN) * 1e6) / 1e6;
+  if ((cfg.magnets || cfg.screws) && cfg.baseMode !== 'bosses') {
+    pad = Math.max(pad, cfg.magnetBase || 2.8);
+    if (cfg.magnets) pad = Math.max(pad, under(cfg.magnetH));
+    if (cfg.screws && cfg.screwHeadD > cfg.screwHoleD)
+      pad = Math.max(pad, under(cfg.screwHeadDepth));
+  }
+  const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
+  if (keyedConn && cfg.keyMount !== 'wall') pad = Math.max(pad, cfg.key.depth + 0.8);
+  if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
+  return pad;
+}
+
+/* Plastic left round a mounting cut, to whatever holds it. 1 mm rather than a token
+   wall, and measured: the sites sit holeOffset from each cell centre whatever the
+   pitch, and with less than this between them and the socket floor's edge the cutter's
+   facets graze the floor's own triangulation — screws at a 36 mm pitch leaked 192 edges
+   with 0.65 mm to spare. */
+const MOUNT_WALL = 1.0;
+/* The largest mounting cuts this configuration has room for, as diameters and depths in
+   the units the page's fields use. Magnets and screws sit holeOffset (13 mm, the spec's)
+   from each cell centre at ANY pitch, so the room round them shrinks with the pitch:
+   below about 34 mm a stock magnet pocket no longer fits inside its cell at all, and every
+   magnet-and-screw leak a pitch sweep found, 24.5 to 36 mm, was a cutter out past the
+   socket floor or the cell edge.
+ *
+ * Three kinds of room, by where the cut opens:
+ *   - into the socket (a magnet from above, the screw shank): it must stay on the socket
+ *     floor, or it crosses the floor's chamfer cone — see ENGINE.md §2;
+ *   - under the floor (a magnet from below, the counterbore): it must stay in its cell;
+ *   - in a corner boss: it must stay in the boss, which is shorter than the solid floor
+ *     and does not grow with the pocket, so it also caps the depth.
+ *
+ * These are measurements, not field ranges, and can come out below the field's minimum
+ * or negative — a screw shank at a 34 mm pitch has −0.1 mm. That means no cut of any size
+ * fits there; the page turns it into a check on the design rather than a range for the
+ * field (src/ui.js readNumber), since no number typed into the field could fix it. */
+function mountLimits(cfg) {
+  const half = cfg.pitch / 2, off = cfg.holeOffset;
+  const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
+  // distance from a point at (s, s) to the edge of a rounded square of half-size h,
+  // corner radius r, centred on the origin
+  const roomIn = (h, r, s) => {
+    const q = s - (h - r);
+    return q > 0 ? r - Math.SQRT2 * q : h - s;
+  };
+  // the socket floor ring, as buildPiece's profile and roundedSquareRing make it
+  const dBot = 2.85 + tol, hf = half - dBot;
+  const rf = Math.max(0.3, Math.min(cfg.socketRadius - (dBot - cfg.topCutoff), hf - 0.01));
+  const onFloor = roomIn(hf, rf, off) - MOUNT_WALL;
+  const inCell = half - off - MOUNT_WALL;
+  const s = half - off;              // the site's distance in from the cell's edges
+  const inBoss = Math.min(roomIn(BOSS_W, BOSS_R, s), s) - MOUNT_WALL;
+  const bosses = cfg.baseMode === 'bosses';
+  const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
+  const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // the fields step in tenths
+  return {
+    // a magnet pocket is cut 0.1 mm over the magnet's radius
+    magnetD: r10(2 * ((cfg.magnetSide === 'top' ? top : under) - 0.1)),
+    screwHoleD: r10(2 * top),
+    screwHeadD: r10(2 * under),
+    // in the solid floor the pad grows to suit, so only a boss caps the depth
+    depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
+  };
+}
+
 /* Region-decomposed build: no global CSG. Each piece = margin/corner regions (plain
    extrusions) + one region per cell (extrusion minus its socket cutter and holes).
    Regions are clipped from the global outline (rounded corners, connector bites)
@@ -2770,7 +3010,7 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
 function buildPiece(cfg, layout, piece, onStatus) {
   const pitch = cfg.pitch, half = pitch/2;
   const solidBase = cfg.baseMode !== 'bosses';
-  let pad = ((cfg.magnets || cfg.screws) && solidBase) ? Math.max(cfg.bottomPad, cfg.magnetBase || 2.8) : cfg.bottomPad;
+  const pad = platePad(cfg);
   const isHclip = cfg.connector === 'hclip';
   const topInsert = cfg.keyInsert === 'top';
   const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
@@ -2796,8 +3036,6 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const keyKind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
   const keyClr = keyKind === 'snaptop' ? cfg.key.clr
                : isHclip ? cfg.hclip.clr : keyDims.clr;
-  if (keyedConn && !wallKeys) pad = Math.max(pad, cfg.key.depth + 0.8);
-  if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
   const H = pad + cfg.plateHeight;
   const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
   const dTop = cfg.topCutoff, dMid = 2.15 + tol, dBot = 2.85 + tol;
@@ -3018,8 +3256,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
   // ---- corner bosses (pocket-style mounting, saves filament) ----
   if ((cfg.magnets || cfg.screws) && !solidBase) {
     const off = cfg.holeOffset;
-    const bossW = 12.5, rIn = 3.5;
-    const bossH = Math.min(2.6, Math.max(
+    const bossW = BOSS_W, rIn = BOSS_R;
+    // never more than BOSS_H, so a pocket deeper than BOSS_H − MOUNT_SKIN would come out
+    // through the top: mountLimits refuses one rather than this growing past it
+    const bossH = Math.min(BOSS_H, Math.max(
       cfg.magnets ? cfg.magnetH + 0.8 : 0,
       cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
     const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
@@ -3180,7 +3420,8 @@ function checkManifold(polys) {
  * building.
  *
  * `joint.kind` names the housing for every connector, `joint.part` is present only for
- * the ones that ship a loose part.
+ * the ones that ship a loose part, and `joint.clrMax`, where there is one, is the
+ * slackest this joint's clearance can be set to.
  */
 /* Which housing a configuration uses. Pure, so it lives here rather than in the UI:
    the coupon, the plate and the audit all have to agree, and the last three bugs in
@@ -3196,7 +3437,14 @@ function jointKind(connector, keyMount, keyInsert) {
 
 function buildFitSample(cfg, H, joint) {
   H = H || 4.25;
-  const clrs = [-0.05, 0, 0.05, 0.1].map(d => Math.max(0.02, joint.clr + d));
+  /* From 0.05 under the joint's clearance to 0.1 over, and no further than the joint is
+     allowed to go. At the top of the range the two slack pairs were clearances the field
+     refuses — a dovetail at 0.25 printed a 0.35 pair, which tells you to set a number the
+     page will not take — so the four slide down until the slackest is the ceiling. Slid,
+     not cut off: four pairs at four fits still answers the question; three at one does not. */
+  const most = joint.clrMax ?? Infinity;
+  const slide = Math.max(0, joint.clr + 0.1 - most);
+  const clrs = [-0.05, 0, 0.05, 0.1].map(d => Math.min(most, Math.max(0.02, joint.clr + d - slide)));
   /* 10 deep, not 8. A top-inserted cup's outer wall stands 0.6 further into the tile than
      the key it houses, and the full-size key is 14 long, so on an 8 mm tile the wall
      landed 0.25 mm from the back edge — inside the tile's own corner arc. That printed a
@@ -3319,7 +3567,14 @@ function build3mfXML(items) {
    Shelf packing with rotation; stackable identical footprints pile up with zGap. */
 function packPlates(items, bedW, bedD, gap, opts) {
   opts = opts || {};
-  const zGap = opts.zGap || 0.24;
+  // a gap below zero overlaps the parts it separates — they print fused — so neither is
+  // allowed to be one, whoever is calling
+  gap = Math.max(0, gap || 0);
+  /* Nor is a stack gap under one layer. Side by side, 0 is two parts touching, and they
+     come apart; one on another, 0 puts the upper piece's first layer straight onto the
+     lower's top, and the slicer prints them as one part. A layer of air is the least
+     that leaves a seam to snap them apart at. */
+  const zGap = Math.max(PRINT_LAYER, opts.zGap ?? 0.24);
   const bedH = opts.bedH || 1e9;
   const stack = !!opts.stack;
   // expand qty into units
@@ -3389,11 +3644,22 @@ function packPlates(items, bedW, bedD, gap, opts) {
 }
 
 // ---- split optimizer: choose cuts minimizing print plates ----
-function compositions(n, maxPart, maxParts) {
+/* Every way to write n as an ordered sum of at most maxParts parts of at most maxPart,
+   largest parts first — up to `limit` of them.
+ *
+ * It used to walk the whole tree and keep what reached zero, which is fine for a drawer
+ * and 24 million nodes for 200 cells into parts of 70: a branch whose remaining parts
+ * could not carry what is left was walked to the bottom anyway. Pruning those changes
+ * nothing about what comes out or in what order — they never produced anything — and
+ * the limit is there for the cases that are genuinely that big, which a real drawer
+ * never reaches: none of the plans test/plate-audit.js holds comes near it. */
+const COMPOSITION_LIMIT = 5000;
+function compositions(n, maxPart, maxParts, limit = COMPOSITION_LIMIT) {
   const out = [];
   function rec(rem, parts) {
-    if (parts.length > maxParts) return;
+    if (out.length >= limit) return;
     if (rem === 0) { if (parts.length) out.push(parts.slice()); return; }
+    if (rem > (maxParts - parts.length) * maxPart) return;   // cannot finish from here
     for (let p = Math.min(rem, maxPart); p >= 1; p--) { parts.push(p); rec(rem - p, parts); parts.pop(); }
   }
   rec(n, []);
@@ -3412,6 +3678,11 @@ function optimizeForPlates(p) {
     .filter(c => c.every((v, i) => v*pitch + extra + (i === 0 ? mF : 0) + (i === c.length-1 ? mB : 0) <= p.bedD + 1e-6));
   const colComps = compositions(nx, maxCols, Math.min(kColMin + 1, 4))
     .filter(c => c.every((v, i) => v*pitch + extra + (i === 0 ? mL : 0) + (i === c.length-1 ? mR : 0) <= p.bedW + 1e-6));
+  /* No way to cut the columns at all — every split that fits the count puts a full-width
+     segment against a margin that tips it over the bed. The loop below indexed into the
+     empty list and threw, so a 1000 × 600 drawer on a 256 mm bed took the page down when
+     Fewest plates was picked. The balanced split the caller falls back to copes. */
+  if (!rowComps.length || !colComps.length) return null;
   let best = null, tried = 0;
   for (const rc of rowComps) {
     if (tried > 4000) break;
@@ -3489,6 +3760,8 @@ const DEFAULTS = {
 
 if (typeof module !== 'undefined') {
   module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+    platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
+    connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };
@@ -3914,10 +4187,10 @@ const DRAWERS = (function () {
   const encodePairs = (pairs) =>
     pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 
-  /* The keys both pages write: the drawer's size, the printer, and the format version,
-     which is the same on both. Every other key belongs to one page or the other. The UI
-     spec checks this list against what the two pages actually own. */
-  const SHARED = new Set(['w', 'd', 'bw', 'bd', 'bh', 'pr', 'v']);
+  /* The keys both pages write: the drawer's size, the printer, the slicer infill, and the
+     format version, which is the same on both. Every other key belongs to one page or the
+     other. The UI spec checks this list against what the two pages actually own. */
+  const SHARED = new Set(['w', 'd', 'bw', 'bd', 'bh', 'pr', 'if', 'v']);
 
   /* One drawer, two pages writing to it. Each page's design string carries the other
      page's keys too — that is how the carry works — but its copy of them is only as new
@@ -4104,8 +4377,9 @@ const DRAWERS = (function () {
   /* Two small records beside the list, of which drawer each tool last saved into (see
      attach). One is per tab, in sessionStorage, which a reload and Back keep and a new tab
      starts without. The other is per device, and goes with the local save the bare site
-     restores. The tab's record also carries the note for the next page to load in it:
-     which drawer the design it arrives with belongs to. */
+     restores. The tab's record also carries the note for the next page to load in it,
+     the one note there is about an arrival: which drawer the design it arrives with
+     belongs to, if any, and whether it is someone's link (see arrival). */
   const TAB = 'drawerforge:drawers:tab';
   const LAST = 'drawerforge:drawers:last';
   function readNote(area, key) {
@@ -4168,12 +4442,16 @@ const DRAWERS = (function () {
         if (n[o.tool] !== id) { n[o.tool] = id; writeNote(area, key, n); }
       }
     }
-    /* The note for the next page to load in this tab: the drawer, and the fingerprint of
-       the design that page will arrive with. Read once, by attach. False if the browser
-       would not keep it. */
-    function handOver(id, h, caughtUp) {
+    /* The note for the next page to load in this tab: the drawer ('' for none), and the
+       fingerprint of the design that page will arrive with. `link` lists the drawer, bed
+       and infill settings in it that are still someone's link's, not yours (the tool's
+       ui.js works that out); `open` says a drawer was opened from the list, or caught up,
+       rather than handed over. Read once, by the page's boot (see arrival). False if the
+       browser would not keep it. */
+    function handOver(id, h, caughtUp, more) {
       const n = readNote('sessionStorage', TAB);
-      n.next = { id, fp: fingerprint(h), caughtUp: !!caughtUp };
+      n.next = { id, fp: fingerprint(h), caughtUp: !!caughtUp,
+                 link: (more && more.link) || [], open: !!(more && more.open) };
       return writeNote('sessionStorage', TAB, n);
     }
     function takeHandOver() {
@@ -4184,6 +4462,9 @@ const DRAWERS = (function () {
       writeNote('sessionStorage', TAB, n);
       return isPlain(next) ? next : null;
     }
+    // taken once per page, by whichever of arrival and attach asks first
+    let taken;
+    const takeOnce = () => (taken === undefined ? (taken = takeHandOver()) : taken);
     /* Replaces the page with design `h`. replaceState and a reload rather than a
        navigation: the design being replaced is not a page you went back from, and the
        back button should not offer it. */
@@ -4206,7 +4487,7 @@ const DRAWERS = (function () {
       const merged = encodePairs(pairs.map(([k, v]) => [k, moved.includes(k) ? stored.get(k) : v])
         .concat(moved.filter((k) => !pairs.some((p) => p[0] === k)).map((k) => [k, stored.get(k)])));
       // without the note the reloaded page could not tell it is this drawer, so stay put
-      if (!handOver(d.id, merged, true)) return false;
+      if (!handOver(d.id, merged, true, { open: true })) return false;
       go(merged);
       return true;
     }
@@ -4378,7 +4659,7 @@ const DRAWERS = (function () {
       }
       /* The note is how the reloaded page knows the design it finds in its address bar is
          this drawer, and not another drawer holding the same design — see attach. */
-      handOver(d.id, d.hash);
+      handOver(d.id, d.hash, false, { open: true });
       go(d.hash);
     }
 
@@ -4561,11 +4842,21 @@ const DRAWERS = (function () {
        *
        * Called once the page has loaded its design and drawn it, so that `bootDesign` is
        * what an untouched page looks like. */
+      /* The note left for this page, if the design `h` it arrives with is the one the
+         note is about, else null: with `link` and `open` as handOver writes them. Read
+         every time, so a stale note never lingers; attach reads the same one. */
+      arrival(h) {
+        const next = takeOnce();
+        if (!next || !h || next.fp !== fingerprint(h)) return null;
+        return { id: typeof next.id === 'string' ? next.id : '',
+                 link: Array.isArray(next.link) ? next.link.filter((k) => typeof k === 'string') : [],
+                 open: next.open === true };
+      },
       attach(arrivedWith) {
         fresh = !arrivedWith;
         bootDesign = o.design();
         attached = null;
-        const next = takeHandOver();      // read every time, so a stale note never lingers
+        const next = takeOnce();          // read every time, so a stale note never lingers
         if (arrivedWith) {
           const s = loadAll();
           const fp = fingerprint(arrivedWith);
@@ -4615,16 +4906,17 @@ const DRAWERS = (function () {
       },
       /* Before the page navigates to the other tool or the guide with `h` in the address.
          Also saves: the debounced save may not have run yet, and this is the last chance.
-         And leaves the note that tells the page at the other end which drawer it is. */
-      handoff(h) {
-        if (!attached) return;
-        const s = loadAll();
-        const d = find(s, attached);
-        if (!d) return;
-        d.hash = mergeDesign(d.hash, h, o.owns, base);
-        d.saved = Date.now();
-        if (saveAll(s)) base = sharedOf(h);
-        handOver(d.id, h);
+         And leaves the note that tells the page at the other end it is a hand-over, which
+         drawer it is if any, and which settings in it are still someone's link's. */
+      handoff(h, link) {
+        const s = attached && loadAll();
+        const d = s && find(s, attached);
+        if (d) {
+          d.hash = mergeDesign(d.hash, h, o.owns, base);
+          d.saved = Date.now();
+          if (saveAll(s)) base = sharedOf(h);
+        }
+        handOver(d ? d.id : '', h, false, { link });
       },
     };
   }
@@ -4691,30 +4983,106 @@ const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFron
  * it and puts "306" out of reach behind "30", so state gets the clamp and the field
  * keeps what you wrote with the reason underneath it. `min` and `max` go on the markup
  * as well, so the browser's own validity — which reported `valid` for -50 — agrees. */
+/* Every other field that reaches the geometry is here too, because each of them built a
+   broken file while Download stayed on: a blank magnet depth read as 0 and cut a pocket
+   whose roof was the plate's floor; a rim cutoff of 0 left a rim of no width; a margin
+   of -100 laid a 378 mm grid into a 306 mm drawer; 1e308 anywhere reached the mesh as
+   Infinity. The numbers themselves come from core.js PLATE_RANGES and mountLimits,
+   which say why each one is where it is; this adds the words.
+ *
+ * `max` may be a function, for a range that depends on the rest of the design — a
+ * margin cannot exceed the drawer, a magnet pocket has to fit the cell the pitch makes.
+ * `when` says whether the field is in play: magnet sizes are not checked with magnets
+ * off, nor margins outside Custom, because a complaint about a field you cannot see is
+ * one you cannot act on. `why` finishes the too-big message where "check the figure is
+ * in millimetres" would be the wrong advice, and `off` names the switch that drops a cut
+ * the pitch has no room for. */
+const RANGES = PLATE_RANGES;
+const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
+const mount = () => mountLimits(state);
+// "an 18 mm pitch", "an 80 mm pitch": the article goes by how the number is said
+const atPitch = () => `at ${/^(8|1[18](\.|$))/.test(String(state.pitch)) ? 'an' : 'a'} ` +
+  `${state.pitch} mm pitch`;
+const mountWhy = (opens) => `${atPitch()} — mounting holes sit ` +
+  `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
+  (state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
+    : opens ? 'a cut open to the socket has to stay on the socket floor'
+    : 'a pocket under the floor has to stay inside its cell');
+const bossDepth = () => state.baseMode === 'bosses'
+  ? 'with corner pockets — a boss is 2.6 mm tall, while the solid floor grows to suit' : '';
 const LIMITS = {
   drawerW: { min: 1, max: 2000, label: 'Drawer width' },
   drawerD: { min: 1, max: 2000, label: 'Drawer depth' },
   bedW: { min: 20, max: 2000, label: 'Bed width' },
   bedD: { min: 20, max: 2000, label: 'Bed depth' },
   bedH: { min: 20, max: 2000, label: 'Bed height' },
-  // pitch divides into the drawer to get the cell count, so a zero here is not a bad
-  // plate, it is an infinite one — Math.floor(x / 0) is Infinity and the grid loops
-  // never come back
-  pitch: { min: 5, max: 200, label: 'Grid pitch' },
+  /* pitch divides into the drawer to get the cell count, so a zero here is not a bad
+     plate, it is an infinite one — Math.floor(x / 0) is Infinity and the grid loops
+     never come back. The floor is higher than that now: below it the joints leak. */
+  pitch: { ...RANGES.pitch, label: 'Grid pitch',
+    tooSmall: 'below that the sockets and joints no longer fit their cells, and the plate comes out with holes in it' },
+  mLeft: { min: 0, max: () => state.drawerW, label: 'Left margin', when: customMargins,
+    why: () => '— the drawer is only that wide' },
+  mRight: { min: 0, max: () => state.drawerW, label: 'Right margin', when: customMargins,
+    why: () => '— the drawer is only that wide' },
+  mFront: { min: 0, max: () => state.drawerD, label: 'Front margin', when: customMargins,
+    why: () => '— the drawer is only that deep' },
+  mBack: { min: 0, max: () => state.drawerD, label: 'Back margin', when: customMargins,
+    why: () => '— the drawer is only that deep' },
+  bottomPad: { ...RANGES.bottomPad, label: 'Extra floor' },
+  topCutoff: { ...RANGES.topCutoff, label: 'Rim cutoff',
+    tooSmall: 'at 0 the rim between sockets is a face with no width, and the plate comes out open',
+    why: () => '— past that a spec bin rides on the rim instead of seating in its socket' },
+  magnetD: { ...RANGES.magnetD, max: () => mount().magnetD, label: 'Magnet Ø', when: () => state.magnets,
+    why: () => mountWhy(state.magnetSide === 'top'), off: 'magnet pockets' },
+  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mount().depth), label: 'Magnet depth',
+    when: () => state.magnets, why: bossDepth },
+  screwHoleD: { ...RANGES.screwHoleD, max: () => mount().screwHoleD, label: 'Screw hole Ø',
+    when: () => state.screws, why: () => mountWhy(true), off: 'screw holes' },
+  screwHeadD: { ...RANGES.screwHeadD, max: () => mount().screwHeadD, label: 'Screw head Ø',
+    when: () => state.screws, why: () => mountWhy(false), off: 'screw holes' },
+  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mount().depth),
+    label: 'Screw head depth', when: () => state.screws, why: bossDepth },
+  // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
+  connClr: { min: RANGES.connClr.min, max: () => connClrCeiling(state).max, label: 'Fit clearance',
+    when: () => state.connector !== 'none', why: () => clrWhy(connClrCeiling(state).by) },
 };
+/* What sets the clearance's ceiling, in words: core.js connClrCeiling decides it and says
+   which reason applies. A ceiling that moves with the pitch names the pitch, as the mount
+   sizes do, because that is the number to change; 'slip' is the plain 1 mm and keeps the
+   millimetres advice. */
+const CLR_JOINT = { puzzle: 'puzzle tab', bowtie: 'bowtie key', puzzlekey: 'puzzle key' };
+const clrWhy = (by) => ({
+  dovetail: '— any looser and a dovetail pocket breaks through into the socket beside it',
+  snaptop: '— any looser and the housing of a snap clip dropped in from above runs up to ' +
+    'the seam and on into the next piece',
+  pitch: `${atPitch()} — on cells under ${RANGES.connClr.smallPitch} mm a ` +
+    `looser ${CLR_JOINT[state.connector]} opens holes in the plate`,
+  joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess opens holes in the plate`,
+})[by] || '';
 /* id -> the message that goes under it. Rebuilt from scratch on every read, so a field
    that has come good stops complaining without anything having to remember it once did. */
 const fieldErrors = new Map();
+// id -> the cut the pitch has no room for at all; a check on the design, see readNumber
+const noRoom = new Map();
 /* Named one field at a time rather than derived from the id: the build audits the
-   template by literal, and $('errDrawerW') is what it looks for. */
+   template by literal, and $('errDrawerW') is what it looks for. Fields that sit in one
+   row share the line under it. */
 const ERR_FIELDS = [
   ['drawerW', 'errDrawerW'], ['drawerD', 'errDrawerD'],
   ['bedW', 'errBedW'], ['bedD', 'errBedD'], ['bedH', 'errBedH'], ['pitch', 'errPitch'],
+  ['mLeft', 'errMargins'], ['mRight', 'errMargins'], ['mFront', 'errMargins'], ['mBack', 'errMargins'],
+  ['bottomPad', 'errFloor'], ['topCutoff', 'errFloor'],
+  ['magnetD', 'errMagnet'], ['magnetH', 'errMagnet'],
+  ['screwHoleD', 'errScrew'], ['screwHeadD', 'errScrew'], ['screwHeadDepth', 'errScrew'],
+  ['connClr', 'errConnClr'],
 ];
 const ERR_EL = { errDrawerW: () => $('errDrawerW'), errDrawerD: () => $('errDrawerD'),
   errBedW: () => $('errBedW'), errBedD: () => $('errBedD'), errBedH: () => $('errBedH'),
-  errPitch: () => $('errPitch') };
+  errPitch: () => $('errPitch'), errMargins: () => $('errMargins'), errFloor: () => $('errFloor'),
+  errMagnet: () => $('errMagnet'), errScrew: () => $('errScrew'), errConnClr: () => $('errConnClr') };
 
+const roundMm = (n) => +n.toFixed(2);
 /* The drawer's own measurements: the fields the unit switch in panel 01 converts. Every
    other number on the page — the bed, the pitch, magnet and screw sizes — stays in
    millimetres whatever the drawer was measured in, because millimetres are how every
@@ -4728,25 +5096,49 @@ function readNumber(id) {
   const len = LENGTH_IDS.includes(id);
   const v = len ? FIELDS.lengthOf($(id), unit) : parseFloat($(id).value.trim());
   if (!lim) return isFinite(v) ? v : 0;
+  /* Out of play, a field keeps its fixed range but not the one the rest of the design
+     sets, and does not complain: magnets off at a 30 mm pitch should not quietly shrink
+     the magnet size the link carries, to be found smaller when they go back on. */
+  const inPlay = !lim.when || lim.when();
+  const lo = lim.min;
+  let hi = typeof lim.max !== 'function' ? (lim.max ?? Infinity) : inPlay ? lim.max() : Infinity;
+  /* A range with nothing in it: the pitch leaves no room for a pocket of any size. No
+     number in this field answers that — a screw hole at a 34 mm pitch is refused at 1 mm
+     as at 3 — and putting it on the field left one whose maximum sat under its minimum,
+     red whatever it held. So it is a check on the design instead, under the cut map,
+     naming what does fix it; and the field keeps only its fixed range meanwhile, so the
+     size a link carries is still there when the pitch comes back up. */
+  if (hi < lo) {
+    if (inPlay) noRoom.set(id, `${lim.label}: there is no room for one ${lim.why()}. ` +
+      `Use a larger pitch, or turn off ${lim.off}.`);
+    hi = Infinity;
+  }
   /* The range is millimetres because the model is; in inches it is quoted in both, since
      "at least 1 mm" means nothing to the field you are typing inches into, and the
      millimetre figure is the one the tool actually holds you to. The advice for a huge
      number follows the unit too: typing millimetres into an inch field is the likeliest
-     way to get one. */
+     way to get one. The field's own min and max are in the unit it shows, as
+     FIELDS.convert sets them, or the browser called a sound inch figure out of range. */
   const inch = len && unit === 'in';
   const both = (mm) => inch ? `${mm} mm (${FIELDS.inchText(mm)} in)` : `${mm} mm`;
   const unitName = inch ? 'inches' : 'millimetres';
+  const shown = (mm) => String(inch ? mm / FIELDS.MM_PER_IN : mm);
+  $(id).min = shown(lo);
+  if (isFinite(hi)) $(id).max = shown(hi); else $(id).removeAttribute('max');
+  const say = (msg) => { if (inPlay) fieldErrors.set(id, msg); };
   if (!isFinite(v)) {
-    fieldErrors.set(id, `${lim.label} is blank — enter a measurement in ${unitName}.`);
-    return lim.min;
+    say(`${lim.label} is blank — enter a measurement in ${unitName}.`);
+    return lo;
   }
-  if (v < lim.min) {
-    fieldErrors.set(id, `${lim.label} must be at least ${both(lim.min)}.`);
-    return lim.min;
+  if (v < lo) {
+    say(`${lim.label} must be at least ${both(lo)}` + (lim.tooSmall ? ` — ${lim.tooSmall}.` : '.'));
+    return lo;
   }
-  if (v > lim.max) {
-    fieldErrors.set(id, `${lim.label} must be ${both(lim.max)} or less — check the figure is in ${unitName}.`);
-    return lim.max;
+  if (v > hi) {
+    const why = lim.why && lim.why();
+    say(`${lim.label} must be ${both(roundMm(hi))} or less ` +
+        (why ? `${why}.` : `— check the figure is in ${unitName}.`));
+    return hi;
   }
   return v;
 }
@@ -4755,50 +5147,59 @@ function readNumber(id) {
    not carrying it on its own: aria-invalid says it to a screen reader and the message
    below the field says it in words. */
 function showFieldErrors() {
+  const lines = new Map();
   for (const [id, errId] of ERR_FIELDS) {
     const msg = fieldErrors.get(id) || '';
-    const out = ERR_EL[errId]();
     $(id).setAttribute('aria-invalid', msg ? 'true' : 'false');
     $(id).style.borderColor = msg ? 'var(--red)' : '';
-    out.textContent = msg;
-    out.hidden = !msg;
+    if (!lines.has(errId)) lines.set(errId, []);
+    if (msg) lines.get(errId).push(msg);
+  }
+  for (const [errId, msgs] of lines) {
+    const out = ERR_EL[errId]();
+    out.textContent = msgs.join(' ');
+    out.hidden = !msgs.length;
   }
 }
 
 function readControls() {
-  fieldErrors.clear();
-  for (const id of numIds) state[id] = readNumber(id);
+  fieldErrors.clear(); noRoom.clear();
+  /* The switches before the numbers: which ranges apply, and how wide they are, depend
+     on them — see LIMITS. */
   state.alignX = $('alignX').value; state.alignY = $('alignY').value;
   const mm = $('marginMode').value;
   state.marginMode = mm === 'custom' ? 'custom' : 'auto';
   state.noMargin = mm === 'none';
-  if (state.noMargin) { state.marginMode = 'custom'; state.mLeft = state.mRight = state.mFront = state.mBack = 0; }
   state.connector = $('connector').value;
   state.keyType = KEY_CONN.includes(state.connector) ? state.connector : 'bowtie';
   state.keyMount = $('keyMount').value;
   state.keyInsert = $('keyInsert').value;
   state.baseMode = $('baseMode').value;
   state.plateStyle = $('plateStyle').value;
+  state.tolerance = $('tolerance').value;
+  state.magnets = $('magnets').checked;
+  state.screws = $('screws').checked;
+  state.magnetSide = $('magnetSide').value;
+  for (const id of numIds) state[id] = readNumber(id);
+  if (state.noMargin) { state.marginMode = 'custom'; state.mLeft = state.mRight = state.mFront = state.mBack = 0; }
+  // the per-corner radii need no range here: buildPiece caps each one at the socket's rim
   if ($('perCorner').checked) {
     state.cornerRadii = { ll: parseFloat($('rFL').value)||0, lr: parseFloat($('rFR').value)||0,
                           ul: parseFloat($('rBL').value)||0, ur: parseFloat($('rBR').value)||0 };
   } else state.cornerRadii = null;
-  state.tolerance = $('tolerance').value;
   /* Read with the other numbers above; clamped here because it is a percentage and
      the estimate divides by 100, so a stray 900 would quote a mass nothing can print. */
   state.infill = Math.max(0, Math.min(100, state.infill));
-  state.magnets = $('magnets').checked;
-  state.screws = $('screws').checked;
-  state.magnetSide = $('magnetSide').value;
-  const clr = parseFloat($('connClr').value) || 0.2;
-  state.tab = Object.assign({}, DEFAULTS.tab, { clr });
+  // `|| 0.2` made a clearance of 0 into 0.2, and let 100 through
+  const fit = fitClearances(readNumber('connClr'));
+  state.tab = Object.assign({}, DEFAULTS.tab, { clr: fit.tab });
   /* No state.bowtie: a bowtie is built from state.key like the other two keyed joints,
      and DEFAULTS.bowtie is gone. This line survived it by being harmless —
      Object.assign over undefined yields {} — which is exactly how a parameter block
      that configures nothing goes on looking like it configures something. */
-  state.key = Object.assign({}, DEFAULTS.key, { clr: Math.max(0.1, clr - 0.05) });
-  state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: Math.max(0.08, clr - 0.05) });
-  state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr });
+  state.key = Object.assign({}, DEFAULTS.key, { clr: fit.key });
+  state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: fit.hclip });
+  state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr: fit.puzzle });
   $('alignRow').style.display = mm === 'auto' ? '' : 'none';
   $('customMargins').style.display = mm === 'custom' ? '' : 'none';
   $('magRow').style.display = state.magnets ? '' : 'none';
@@ -4879,9 +5280,18 @@ function pieceExtent(pc) {
   const ext = state.connector === 'dovetail' ? state.tab.dp + 0.4 : 0;
   return [pc.mL + pc.nx*pitch + pc.mR + ext, pc.mF + pc.ny*pitch + pc.mB + ext];
 }
-function pieceFits(pc) {
+function footprintFits(pc) {
   const [w, d] = pieceExtent(pc);
   return w <= state.bedW + 1e-6 && d <= state.bedD + 1e-6;
+}
+/* The bed has three dimensions and only two were checked. An extra floor of 300 mm made
+   a 304 mm plate, the print plan quietly packed it onto nothing — four empty plates —
+   and the dialog said every piece fit while quoting 10 kg of PLA. The height is known
+   before anything is built: it is the floor platePad works out, under the profile. */
+const plateHeightMm = () => platePad(state) + state.plateHeight;
+const heightFits = () => plateHeightMm() <= state.bedH + 1e-6;
+function pieceFits(pc) {
+  return footprintFits(pc) && heightFits();
 }
 
 /* How big a job this tool will take on in one go.
@@ -4889,8 +5299,14 @@ function pieceFits(pc) {
    from 999 — gave a 238 × 238 grid, 1600 pieces, and a build that started working
    through them one real CSG at a time with nothing on the page to say it would not
    finish. Both numbers are well past any drawer: MAX_CELLS is a 1.26 m square of grid
-   at the spec pitch, MAX_PIECES more separate prints than anyone is going to run. */
-const MAX_CELLS = 900, MAX_PIECES = 60;
+   at the spec pitch, MAX_PIECES more separate prints than anyone is going to run.
+   MAX_CELLS is core.js's, because the Fewest plates search has to stop at it too.
+
+   MAX_PIECE_CELLS is the same idea for one piece, which is one synchronous build: the
+   bed fields go to 2 m, so a 1260 mm drawer on a "2000 mm bed" was one 900-cell piece,
+   22 s with the page frozen and a 189 MB STL at the end. 24 × 24 cells is a metre
+   square at the spec pitch — bigger than any printer's bed. */
+const MAX_CELLS = PLATE_MAX_CELLS, MAX_PIECES = 60, MAX_PIECE_CELLS = 576;
 const overCap = () => !!layout &&
   (layout.nx * layout.ny > MAX_CELLS || layout.pieces.length > MAX_PIECES);
 
@@ -4904,6 +5320,7 @@ function warningsList() {
   // first, and above everything: these say what is wrong with what you typed, which
   // nothing below can — every check after this one is reasoning about the clamped value
   for (const msg of fieldErrors.values()) out.push({ err: true, stop: true, t: msg });
+  for (const msg of noRoom.values()) out.push({ err: true, stop: true, t: msg });
   if (layout.nx * layout.ny > MAX_CELLS)
     out.push({ err: true, stop: true, t: `A ${layout.nx} × ${layout.ny} grid is ` +
       `${layout.nx * layout.ny} cells, past the ${MAX_CELLS} this tool will build in one ` +
@@ -4912,13 +5329,37 @@ function warningsList() {
     out.push({ err: true, stop: true, t: `This split makes ${layout.pieces.length} pieces, ` +
       `past the ${MAX_PIECES} this tool will build in one go. A larger printer bed, or ` +
       'fewer cuts on the map, brings it back down.' });
+  else {
+    const big = layout.pieces.find((pc) => pc.nx * pc.ny > MAX_PIECE_CELLS);
+    if (big)
+      out.push({ err: true, stop: true, t: `Piece ${big.id} is ${big.nx} × ${big.ny} = ` +
+        `${big.nx * big.ny} cells, past the ${MAX_PIECE_CELLS} this tool will build as one ` +
+        'piece — no printer bed is that big. Check the bed size, or add cuts on the map.' });
+  }
   // suppressed when the drawer fields are already complaining: "smaller than one cell"
   // is true of the clamped value and useless as a diagnosis of a blank or negative one
-  if (!fieldErrors.has('drawerW') && !fieldErrors.has('drawerD') &&
-      (layout.nx < 1 || layout.ny < 1 || state.drawerW < state.pitch || state.drawerD < state.pitch))
+  const tooSmall = !fieldErrors.has('drawerW') && !fieldErrors.has('drawerD') &&
+      (layout.nx < 1 || layout.ny < 1 || state.drawerW < state.pitch || state.drawerD < state.pitch);
+  if (tooSmall)
     out.push({ err: true, stop: true, t: `Drawer smaller than one ${state.pitch} mm cell — nothing to generate.` });
-  for (const pc of layout.pieces) if (!pieceFits(pc))
+  /* Each custom margin can be inside the drawer while the pair of them leaves no room
+     for a cell. computeLayout puts one there regardless and hands the far margin what
+     is left, which is then a negative width. */
+  else if (customMargins()) {
+    const freeW = state.drawerW - state.mLeft - state.mRight;
+    const freeD = state.drawerD - state.mFront - state.mBack;
+    if (freeW < state.pitch - 1e-6)
+      out.push({ err: true, stop: true, t: `The left and right margins leave ${roundMm(freeW)} mm ` +
+        `of the drawer's width — not enough for one ${state.pitch} mm cell.` });
+    if (freeD < state.pitch - 1e-6)
+      out.push({ err: true, stop: true, t: `The front and back margins leave ${roundMm(freeD)} mm ` +
+        `of the drawer's depth — not enough for one ${state.pitch} mm cell.` });
+  }
+  for (const pc of layout.pieces) if (!footprintFits(pc))
     out.push({ err: true, t: `Piece ${pc.id} (${(pc.mL+pc.nx*state.pitch+pc.mR).toFixed(0)} × ${(pc.mF+pc.ny*state.pitch+pc.mB).toFixed(0)} mm) exceeds the ${state.bedW} × ${state.bedD} bed — add a cut through it.` });
+  if (!heightFits())
+    out.push({ err: true, t: `The plate is ${roundMm(plateHeightMm())} mm tall, more than ` +
+      `your printer's ${state.bedH} mm build height — lower the extra floor, or check the bed height.` });
   if (layout.pieces.some(pc => pc.nx*pc.ny === 1))
     out.push({ t: 'A piece is a single cell — printable, but consider moving a cut for a sturdier layout.' });
   /* One axis at a time. It fired on either and then printed both, so a drawer narrower
@@ -4963,8 +5404,9 @@ function drawWarnings() {
      said "resolve the errors above to generate" and offered you the download in the
      same breath. See warningsList for why this is `stop` and not `err`. */
   const stop = ws.some(w => w.stop);
-  $('openExport').disabled = stop;
-  $('openExport').title = stop ? 'Fix the errors under the cut map first' : '';
+  $('openExport').disabled = stop || !!buildFailed;
+  $('openExport').title = stop ? 'Fix the errors under the cut map first'
+    : buildFailed ? `Piece ${buildFailed} failed to build — try different cuts` : '';
 }
 
 // ---------- interactive cut map ----------
@@ -5203,7 +5645,7 @@ function drawPieceTable() {
     const w = pc.mL + pc.nx*pitch + pc.mR, d = pc.mF + pc.ny*pitch + pc.mB;
     const fit = pieceFits(pc);
     const built = builds[pc.id];
-    let joints = '…';
+    let joints = pc.id === buildFailed ? 'failed' : '…';
     if (built) {
       const m = built.meta, parts = [];
       if (m.tabs) parts.push(plural(m.tabs, 'tab'));
@@ -5217,7 +5659,7 @@ function drawPieceTable() {
       <td class="mono">${pc.nx} × ${pc.ny}</td>
       <td class="mono">${w.toFixed(1)} × ${d.toFixed(1)}</td>
       <td class="mono">${joints || '—'}</td>
-      <td class="${fit?'':'bad'}">${fit ? 'fits' : 'TOO BIG'}</td>
+      <td class="${fit?'':'bad'}">${fit ? 'fits' : footprintFits(pc) ? 'TOO TALL' : 'TOO BIG'}</td>
       <td><button class="ghost" data-dl="${pc.id}" ${built?'':'disabled'}>STL</button></td>
     </tr>`;
   }).join('');
@@ -5229,6 +5671,7 @@ function drawPieceTable() {
      it would never reach, next to a status line saying the build could not start. */
   const blocked = ws.some(w => w.err);
   $('pieceTail').textContent = blocked ? 'not building — see the checks above'
+    : buildFailed ? `build failed at piece ${buildFailed} — try different cuts`
     : okc < tot ? `building ${okc}/${tot}…` : `${tot} ready`;
   updatePreviewLabel(blocked);
   // this runs once per piece as the build proceeds, which is exactly the cadence an
@@ -5248,8 +5691,13 @@ function drawPieceTable() {
    set once goes stale, and a stale label is worse than none because it is confident. */
 function updatePreviewLabel(blocked) {
   const n = layout.pieces.length, built = Object.keys(builds).length;
+  if (!threeOk) {
+    $('three').setAttribute('aria-label', '3D preview unavailable — this browser could not start WebGL.');
+    return;
+  }
   $('three').setAttribute('aria-label', blocked
     ? '3D preview: nothing to show — see the checks under the cut map.'
+    : buildFailed ? `3D preview: the build failed at piece ${buildFailed}.`
     : built < n
       ? `3D preview: building, ${built} of ${plural(n, 'piece')} so far.`
       : `3D preview: a ${layout.nx} by ${layout.ny} cell baseplate, ` +
@@ -5265,9 +5713,15 @@ function scheduleBuild() {
   clearTimeout(buildTimer);
   buildTimer = setTimeout(runBuild, 260);
 }
+/* The id of the piece whose build threw, until the next build starts. A failure used to
+   be a line in the preview's corner and nothing else: the piece table sat on "building
+   1/2…" for good, the dialog said "Still building", and Download stayed on — for a
+   build that had already given up. */
+let buildFailed = null;
 async function runBuild() {
   const token = ++buildToken;
   builds = {};
+  if (buildFailed) { buildFailed = null; drawWarnings(); }
   printPlan = null; renderPrintPlan();
   drawPieceTable();
   clearThree();
@@ -5285,6 +5739,9 @@ async function runBuild() {
     } catch (e) {
       console.error('build failed for', pc.id, e);
       $('status').textContent = `piece ${pc.id} failed — try different cuts`;
+      buildFailed = pc.id;
+      drawWarnings();
+      drawPieceTable();
       // the pieces that did build are what is on screen now, and the framing may still be
       // for the meshes this build cleared away (see frameKey)
       autoFrame();
@@ -5299,6 +5756,13 @@ async function runBuild() {
 
 // ---------- three.js ----------
 let scene, camera, renderer, root, sph = { theta: -0.7, phi: 1.05, r: 420, cx: 0, cy: 0, cz: 0 };
+/* The preview is the one part of the page that needs WebGL, and it was set up first, so
+   a browser without it — GPU blocklisted, hardware acceleration off, three.js not
+   loaded — threw on the renderer and took the rest of the boot with it: no layout, no
+   build, no downloads, for a tool whose files never touch the GPU. So a failed setup
+   says so in the preview box and leaves `threeOk` false, and every preview function
+   below checks it and does nothing. */
+let threeOk = false;
 /* Who is in charge of the framing, the page or the person looking at it.
  *
  * The preview re-framed itself at the end of every build, and a build follows every
@@ -5314,6 +5778,16 @@ let scene, camera, renderer, root, sph = { theta: -0.7, phi: 1.05, r: 420, cx: 0
  * it frames now and lets the page frame again from then on. */
 let viewOwned = false, framedKey = '', fitR = 0;
 function initThree() {
+  try {
+    setupThree();
+    threeOk = true;
+  } catch (e) {
+    console.warn('3D preview unavailable:', e && e.message);
+    $('noGl').style.display = 'grid';
+    $('threehint').style.display = 'none';
+  }
+}
+function setupThree() {
   const canvas = $('three');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   scene = new THREE.Scene();
@@ -5404,6 +5878,7 @@ function initThree() {
   })();
 }
 function clearThree() {
+  if (!threeOk) return;
   while (root.children.length) {
     const m = root.children.pop();
     m.geometry.dispose(); m.material.dispose();
@@ -5416,6 +5891,7 @@ function piecePlacement(pc) {
   return [gx + pc.seg * gap, gy + pc.band * gap];
 }
 function addPieceToThree(pc, res) {
+  if (!threeOk) return;
   const tris = polysToTriangles(res.polys);
   const pos = new Float32Array(tris.length * 9);
   let o = 0;
@@ -5474,6 +5950,7 @@ const frameKey = () => {
    deliberate, for Fit as much as for the automatic case: the button answers "show me
    all of it", not "start again", and a reload is still there for that. */
 function fitThree() {
+  if (!threeOk) return;
   const cv = $('three');
   const w = cv.clientWidth, h = cv.clientHeight;
   framedKey = frameKey();
@@ -5490,7 +5967,7 @@ function fitThree() {
   camera.updateProjectionMatrix();
 }
 function autoFrame() {
-  if (frameKey() === framedKey) return;
+  if (!threeOk || frameKey() === framedKey) return;
   if (viewOwned) framedKey = frameKey();
   else fitThree();
 }
@@ -5499,6 +5976,7 @@ function autoFrame() {
    how either tool keeps its camera. */
 $('threewrap').addEventListener('previewfit', () => { viewOwned = false; fitThree(); });
 $('explode').addEventListener('change', () => {
+  if (!threeOk) return;
   for (const mesh of root.children) {
     const pc = layout.pieces.find(p => p.id === mesh.userData.pieceId);
     if (pc) { const [px, py] = piecePlacement(pc); mesh.position.set(px, py, 0); }
@@ -5511,9 +5989,18 @@ $('explode').addEventListener('change', () => {
 let printPlan = null;
 function computePrintPlan() {
   if (!layout || Object.keys(builds).length < layout.pieces.length) { printPlan = null; renderPrintPlan(); return; }
-  const gap = parseFloat($('plateGap').value) || 4;
+  /* Never below zero. A negative spacing packed parts into each other, and a negative
+     stack gap sank the upper piece into the one under it, so the 3MF printed them as
+     one fused lump. A blank field means the default; a spacing of 0 is an answer and
+     stays 0 — the old `|| 4` turned it into 4. A stack gap of 0 is not: it prints the
+     two pieces fused just the same, so it is held to one layer, as packPlates holds it. */
+  const gapOf = (id, dflt) => {
+    const v = parseFloat($(id).value);
+    return isFinite(v) ? Math.max(0, v) : dflt;
+  };
+  const gap = gapOf('plateGap', 4);
   const stack = $('stackToggle').checked;
-  const zGap = parseFloat($('stackGap').value) || 0.24;
+  const zGap = Math.max(PRINT_LAYER, gapOf('stackGap', 0.24));
   $('stackHint').style.display = stack ? '' : 'none';
   const items = layout.pieces.map(pc => {
     const m = builds[pc.id].meta;
@@ -5529,7 +6016,7 @@ function computePrintPlan() {
      Same for the size: measured off the mesh connectorPart returns, not off the
      parameters that made it. The two are the same rectangle for a flat key and are
      nothing like each other for the U-clip, whose prm describes a cross-section. */
-  if (KEYED.includes(state.connector)) {
+  if (shipsKeys()) {
     const ext = partExtent(connectorPart().polys);
     items.push({ id: 'key', w: ext.w, d: ext.d, h: ext.h,
                  qty: keysNeeded(), stackable: false });
@@ -5576,13 +6063,18 @@ function platePolysAndItems(idx) {
   }
   return objs;
 }
+/* JSZip stores files uncompressed unless asked, and a 3MF is a ZIP of XML text — a
+   format that compresses several times over. Stored, every 3MF and ZIP was several
+   times the size it needed to be, which on a big plate is the difference between a
+   download and a stall. Slicers read either. */
+const ZIP_DEFLATE = { compression: 'DEFLATE', compressionOptions: { level: 6 } };
 async function plate3mfBytes(idx) {
   const x = build3mfXML(platePolysAndItems(idx));
   const pz = new JSZip();
   pz.file('[Content_Types].xml', x.contentTypes);
   pz.file('_rels/.rels', x.rels);
   pz.file('3D/3dmodel.model', x.model);
-  return pz.generateAsync({ type: 'uint8array' });
+  return pz.generateAsync({ type: 'uint8array', ...ZIP_DEFLATE });
 }
 async function downloadAllPlates() {
   if (!printPlan) return;
@@ -5590,7 +6082,7 @@ async function downloadAllPlates() {
   if (n === 1) { saveBlob(await plate3mfBytes(0), 'print-plates.3mf'); return; }
   const zip = new JSZip();
   for (let i = 0; i < n; i++) zip.file(`plate-${i+1}.3mf`, await plate3mfBytes(i));
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }), `print-plates-x${n}.zip`);
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }), `print-plates-x${n}.zip`);
 }
 $('plateGap').addEventListener('input', computePrintPlan);
 $('stackToggle').addEventListener('change', computePrintPlan);
@@ -5671,19 +6163,37 @@ function connectorPart() {
  *
  * `pad` is read back off the height the build actually came out at rather than worked
  * out again from bottomPad and the joint's own minimum — the puzzle cavity is cut
- * relative to it, and the coupon has no other way to know. */
+ * relative to it, and the coupon has no other way to know.
+ *
+ * `clrMax` is the joint's clearance with the field at its ceiling, so the coupon offers
+ * no pair looser than the field will take: the same ceiling the field is held to
+ * (connClrCeiling), cut the way this joint cuts the field (fitClearances). It was the
+ * field's headroom added to the joint's clearance, which is the same thing only while
+ * the key's 0.1 floor is not in play, and it read a ceiling that knew the connector and
+ * nothing else — a snap clip dropped in from above got pairs to 0.95, whose housings
+ * met across the coupon's seam. Its slackest pair now stops at the key's 0.25, which
+ * holds the slot's seam-side wall one BLOAT inside its tile, off the tile's seam face,
+ * as the ceiling holds it on the plate; test/plate-audit.js measures both. A slim wall
+ * key's clearance is its own and the field does not move it, so it has no ceiling to
+ * keep to. */
 function activeJoint() {
   const pad = builtH() - state.plateHeight;
-  if (!KEYED.includes(state.connector))
+  const top = fitClearances(connClrCeiling(state).max);
+  if (!KEYED.includes(state.connector)) {
+    const puzzle = state.connector === 'puzzle';
     return { kind: state.connector === 'none' ? 'none' : state.connector, pad,
-             clr: state.connector === 'puzzle' ? state.puzzle.clr : state.tab.clr };
+             clr: puzzle ? state.puzzle.clr : state.tab.clr,
+             clrMax: puzzle ? top.puzzle : top.tab };
+  }
   const prm = activeKeyDims();
   // core.js owns this, so the coupon, the plate and the audit cannot disagree
   const kind = jointKind(state.connector, state.keyMount, state.keyInsert);
-  return { kind, shape: activeKeyShape(), prm, pad,
-           // the clip is one part at one size in either housing, so it is fitted to the
-           // full key's clearance — buildPiece says the same
-           clr: kind === 'snaptop' ? state.key.clr : prm.clr,
+  // the clip is one part at one size in either housing, so it is fitted to the full
+  // key's clearance — buildPiece says the same
+  const clr = kind === 'snaptop' ? state.key.clr : prm.clr;
+  const slim = kind !== 'snaptop' && state.connector !== 'hclip' && state.keyMount === 'wall';
+  return { kind, shape: activeKeyShape(), prm, pad, clr,
+           clrMax: slim ? Infinity : state.connector === 'hclip' ? top.hclip : top.key,
            part: connectorPart().polys };
 }
 /* ---------- material ------------------------------------------------------
@@ -5776,7 +6286,7 @@ function materialGrams() {
   let mm3 = layout.pieces.reduce((a, pc) => a + filamentOf(builds[pc.id].mat), 0);
   // the loose parts are part of the job: keysNeeded is the same count the STL lays out
   // and the print plan reserves bed space for
-  if (KEYED.includes(state.connector))
+  if (shipsKeys())
     mm3 += filamentOf(meshMaterial(connectorPart().polys)) * keysNeeded();
   return mm3 * PLA_DENSITY / 1000;
 }
@@ -5841,13 +6351,18 @@ function keyCount(wallOnly) {
     !wallish || Math.abs(j - Math.round(j)) <= 0.25).length, 0);
 }
 const topClips = () => state.connector === 'snap' && state.keyInsert === 'top';
-const keysNeeded = () => keyCount(topClips()) || 1;
+/* No floor of one. A plate that is a single piece has no seams, so it needs no keys —
+   the `|| 1` that used to sit here put a key in the ZIP, on the print plan and in the
+   file list for a design with nothing to join. shipsKeys is the one test for "is there
+   a loose part to offer at all", so the plan, the ZIP and the dialog agree on it. */
+const keysNeeded = () => keyCount(topClips());
+const shipsKeys = () => KEYED.includes(state.connector) && keysNeeded() > 0;
 async function downloadEverythingZip() {
   if (Object.keys(builds).length < layout.pieces.length) return;
   const zip = new JSZip();
   for (const pc of layout.pieces)
     zip.file(`baseplate-${pc.id}.stl`, stlBinary(builds[pc.id].polys, pc.id));
-  if (KEYED.includes(state.connector)) {
+  if (shipsKeys()) {
     const k = keysStl();
     zip.file(k.name, stlBinary(k.polys, k.mesh));
   }
@@ -5856,7 +6371,7 @@ async function downloadEverythingZip() {
       zip.file(`print-plates/plate-${i+1}.3mf`, await plate3mfBytes(i));
   }
   zip.file('README.txt', readmeText());
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }),
                 `gridfinity-baseplate-${layout.nx}x${layout.ny}.zip`);
 }
 function readmeText() {
@@ -5948,7 +6463,13 @@ const CONNECTOR_NAMES = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', bowt
    "Split: plates". An internal enum is not a name for anything. */
 const SPLIT_NAMES = { balanced: 'balanced', staggered: 'staggered',
   plates: 'fewest plates', manual: 'manual' };
-const splitName = () => SPLIT_NAMES[state.splitMode] || state.splitMode;
+/* hasOwn, not a bare lookup: SPLIT_NAMES.constructor is Object, so "sp=constructor" in a
+   link was a "function Object() { [native code] } split" on screen and in the README.
+   Not Object.hasOwn, which Safari only has from 15.4: before that it threw here, inside
+   drawing the map, and the page never laid out. */
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const splitName = () =>
+  (hasOwn(SPLIT_NAMES, state.splitMode) ? SPLIT_NAMES[state.splitMode] : state.splitMode);
 
 /* What goes wrong is tested before whether the build has finished, not after. Anything
    the checks call an error stops runBuild, so the pieces never finish and never will —
@@ -5960,13 +6481,20 @@ function bedFitText() {
   // guard, so the "largest piece" arithmetic below never reasons about an empty list
   if (!layout.pieces.length)
     return { cls: 'bad', t: 'There is nothing to generate yet — see the checks under the cut map.' };
-  const bad = layout.pieces.filter((pc) => !pieceFits(pc));
+  const bad = layout.pieces.filter((pc) => !footprintFits(pc));
   if (bad.length)
     return { cls: 'bad', t: `${plural(bad.length, 'piece')} — ${bad.map((pc) => pc.id).join(', ')} — ` +
       `will not fit your ${bed}. Add a cut through them on the cut map, or pick a split mode ` +
       'that makes smaller pieces; the files below would print oversized as they stand.' };
+  // a cut cannot fix this one, so it gets its own sentence rather than the one above
+  if (!heightFits())
+    return { cls: 'bad', t: `The plate is ${roundMm(plateHeightMm())} mm tall and your printer ` +
+      `builds ${state.bedH} mm high. Lower the extra floor, or check the bed height.` };
   const err = warningsList().find((w) => w.err);
   if (err) return { cls: 'bad', t: err.t + ' Nothing can be exported until that is fixed.' };
+  if (buildFailed)
+    return { cls: 'bad', t: `Piece ${buildFailed} could not be built, so the build stopped there. ` +
+      'Move a cut through it or pick another joint; the plates cannot be exported until every piece builds.' };
   const ready = Object.keys(builds).length;
   if (ready < layout.pieces.length)
     return { cls: 'wait', t: `Still building — ${ready} of ${plural(layout.pieces.length, 'piece')} ready. ` +
@@ -6053,7 +6581,7 @@ function renderExportFiles() {
           { 'data-ex': 'piece', 'aria-label': `Download piece ${pc.id} (STL)` });
     btn.disabled = !b;   // downloadPiece would otherwise fail silently
   }
-  if (KEYED.includes(state.connector)) {
+  if (shipsKeys()) {
     const kn = state.connector === 'snap' ? 'Snap clips' : 'Connector keys';
     exRow(kn, `${keysNeeded()} needed, laid out on one plate · STL`, 'STL', downloadKeys,
           { 'data-ex': 'keys', 'aria-label': `Download the ${kn.toLowerCase()} (STL)` });
@@ -6143,7 +6671,24 @@ function descriptor() {
   };
   return Object.assign({}, hashExtras, o, { v: 2 });
 }
-const encodeDesc = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+/* Names are encoded as well as values. Keys from other tools ride through here as they
+   came, and loadFromHash decodes them, so one written raw did not survive its own round
+   trip: "%25=1" was carried as "%=1", and every visit after that threw URIError reading
+   the save back. A raw line break in a name would also have reached the README. */
+const encodeDesc = (o) => Object.entries(o)
+  .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+/* One bad pair costs that pair. A malformed escape (%E0%A4%A) used to throw out of the
+   whole load, and a pair with no '=' was kept as a setting whose value was undefined. */
+function parseHash(h) {
+  const q = Object.create(null);
+  for (const kv of h.split('&')) {
+    const i = kv.indexOf('=');
+    if (i < 1) continue;
+    try { q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1)); }
+    catch (err) { /* not valid percent-encoding: drop it, keep the rest */ }
+  }
+  return q;
+}
 /* Keep the address bar holding the current design, so a reload does not throw it away.
  *
  * The tool has no accounts and no server, which is the point of it — but it also meant
@@ -6194,10 +6739,103 @@ const saveLocal = (h) => {
                    an exception that stops the page working */ }
 };
 const readLocal = () => { try { return localStorage.getItem(SAVE_KEY) || ''; } catch (err) { return ''; } };
+/* Only a fragment that carries settings is a layout. The page has fragments of its own —
+   the skip link's #stage — and one arriving as if it were a shared link loaded nothing,
+   then saved the empty default over the drawer this browser had kept. */
+const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
   location.href = location.origin + location.pathname;   // drop the hash and reload clean
 }
+/* Wired here, before the boot below reads any link: a link that throws there must not
+   also take away the button that gets you out of it, or stop the next link working. */
+$('startFresh').addEventListener('click', startFresh);
+/* A hash this page did not write means someone navigated to a link — pasted a share URL
+   into the address bar, or picked a bookmark — and changing only the fragment is a
+   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
+   Before local saving that was merely confusing; now it means a shared layout loses to
+   whatever this browser had stored, which is the one case that must never happen.
+   Reloading applies the link. replaceState does not fire this event, so the saves this
+   page makes every few seconds cannot trigger it. A fragment with no settings in it is
+   an anchor, not a link to a drawer, and reloading for one threw the drawer away. */
+addEventListener('hashchange', () => {
+  if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
+});
+
+/* More slots beside the save, so a layout is set aside rather than lost.
+ *
+ * PREV_KEY: following a link overwrote the save within 400 ms with no way back, so
+ * whatever is about to replace it — a link, or the defaults standing in for a layout
+ * that would not load — copies it here first, and the page offers to put it back.
+ *
+ * LINKED_KEY: the save a link wrote, while nobody has changed it. That save is the
+ * sender's drawer, not yours, so a second link replacing it leaves PREV_KEY holding
+ * yours; setting it aside instead lost your layout to the first link you had opened.
+ * Changed, it is kept while the page still uses any of the link's drawer, bed and infill.
+ *
+ * PREV_LINKED_KEY: the LINKED_KEY of the layout in PREV_KEY. Whether a layout is a link's
+ * travels with it, so a link put back is still the link's and your own put back is not;
+ * left behind, it went to whatever was put back in its place.
+ *
+ * LOADING_KEY: names the layout being loaded, and is cleared once the page has drawn
+ * it. Still there at the next visit, for the same layout, means the last attempt hung or
+ * crashed the tab; loading it again would only do that again, on every visit. */
+const PREV_KEY = SAVE_KEY + ':prev', LINKED_KEY = SAVE_KEY + ':linked',
+  PREV_LINKED_KEY = PREV_KEY + ':linked', LOADING_KEY = SAVE_KEY + ':loading';
+const readKey = (k) => { try { return localStorage.getItem(k) || ''; } catch (err) { return ''; } };
+const writeKey = (k, v) => {
+  try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); }
+  catch (err) { /* private mode: the guard and the backup go, the page does not */ }
+};
+let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* What an untouched page saves, and what this one held when the boot finished — null
+   from the first change on. Until that change a stalled page saves nothing: saving the
+   defaults it stands in with put them over the layout it declined, and one more reload
+   lost that layout for good. */
+let pristine = '', bootDesc = null;
+/* Someone's link this page holds, or ''. Each of its drawer, bed and infill values the
+   page still uses is the link's, not yours, whatever else has been changed: so taking
+   the design to the other page does not replace yours there without setting it aside.
+   Key by key: compared as one group, changing only the infill made the drawer yours. */
+let heldLink = '';
+// the drawer, bed and infill settings in which a design still has a link's values
+function linkKeys(h, link) {
+  if (!link) return [];
+  const p = parseHash(h), q = parseHash(link);
+  return [...SHARED_KEYS].filter((k) => k in q && p[k] === q[k]);
+}
+function leaveFor(url) {
+  hashReady = false; dropSave();   // no save of this page's may land after
+  location.href = url;
+}
+/* Swapped rather than copied over: what is here now goes aside in its place, so putting
+   a layout back is never the step that loses one. */
+function putBack() {
+  const prev = readKey(PREV_KEY);
+  if (!prev) return;
+  const prevLinked = readKey(PREV_LINKED_KEY);
+  const cur = encodeDesc(descriptor());
+  if (cur !== pristine && !(stalled && cur === bootDesc)) {
+    writeKey(PREV_KEY, cur);
+    writeKey(PREV_LINKED_KEY, heldLink);
+  }
+  saveLocal(prev);
+  writeKey(LINKED_KEY, prevLinked);
+  leaveFor(location.href.split('#')[0]);   // a bare visit restores it, and says so
+}
+function tryAnyway() {
+  writeKey(LOADING_KEY, '');
+  leaveFor(location.href.split('#')[0] + '#' + stalled);
+  location.reload();   // a change of fragment alone reloads nothing
+}
+function showSetAside(msg, canPutBack, canTry) {
+  $('setAsideMsg').textContent = msg;
+  $('putBack').style.display = canPutBack ? '' : 'none';
+  $('tryAnyway').style.display = canTry ? '' : 'none';
+  $('setAside').style.display = '';
+}
+$('putBack').addEventListener('click', putBack);
+$('tryAnyway').addEventListener('click', tryAnyway);
 
 function rememberState() {
   if (!hashReady) return;
@@ -6209,6 +6847,16 @@ function saveNow() {
   clearTimeout(hashSaveT);
   removeEventListener('beforeunload', dropSave);
   const h = encodeDesc(descriptor());
+  /* The first change is the moment the banner stops being true: "put my layout back"
+     would now also throw away the edit, so it goes. */
+  if (bootDesc !== null) {
+    if (sameDesign(h, bootDesc)) { if (stalled) return; }
+    else {
+      bootDesc = null; $('setAside').style.display = 'none';
+      // what a stalled page goes on from is its defaults, not the link it declined
+      if (stalled) writeKey(LINKED_KEY, '');
+    }
+  }
   try { history.replaceState(null, '', '#' + h); }
   catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                    worth an exception that stops the rest of the page working */ }
@@ -6258,21 +6906,33 @@ function binsHref() {
   // full baseplate state plus the plate height bins needs; extras ride along
   return 'bins/#' + encodeDesc(Object.assign(descriptor(), { ph: (+H).toFixed(2) }));
 }
-/* Each hand-over is told to the saved drawer first, so the page at the other end
-   recognises the design it arrives with as that drawer — see attach in drawers.js. And a
-   change still waiting to be saved is saved now, not dropped as the page goes: Back
+/* Each hand-over leaves one note in this tab for the page at the other end to read once
+   (handoff in drawers.js, which also tells the saved drawer, if this is one, so that page
+   recognises the design it arrives with as that drawer — see attach there). A design
+   arriving from the other tool may carry a drawer or bed changed there, and that is the
+   same layout moving on, not a link replacing it. The guide passes the address through
+   untouched, so going by way of it is the same.
+   The note names any drawer, bed and infill settings still at someone's link's values:
+   those are not yours to carry over, and the other page compares them as a link's, so
+   they do not replace yours there without setting it aside. Left out of the comparison,
+   they did, after any edit at all.
+   A change still waiting to be saved is saved now, not dropped as the page goes: Back
    comes to this page's address, and that and the drawer must both have the change. */
 function leave(href) {
   if (hashReady) saveNow();
-  drawers.handoff(href.slice(href.indexOf('#') + 1));
+  drawers.handoff(href.slice(href.indexOf('#') + 1),
+    linkKeys(encodeDesc(descriptor()), heldLink));
   location.href = href;
 }
 for (const id of ['toBins', 'navBins'])
   $(id).addEventListener('click', (e) => { e.preventDefault(); leave(binsHref()); });
-// the guide holds no state, so hand it ours and it can hand it back
+/* The guide holds no state, so hand it ours and it can hand it back — what the bins page
+   would be handed, plate height and all: it passes the layout on to either tool, and
+   without ph the bins page took a 4.25 mm plate. */
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  leave('guide/#' + encodeDesc(descriptor()));
+  const h = binsHref();
+  leave('guide/' + h.slice(h.indexOf('#')));
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
@@ -6283,15 +6943,20 @@ $('shareBtn').addEventListener('click', () => {
 function loadFromHash(src) {
   const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
   if (h.length < 2) return;
-  const q = Object.fromEntries(h.split('&').map(kv => kv.split('=').map(decodeURIComponent)));
+  const q = parseHash(h);
   for (const [k, v] of Object.entries(q)) if (!OWNED.has(k)) hashExtras[k] = v;
-  /* The link is millimetres, always; a drawer length is written into its field in
+  /* A menu takes only a value it offers. "cn=bogus" left the connector menu blank, so
+     the plates were cut for keys that were then never exported, and the fit sample was
+     named "-fit-sample-". Anything else keeps the default.
+     The link is millimetres, always; a drawer length is written into its field in
      whatever unit the field is showing. Anything that is not a number goes in as it
      came, so the field's own check can say what is wrong with it. */
   const set = (id, v) => {
-    if (v === undefined || !$(id)) return;
-    if (LENGTH_IDS.includes(id) && v !== '' && isFinite(+v)) FIELDS.setLength($(id), +v, unit);
-    else $(id).value = v;
+    const el = $(id);
+    if (v === undefined || !el) return;
+    if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === v)) return;
+    if (LENGTH_IDS.includes(id) && v !== '' && isFinite(+v)) FIELDS.setLength(el, +v, unit);
+    else el.value = v;
   };
   set('drawerW', q.w); set('drawerD', q.d); set('marginMode', q.mm);
   set('alignX', q.ax); set('alignY', q.ay);
@@ -6306,11 +6971,12 @@ function loadFromHash(src) {
   set('baseMode', q.bm); set('plateStyle', q.ps); set('infill', q.if);
   if (q.pc !== undefined) $('perCorner').checked = q.pc === '1';
   set('rFL', q.r1); set('rFR', q.r2); set('rBL', q.r3); set('rBR', q.r4);
-  if (q.sp) {
+  // only a split the page has; anything else is not a split, it is text for the README
+  if (q.sp && hasOwn(SPLIT_NAMES, q.sp)) {
     state.splitMode = q.sp; setSplitSeg(q.sp);
     if (q.sp === 'manual') {
-      state.rowCuts = q.rc ? q.rc.split(',').map(Number).filter(n => !isNaN(n)) : [];
-      state.colCuts = q.cc ? q.cc.split('_').map(s => s ? s.split('.').map(Number) : []) : [];
+      state.rowCuts = cutList(q.rc, ',');
+      state.colCuts = q.cc ? q.cc.split('_').slice(0, MAX_PIECES).map((s) => cutList(s, '.')) : [];
     }
   }
   /* The list follows the bed, not the other way round. It did not follow it at all: a
@@ -6318,6 +6984,14 @@ function loadFromHash(src) {
      the 256 mm entry above them. */
   $('bedPreset').value = FIELDS.presetFor($('bedPreset'), bedNow(), q.pr);
 }
+/* Cuts are whole cells, each one once, in order, and no more than the pieces this page
+   will build. "rc=2,2,2" built zero-height pieces, "rc=1.5" a fractional one, and 2,500
+   copies of one cut took 1.8 GB — and were saved, so every visit after took it again. */
+const CUT_TOP = Math.floor(LIMITS.drawerW.max / LIMITS.pitch.min);   // most cells on a side
+const cutList = (s, sep) => [...new Set(String(s || '').split(sep).map(Number))]
+  .filter((n) => Number.isInteger(n) && n > 0 && n < CUT_TOP)
+  .sort((a, b) => a - b).slice(0, MAX_PIECES - 1);
+
 const bedNow = () => [+$('bedW').value, +$('bedD').value, +$('bedH').value];
 
 /* ---------- undo -----------------------------------------------------------
@@ -6518,31 +7192,108 @@ if (FIELDS.savedUnit() !== unit) {
   for (const id of LENGTH_IDS) $(id).value = $(id).defaultValue;
   applyUnit(FIELDS.savedUnit());
 }
+/* Whether two saves hold the same plates, compared setting by setting on what this page
+   owns. Compared as strings, the bins page handing the drawer back — its keys in its own
+   order, with its own extras — was a link that had replaced your layout, on every trip
+   there and back. A hand-over also leaves out the drawer and the bed, the settings the
+   two pages share: changing them on the other page is not a different layout, unless
+   the other page still had them from someone's link. A link from someone keeps them,
+   since a drawer of another size is exactly what one brings. */
+// the drawer, the bed and its printer, and the infill: drawers.js keeps the same list
+const SHARED_KEYS = new Set([...DRAWERS.SHARED].filter((k) => k !== 'v'));
+function sameDesign(a, b, skip = []) {
+  const p = parseHash(a), q = parseHash(b);
+  return [...OWNED].every((k) => k === 'v' || k === 'ph' || skip.includes(k) || p[k] === q[k]);
+}
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
-let arrivedWith = '';                     // the design string this page was opened with
-if (incomingHash.length > 2) { loadFromHash(); arrivedWith = incomingHash; }
-else {
+let linkedNow = false;   // this page holds a link's layout, not yet changed by anyone
+let linkNew = false;     // ...one that arrived on this visit, so is recorded afresh
+let linkKept = '';       // the link this page last opened, unless a hand-over came since
+let notLinked = [];      // settings a link arrived with that were yours on the other page
+let arrivedWith = '';    // the design string this page was opened with, if it shows it
+{
+  const fromLink = isLayoutHash(incomingHash);
   const saved = readLocal();
-  if (saved.length > 2) { loadFromHash(saved); $('restored').style.display = ''; arrivedWith = saved; }
+  const src = fromLink ? incomingHash : saved.length > 2 ? saved : '';
+  /* What this page saves when nobody has touched it. A save that is only that is no
+     one's work, so replacing it sets nothing aside — or every link would offer the
+     defaults back. */
+  readControls();
+  pristine = encodeDesc(descriptor());
+  stalled = src && readKey(LOADING_KEY) === src ? src : '';
+  /* The tab's note of what this page arrives with, if it is this design: the other tool
+     or the guide handing it over, or a saved drawer opened. Read every time, so a stale
+     note never lingers. */
+  const note = drawers.arrival(incomingHash);
+  const handOver = fromLink ? note : null;
+  // a saved drawer opened from the list is yours, whatever it replaces
+  const opened = !!handOver && handOver.open;
+  // your own drawer, bed and infill settings, as the other page had them
+  const yours = handOver ? [...SHARED_KEYS].filter((k) => !handOver.link.includes(k)) : [];
+  // the other page had nothing of anyone's link: your own layout come back
+  const handedOver = !!handOver && (opened || !handOver.link.length);
+  notLinked = handOver ? yours : [];
+  const replaces = fromLink && !opened &&
+    (saved.length <= 2 || !sameDesign(saved, src, yours));
+  const linked = readKey(LINKED_KEY);
+  linkKept = handedOver ? '' : linked;
+  /* Compared on what the record holds: one made without the settings that came with
+     the link as yours does not count those, or your own drawer made it "changed", and a
+     second link set it aside over the layout the first had. */
+  const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked,
+    [...SHARED_KEYS].filter((k) => !(k in parseHash(linked))));
+  /* Set aside whatever is about to be replaced: by a different layout, or by the defaults
+     standing in for one that would not load. Not a link's own layout, untouched: what that
+     link replaced is already set aside, and it is the one you would want back. */
+  const aside = saved.length > 2 && saved !== pristine && !savedLinked &&
+    (replaces || !!stalled);
+  if (aside) {
+    writeKey(PREV_KEY, saved);
+    writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
+  }
+  const canPutBack = replaces && (aside || (savedLinked && !!readKey(PREV_KEY)));
+  if (stalled) {
+    showSetAside('This layout did not finish loading last time, so the page has started ' +
+      'from its defaults rather than try it again.', canPutBack, true);
+  } else if (src) {
+    writeKey(LOADING_KEY, src);
+    loadFromHash(src);
+    if (!fromLink) $('restored').style.display = '';
+    else if (canPutBack) showSetAside('This link replaced the layout you had here.', true, false);
+    /* A hand-over is your own layout come back from the other page, never someone's
+       link, even onto an empty save; and one that moved the drawer or bed on has been
+       changed, by you, there. One still holding a link's settings is that link's. */
+    linkedNow = handedOver ? false
+      : fromLink ? replaces || (savedLinked && sameDesign(saved, src))
+      : savedLinked;
+    linkNew = fromLink && replaces && !handedOver;
+    arrivedWith = src;
+  }
 }
 hashReady = true;                         // loadFromHash has had its say; ours may start
 recomputeLayout();
 autoFrame();
+bootDesc = encodeDesc(descriptor());
+/* Laid out and drawn, so the marker has done its job. A stalled layout keeps its marker:
+   reloading the same link must be declined again, not tried again. */
+if (!stalled) {
+  writeKey(LOADING_KEY, '');
+  /* A link that arrived on this visit is recorded as it is, less any drawer, bed or infill
+     settings that came with it as yours: kept, they were the link's from then on, and a
+     later trip that changed them on the other page was a link replacing your layout
+     there. The same link reloaded or reopened keeps its record, which writing it afresh
+     filled back in. A changed one is kept while the page still uses any of its values,
+     so a reload does not turn those into yours. */
+  const keep = !linkedNow ? (linkKeys(bootDesc, linkKept).length ? linkKept : '')
+    : !linkNew ? linkKept
+    : bootDesc.split('&').filter((kv) =>
+      !notLinked.includes(kv.slice(0, kv.indexOf('=')))).join('&');
+  writeKey(LINKED_KEY, keep);
+  heldLink = keep;
+}
 drawers.attach(arrivedWith);              // is that a saved drawer this browser wrote?
-
-
-if ($('startFresh')) $('startFresh').addEventListener('click', startFresh);
-
-/* A hash this page did not write means someone navigated to a link — pasted a share URL
-   into the address bar, or picked a bookmark — and changing only the fragment is a
-   same-document navigation, so nothing re-reads it and the drawer on screen stays put.
-   Before local saving that was merely confusing; now it means a shared layout loses to
-   whatever this browser had stored, which is the one case that must never happen.
-   Reloading applies the link. replaceState does not fire this event, so the saves this
-   page makes every few seconds cannot trigger it. */
-addEventListener('hashchange', () => location.reload());
 
 </script>
 <!-- The dismiss control is a sibling of the link, not a child of it: a <button> inside
@@ -6571,11 +7322,27 @@ addEventListener('hashchange', () => location.reload());
       return h && !/^(https?:|mailto:|#)/.test(h);
     });
   }
+  /* The link's own anchor gives way to the layout: an address holds one fragment, and
+     "../#heights" with the layout added was "#heights#w=…", which the tools read as a
+     layout missing its drawer. */
   for (const a of links)
     a.addEventListener('click', function (e) {
       if (!location.hash || location.hash.length < 3) return;
       e.preventDefault();
-      location.href = a.getAttribute('href') + location.hash;
+      location.href = a.getAttribute('href').split('#')[0] + location.hash;
+    });
+
+  /* Skip links move focus and leave the address alone. Followed the ordinary way, one
+     put #stage in the address bar where the tools keep the layout, and a hash change
+     reloads both tools — so the first thing Tab reaches wiped the drawer on screen and
+     then the save behind it. The target takes focus (tabindex="-1"), and focusing it
+     scrolls it into view, which is all the jump was for. */
+  for (const s of document.querySelectorAll('a.skip'))
+    s.addEventListener('click', function (e) {
+      var t = document.getElementById((s.getAttribute('href') || '').slice(1));
+      if (!t) return;
+      e.preventDefault();
+      t.focus();
     });
 
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"

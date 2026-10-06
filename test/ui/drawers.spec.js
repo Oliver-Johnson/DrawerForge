@@ -391,8 +391,10 @@ test('every drawer in one file, and importing it twice keeps both copies apart',
   expect(errors).toEqual([]);
 });
 
-/* The bins page takes a drawer width of 0, so a drawer can be saved that the importer
-   refuses. Written into "every drawer", it made the whole file refuse to import. */
+/* The bins page used to take a drawer width of 0, so a drawer could be saved that the
+   importer refuses. Written into "every drawer", it made the whole file refuse to import.
+   The page holds a typed 0 to its 1 mm floor now, so the drawer is stored here as the
+   older page saved it. */
 test('a drawer that would not import is left out of an export, and does not spoil a file',
   async ({ page }) => {
     const errors = await openPlates(page);
@@ -401,6 +403,13 @@ test('a drawer that would not import is left out of an export, and does not spoi
     await saveAs(page, 'Zero');
     await H.setField(page, 'drawerW', '0');
     await settle(page);
+    expect((await stored(page)).Zero.w).toBe('1');
+    await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('drawerforge:drawers:v1'));
+      const d = s.drawers.find((x) => x.name === 'Zero');
+      d.hash = d.hash.replace(/(^|&)w=[^&]*/, '$1w=0');
+      localStorage.setItem('drawerforge:drawers:v1', JSON.stringify(s));
+    });
     expect((await stored(page)).Zero.w).toBe('0');
 
     await openDialog(page);
