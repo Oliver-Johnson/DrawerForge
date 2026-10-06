@@ -1265,6 +1265,49 @@ console.log('\nmagnet and screw pockets keep a floor:');
  * the extremes are built here; and the one step past each that justified the pitch floor
  * is built too, so that if the engine ever closes it the floor can come down and this
  * says so, the way a quarantined case does. */
+/* A margin of any width beside a corner, square or rounded.
+ *
+ * A margin is a region of its own, cut from the plate's outline beside the cells it runs
+ * along, and each region is built BLOAT past the cut so the two shells overlap. That only
+ * works while the band where they overlap holds no vertex of the outline. One that does is
+ * in both shells, and each puts a vertical edge of the plate's side wall on it: an edge
+ * used four times, two closed shells touching where they were meant to overlap. A margin
+ * under a BLOAT puts the corner itself in the band, and with it the whole of the side wall
+ * either side; beside a rounded corner the arc's own vertices are spread across the first
+ * millimetre or so of the edge, so 0.15, 0.4 and 0.75 mm beside a 4 mm corner each did it
+ * once a side.
+ *
+ * So every margin from none to 1 mm, a hundredth at a time, on all four sides of one cell,
+ * beside square corners, the default radius and the largest the cap allows; and the same
+ * past a strip of half cells, which is a margin cut of its own. Every one has to come back
+ * with no bad edge at all, open or touching. */
+console.log('\na margin of any width beside a corner:');
+{
+  const touched = [];
+  let builds = 0;
+  for (let i = 0; i <= 100; i++) {
+    const m = i / 100;
+    for (const outerRadius of [0, 4, 4.88]) {
+      const DESIGNS = {
+        'margins': { drawerW: 42 + 2 * m, drawerD: 42 + 2 * m, mLeft: m, mRight: m, mFront: m, mBack: m },
+        // the leftover past a half column and a half row, all of it on the far side
+        'past half cells': { drawerW: 42 + 21 + m, drawerD: 42 + 21 + m, marginMode: 'half',
+                             alignX: 'end', alignY: 'end' },
+      };
+      for (const [dn, d] of Object.entries(DESIGNS)) {
+        const r = buildAll({ ...d, outerRadius, connector: 'none' });
+        builds++;
+        if (r.bad) touched.push(`${dn} ${m.toFixed(2)} mm, radius ${outerRadius}: ${leakText(r)}`);
+      }
+    }
+  }
+  console.log(`  0 to 1 mm by 0.01, ${builds} plates: ` +
+              (touched.length ? `NOT CLEAN: ${touched.slice(0, 6).join('; ')}` +
+                                (touched.length > 6 ? ` and ${touched.length - 6} more` : '')
+                              : 'every one watertight with no shells touching'));
+  bad += touched.length;
+}
+
 console.log('\nthe smallest pitch the page allows:');
 {
   const P = G.PLATE_RANGES.pitch.min;
