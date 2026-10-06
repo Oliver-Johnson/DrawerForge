@@ -133,24 +133,41 @@ const setField = async (page, id, value) => {
    next is only dependable on a real origin: from file:// pages the CI browser has now
    and then opened the second page with the first page's localStorage write missing,
    through reloads. The server listens on a port the system picks, so there is no port
-   to collide on. Resolves to { base, close }. */
+   to collide on. Resolves to { base, close }, and two switches for the offline cases:
+
+     down   set true and every request is cut off unanswered, as a dropped connection
+            is, until it is set false again
+     files  { '/path': text } served in place of the file on disk, to stand in for a
+            deploy that has changed it
+
+   The manifest's type is the one GitHub Pages sends for .webmanifest. */
 async function serveRoot() {
   const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
-                  '.svg': 'image/svg+xml', '.png': 'image/png' };
+                  '.svg': 'image/svg+xml', '.png': 'image/png',
+                  '.webmanifest': 'application/manifest+json' };
+  const site = { down: false, files: {} };
   const server = http.createServer((req, res) => {
-    let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    if (p.endsWith('/')) p += 'index.html';
+    if (site.down) { req.socket.destroy(); return; }
+    const asked = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    const p = asked.endsWith('/') ? asked + 'index.html' : asked;
+    const type = { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' };
+    if (Object.prototype.hasOwnProperty.call(site.files, asked)) {
+      res.writeHead(200, type);
+      res.end(site.files[asked]);
+      return;
+    }
     const f = path.join(ROOT, p);
     if (!f.startsWith(ROOT + path.sep)) { res.writeHead(403); res.end(); return; }
     fs.readFile(f, (err, buf) => {
       if (err) { res.writeHead(404); res.end(); return; }
-      res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' });
+      res.writeHead(200, type);
       res.end(buf);
     });
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  return { base: `http://127.0.0.1:${server.address().port}/`,
-           close: () => new Promise((r) => server.close(r)) };
+  site.base = `http://127.0.0.1:${server.address().port}/`;
+  site.close = () => new Promise((r) => server.close(r));
+  return site;
 }
 
 module.exports = { openBins, openPlates, cellPoint, dragCells, clickCell, bins, setField,

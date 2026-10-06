@@ -21,11 +21,12 @@ const coreTmp = path.join(tmp, 'core.js');
 fs.writeFileSync(coreTmp, g('src/core.js'));
 const CORE = require(coreTmp);
 /* The same goes for the code that writes the generated parts of a page: the printer
-   table, the joint figures and the share tags. Requiring the working tree's let an
-   uncommitted change to tools/printers.js pass here and fail in CI. They require only
-   each other, so the committed copies go side by side in one temp folder. */
+   table, the joint figures, the share tags, and the app's manifest and service worker.
+   Requiring the working tree's let an uncommitted change to tools/printers.js pass here
+   and fail in CI. They require only each other, so the committed copies go side by side
+   in one temp folder. */
 fs.mkdirSync(path.join(tmp, 'tools'));
-for (const f of ['generated.js', 'seo.js', 'joints.js', 'printers.js'])
+for (const f of ['generated.js', 'seo.js', 'joints.js', 'printers.js', 'app.js'])
   fs.writeFileSync(path.join(tmp, 'tools', f), g(`tools/${f}`));
 const generated = require(path.join(tmp, 'tools', 'generated.js'));
 const MARK = (name) => new RegExp(`[ \\t]*\\r?\\n?/\\*__${name}__\\*/[ \\t]*\\r?\\n?`);
@@ -38,6 +39,7 @@ const MARK = (name) => new RegExp(`[ \\t]*\\r?\\n?/\\*__${name}__\\*/[ \\t]*\\r?
 const tools = require('../tools/manifest.js');
 
 let ok = true;
+const built = {};
 for (const t of tools) {
   let s = g(t.template);
   for (const [m, f] of Object.entries(t.parts)) {
@@ -45,10 +47,35 @@ for (const t of tools) {
     s = s.replace(MARK(m), () => g(f));
   }
   s = generated(s, CORE, t);
+  built[t.out] = s;
   const committed = g(t.out);
   const match = s === committed;
   if (!match) ok = false;
   console.log(`${t.out.padEnd(16)} ${match ? 'matches committed output' : `DIFFERS (${s.length} vs ${committed.length})`}`);
+}
+
+/* The web manifest and the service worker, by the same functions build.js uses. The
+   worker's cache name is a hash of every file it caches — the pages, the vendored
+   scripts, the icons — so a page rebuilt and committed without the sw.js that goes with
+   it is exactly the stale file this exists to catch. The icons and scripts are read as
+   bytes, not text: a PNG decoded as UTF-8 hashes to something else. */
+const app = require(path.join(tmp, 'tools', 'app.js'));
+const blob = (p) => execSync(`git show HEAD:${p}`, { maxBuffer: 1e8 });
+try {
+  const manifest = app.webManifest(tools, g('src/shared-ui/style.css'),
+                                   JSON.parse(g('package.json')).description);
+  const sw = app.serviceWorker(g(app.SW_SOURCE), tools, (rel) =>
+    rel === app.MANIFEST ? manifest
+      : Object.prototype.hasOwnProperty.call(built, rel) ? built[rel] : blob(rel));
+  for (const [rel, text] of [[app.MANIFEST, manifest], [app.SW, sw]]) {
+    const committed = g(rel);
+    const match = text === committed;
+    if (!match) ok = false;
+    console.log(`${rel.padEnd(16)} ${match ? 'matches committed output' : `DIFFERS (${text.length} vs ${committed.length})`}`);
+  }
+} catch (e) {
+  ok = false;
+  console.log(`the manifest and sw.js could not be rebuilt from the committed files: ${String(e.message).split('\n')[0]}`);
 }
 console.log(ok ? '\nCI will pass.' : '\nCI WOULD FAIL.');
 process.exit(ok ? 0 : 1);

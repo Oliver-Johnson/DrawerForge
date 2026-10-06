@@ -7,9 +7,10 @@
  *
  * build.js assembles a page by replacing markers with the contents of files, and then
  * does this: content computed at build time from the sources rather than copied out of
- * them. There are three such steps — the icon and link-preview tags every page shares,
- * the FAQ markup seo.js derives from the page's own questions, and the joint diagrams
- * joints.js draws from core.js's DEFAULTS.
+ * them. There are four such steps — the icon and link-preview tags every page shares,
+ * the app's manifest link and theme colour beside them, the FAQ markup seo.js derives
+ * from the page's own questions, and the joint diagrams joints.js draws from core.js's
+ * DEFAULTS.
  *
  * They live here because test/ci-sim.js has to perform the identical sequence against
  * git's stored bytes, and when the two lists were kept separately they drifted. That
@@ -34,9 +35,11 @@
 const seo = require('./seo.js');
 const joints = require('./joints.js');
 const printers = require('./printers.js');
+const app = require('./app.js');
 
 module.exports = function generated(html, G, page) {
   html = seo.share(html, page.out);     // favicon and link-preview image, every page
+  html = app.tags(html, page.out);      // web manifest and theme colour, beside the icons
   html = seo.inject(html);              // FAQ markup, from the page's own questions
   if (html.includes('<!--__JOINTS__-->'))
     html = html.replace('<!--__JOINTS__-->', joints.gallery(G));
