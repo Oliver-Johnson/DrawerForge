@@ -938,13 +938,16 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <!-- Cost and print time. Both describe your filament and your printer rather than the
          layout, so they are kept on this device — one setting the baseplates page shares —
          and never put in the link. src/shared-ui/estimate.js fills these in and saves
-         them. -->
+         them.
+         The price is a text field, not a number one: typed into a number field, a
+         decimal comma, 12,50, was read as 1250. -->
     <div class="row">
-      <label class="f"><b>Filament price per kg</b><input id="filPrice" type="number" step="any" min="0" max="10000" placeholder="not set" inputmode="decimal"></label>
+      <label class="f"><b>Filament price per kg</b><input id="filPrice" type="text" inputmode="decimal" autocomplete="off" placeholder="not set" aria-describedby="filPriceErr"></label>
       <label class="f"><b>Currency</b><select id="filSym">
         <option value="£">£</option><option value="€">€</option><option value="$">$</option><option value="">no symbol</option>
       </select></label>
     </div>
+    <span class="hint" id="filPriceErr" style="color:var(--red)" hidden></span>
     <label class="f"><b>Printer speed</b><select id="printSpeed">
       <option value="auto">From the printer</option>
       <option value="fast">Fast — CoreXY or input shaping</option>
@@ -4293,6 +4296,19 @@ const ESTIMATE = (() => {
   // past any real spool, and well short of a typo the size of a phone number
   const PRICE_MAX = 10000;
   const priceOf = (v) => (typeof v === 'number' && isFinite(v) && v > 0 ? Math.min(v, PRICE_MAX) : null);
+  /* A price as it is typed: a plain number, with a decimal point or a decimal comma. Half
+     of Europe writes 12,50, and the number input this used to be took that as 1250 — a
+     price then saved, shared with the other tool and written into the README. A lone
+     comma with no point is a decimal comma. Anything else — a thousands separator, a
+     currency sign, a minus, an exponent — is not read at all, because any reading of it
+     would be a guess. The number; null for an empty field, which is no price; NaN for
+     text that is not a price. */
+  function parsePrice(text) {
+    const t = String(text).trim();
+    if (!t) return null;
+    const s = /^\d*,\d*$/.test(t) ? t.replace(',', '.') : t;
+    return /^(\d+\.?\d*|\.\d+)$/.test(s) ? parseFloat(s) : NaN;
+  }
 
   function load() {
     let p = null;
@@ -4347,7 +4363,9 @@ const ESTIMATE = (() => {
    * on the long side of a printer that levels itself before every print.
    *
    * With those, before rounding, a 1×1×3 bin is about 35 minutes fast and 70 standard,
-   * a 2×2×3 about 75 minutes and 2 h 55, and a 5 × 5 baseplate about 1 h 20 and 3 h 15.
+   * a 2×2×3 about 75 minutes and 2 h 55, and a 5 × 5 baseplate about 1 h 20 and 3 h 15
+   * (77 and 194 minutes: the plate alone, 210 mm square, at the page's defaults; a
+   * plate that carries margins weighs more and takes longer).
    *
    * Conservative on purpose — a print that finishes early is a pleasant surprise and
    * one that runs past bedtime is not — and rounded up to the next 5 minutes under an
@@ -4401,25 +4419,66 @@ const ESTIMATE = (() => {
    * The price, the symbol and the speed override, in panel 02 of both tools. Filled from
    * storage at load, saved on every edit, and refilled when the other tool — or this one
    * in another tab — changes them, so a price typed on one page is the price on the
-   * other without a reload. `onChange` is the tool's own redraw. */
+   * other without a reload. `onChange` is the tool's own redraw. `els.err` is the line
+   * under the price that says when what was typed is not a price.
+   *
+   * The price is read from its own field and only from there. A change of symbol or
+   * speed used to read the price box as well, and a tab whose box was left focused when
+   * another tab changed the price wrote its own stale figure back over the new one. */
   function bind(els, onChange) {
     let prefs = load();
+    // typed into since it took focus: only then is the box the person's to keep
+    let edited = false, refused = false;
+    /* A price that is not one is said out loud, the way the drawer fields say a bad
+       measurement: marked for a screen reader and in red, and a line under it in words
+       that says what is still in use, since the price in use does not change. */
+    const mark = (bad) => {
+      refused = bad;
+      els.price.setAttribute('aria-invalid', bad ? 'true' : 'false');
+      els.price.style.borderColor = bad ? 'var(--red)' : '';
+      if (!els.err) return;
+      els.err.textContent = bad ? 'Type the price as a number, like 22.99 or 22,99 — ' +
+        (prefs.price ? `the costs still use ${perKg(prefs)}.` : 'no price is set.') : '';
+      els.err.hidden = !bad;
+    };
+    const showPrice = () => {
+      els.price.value = prefs.price === null ? '' : String(prefs.price);
+      mark(false);
+    };
     const show = () => {
-      if (document.activeElement !== els.price)
-        els.price.value = prefs.price === null ? '' : String(prefs.price);
+      if (document.activeElement !== els.price || !edited) showPrice();
+      else if (refused) mark(true);            // still refused, but the price in use moved
       els.sym.value = prefs.sym;
       els.speed.value = prefs.speed;
     };
     show();
-    const read = () => {
-      prefs = { price: priceOf(parseFloat(els.price.value)), sym: els.sym.value,
-                speed: SPEED_CHOICES.includes(els.speed.value) ? els.speed.value : 'auto' };
-      save(prefs);
-      onChange();
+    const commit = () => { save(prefs); onChange(); };
+    els.price.addEventListener('focus', () => { edited = false; });
+    els.price.addEventListener('input', () => {
+      edited = true;
+      const p = parsePrice(els.price.value);
+      mark(Number.isNaN(p));
+      if (refused) return;
+      prefs = Object.assign({}, prefs, { price: priceOf(p) });
+      commit();
+    });
+    /* Once it is left, the box shows the price in use, as the other fields show the value
+       in use: 1000000000 is held at the limit, 0 is no price, and a price another tab set
+       meanwhile is that price. What was typed stays when it is that price already — 12,50
+       is left as 12,50 — and when it was refused, so it can be put right. */
+    els.price.addEventListener('blur', () => {
+      edited = false;
+      const p = parsePrice(els.price.value);
+      if (!Number.isNaN(p) && p !== prefs.price) showPrice();
+    });
+    const choose = () => {
+      prefs = Object.assign({}, prefs, { sym: els.sym.value,
+        speed: SPEED_CHOICES.includes(els.speed.value) ? els.speed.value : 'auto' });
+      if (refused) mark(true);                  // the line names the price in the new symbol
+      commit();
     };
-    els.price.addEventListener('input', read);
-    els.sym.addEventListener('change', read);
-    els.speed.addEventListener('change', read);
+    els.sym.addEventListener('change', choose);
+    els.speed.addEventListener('change', choose);
     window.addEventListener('storage', (e) => {
       if (e.key !== KEY) return;
       prefs = load(); show(); onChange();
@@ -4433,7 +4492,7 @@ const ESTIMATE = (() => {
     if (o) o.textContent = `From the printer: ${listedSpeed(printerSelect)}`;
   }
 
-  return { KEY, SYMBOLS, SPEEDS, LAYER, ROUGH, regionSymbol, load, cost, perKg, money,
+  return { KEY, SYMBOLS, SPEEDS, LAYER, ROUGH, regionSymbol, load, parsePrice, cost, perKg, money,
            plateSeconds, roundMinutes, duration, speedOf, listedSpeed, bind, labelAuto };
 })();
 </script>
@@ -6625,7 +6684,8 @@ const unitsUnder = (room) => Math.max(0, Math.floor((room - LIP_H + 0.001) / SPE
    and they never reach the link or a saved drawer. A change redraws the figures and
    nothing else: no bin changes because a spool got dearer. Bound here, at the top,
    because refresh() reads it and refresh() can run from any of the boot paths below. */
-const est = ESTIMATE.bind({ price: $('filPrice'), sym: $('filSym'), speed: $('printSpeed') },
+const est = ESTIMATE.bind({ price: $('filPrice'), sym: $('filSym'), speed: $('printSpeed'),
+                            err: $('filPriceErr') },
                           // the dialog too: a price typed on the other page arrives here
                           () => { refresh(); if ($('exportDlg').open) renderExport(); });
 
@@ -9488,8 +9548,11 @@ for (const [id, field] of [['gridX', 'drawerW'], ['gridY', 'drawerD']])
 $('bedPreset').addEventListener('change', () => {
   const bed = FIELDS.bedOf($('bedPreset').selectedOptions[0]);   // null for Custom
   /* Custom keeps the bed it had, so there is nothing to rebuild, but the choice is
-     still part of the design: without a save a reload put the printer's name back. */
-  if (!bed) { rememberState(); return; }
+     still part of the design: without a save a reload put the printer's name back. Nor
+     is it a printer known to be fast, so the times change with it: saving alone left the
+     page timing a fast printer while the dialog and the README timed a standard one.
+     refresh() redraws them, and saves as it always does at the end. */
+  if (!bed) { refresh(); return; }
   [$('bedW').value, $('bedD').value, $('bedH').value] = bed;
   schedule();
 });
