@@ -161,18 +161,22 @@ const tallestWall = (c) => (c.solid || !isFullRect(c) ? 1 : Math.max(...['f', 'b
    so they cannot drift. It is buildBin's figure, not a measurement of the mesh: the
    share is taken from the top of the slab while the wall ring runs from floorZ, so a
    part-height wall stands up to BLOAT under it (0.025 mm at half height). */
-const binTop = (c) => {
+const binTop = (c) => (c.divX > 0 || c.divY > 0 ? c.hUnits * SPEC.unitH : wallTop(c));
+/* The top of the tallest wall, dividers aside: what holds a part standing in the bin,
+   and so what its inside depth is measured to (binHeights). */
+const wallTop = (c) => {
   const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
-  if (builtSolid(c) || c.divX > 0 || c.divY > 0) return H;
+  if (builtSolid(c)) return H;
   return floorZ + BLOAT + tallestWall(c) * (H - floorZ - BLOAT);
 };
 
 /* A bin's heights as the page quotes them, from the numbers buildBin builds it with
    rather than from constants kept beside them. H is the stacking height, units x 7 —
    the top of the walls, which is where the feet of a bin stacked on this one come to
-   rest — and the lip stands above it. The inside depth runs from the floor to that same
-   top, because a part standing any taller is in the way of the bin above it, or of a
-   lid. A solid bin has no inside, and a bin with a lowered wall has no lip.
+   rest — and the lip stands above it. The inside depth runs from the floor to the top
+   of the walls, because a part standing any taller is in the way of the bin above it,
+   or of a lid, or with a wall lowered is no longer held by it. A solid bin has no
+   inside, and a bin with a lowered wall has no lip.
 
    The floor a part stands on is not floorZ itself. buildBin runs the slab a BLOAT past
    it, so the wall ring that starts below floorZ is buried in the slab instead of meeting
@@ -187,12 +191,15 @@ function binHeights(cfg) {
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
   const lipH = c.lip && allFull && !c.solid ? lipHeight(c.lipMin) : 0;
-  /* `top` is H unless a wall is lowered all round, and the inside runs up to it: a part
-     standing taller than every wall is not in the bin. `hollow` says whether the bin has
-     an inside at any height. A solid block never does, and nor does a tray open on every
-     side, whose top is its floor whatever its units. */
+  /* `top` is H unless a wall is lowered all round. The inside runs up to the tallest
+     wall, which is `top` but for a bin with dividers: they stand it H tall whatever its
+     walls do, but they are not what holds a part in it, and measured to them half walls
+     at 6 units were quoted 36 mm inside where the walls stop 18 mm above the floor. A
+     part standing taller than every wall is not in the bin. `hollow` says whether the
+     bin has an inside at any height. A solid block never does, and nor does a tray open
+     on every side, whose walls stop at its floor whatever its units. */
   return { H, floorZ, top, lipH, hollow: !c.solid && tallestWall(c) > 0,
-           inside: builtSolid(c) ? 0 : Math.max(0, top - (floorZ + BLOAT)) };
+           inside: builtSolid(c) ? 0 : Math.max(0, wallTop(c) - (floorZ + BLOAT)) };
 }
 /* The fewest whole units that give at least `depth` mm inside. Rounded up, not to the
    nearest: someone typing the inside depth is sizing a bin for a part, and a bin a

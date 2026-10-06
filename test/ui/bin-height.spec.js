@@ -297,6 +297,46 @@ test('dividers and carving stand a bin full height, and a tray keeps its units',
     edges: { f: 0.5, b: 0.5, l: 0.5, r: 0.5 } })).top)).toBe(21);
 });
 
+/* Dividers stand to H whatever the walls do, so a bin with them stands H tall; but what
+   holds a part standing in it is its walls, not the dividers between its compartments.
+   So its inside is measured to the tallest wall, as for the same bin without dividers:
+   half walls with dividers at 6 units were quoted 36 mm inside, with the walls stopping
+   at 24. Typed as an inside depth, the units are worked out the same way. */
+test('the inside is measured to the walls, not to the dividers', async ({ page }) => {
+  await oneBin(page);
+  await H.setField(page, 'hUnits', 6);
+  for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) await page.selectOption(`#${id}`, '0.5');
+  await H.setField(page, 'divX', 1);
+  await page.waitForTimeout(300);
+  expect(await result(page)).toBe('6 units · 42 mm overall · 18 mm inside');
+  await page.selectOption('#hMode', 'inside');
+  await expect(page.locator('#hMm')).toHaveValue('18');
+  await typeHeight(page, 18.01);
+  expect(await units(page)).toBe(7);
+  await leave(page);
+
+  // the same inside as without the dividers, at any height, and the inverse agrees with it
+  const ok = await page.evaluate(() => {
+    const half = { f: 0.5, b: 0.5, l: 0.5, r: 0.5 };
+    for (const div of [{ divX: 1 }, { divY: 2, divRemovable: true }])
+      for (const edges of [half, { f: 0.25, b: 0.5, l: 0, r: 0 }, null]) {
+        for (let n = 1; n <= 12; n++) {
+          const w = binHeights(Object.assign({ hUnits: n, edges }, div)), wo = binHeights({ hUnits: n, edges });
+          if (w.top !== w.H) return `${n} units ${JSON.stringify(div)}: stands ${w.top}, not ${w.H}`;
+          if (w.inside !== wo.inside) return `${n} units ${JSON.stringify(div)}: ${w.inside} inside, ${wo.inside} without`;
+        }
+        const cfg = Object.assign({ edges }, div);
+        for (let d = 0.5; d < 80; d += 0.37) {
+          const n = unitsForInside(d, cfg), at = (k) => binHeights(Object.assign({ hUnits: k }, cfg)).inside;
+          if (at(n) < d - 1e-9) return `${d} on ${JSON.stringify(cfg)}: ${n} too shallow`;
+          if (n > 1 && at(n - 1) >= d) return `${d} on ${JSON.stringify(cfg)}: ${n} not the fewest`;
+        }
+      }
+    return 'ok';
+  });
+  expect(ok).toBe('ok');
+});
+
 /* A lowered wall stops short of H, and with every wall open the bin is its slab and
    nothing more. Quoted at full height, the Tray preset at 6 units read "42 mm overall"
    for a part that stands 6 mm, and four half walls the same for one that stands 24. */
