@@ -164,6 +164,12 @@ test('Checks says what is left off and what stands above the rim, as notes', asy
   expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
   expect(await page.evaluate(() => [geomFor(B()[0]).meta.holes, typeName(types()[0])]))
     .toEqual([4, 'bin-1x1x3-aa-holes-qty1']);
+  // and a lid would sit on them too
+  await page.locator('#lid').check();
+  await settle(page);
+  await expect(checks(page)).toContainText('so nothing can stack on it and its lid will not go on; at 9 units');
+  await page.locator('#lid').uncheck();
+  await settle(page);
 
   // a drawer too shallow for what stands in the holes is a fault: it would not shut
   await H.setField(page, 'drawerH', 50);

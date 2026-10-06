@@ -2673,14 +2673,16 @@ function insertIssues(b, z) {
       t: `has holes for ${p.items}, so its ${off.join(' and ')} ${divs ? 'are' : 'is'} left off`,
       many: (n, names) => `${n} bins have holes across their floors, so their ` +
         `${divs ? 'dividers' : ''}${off.length > 1 ? ' and ' : ''}${b.scoop ? 'scoops' : ''} are left off: ${names}` });
-  /* Above the rim is above where the bin above stands. A bin with a lowered wall has no
-     lip for one to stand in, so it is only worth saying of a bin that stacks. */
-  if (h.above > 1e-9 && allFullEdges(b))
-    out.push({ note: true, group: `above:${b.insert}:${h.units}`,
-      t: `has ${p.items} standing ${mm(h.above)} mm above its rim, so nothing can stack on it; ` +
-         `at ${plural(h.units, 'unit')} they stay below the rim`,
+  /* Above the rim is above where the bin above stands, and where a lid sits. A bin with
+     a lowered wall has no lip for either, so it is only worth saying of one that has. */
+  if (h.above > 1e-9 && allFullEdges(b)) {
+    const lid = !!b.lid && lidFits(b);
+    out.push({ note: true, group: `above:${b.insert}:${h.units}:${lid}`,
+      t: `has ${p.items} standing ${mm(h.above)} mm above its rim, so nothing can stack on it` +
+         `${lid ? ' and its lid will not go on' : ''}; at ${plural(h.units, 'unit')} they stay below the rim`,
       many: (n, names) => `${n} bins have ${p.items} standing above their rims, so nothing can stack on ` +
-        `them: ${names}. At ${plural(h.units, 'unit')} they stay below the rim` });
+        `them${lid ? ' and their lids will not go on' : ''}: ${names}. At ${plural(h.units, 'unit')} they stay below the rim` });
+  }
   if (z !== null) {
     const reach = z + h.floor + p.len, avail = grid().avail;
     if (reach > avail + 0.001)
