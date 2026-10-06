@@ -94,11 +94,17 @@ function plateMargins() {
   return { l: m('ml'), r: m('mr'), f: m('mf'), b: m('mb') };
 }
 /* The pitch the baseplate in the link was laid out at, or null when it is the standard
-   one or there is none. Spec bins are 42 mm and seat in nothing else — see warnings. */
+   one or there is none. Spec bins are 42 mm and seat in nothing else — see warnings.
+   Within a hundredth of a millimetre is the standard one. The test was exact, so a plate
+   at 42.001 mm was "a 42 mm grid ... not the standard's 42 mm"; and a hundredth a cell
+   is a few hundredths across any bin a bed will print, where a 41.5 mm foot has a
+   quarter of a millimetre to spare each side of its socket. The 1e-9 is for 42.01,
+   which floating point puts 0.010000000000005 away. */
+const PITCH_SLACK = 0.01;
 function platePitch() {
   if (!Object.prototype.hasOwnProperty.call(hashExtras, 'pi')) return null;
   const x = Number(hashExtras.pi);
-  return x === SPEC.pitch ? null : x;
+  return Math.abs(x - SPEC.pitch) <= PITCH_SLACK + 1e-9 ? null : x;
 }
 /* The plate's cells, counted by the code that lays the plate out (gridCells in core.js),
    at the 42 mm a spec bin is made to. It was the drawer over 42 and nothing else, so a
@@ -1766,10 +1772,14 @@ function warnings() {
   /* A baseplate at another pitch has no socket a spec bin seats in, and nothing else on
      this page would say so: the map is drawn in 42 mm cells whatever the plate is. The
      figure is the link's, so it is written as a number and only when it reads as one —
-     this goes into the panel as markup. */
+     this goes into the panel as markup. To the thousandth, so that no pitch platePitch
+     calls non-standard is named as 42; and one too small to show there is not called a
+     0 mm grid. */
   const pp = platePitch();
-  if (pp !== null)
-    out.push({ err: true, t: `The baseplate in this design is laid out on a ${isFinite(pp) && pp > 0 ? `${+pp.toFixed(2)} mm` : 'non-standard'} grid. These bins are made to the standard's ${SPEC.pitch} mm, so they will not seat in it: set Grid pitch on the Baseplates page back to ${SPEC.pitch} mm.` });
+  if (pp !== null) {
+    const shown = isFinite(pp) ? +pp.toFixed(3) : 0;
+    out.push({ err: true, t: `The baseplate in this design is laid out on a ${shown > 0 ? `${shown} mm` : 'non-standard'} grid. These bins are made to the standard's ${SPEC.pitch} mm, so they will not seat in it: set Grid pitch on the Baseplates page back to ${SPEC.pitch} mm.` });
+  }
   const tot = stackHeight();
   if (tot > g.avail + 0.001)
     out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate.` });

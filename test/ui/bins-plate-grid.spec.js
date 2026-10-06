@@ -146,3 +146,29 @@ test('older and broken links keep working', async ({ page }) => {
   expect(await checksText(page)).toMatch(/outside the drawer grid/);
   expect(errors).toEqual([]);
 });
+
+/* Near enough to 42 is 42. A link from a plate at 42.001 mm, or 41.999, said "laid out
+   on a 42 mm grid ... made to the standard's 42 mm", because the test was exact and the
+   figure was rounded to two places. Within a hundredth of a millimetre the plate is the
+   standard one, and any other pitch is named to the thousandth, so the figure given is
+   never 42. A pitch too small to show in thousandths is not called a 0 mm grid. */
+test('a pitch a hair off 42 is standard, and any other is named as itself', async ({ page }) => {
+  const errors = watch(page);
+  const at = async (pi) => {
+    await page.goto('about:blank');
+    await page.goto(site.base + 'bins/#w=306&d=380&pi=' + pi);
+    await binsReady(page);
+    return checksText(page);
+  };
+  for (const pi of ['42.001', '41.999', '42.01', '41.99', '42.0'])
+    expect(await at(pi), pi).not.toMatch(/laid out on/);
+  for (const [pi, shown] of [['42.011', '42.011 mm'], ['41.989', '41.989 mm'], ['42.5', '42.5 mm'],
+                             ['50', '50 mm'], ['13.5', '13.5 mm']])
+    expect(await at(pi), pi).toContain(`laid out on a ${shown} grid`);
+  for (const pi of ['1e-7', '0.0004']) {
+    const t = await at(pi);
+    expect(t, pi).toContain('laid out on a non-standard grid');
+    expect(t, pi).not.toMatch(/\b0 mm grid/);
+  }
+  expect(errors).toEqual([]);
+});
