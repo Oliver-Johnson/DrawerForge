@@ -2207,6 +2207,23 @@ for (const btn of document.querySelectorAll('section.p>h2>button')) {
     btn.setAttribute('aria-expanded', String(!sec.classList.toggle('closed')));
   });
 }
+/* On a phone the rail is not a column beside the map but the top of one long page, and
+   with panels 01 to 05 open the cut map started 2.4 screens below the drawer size. So
+   there only panel 01, the drawer, opens on arrival; the rest arrive folded, a tap each,
+   and the section bar jumps past them. Decided once, as the page opens: a window that
+   changes width later keeps its panels as they are.
+   The decision is made in the <head>, as html.fold, because by the time this script runs
+   the browser has already drawn the rail: done only here, the four panels showed open
+   for the first frames and then snapped shut. style.css folds them by look from the first
+   frame; this makes it real — the class each panel's button reads, and aria-expanded —
+   and then takes the stand-in away. */
+if (document.documentElement.classList.contains('fold')) {
+  for (const id of ['s-printer', 's-split', 's-conn', 's-mag']) {
+    $(id).classList.add('closed');
+    $(id).querySelector(':scope>h2>button').setAttribute('aria-expanded', 'false');
+  }
+  document.documentElement.classList.remove('fold');
+}
 document.querySelectorAll('#splitSeg button').forEach(b => b.addEventListener('click', () => {
   state.splitMode = b.dataset.v;
   if (b.dataset.v !== 'manual') { state.rowCuts = null; state.colCuts = null; }

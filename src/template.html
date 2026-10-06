@@ -37,12 +37,16 @@
      saves its layout within moments of opening. In the head, so the class is on <html> before
      the header is laid out and the page never paints the long header and then jumps.
      localStorage throws outright when storage is blocked; that counts as a first visit,
-     which shows more rather than less. The bins page carries the same lines. -->
+     which shows more rather than less. The bins page carries the same lines.
+     `fold` is this page's alone: on a phone, panels 02 to 05 arrive folded (ui.js says why),
+     and deciding it here is what stops the first frame drawing them open. -->
 <script>
 try {
   if (['plates', 'bins', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
     document.documentElement.classList.add('returning');
 } catch (e) { /* storage blocked: the full header */ }
+if (window.matchMedia && matchMedia('(max-width: 980px)').matches)
+  document.documentElement.classList.add('fold');
 </script>
 <style>
 /*__CSS__*/
@@ -85,6 +89,20 @@ try {
   <button type="button" id="putBack" style="display:none">Put my layout back</button>
   <button type="button" id="tryAnyway" style="display:none">Try it anyway</button>
 </div>
+<!-- On a phone the page is one long column: the panels, then the map, the preview, the
+     tables and the download, and getting from the settings to the map and back was a long
+     scroll each way. This bar comes down at the top of the screen there once the header
+     has scrolled away, and jumps to each part.
+     It scrolls and moves focus (chrome.js), and it is buttons rather than #links because
+     the address's fragment holds the layout and changing it reloads the tool. Wide enough
+     for the side-by-side layout there is nothing to jump between, and it is not shown.
+     data-jump lists where each goes; the first of them on screen wins. -->
+<nav class="jumpbar" id="jumpbar" aria-label="Jump to a part of the page">
+  <button type="button" data-jump="s-drawer">Settings</button>
+  <button type="button" id="jumpMap" data-jump="c-map">Map</button>
+  <button type="button" data-jump="c-preview">Preview</button>
+  <button type="button" data-jump="c-export">Export</button>
+</nav>
 <main class="app">
 <div class="rail">
 
@@ -289,7 +307,7 @@ try {
      drawMap decides, through the same DF.stageRow as the bins map. -->
 <div class="stagetop">
 
-<div class="stagecard">
+<div class="stagecard" id="c-map">
   <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
   <div id="mapwrap"><svg id="cutmap" role="img" aria-label="Cut map, loading"></svg></div>
   <!-- Under the map because the map is where the stray click happens: one click on a grid
@@ -302,7 +320,7 @@ try {
   <div id="warnings"></div>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-preview">
   <h3>Preview <span class="tail"><label class="tog"><input type="checkbox" id="explode"> exploded</label></span></h3>
   <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the baseplate, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · middle-drag or shift-drag pan · wheel zoom</div><div id="noGl" class="hint" role="status" style="display:none;position:absolute;inset:0;place-items:center;padding:24px;text-align:center">3D preview unavailable — this browser could not start WebGL. Everything else still works: the pieces, the print plan and every download.</div></div>
 </div>
@@ -329,7 +347,7 @@ try {
   </tr></thead><tbody id="pieceRows"></tbody></table>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-export">
   <h3>Export <span class="tail" id="exportTail"></span></h3>
   <div class="exportbar">
     <div class="exportrow">

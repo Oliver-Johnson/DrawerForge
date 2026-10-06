@@ -349,6 +349,77 @@ function setPanel(id, open) {
 let hadSelection = false;
 let hadErrors = false;
 
+/* ---------- the bin sheet (phone) -----------------------------------------
+   On a phone the selected bin's settings are a sheet over the foot of the screen with
+   the map above it, instead of panel 03 opening 1,500 px of settings above the map (the
+   rules, and the reason, are in style.css). This keeps the class that makes it a sheet
+   in step with the selection, and does the three things the stylesheet cannot. */
+const PHONE = matchMedia('(max-width: 980px)');
+let sheetWas = false, sheetReveal = false;
+function applySheet() {
+  const on = !focused && selAll().length > 0;
+  document.body.classList.toggle('binsheet', on);
+  if (PHONE.matches && on !== sheetWas) {
+    /* Opening, the sheet comes up over the bottom half of the screen, which is where the
+       bin you just tapped may well be. Not while a finger is still dragging it: the page
+       moving under a drag would move the bin. The release redraws, and comes back here. */
+    if (on) sheetReveal = true;
+    /* Put away, the panel goes back into the column above the map, and open it would be
+       the 1,500 px the sheet exists to keep out of the way — so it goes back folded, as
+       the page first showed it. Not on the way into single-bin mode, which is about
+       nothing but this panel. */
+    else if (!focused) setPanel('s-bin', false);
+  }
+  sheetWas = on;
+  /* Two frames on, not one. The panel leaving the column (it was in it in single-bin
+     mode, all 1,500 px of it, above the map) moves everything under it, and the browser's
+     scroll anchoring corrects for that in the frame's own update, after a callback in the
+     first frame has already measured the page as it was. */
+  if (sheetReveal && !drag) {
+    sheetReveal = false;
+    requestAnimationFrame(() => requestAnimationFrame(revealSelected));
+  }
+}
+/* Scroll the selected bin clear of the sheet, without pushing the top of it under the
+   section bar. The bin's box comes from the map's own transform (see cellFromEvent). */
+function revealSelected() {
+  const b = selected >= 0 ? B()[selected] : null;
+  if (!b || !document.body.classList.contains('binsheet')) return;
+  const svg = $('fillmap'), m = svg.getScreenCTM && svg.getScreenCTM();
+  if (!m || !svg.getClientRects().length) return;
+  const g = grid(), p = svg.createSVGPoint();
+  p.x = 0; p.y = (g.ny - b.y - b.v) * S; const top = p.matrixTransform(m).y;
+  p.y = (g.ny - b.y) * S; const bottom = p.matrixTransform(m).y;
+  /* Where the sheet's top will be, not where it is: it is still sliding up at this point,
+     and a transform moves the box getBoundingClientRect reports. It sits on the bottom of
+     the window, so its height is enough. */
+  const sheetTop = innerHeight - $('s-bin').offsetHeight - 12;
+  /* the bar's height, not where it is now: it comes down once the header has scrolled away,
+     which the scroll below may well be what does */
+  const bar = $('jumpbar').offsetHeight + 8;
+  if (bottom > sheetTop) scrollBy(0, Math.min(bottom - sheetTop, top - bar));
+  // or scrolled past it — leaving single-bin mode brings the map back above the fold
+  else if (top < bar) scrollBy(0, top - bar);
+}
+/* Size, height and dividers are what a bin gets changed for, and a sheet has room for a
+   few rows before it scrolls, so on a phone the dividers come up under the height. Moved
+   in the document rather than reordered with CSS, so that Tab goes the way the eye does;
+   and moved back on a wider window, where the panel is the rail's and does not change. */
+function placeDividers() {
+  const after = PHONE.matches ? $('binSizeHint') : $('thickRow');
+  if (after.nextElementSibling !== $('divRow')) after.after($('divRow'), $('divHint'));
+}
+PHONE.addEventListener('change', placeDividers);
+placeDividers();
+function closeSheet() {
+  const inside = $('s-bin').contains(document.activeElement);
+  clearSel(); readControls(); drawMap(); refresh();
+  /* The X has gone with the sheet, and focus with it unless it is put somewhere: on the
+     panel's own header, folded back into the column, which is where the sheet went. */
+  if (inside) $('s-bin').querySelector(':scope>h2>button').focus({ preventScroll: true });
+}
+$('binSheetClose').addEventListener('click', closeSheet);
+
 /* ---------- single-bin focus ----------------------------------------------
    The one place that says what focus mode looks like. It sets a class and lets the
    stylesheet do the hiding, for the reason written above that CSS block: this
@@ -746,6 +817,8 @@ function readControls() {
      decides what focus hides is applied after every other visibility decision above,
      rather than being quietly undone by one of them. */
   applyFocus();
+  // and whether this is a sheet on a phone follows from the selection and the mode
+  applySheet();
 }
 function writeControls(src) {
   $('u').value = src.u; $('v').value = src.v; $('hUnits').value = src.hUnits;
@@ -3421,6 +3494,14 @@ document.addEventListener('keydown', (e) => {
   /* Carving first, focus second — so Escape backs out one layer at a time rather than
      dropping you all the way to the drawer from inside the carve grid. */
   if (e.key === 'Escape' && focused) { e.preventDefault(); leaveFocus(); return; }
+  /* And the phone's bin sheet, which is in the way of the map the way a dialog is. Not
+     when the Escape was for something else: the right-click menu marks its own, and the
+     expanded preview is closed by chrome.js on the same key. */
+  if (e.key === 'Escape' && !e.defaultPrevented && PHONE.matches &&
+      document.body.classList.contains('binsheet') &&
+      !document.body.classList.contains('previewlock')) {
+    e.preventDefault(); closeSheet(); return;
+  }
   if (selected < 0) return;
   const b = B()[selected];
   if (e.key === 'Delete' || e.key === 'Backspace') {

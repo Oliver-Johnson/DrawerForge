@@ -93,6 +93,20 @@ try {
      it opens, because half its entries depend on the bin under the cursor — which layer
      it can move to, and whether it is already marked printed. -->
 <div id="ctxmenu" class="ctxmenu" role="menu" hidden></div>
+<!-- On a phone the page is one long column: the panels, then the map, the preview, the
+     tables and the download, and getting from the settings to the map and back was a long
+     scroll each way. This bar comes down at the top of the screen there once the header
+     has scrolled away, and jumps to each part.
+     It scrolls and moves focus (chrome.js), and it is buttons rather than #links because
+     the address's fragment holds the layout and changing it reloads the tool. Wide enough
+     for the side-by-side layout there is nothing to jump between, and it is not shown.
+     data-jump lists where each goes; the first of them on screen wins. -->
+<nav class="jumpbar" id="jumpbar" aria-label="Jump to a part of the page">
+  <button type="button" data-jump="s-drawer s-bin">Settings</button>
+  <button type="button" id="jumpMap" data-jump="s-layout s-focuscarve">Map</button>
+  <button type="button" data-jump="c-preview">Preview</button>
+  <button type="button" data-jump="c-export">Export</button>
+</nav>
 <main class="app">
 <!-- Shown only while one bin is being edited on its own. It carries the way back,
      and it has to: focus hides the map, the layer tabs and panel 01, so every other
@@ -208,6 +222,13 @@ try {
      something real. -->
 <section class="p closed" id="s-bin">
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-bin"><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></button></h2>
+  <!-- On a phone, with a bin selected, this panel is a sheet over the foot of the screen
+       rather than 1,500 px of settings above the map (style.css, "the bin sheet"). This is
+       its way out: it lets go of the selection, which is what puts the sheet away. Shown
+       only as the sheet; beside a desktop map the panel is part of the rail, and an X on it
+       would read as closing the panel. A sibling of the h2 rather than inside it, because
+       every button in a panel header toggles its panel. -->
+  <button type="button" class="sheetx" id="binSheetClose" title="Close — lets go of the selected bin" aria-label="Close the bin settings">×</button>
   <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
       <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" max="50" value="1"></label>
@@ -225,7 +246,7 @@ try {
       <label class="f"><b>Dividers across</b><input id="divX" type="number" step="1" min="0" value="0"></label>
       <label class="f"><b>Dividers along</b><input id="divY" type="number" step="1" min="0" value="0"></label>
     </div>
-    <div class="hint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments.</div>
+    <div class="hint" id="divHint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments.</div>
     <!-- Only shown with a bin selected: it describes that bin, not the next one you
          draw. Half a drawer is often already printed, and a plate arranged around
          parts already sitting in the drawer wastes the plate. -->
@@ -387,7 +408,7 @@ try {
   </div>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-preview">
   <!-- The toggle lives here, not in panel 01. It changes what this box shows, and up
        there it was three scrolls away behind the first panel you ever fill in — easy
        to forget you had it, and easy not to know it existed. A control belongs beside
@@ -421,7 +442,7 @@ try {
   </div>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-export">
   <h3>Export <span class="tail" id="exportTail"></span></h3>
   <div class="exportbar">
     <div class="exportrow">

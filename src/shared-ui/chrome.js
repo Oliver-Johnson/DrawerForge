@@ -42,6 +42,46 @@
       t.focus();
     });
 
+  /* The phone's section bar (its markup says why it is there). It does what the skip link
+     does — scroll, and move focus so the next Tab carries on from where you landed — and
+     for the same reason never touches location.hash. Each button lists the places it can
+     go and takes the first one on screen: in the bins page's single-bin mode panel 01 and
+     the drawer map are hidden, and Settings is then the bin's own panel. A panel takes
+     focus on its header button, which is a real control. A card is given tabindex="-1"
+     only while it holds focus: carried in the markup, every click inside the card would
+     focus the card and draw a ring round it. The bar does not cover what it jumps to,
+     because the page's scroll-padding-top on a phone (style.css) is its height. */
+  var jumpbar = document.getElementById('jumpbar');
+  if (jumpbar) jumpbar.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-jump]');
+    if (!b) return;
+    var t = b.getAttribute('data-jump').split(' ')
+      .map(function (id) { return document.getElementById(id); })
+      .filter(function (el) { return el && el.getClientRects().length; })[0];
+    if (!t) return;
+    t.scrollIntoView({ block: 'start' });
+    var f = t.querySelector(':scope>h2>button');
+    if (!f) {
+      f = t;
+      if (!t.hasAttribute('tabindex')) {
+        t.setAttribute('tabindex', '-1');
+        t.addEventListener('blur', function () { t.removeAttribute('tabindex'); }, { once: true });
+      }
+    }
+    f.focus({ preventScroll: true });
+  });
+
+  /* The bar comes down once the header has gone off the top, and goes back up when it
+     returns (style.css says why it waits). An observer rather than a scroll listener:
+     it costs nothing while the page scrolls, and it also catches the header leaving by
+     any other route, a jump or a focused field pulling the page down. Without one (an old
+     browser) the bar simply never comes down, and the page is as it was before the bar. */
+  var head = document.querySelector('header');
+  if (jumpbar && head && window.IntersectionObserver)
+    new IntersectionObserver(function (es) {
+      jumpbar.classList.toggle('on', !es[es.length - 1].isIntersecting);
+    }).observe(head);
+
   /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
      read before you reached its controls, and on a phone it pushed the working surface
      further down. Each long one shows its first sentence and then this button, and the
