@@ -3616,6 +3616,13 @@ function buildFitSample(cfg, H, joint) {
 }
 
 // ---------- 3MF export ----------
+/* A part's name goes into an attribute, so every character XML reads as markup is written
+   as its entity. The names today are piece ids and type keys with none of these in them,
+   but typed text may reach them later, and a quote in one would end the attribute early
+   and hand the rest of the name to the slicer as markup. test/plate-files.js reads the
+   names back out of the model. */
+const XML_ENTITY = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' };
+const xmlAttr = (s) => String(s).replace(/[&<>"']/g, (c) => XML_ENTITY[c]);
 /* items: [{name, polys, tx, ty, tz, rot}] rot in {0,90}. Returns {model, contentTypes, rels} XML strings.
    Each part is turned about its own origin and then moved by (tx, ty, tz), so (tx, ty) is
    where the origin goes, not where the part's corner goes: a caller with a rectangle to
@@ -3635,7 +3642,7 @@ function build3mfXML(items) {
     for (const p of it.polys)
       for (let i = 2; i < p.verts.length; i++)
         tris.push([vidx(p.verts[0]), vidx(p.verts[i-1]), vidx(p.verts[i])]);
-    objs += `<object id="${id}" type="model" name="${it.name}"><mesh><vertices>` +
+    objs += `<object id="${id}" type="model" name="${xmlAttr(it.name)}"><mesh><vertices>` +
       verts.map(v => `<vertex x="${v[0].toFixed(3)}" y="${v[1].toFixed(3)}" z="${v[2].toFixed(3)}"/>`).join('') +
       `</vertices><triangles>` +
       tris.map(t => `<triangle v1="${t[0]}" v2="${t[1]}" v3="${t[2]}"/>`).join('') +
