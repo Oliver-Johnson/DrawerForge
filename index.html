@@ -41,6 +41,26 @@
 "featureList":["Gridfinity baseplate generator","Splits plates to fit a print bed","Seven printable connector types","Gridfinity bin designer","Whole-drawer bin layout","Multi-layer stacking","STL and 3MF export"],
 "isAccessibleForFree":true}
 </script>
+<!-- Whether this browser has been here before, decided before anything is drawn. A first
+     visit gets the whole header: what the tool is and that nothing leaves the browser. After
+     that it is a one-line bar, because the pitch is read once and then costs the top of every
+     screen. Someone has used the tools once either tool has seen a design changed (ui.js sets
+     drawerforge:used:v1 on the first change, and says why a saved layout does not count: one
+     is written within moments of any visit) or once a drawer has been saved. In the head, so
+     the class is on <html> before the header is laid out and the page never paints the long
+     header and then jumps.
+     localStorage throws outright when storage is blocked; that counts as a first visit,
+     which shows more rather than less. The bins page carries the same lines.
+     `fold` is this page's alone: on a phone, panels 02 to 05 arrive folded (ui.js says why),
+     and deciding it here is what stops the first frame drawing them open. -->
+<script>
+try {
+  if (['used', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
+    document.documentElement.classList.add('returning');
+} catch (e) { /* storage blocked: the full header */ }
+if (window.matchMedia && matchMedia('(max-width: 980px)').matches)
+  document.documentElement.classList.add('fold');
+</script>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later
  * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
@@ -193,7 +213,37 @@ header h1{font-size:21px;letter-spacing:.16em;font-weight:700}
 header h1 .tm{color:var(--cyan)}
 header p{color:var(--dim);margin-top:5px;max-width:640px}
 header .privacy{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:7px}
-header .privacy::before{content:"● ";color:var(--cyan)}
+header .privacy::before,footer .privacy::before{content:"● ";color:var(--cyan)}
+/* After the first visit: one line.
+   The title, a two-line pitch and the privacy line took 202 px of a 1080 px window on
+   Baseplates and 245 on Bins, and on a phone 304 and 287 of 844 — every visit, to say
+   what the visitor already knew. The inline script in each tool's <head> puts
+   `returning` on <html> once this browser has changed a design on either tool or saved
+   a drawer, before the header is laid out, so a returning visit is drawn short from the
+   first frame rather than drawn long and then collapsed. The pitch and the privacy line
+   go (the privacy line is in the footer, word for word); the name, the pages, the drawer
+   and the bins page's way in to a single bin stay, on one row wherever the window is
+   wide enough for them. Only the tools carry the script, so the guide pages keep their
+   header. */
+html.returning header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;
+  padding:10px 26px}
+html.returning header>p,html.returning header>.privacy{display:none}
+html.returning header nav,html.returning header .drawerbar,
+html.returning header .quickstart{margin-top:0}
+/* the drawer and the way in to one bin sit at the far end, away from the page tabs */
+html.returning header .drawerbar{margin-left:auto}
+html.returning header .quickstart span{display:none}
+/* Narrower, the name and the tabs give up a little width so the row still holds them:
+   at 844 × 390, a phone on its side, that is the difference between one row and two, and
+   the window there is 390 px tall. Upright at 390 px they cannot share a row whatever is
+   done to them, so the bar wraps instead: the name, then the tabs with the drawer beside
+   them, and on the bins page the way in to a single bin under those. */
+@media(max-width:980px){
+  html.returning header{padding:8px 16px;gap:8px 12px}
+  html.returning header h1{font-size:17px;letter-spacing:.12em}
+  html.returning header nav a{padding:0 12px}
+  html.returning header .drawerbar{margin-right:0}
+}
 /* The working area is exactly the window below the header.
    It was `calc(100vh - 96px)` on .app, the rail and the stage, and 96 was nobody's
    header: the real one is 164 px on Baseplates, 207 px on Bins (the quickstart row),
@@ -273,6 +323,10 @@ section.p>h2 .caret{margin-left:auto;transition:transform .15s;color:var(--dim)}
 section.p.closed .caret{transform:rotate(-90deg)}
 section.p .body{padding:2px 13px 13px;display:grid;gap:9px}
 section.p.closed .body{display:none}
+/* Baseplates on a phone: panels 02 to 05 folded from the first frame, before ui.js has
+   run to fold them for real (it explains, and takes html.fold away once it has). */
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag)>.body{display:none}
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag) .caret{transform:rotate(-90deg)}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 /* Type sizes.
@@ -312,6 +366,18 @@ select{font-family:var(--sans)}
 .tog input:focus-visible{outline:1px solid var(--cyan)}
 .hint{font-size:12.5px;color:var(--dim);line-height:1.55}
 .hint.amber{color:var(--amber)}
+/* "more" in a long hint: the first sentence stays, the rest opens underneath it in place
+   (chrome.js does the toggling). Drawn as a link in the hint's own type rather than as
+   one of the page's buttons, because it is a footnote to the sentence and not something
+   to do; a button for all that, so it takes the keyboard and says whether it is open.
+   [hidden] is restated because the display that opens the rest would otherwise beat the
+   browser's own rule for it, the trap the tip jar's comment below describes. */
+.hint button.more{all:unset;display:inline-block;color:var(--cyan);cursor:pointer;
+  text-decoration:underline dotted;text-underline-offset:3px;border-radius:3px}
+.hint button.more:hover{text-decoration-style:solid}
+.hint button.more:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+.hint .moretext{display:block;margin-top:4px}
+.hint .moretext[hidden]{display:none}
 button.act{background:var(--cyan);color:#0c1116;border:none;border-radius:6px;padding:9px 12px;
   font-weight:600;cursor:pointer;font-size:13px}
 button.act:disabled{opacity:.45;cursor:default}
@@ -644,6 +710,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .stagecard h3 .tail{font-size:12px}
   label.f{font-size:12px}
   .hint{font-size:12px}
+  /* A 40 px target without a 40 px line: the padding makes the box a finger can hit and the
+     equal negative margin takes it back out of the layout, so the sentence it ends does
+     not open a gap above and below itself. */
+  .hint button.more{padding:11px 8px;margin:-11px -8px}
   .tog{font-size:13px;min-height:40px}
   /* every control a finger has to hit */
   input,select,button{min-height:40px}
@@ -691,6 +761,92 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input{min-height:20px}
 }
 
+/* ---- the phone's section bar ----------------------------------------------
+   Stacked, the page is one long column, and the bar keeps Settings, Map, Preview and
+   Export a tap away at the top of the screen (chrome.js does the jumping). Not shown
+   side by side, where everything it jumps to is already in view.
+   It is fixed, not sticky, and only comes down once the header has scrolled away
+   (chrome.js watches the header and sets .on). A sticky bar sits in the flow, and its
+   44 px came straight off the first screen: on a first visit the bins page then showed
+   about 94 px of the drawer map, under the 120 the first-screen test asks for. While the
+   header is in view there is nothing to jump past anyway. It is moved off the top rather
+   than hidden, so it stays in the Tab order, and focus inside it brings it down.
+   The scroll padding is the bar's height, so nothing the page scrolls to — a jump, a
+   skip link, a field Tab lands on — ends up underneath it. */
+.jumpbar{display:none}
+@media(max-width:980px){
+  .jumpbar{display:flex;gap:6px;position:fixed;top:0;left:0;right:0;z-index:40;
+    padding:6px 10px;background:var(--bg);border-bottom:1px solid var(--line);
+    transform:translateY(-100%);transition:transform .15s}
+  .jumpbar.on,.jumpbar:focus-within{transform:none}
+  .jumpbar button{flex:1 1 0;min-width:0;background:var(--panel2);color:var(--ink);
+    border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px;cursor:pointer}
+  .jumpbar button:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+  /* only where there is a bar: the guide pages share this stylesheet and have none, and
+     there it stopped the skip link, and whatever Tab scrolled to, 60 px short of the top
+     of the window to clear a bar that is not on the page */
+  html:has(#jumpbar){scroll-padding-top:60px}
+  /* in single-bin mode there is no drawer map, and a carve grid only while carving */
+  body.binfocus:not(.focuscarve) #jumpMap{display:none}
+}
+
+/* ---- the bin sheet (bins page, phone) ---------------------------------------
+   Selecting a bin opens panel 03, and stacked, panel 03 is about 1,500 px of settings
+   ABOVE the map: every edit was a scroll up to change it and a scroll down to see what it
+   did. So on a phone, with a bin selected, the panel leaves the column and becomes a
+   sheet over the foot of the screen, with the map above it still in reach — drag, tap,
+   resize, carve — and the sheet's own contents scrolling inside it. Its header still
+   folds it down to a bar; the X lets go of the selection, which is what puts it away.
+   bins/ui.js sets body.binsheet whenever a bin is selected outside single-bin mode,
+   at every width; only these rules make anything of it, so the desktop is unchanged.
+   The page gets the sheet's height as padding at its foot, or the last of it (the
+   footer, the download) could never be scrolled clear. */
+#binSheetClose{display:none}
+@media(max-width:980px){
+  body.binsheet{padding-bottom:min(50dvh,520px)}
+  body.binsheet:has(#s-bin.closed){padding-bottom:64px}
+  /* And the same height kept clear of whatever the browser scrolls to. Tab brings what it
+     lands on only just inside the window, and with the sheet up the foot of the window is
+     the sheet: measured in the October 2026 review, every one of the 25 stops after it —
+     Checks, the layer tabs, Fill and Clear, the downloads, the footer — was focused out of
+     sight underneath. On the root, because the page is what scrolls; the 8 px is room for
+     the focus ring. */
+  html:has(body.binsheet){scroll-padding-bottom:calc(min(50dvh,520px) + 8px)}
+  html:has(body.binsheet #s-bin.closed){scroll-padding-bottom:72px}
+  /* The tip jar is fixed to the same corner, a layer under the sheet (60 to its 66), so it
+     was there for Tab to reach and not there to be seen; lifted above the sheet it would sit
+     on the map, which is what the sheet keeps clear. It waits while the sheet is up, and
+     comes back when the sheet goes. */
+  body.binsheet .kofi{display:none}
+  body.binsheet #s-bin{position:fixed;left:0;right:0;bottom:0;z-index:66;margin:0;
+    display:flex;flex-direction:column;max-height:min(50dvh,520px);
+    border-radius:14px 14px 0 0;border-bottom:0;box-shadow:0 -12px 32px rgba(0,0,0,.55);
+    animation:sheetup .16s ease-out}
+  /* the handle: says "this came up from below" without being a control of its own */
+  body.binsheet #s-bin::before{content:"";position:absolute;top:5px;left:50%;width:36px;
+    height:4px;margin-left:-18px;border-radius:2px;background:var(--line);pointer-events:none}
+  body.binsheet #s-bin>h2{flex:none}
+  body.binsheet #s-bin>h2>button{padding-right:56px}
+  body.binsheet #s-bin>.body{overflow-y:auto;overscroll-behavior:contain;min-height:0;
+    padding-bottom:max(13px,env(safe-area-inset-bottom))}
+  body.binsheet #binSheetClose{display:flex;align-items:center;justify-content:center;
+    position:absolute;top:2px;right:6px;min-width:44px;min-height:44px;
+    background:none;border:1px solid transparent;border-radius:6px;color:var(--dim);
+    font-size:22px;line-height:1;cursor:pointer}
+  body.binsheet #binSheetClose:hover{color:var(--ink);border-color:var(--line)}
+  body.binsheet #binSheetClose:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+}
+@keyframes sheetup{from{transform:translateY(100%)}}
+/* On paper. A page printed is narrower than 980 px, so it gets the phone's layout, and a
+   box fixed to the window is printed on every page, over whatever that page has there: the
+   bar, once the header had scrolled away, and the sheet with its bin's settings. Both are
+   ways round a screen, with nothing to read on paper, so neither is printed, nor the room
+   the sheet keeps at the page's foot. Printed wider the panel is the rail's, and stays. */
+@media print and (max-width:980px){
+  .jumpbar,body.binsheet #s-bin{display:none}
+  body.binsheet,body.binsheet:has(#s-bin.closed){padding-bottom:0}
+}
+
 /* ---- reduced motion -------------------------------------------------------
    Every transition on the site, in one place, at the end of the file. It has to be
    the end: a media query adds no specificity, so a block sitting above the rules it
@@ -706,8 +862,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input,
   .tog input::after,
   .skip,
-  .kofi{transition:none}
+  .kofi,
+  .jumpbar{transition:none}
   .kofi:hover{transform:none}
+  body.binsheet #s-bin{animation:none}
 }
 
 /* ---- single-bin focus (bins page) ---------------------------------------
@@ -813,6 +971,20 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <button type="button" id="putBack" style="display:none">Put my layout back</button>
   <button type="button" id="tryAnyway" style="display:none">Try it anyway</button>
 </div>
+<!-- On a phone the page is one long column: the panels, then the map, the preview, the
+     tables and the download, and getting from the settings to the map and back was a long
+     scroll each way. This bar comes down at the top of the screen there once the header
+     has scrolled away, and jumps to each part.
+     It scrolls and moves focus (chrome.js), and it is buttons rather than #links because
+     the address's fragment holds the layout and changing it reloads the tool. Wide enough
+     for the side-by-side layout there is nothing to jump between, and it is not shown.
+     data-jump lists where each goes; the first of them on screen wins. -->
+<nav class="jumpbar" id="jumpbar" aria-label="Jump to a part of the page">
+  <button type="button" data-jump="s-drawer">Settings</button>
+  <button type="button" id="jumpMap" data-jump="c-map">Map</button>
+  <button type="button" data-jump="c-preview">Preview</button>
+  <button type="button" data-jump="c-export">Export</button>
+</nav>
 <main class="app">
 <div class="rail">
 
@@ -895,7 +1067,10 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     </div>
     <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
-    <div class="hint">Only affects the material estimate, not the geometry. A baseplate is nearly all shell — the socket walls are a couple of perimeters wide and print solid whatever you set — so this moves the figure much less than it does for bins. It is the slab under a solid plate that the infill actually reaches.</div>
+    <!-- A hint past four lines or so shows its first sentence; "more" opens the rest in
+         place (chrome.js). The rest stays inside the hint, where the tests read it, and a
+         hint shown or hidden by the joint picked carries all of its text either way. -->
+    <div class="hint">Only affects the material estimate, not the geometry. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>A baseplate is nearly all shell — the socket walls are a couple of perimeters wide and print solid whatever you set — so this moves the figure much less than it does for bins. It is the slab under a solid plate that the infill actually reaches.</span></div>
     <span class="hint" id="errBedW" style="color:var(--red)" hidden></span>
     <span class="hint" id="errBedD" style="color:var(--red)" hidden></span>
     <span class="hint" id="errBedH" style="color:var(--red)" hidden></span>
@@ -911,7 +1086,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       <button data-v="plates">Fewest plates</button>
       <button data-v="manual">Manual</button>
     </div>
-    <div class="hint">Staggered offsets joints between rows like brickwork so seams never line up. Fewest plates searches split patterns and picks the one needing the fewest print beds — often pairing two narrow pieces on one plate. For full control click grid lines on the cut map; that switches to Manual.</div>
+    <div class="hint">Staggered offsets joints between rows like brickwork so seams never line up. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Fewest plates searches split patterns and picks the one needing the fewest print beds — often pairing two narrow pieces on one plate. For full control click grid lines on the cut map; that switches to Manual.</span></div>
   </div>
 </section>
 
@@ -935,8 +1110,8 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <div class="connfig" data-joint="dovetail" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="8 mm at the seam, 11 mm at 1.9 mm deep — it cannot pull straight out"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-cut" d="M-4 0 L-5.5 1.9 L5.5 1.9 L4 0 Z"/></svg></div><div class="connfig" data-joint="puzzle" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="a 6 mm neck opening to a 9.2 mm lobe"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-cut" d="M-3 -0.4 L-3 0.64 L-3.82 1.57 L-4.37 2.68 L-4.59 3.9 L-4.49 5.13 L-4.06 6.3 L-3.33 7.3 L-2.37 8.07 L-1.23 8.56 L0 8.73 L1.23 8.56 L2.37 8.07 L3.33 7.3 L4.06 6.3 L4.49 5.13 L4.59 3.9 L4.37 2.68 L3.82 1.57 L3 0.64 L3 -0.4 Z"/></svg></div><div class="connfig" data-joint="bowtie" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="a 14 x 8 mm bowtie, waisted so it cannot slide out either way"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-part" d="M-4 -7 L-2.5 0 L-4 7 L4 7 L2.5 0 L4 -7 Z"/></svg></div><div class="connfig" data-joint="puzzlekey" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="a 14 x 8.39 mm key with lobed ends"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-part" d="M-3.51 0.5 L-4 1.52 L-4.2 2.62 L-4.09 3.74 L-3.69 4.8 L-3.03 5.71 L-2.15 6.41 L-1.12 6.85 L0 7 L1.12 6.85 L2.15 6.41 L3.03 5.71 L3.69 4.8 L4.09 3.74 L4.2 2.62 L4 1.52 L3.51 0.5 L3.51 -0.5 L4 -1.52 L4.2 -2.62 L4.09 -3.74 L3.69 -4.8 L3.03 -5.71 L2.15 -6.41 L1.12 -6.85 L0 -7 L-1.12 -6.85 L-2.15 -6.41 L-3.03 -5.71 L-3.69 -4.8 L-4.09 -3.74 L-4.2 -2.62 L-4 -1.52 L-3.51 -0.5 Z"/></svg></div><div class="connfig" data-joint="snap" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="a 14 x 8 mm sprung key — the slot lets it compress going in"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-part" d="M-4 -7 L-4 -3.8 L-3.25 -3 L-3.25 3 L-4 3.8 L-4 7 L4 7 L4 3.8 L3.25 3 L3.25 -3 L4 -3.8 L4 -7 Z"/><path class="j-slot" d="M-0.65 -4.34 L0.65 -4.34 L0.65 4.34 L-0.65 4.34 Z"/></svg></div><div class="connfig" data-joint="hclip" style="display:none" aria-hidden="true"><svg class="joint" viewBox="-17 -10 34 20" role="img" aria-label="a 3.6 x 3.8 mm U-clip, pressed in from above once the plate is down"><rect class="j-plate" x="-17" y="-10" width="34" height="10"/><rect class="j-plate" x="-17" y="0" width="34" height="10"/><path class="j-seam" d="M-17 0 L17 0"/><path class="j-part" d="M-1.9 -1.8 L-1.9 -0.9 L-0.9 -0.65 L-0.9 0.65 L-1.9 0.9 L-1.9 1.8 L1.9 1.8 L1.9 0.9 L0.9 0.65 L0.9 -0.65 L1.9 -0.9 L1.9 -1.8 Z"/></svg></div>
     <div id="connHintDove" class="hint">Tabs on one piece drop into open-bottomed pockets on its neighbour. Assemble on a flat surface, then lower the whole plate into the drawer. Placed at every wall junction along each seam.</div>
     <div id="connHintPuzzle" class="hint" style="display:none">Jigsaw lobes printed on one piece lock into matching cavities on its neighbour — the strongest in-plane joint. Adds a ~2.6&nbsp;mm solid floor that the lobes live in; assembles by lowering pieces together.</div>
-    <div id="connHintBow" class="hint" style="display:none">Bowtie-shaped recesses are cut into the underside of both pieces; printed keys bridge each seam. The waisted middle is what stops the seam pulling apart. The simplest of the loose-key joints and the easiest to press home — pick it unless a seam is long enough to creep sideways. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</div>
-    <div id="connHintPkey" class="hint" style="display:none">The same idea with a jigsaw profile: the lobes grip along the seam as well as across it, so a long run cannot slide lengthways the way a row of bowties can. Stiffer to press in, and worth that on seams past three or four cells. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</div>
+    <div id="connHintBow" class="hint" style="display:none">Bowtie-shaped recesses are cut into the underside of both pieces; printed keys bridge each seam. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>The waisted middle is what stops the seam pulling apart. The simplest of the loose-key joints and the easiest to press home — pick it unless a seam is long enough to creep sideways. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</span></div>
+    <div id="connHintPkey" class="hint" style="display:none">The same idea with a jigsaw profile: the lobes grip along the seam as well as across it, so a long run cannot slide lengthways the way a row of bowties can. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Stiffer to press in, and worth that on seams past three or four cells. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</span></div>
     <div id="connHintSnap" class="hint" style="display:none">Dog-bone recesses under both pieces take a sprung key: the slot through its middle lets it compress, so it clicks in and holds. Adds a solid floor. Keys STL in Export.</div>
     <div id="connHintHclip" class="hint" style="display:none">Tiny H-shaped keys (≈3.6 × 3.8 mm) sink into pockets in the grid walls at each junction, pressed in from beneath during face-down assembly. No floor, almost no filament, invisible from above. Keys STL in Export.</div>
     <label class="f" id="keyInsertRow" style="display:none"><b>Key insertion</b>
@@ -944,13 +1119,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
         <option value="bottom">From beneath — assemble face-down, then flip into the drawer</option>
         <option value="top">From above — join the pieces inside the drawer, drop keys in</option>
       </select></label>
-    <div class="hint" id="keyInsertHint" style="display:none">From above suits drawers you can't lower an assembled plate into: lay the pieces in place, then drop a key into each junction from the top. Keys sit just below flush; the rim gets a small opening at each junction, hidden under the bins' rounded corners.</div>
+    <div class="hint" id="keyInsertHint" style="display:none">From above suits drawers you can't lower an assembled plate into: lay the pieces in place, then drop a key into each junction from the top. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Keys sit just below flush; the rim gets a small opening at each junction, hidden under the bins' rounded corners.</span></div>
     <label class="f" id="keyMountRow" style="display:none"><b>Key housing</b>
       <select id="keyMount">
         <option value="floor">Solid floor — full-size keys, strongest</option>
         <option value="wall">Inside the walls — slim keys, no extra filament</option>
       </select></label>
-    <div class="hint" id="keyMountHint" style="display:none">Wall housing sinks slim keys into the grid walls at each junction — the plate stays open-bottomed and uses no extra filament. Keys are smaller, so the hold is lighter; solid floor gives the strongest joint.</div>
+    <div class="hint" id="keyMountHint" style="display:none">Wall housing sinks slim keys into the grid walls at each junction — the plate stays open-bottomed and uses no extra filament. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Keys are smaller, so the hold is lighter; solid floor gives the strongest joint.</span></div>
     <label class="f"><b>Fit clearance (mm per side)</b><input id="connClr" type="number" step="0.05" min="0" max="0.3" value="0.2" aria-describedby="errConnClr"></label>
     <span class="hint" id="errConnClr" style="color:var(--red)" hidden></span>
     <div class="hint">0.2 suits most printers. Print the test tile pair first; tighten to 0.15 or loosen to 0.25 from there.</div>
@@ -979,7 +1154,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
         <option value="solid">Solid floor — at least 2.8 mm base under everything</option>
         <option value="bosses">Corner pockets only — bosses at each position, saves filament</option>
       </select></label>
-    <div class="hint">A solid floor puts at least 2.8&nbsp;mm of plastic under the whole plate, and more when a magnet or screw head is deeper than 2.6&nbsp;mm, so a pocket always keeps a layer under it. Corner pockets put a small rounded boss under each magnet or screw position instead, leaving the rest open underneath: much less filament and a much shorter print, at some cost in stiffness. Gravity-fit drawers need neither magnets nor screws.</div>
+    <div class="hint">A solid floor puts at least 2.8&nbsp;mm of plastic under the whole plate, and more when a magnet or screw head is deeper than 2.6&nbsp;mm, so a pocket always keeps a layer under it. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Corner pockets put a small rounded boss under each magnet or screw position instead, leaving the rest open underneath: much less filament and a much shorter print, at some cost in stiffness. Gravity-fit drawers need neither magnets nor screws.</span></div>
   </div>
 </section>
 
@@ -1022,7 +1197,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
      drawMap decides, through the same DF.stageRow as the bins map. -->
 <div class="stagetop">
 
-<div class="stagecard">
+<div class="stagecard" id="c-map">
   <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
   <div id="mapwrap"><svg id="cutmap" role="img" aria-label="Cut map, loading"></svg></div>
   <!-- Under the map because the map is where the stray click happens: one click on a grid
@@ -1035,7 +1210,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <div id="warnings"></div>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-preview">
   <h3>Preview <span class="tail"><label class="tog"><input type="checkbox" id="explode"> exploded</label></span></h3>
   <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the baseplate, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · middle-drag or shift-drag pan · wheel zoom</div><div id="noGl" class="hint" role="status" style="display:none;position:absolute;inset:0;place-items:center;padding:24px;text-align:center">3D preview unavailable — this browser could not start WebGL. Everything else still works: the pieces, the print plan and every download.</div></div>
 </div>
@@ -1062,7 +1237,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   </tr></thead><tbody id="pieceRows"></tbody></table>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-export">
   <h3>Export <span class="tail" id="exportTail"></span></h3>
   <div class="exportbar">
     <div class="exportrow">
@@ -1079,7 +1254,9 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — this tool implements the published baseplate profile and adds drawer-first workflow, split control, and printable connectors.</div>
   <div style="margin-top:10px">Got your grid sorted? <a id="toBins" href="bins/">Design the bins that go in it →</a> Your drawer dimensions carry across.</div>
   <div style="margin-top:10px">Free software under the <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/LICENSE" rel="noopener">AGPL</a>, and the models you make with it <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/NOTICE" rel="noopener">are yours</a>. <a href="https://github.com/Oliver-Johnson/DrawerForge" rel="noopener">Source code</a>, <a href="https://github.com/Oliver-Johnson/DrawerForge/issues" rel="noopener">issues and feature requests</a> on GitHub. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
-  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL/3MF output is mm scale. v1.2</div>
+  <!-- The header's privacy line, word for word. After the first visit the header is one line
+       and leaves it out, so this is where it stays said. -->
+  <div class="mono privacy" style="margin-top:8px">Runs entirely in your browser — nothing is uploaded, no account, no tracking. Your layout is kept on this device so you can come back to it. All geometry is computed locally; STL/3MF output is mm scale. v1.2</div>
 </footer>
 
 <!-- The download dialog. It sits before the UI script because that script wires it up
@@ -3839,6 +4016,30 @@ const DF = {
   plural(n, one, many) {
     return `${n} ${n === 1 ? one : many || one + 's'}`;
   },
+  /* A long hint the page writes itself, given the same "more" as the long hints written
+     into the markup: the first sentence, the button, and the rest hidden until it is
+     pressed (chrome.js toggles it; style.css draws it). The plate style hint is the case —
+     it describes whichever style is picked, so its words change after load. The parts are
+     made once and only their text is rewritten after that, so a hint someone has opened
+     stays open while they change the setting it describes. The first sentence is a span of
+     its own, which describes the button, as chrome.js does for the hints in the markup. */
+  hint(el, lead, rest) {
+    let btn = el.querySelector(':scope>button.more');
+    if (!btn) {
+      el.textContent = '';
+      const first = document.createElement('span');
+      first.id = el.id + 'Lead';
+      btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'more'; btn.textContent = 'more';
+      btn.setAttribute('aria-expanded', 'false');
+      btn.setAttribute('aria-describedby', first.id);
+      const more = document.createElement('span');
+      more.className = 'moretext'; more.hidden = true;
+      el.append(first, btn, more);
+    }
+    btn.previousElementSibling.textContent = lead + ' ';
+    btn.nextElementSibling.textContent = rest;
+  },
   /* An STL is an 84-byte header plus 50 bytes a triangle, and a polygon fans into
      verts-2 of them, so the exact file size follows from polygons already in memory. */
   stlBytes(polys) {
@@ -5263,7 +5464,7 @@ function readControls() {
   $('baseModeRow').style.display = (state.magnets || state.screws) ? '' : 'none';
   $('cornerRow').style.display = $('perCorner').checked ? '' : 'none';
   $('cornerHint').style.display = $('perCorner').checked ? '' : 'none';
-  $('plateStyleHint').textContent = plateStyleHint();
+  DF.hint($('plateStyleHint'), ...plateStyleHint());
   showFieldErrors();
 }
 
@@ -5272,17 +5473,20 @@ function readControls() {
    sits on the first screen and is the first use of four terms nothing has defined:
    skeleton, socket, rim, wall band. The socket is the one you cannot guess from the
    word, so it is glossed here, once, in whichever hint is showing. The pitch is read
-   from the state rather than written as 42, because panel 06 can move it. */
+   from the state rather than written as 42, because panel 06 can move it.
+   Two parts: the first sentence, which stays in view and carries the gloss, and the rest,
+   behind the hint's "more" (DF.hint). */
 function plateStyleHint() {
   const socket = `the socket, the ${state.pitch} mm recess a bin's foot drops into`;
   return state.plateStyle === 'skeleton'
-    ? `Skeleton keeps ${socket}, along with the rim round the outside of the plate and ` +
-      'the band of wall between neighbouring cells, and leaves out the bulk underneath — ' +
-      'lighter, and quicker to print. Cells carrying a joint stay solid, ' +
-      'and it turns off entirely with magnets or screws, which need that material.'
-    : `Solid backs ${socket} with material all the way down to the drawer floor. ` +
-      'The sturdy default: the heaviest and slowest to print, and the only style that ' +
-      'works with magnets, screws, or a joint that needs a floor to house its keys.';
+    ? [`Skeleton keeps ${socket}, along with the rim round the outside of the plate and ` +
+       'the band of wall between neighbouring cells, and leaves out the bulk underneath — ' +
+       'lighter, and quicker to print.',
+       'Cells carrying a joint stay solid, ' +
+       'and it turns off entirely with magnets or screws, which need that material.']
+    : [`Solid backs ${socket} with material all the way down to the drawer floor.`,
+       'The sturdy default: the heaviest and slowest to print, and the only style that ' +
+       'works with magnets, screws, or a joint that needs a floor to house its keys.'];
 }
 
 // ---------- layout & validation ----------
@@ -6873,6 +7077,12 @@ const writeKey = (k, v) => {
   catch (err) { /* private mode: the guard and the backup go, the page does not */ }
 };
 let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* Set the first time anyone changes a design on either tool, and never cleared. The
+   template's <head> reads it, with the saved drawers, to draw the one-line header for a
+   browser that has used the tools rather than only opened them: the save above is written
+   within moments of any visit, so its being there said nothing, and a first visit that went
+   from one tool to the other arrived at the second with its header already shortened. */
+const USED_KEY = 'drawerforge:used:v1';
 /* What an untouched page saves, and what this one held when the boot finished — null
    from the first change on. Until that change a stalled page saves nothing: saving the
    defaults it stands in with put them over the layout it declined, and one more reload
@@ -6940,6 +7150,7 @@ function saveNow() {
       bootDesc = null; $('setAside').style.display = 'none';
       // what a stalled page goes on from is its defaults, not the link it declined
       if (stalled) writeKey(LINKED_KEY, '');
+      writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
   try { history.replaceState(null, '', '#' + h); }
@@ -7218,6 +7429,23 @@ for (const btn of document.querySelectorAll('section.p>h2>button')) {
     btn.setAttribute('aria-expanded', String(!sec.classList.toggle('closed')));
   });
 }
+/* On a phone the rail is not a column beside the map but the top of one long page, and
+   with panels 01 to 05 open the cut map started 2.4 screens below the drawer size. So
+   there only panel 01, the drawer, opens on arrival; the rest arrive folded, a tap each,
+   and the section bar jumps past them. Decided once, as the page opens: a window that
+   changes width later keeps its panels as they are.
+   The decision is made in the <head>, as html.fold, because by the time this script runs
+   the browser has already drawn the rail: done only here, the four panels showed open
+   for the first frames and then snapped shut. style.css folds them by look from the first
+   frame; this makes it real — the class each panel's button reads, and aria-expanded —
+   and then takes the stand-in away. */
+if (document.documentElement.classList.contains('fold')) {
+  for (const id of ['s-printer', 's-split', 's-conn', 's-mag']) {
+    $(id).classList.add('closed');
+    $(id).querySelector(':scope>h2>button').setAttribute('aria-expanded', 'false');
+  }
+  document.documentElement.classList.remove('fold');
+}
 document.querySelectorAll('#splitSeg button').forEach(b => b.addEventListener('click', () => {
   state.splitMode = b.dataset.v;
   if (b.dataset.v !== 'manual') { state.rowCuts = null; state.colCuts = null; }
@@ -7429,6 +7657,81 @@ drawers.attach(arrivedWith);              // is that a saved drawer this browser
       e.preventDefault();
       t.focus();
     });
+
+  /* The phone's section bar (its markup says why it is there). It does what the skip link
+     does — scroll, and move focus so the next Tab carries on from where you landed — and
+     for the same reason never touches location.hash. Each button lists the places it can
+     go and takes the first one on screen: in the bins page's single-bin mode panel 01 and
+     the drawer map are hidden, and Settings is then the bin's own panel. A panel takes
+     focus on its header button, which is a real control. A card is given tabindex="-1"
+     only while it holds focus: carried in the markup, every click inside the card would
+     focus the card and draw a ring round it. The bar does not cover what it jumps to,
+     because the page's scroll-padding-top on a phone (style.css) is its height. */
+  var jumpbar = document.getElementById('jumpbar');
+  if (jumpbar) jumpbar.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-jump]');
+    if (!b) return;
+    var t = b.getAttribute('data-jump').split(' ')
+      .map(function (id) { return document.getElementById(id); })
+      .filter(function (el) { return el && el.getClientRects().length; })[0];
+    if (!t) return;
+    t.scrollIntoView({ block: 'start' });
+    var f = t.querySelector(':scope>h2>button');
+    if (!f) {
+      f = t;
+      if (!t.hasAttribute('tabindex')) {
+        t.setAttribute('tabindex', '-1');
+        t.addEventListener('blur', function () { t.removeAttribute('tabindex'); }, { once: true });
+      }
+    }
+    f.focus({ preventScroll: true });
+  });
+
+  /* The bar comes down once the header has gone off the top, and goes back up when it
+     returns (style.css says why it waits). An observer rather than a scroll listener:
+     it costs nothing while the page scrolls, and it also catches the header leaving by
+     any other route, a jump or a focused field pulling the page down. Without one (an old
+     browser) the bar simply never comes down, and the page is as it was before the bar. */
+  var head = document.querySelector('header');
+  if (jumpbar && head && window.IntersectionObserver)
+    new IntersectionObserver(function (es) {
+      jumpbar.classList.toggle('on', !es[es.length - 1].isIntersecting);
+    }).observe(head);
+
+  /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
+     read before you reached its controls, and on a phone it pushed the working surface
+     further down. Each long one shows its first sentence and then this button, and the
+     rest opens in place under it. The words never leave the hint: the build's audits and
+     the tests read them there, and a hint the page shows or hides by joint type still
+     holds its whole text either way. Delegated rather than wired per button, because the
+     page writes some hints itself after load (DF.hint in widgets.js) and theirs is the
+     same button. The label says which way it goes; aria-expanded says it to a screen
+     reader. */
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.hint button.more') : null;
+    var rest = b && b.nextElementSibling;
+    if (!rest || !rest.classList.contains('moretext')) return;
+    var open = b.getAttribute('aria-expanded') !== 'true';
+    b.setAttribute('aria-expanded', String(open));
+    b.textContent = open ? 'less' : 'more';
+    rest.hidden = !open;
+  });
+  /* Every one of them says "more", so a screen reader listing the page's buttons, which is
+     a common way through a page, read the same word a dozen times and more with nothing to
+     tell which hint each would open. The name stays the word on screen; each is described
+     by the sentence it continues, the hint's first, wrapped here as the page opens in a
+     span for the button to point at. Wrapped and nothing else: the words, and the hint's
+     text, are as they were. A button that already has a description is left alone — DF.hint
+     gives the hints the page writes their own as it makes them. */
+  let leads = 0;
+  for (const b of document.querySelectorAll('.hint button.more:not([aria-describedby])')) {
+    const lead = document.createElement('span');
+    do leads++; while (document.getElementById('morelead' + leads));
+    lead.id = 'morelead' + leads;
+    while (b.parentNode.firstChild !== b) lead.appendChild(b.parentNode.firstChild);
+    b.before(lead);
+    b.setAttribute('aria-describedby', lead.id);
+  }
 
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
      described controls that do not exist there. Rewritten rather than removed: the

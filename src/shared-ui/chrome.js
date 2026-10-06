@@ -42,6 +42,81 @@
       t.focus();
     });
 
+  /* The phone's section bar (its markup says why it is there). It does what the skip link
+     does — scroll, and move focus so the next Tab carries on from where you landed — and
+     for the same reason never touches location.hash. Each button lists the places it can
+     go and takes the first one on screen: in the bins page's single-bin mode panel 01 and
+     the drawer map are hidden, and Settings is then the bin's own panel. A panel takes
+     focus on its header button, which is a real control. A card is given tabindex="-1"
+     only while it holds focus: carried in the markup, every click inside the card would
+     focus the card and draw a ring round it. The bar does not cover what it jumps to,
+     because the page's scroll-padding-top on a phone (style.css) is its height. */
+  var jumpbar = document.getElementById('jumpbar');
+  if (jumpbar) jumpbar.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-jump]');
+    if (!b) return;
+    var t = b.getAttribute('data-jump').split(' ')
+      .map(function (id) { return document.getElementById(id); })
+      .filter(function (el) { return el && el.getClientRects().length; })[0];
+    if (!t) return;
+    t.scrollIntoView({ block: 'start' });
+    var f = t.querySelector(':scope>h2>button');
+    if (!f) {
+      f = t;
+      if (!t.hasAttribute('tabindex')) {
+        t.setAttribute('tabindex', '-1');
+        t.addEventListener('blur', function () { t.removeAttribute('tabindex'); }, { once: true });
+      }
+    }
+    f.focus({ preventScroll: true });
+  });
+
+  /* The bar comes down once the header has gone off the top, and goes back up when it
+     returns (style.css says why it waits). An observer rather than a scroll listener:
+     it costs nothing while the page scrolls, and it also catches the header leaving by
+     any other route, a jump or a focused field pulling the page down. Without one (an old
+     browser) the bar simply never comes down, and the page is as it was before the bar. */
+  var head = document.querySelector('header');
+  if (jumpbar && head && window.IntersectionObserver)
+    new IntersectionObserver(function (es) {
+      jumpbar.classList.toggle('on', !es[es.length - 1].isIntersecting);
+    }).observe(head);
+
+  /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
+     read before you reached its controls, and on a phone it pushed the working surface
+     further down. Each long one shows its first sentence and then this button, and the
+     rest opens in place under it. The words never leave the hint: the build's audits and
+     the tests read them there, and a hint the page shows or hides by joint type still
+     holds its whole text either way. Delegated rather than wired per button, because the
+     page writes some hints itself after load (DF.hint in widgets.js) and theirs is the
+     same button. The label says which way it goes; aria-expanded says it to a screen
+     reader. */
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.hint button.more') : null;
+    var rest = b && b.nextElementSibling;
+    if (!rest || !rest.classList.contains('moretext')) return;
+    var open = b.getAttribute('aria-expanded') !== 'true';
+    b.setAttribute('aria-expanded', String(open));
+    b.textContent = open ? 'less' : 'more';
+    rest.hidden = !open;
+  });
+  /* Every one of them says "more", so a screen reader listing the page's buttons, which is
+     a common way through a page, read the same word a dozen times and more with nothing to
+     tell which hint each would open. The name stays the word on screen; each is described
+     by the sentence it continues, the hint's first, wrapped here as the page opens in a
+     span for the button to point at. Wrapped and nothing else: the words, and the hint's
+     text, are as they were. A button that already has a description is left alone — DF.hint
+     gives the hints the page writes their own as it makes them. */
+  let leads = 0;
+  for (const b of document.querySelectorAll('.hint button.more:not([aria-describedby])')) {
+    const lead = document.createElement('span');
+    do leads++; while (document.getElementById('morelead' + leads));
+    lead.id = 'morelead' + leads;
+    while (b.parentNode.firstChild !== b) lead.appendChild(b.parentNode.firstChild);
+    b.before(lead);
+    b.setAttribute('aria-describedby', lead.id);
+  }
+
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
      described controls that do not exist there. Rewritten rather than removed: the
      gestures are still worth naming, they are just different ones. Matching on
