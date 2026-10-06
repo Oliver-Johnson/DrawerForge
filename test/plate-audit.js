@@ -149,6 +149,14 @@ const CASES = [
   // both, with the quarter cell in the corner, no margin past them and the corners rounded
   { name: 'half both, rounded', drawerW: 189, drawerD: 189, marginMode: 'half', strips: [1, 1],
     outerRadius: 4 },
+  /* A small pitch, where a half socket's corner is held smaller than a whole one's and
+     comes out towards the plate's corner: the corner arc is capped by the half cell's
+     own ring there, or it folds through the rim (six coplanar folds at pitch 14). */
+  { name: 'half small pitch, rounded', pitch: 14, drawerW: 49, drawerD: 49, marginMode: 'half',
+    strips: [1, 1], outerRadius: 4.88, connector: 'none' },
+  // 0.05 mm of margin past the strip, which joins the half cell rather than make a sliver
+  { name: 'half, sliver past', drawerW: 189.05, drawerD: 170, marginMode: 'half', alignX: 'end',
+    strips: [1, 0] },
   // the leftover past the strips, placed by the alignment on the far side of the grid
   { name: 'half, margin left', drawerW: 199, drawerD: 199, marginMode: 'half', strips: [1, 1],
     alignX: 'start', alignY: 'start' },
@@ -393,6 +401,16 @@ for (const cs of CASES) {
                 `${sockets.cut} of ${sockets.of} half sockets cut at their own size` +
                 `${sockets.fail.length ? '   NOT CUT: ' + sockets.fail.slice(0, 3).join('; ') : ''}`);
     if (!good) bad++;
+    /* No magnet or screw holes in a half cell, and the whole cells keep theirs: a hole
+       is surfaces inside a cell away from its socket wall, so an engine that put them
+       back, or left them off the whole cells, is caught here and nowhere else. */
+    if (cfg.magnets || cfg.screws) {
+      const h = holeSurfaces(cfg, L, pieces);
+      const ok = h.half === 0 && h.wholeWith === h.whole && h.whole > 0;
+      console.log(`${''.padEnd(24)} holes: ${h.wholeWith} of ${h.whole} whole cells, ` +
+                  `${h.half} surfaces inside ${h.halves} half cells${ok ? '' : '   HOLES WRONG'}`);
+      if (!ok) bad++;
+    }
     /* A known leak with half cells has to be the same leak as without them: the same
        drawer as solid margin, compared edge-use count for edge-use count. */
     if (cs.quarantine) {
@@ -457,6 +475,54 @@ function halfSocketsCut(cfg, L, pieces) {
     }
   });
   return { of, cut, fail };
+}
+
+/* Surfaces inside each cell of a half-cell plate away from its socket wall, at a few
+ * heights through the pad and the socket. Whole cells with holes have some; a half or
+ * quarter cell must have none. The socket wall itself is left out by its profile's
+ * inset at each height (2.85 mm at the bottom of the socket, 2.15 through its middle,
+ * narrowing to the cutoff at the top). After the reviewer's probe for #45. */
+function holeSurfaces(cfg, L, pieces) {
+  const slice = (tris, z) => {
+    const segs = [];
+    for (const t of tris) {
+      const pts = [];
+      for (let k = 0; k < 3; k++) {
+        const a = t[k], b = t[(k + 1) % 3], da = a[2] - z, db = b[2] - z;
+        if ((da < 0 && db > 0) || (da > 0 && db < 0)) {
+          const u = da / (da - db);
+          pts.push([a[0] + u * (b[0] - a[0]), a[1] + u * (b[1] - a[1])]);
+        }
+      }
+      if (pts.length === 2) segs.push(pts);
+    }
+    return segs;
+  };
+  const P = cfg.pitch, pad = G.platePad(cfg);
+  const dAt = (z) => { const zz = z - pad; if (zz < 0) return null; if (zz <= 0.7) return 2.85 - zz;
+                       if (zz <= 2.5) return 2.15; return 2.15 - (zz - 2.5); };
+  const zs = [0.5, 1.0, 1.5, 2.0, 2.4, pad + 0.3, pad + 1.2, pad + 2.0];
+  const out = { whole: 0, wholeWith: 0, halves: 0, half: 0 };
+  L.pieces.forEach((pc, i) => {
+    const sl = zs.map((z) => [z, slice(G.polysToTriangles(pieces[i]), z)]);
+    for (let a = 0; a < pc.nx + (pc.hR ? 1 : 0); a++) for (let b = 0; b < pc.ny + (pc.hB ? 1 : 0); b++) {
+      const hx = a === pc.nx ? P / 4 : P / 2, hy = b === pc.ny ? P / 4 : P / 2;
+      const cx = pc.mL + a * P + hx, cy = pc.mF + b * P + hy;
+      let c = 0;
+      for (const [z, segs] of sl) {
+        const d = dAt(z);
+        for (const [p, q] of segs) {
+          const mx = (p[0] + q[0]) / 2 - cx, my = (p[1] + q[1]) / 2 - cy;
+          if (Math.abs(mx) > hx - 0.3 || Math.abs(my) > hy - 0.3) continue;
+          if (d !== null && Math.abs(mx) < hx - d + 0.2 && Math.abs(my) < hy - d + 0.2) continue;
+          c++;
+        }
+      }
+      if (a === pc.nx || b === pc.ny) { out.halves++; out.half += c; }
+      else { out.whole++; if (c > 0) out.wholeWith++; }
+    }
+  });
+  return out;
 }
 
 /* How many of the bad edges are actually open boundary, and how many are shells meeting
