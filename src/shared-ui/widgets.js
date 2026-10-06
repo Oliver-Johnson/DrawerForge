@@ -33,6 +33,30 @@ const DF = {
   plural(n, one, many) {
     return `${n} ${n === 1 ? one : many || one + 's'}`;
   },
+  /* A long hint the page writes itself, given the same "more" as the long hints written
+     into the markup: the first sentence, the button, and the rest hidden until it is
+     pressed (chrome.js toggles it; style.css draws it). The plate style hint is the case —
+     it describes whichever style is picked, so its words change after load. The parts are
+     made once and only their text is rewritten after that, so a hint someone has opened
+     stays open while they change the setting it describes. The first sentence is a span of
+     its own, which describes the button, as chrome.js does for the hints in the markup. */
+  hint(el, lead, rest) {
+    let btn = el.querySelector(':scope>button.more');
+    if (!btn) {
+      el.textContent = '';
+      const first = document.createElement('span');
+      first.id = el.id + 'Lead';
+      btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'more'; btn.textContent = 'more';
+      btn.setAttribute('aria-expanded', 'false');
+      btn.setAttribute('aria-describedby', first.id);
+      const more = document.createElement('span');
+      more.className = 'moretext'; more.hidden = true;
+      el.append(first, btn, more);
+    }
+    btn.previousElementSibling.textContent = lead + ' ';
+    btn.nextElementSibling.textContent = rest;
+  },
   /* An STL is an 84-byte header plus 50 bytes a triangle, and a polygon fans into
      verts-2 of them, so the exact file size follows from polygons already in memory. */
   stlBytes(polys) {
