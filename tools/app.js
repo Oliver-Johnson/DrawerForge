@@ -15,11 +15,12 @@
  * Everything here is generated rather than written by hand, for the same reason the
  * sitemap is. The worker's list of files comes from the page manifest (tools/manifest.js)
  * and from what the built pages themselves load, so a page or a vendored script cannot
- * be added without being cached. Its cache name carries a hash of exactly those bytes, so
- * a deploy that changes any of them is a new worker with a new cache, and one that
- * changes none of them is no change at all — which is what keeps `build.js --check`
- * deterministic. The colours come from the page's own tokens in style.css, so the title
- * bar of the installed app is the colour of the header beneath it.
+ * be added without being cached. Its cache name carries a hash of exactly those bytes and
+ * of the worker's own code, so a deploy that changes any of them is a new worker with a
+ * new cache, and one that changes none of them is no change at all — which is what keeps
+ * `build.js --check` deterministic. The colours come from the page's own tokens in
+ * style.css, so the title bar of the installed app is the colour of the header beneath
+ * it.
  *
  * build.js writes manifest.webmanifest and sw.js from this, test/ci-sim.js rebuilds both
  * from git's stored bytes with the same functions, and test/app-check.js reads them back.
@@ -168,10 +169,20 @@ function precache(pages, read) {
    in it. */
 const fileFor = (entry) => entry === './' ? 'index.html' : entry.endsWith('/') ? entry + 'index.html' : entry;
 
-/* A short hash of everything the worker caches, names and bytes both. Any change to any
-   of them is a different cache; no change is the same one. */
-function version(files, read) {
+/* A short hash of everything the worker caches, names and bytes both, and of the worker's
+   own code, `worker` (src/sw.js as written). Any change to any of them is a different
+   cache; no change is the same one.
+
+   The code is in it because a cache must belong to one worker only. Without it, a deploy
+   that changed src/sw.js and nothing else would install the new worker into the very
+   cache the old one is still serving from, and a new worker whose install fails deletes
+   its own cache — which would then be the old worker's, and the site would stop opening
+   offline until the next good install. */
+function version(files, read, worker) {
   const h = crypto.createHash('sha256');
+  const code = Buffer.from(worker);
+  h.update(SW_SOURCE + '\n' + code.length + '\n');
+  h.update(code);
   for (const f of files) {
     const b = Buffer.from(read(fileFor(f)));
     h.update(f + '\n' + b.length + '\n');
@@ -185,7 +196,7 @@ function version(files, read) {
    on its own. */
 function serviceWorker(source, pages, read) {
   const files = precache(pages, read);
-  const v = version(files, read);
+  const v = version(files, read, source);
   for (const marker of ["/*__VERSION__*/''", '/*__FILES__*/[]'])
     if (!source.includes(marker)) throw new Error(`${SW_SOURCE} is missing the ${marker} marker`);
   const list = '[\n' + files.map((f) => '  ' + JSON.stringify(f) + ',').join('\n') + '\n]';

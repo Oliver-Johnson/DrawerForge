@@ -143,15 +143,23 @@ for (const p of pages) {
         `not cached: ${absent.join(', ')}`);
 }
 
-/* The cache name is a hash of the cached files, so a deploy that changes any of them
-   replaces the old cache rather than serving it. Recomputed here from the files on disk,
-   and then again with one byte of one page different, which must not give the same. */
+/* The cache name is a hash of the cached files and of the worker's own code, so a deploy
+   that changes any of them replaces the old cache rather than serving it. Recomputed here
+   from the files on disk, and then again with one byte of one page different, which must
+   not give the same.
+
+   And again with one byte of the worker different and nothing else. A worker whose
+   install fails deletes its cache; if a change to the worker alone kept the cache's name,
+   the cache it deleted would be the one the worker before it is still serving. */
 const read = (rel) => fs.readFileSync(file(rel));
-const v = app.version(files, read);
+const code = fs.readFileSync(file(app.SW_SOURCE), 'utf8');
+const v = app.version(files, read, code);
 check(`its version ${sw.VERSION} is the hash of what it caches`, sw.VERSION === v, `the files hash to ${v}`);
 const touched = app.version(files, (rel) => rel === 'index.html'
-  ? Buffer.concat([read(rel), Buffer.from(' ')]) : read(rel));
+  ? Buffer.concat([read(rel), Buffer.from(' ')]) : read(rel), code);
 check('a one-byte change to a page is a new version', touched !== v, 'the version did not change');
+check('a change to the worker alone is a new version, so a new cache',
+      app.version(files, read, code + ' ') !== v, 'the version did not change');
 
 console.log('\nneither is a page, so neither is in the sitemap');
 const sitemap = fs.readFileSync(file('sitemap.xml'), 'utf8');

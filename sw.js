@@ -10,9 +10,10 @@
  *
  * The cache holds one deploy: every page, everything the pages load, and the app's icons
  * and manifest, fetched together when the worker installs and never written to again.
- * A deploy that changes any of those files changes the hash in sw.js, so the browser
- * installs a new worker with a new cache the next time a page is opened, and the old
- * cache is deleted when the new worker takes over.
+ * A deploy that changes any of those files, or this script, changes the hash in sw.js, so
+ * the browser installs a new worker with a new cache the next time a page is opened, and
+ * the old cache is deleted when the new worker takes over. A cache is only ever one
+ * worker's.
  *
  * Online, everything comes from the network, exactly as it would with no worker, so a fix
  * shows the moment it is deployed rather than one visit late. The cache is only the
@@ -32,8 +33,9 @@
 
 /* Filled in by build.js. FILES is every page in tools/manifest.js, everything those pages
    load from this site, and the app's icons and manifest, as paths from the root. VERSION
-   is a hash of all of those files, names and bytes. */
-const VERSION = "0afe41e051cd";
+   is a hash of all of those files, names and bytes, and of this script as it stands in
+   src/sw.js. */
+const VERSION = "37b8f67a0eb9";
 const FILES = [
   "./",
   "bins/",
@@ -84,6 +86,13 @@ self.addEventListener('install', (e) => {
       if (!r.ok) throw new Error(u + ' answered ' + r.status);
       return plain(r).then((p) => cache.put(u, p));
     }))))
+    /* And a failed install takes its half-filled cache with it, rather than leaving it in
+       the visitor's storage until the next good install deletes it. The cache is this
+       worker's alone (VERSION covers this script too, see tools/app.js), so the worker
+       still serving the site loses nothing. The error goes on, so the install still fails
+       and the browser still tries again on the next visit. Fetches still in flight finish
+       into the deleted cache, which the browser then throws away. */
+    .catch((err) => caches.delete(CACHE).then(() => { throw err; }))
     /* Straight to active rather than waiting for every tab to close. The pages hold
        everything they need once loaded and ask this worker for nothing afterwards, so an
        open page loses nothing by the cache under it changing. */

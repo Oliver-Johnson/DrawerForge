@@ -145,6 +145,38 @@ test('a new deploy replaces the old cache rather than adding to it', async ({ pa
   }, null, { timeout: 30000 });
 });
 
+/* A deploy whose worker never installs: its list names a file the server does not have,
+   so one fetch fails while the rest are coming in. The browser keeps the worker it has,
+   and the cache the failed one had begun to fill goes with it rather than sitting in the
+   visitor's storage until some later install deletes it. */
+test('a failed install leaves no cache behind, and the worker before it still opens the site offline',
+  async ({ page, context }) => {
+    await page.goto(site.base + 'guide/');
+    await controlled(page);
+    const sw = fs.readFileSync(path.join(H.ROOT, 'sw.js'), 'utf8');
+    const version = sw.match(/const VERSION = "([0-9a-f]+)";/)[1];
+    site.files['/sw.js'] = sw.replace(`"${version}"`, '"0123456789ab"')
+      .replace('const FILES = [', 'const FILES = [\n  "nowhere.js",');
+    // asks for the new worker, and waits for the browser to give up on it
+    const state = await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) =>
+      new Promise((resolve) => {
+        r.addEventListener('updatefound', () => {
+          const w = r.installing;
+          w.addEventListener('statechange', () => {
+            if (w.state === 'redundant' || w.state === 'activated') resolve(w.state);
+          });
+        });
+        r.update().catch(() => {});
+      })));
+    expect(state).toBe('redundant');
+    expect((await page.evaluate(() => caches.keys())).map((k) => k.split(' ').pop())).toEqual([version]);
+
+    await offline(context);
+    const res = await page.reload();
+    expect(res.fromServiceWorker()).toBe(true);
+    await expect(page.locator('h1')).toContainText('GUIDE');
+  });
+
 test('opened from a file, no worker is registered and nothing is logged', async ({ page }) => {
   const errors = watch(page);
   // count the attempts, however the page might make one
