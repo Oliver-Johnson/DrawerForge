@@ -206,16 +206,15 @@ test('width and depth can change a half-size bin on a half step', async ({ page 
   await settle(page);
   expect(await now(), 'the spinner, over 2').toEqual([2.5, 2, '2.5', '2']);
 
-  // typed at a human pace, the 2 on the way to 2.5 is not put back under the caret
+  // typed at a human pace, the 1 on the way to 1.5 and the 2 on the way to 2.5 are left
+  // under the caret, not put back
   await page.focus('#u');
-  await page.keyboard.press('Control+a');
-  await page.keyboard.type('3.5', { delay: 250 });
-  await settle(page);
-  expect(await now()).toEqual([3.5, 2, '3.5', '2']);
-  await page.keyboard.press('Control+a');
-  await page.keyboard.type('1.5', { delay: 250 });
-  await settle(page);
-  expect(await now()).toEqual([1.5, 2, '1.5', '2']);
+  for (const typed of ['1.5', '2.5', '1.5']) {
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type(typed, { delay: 250 });
+    await settle(page);
+    expect(await now(), `typed ${typed}`).toEqual([Number(typed), 2, typed, '2']);
+  }
 
   // emptied to type another number, it stays empty, and the bin keeps its size meanwhile
   await page.keyboard.press('Control+a');
