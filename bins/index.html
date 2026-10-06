@@ -9951,9 +9951,9 @@ document.addEventListener('keydown', (e) => {
   /* A key typed into a field is the field's, and goes no further — except Escape in a field
      of the phone's bin sheet. The sheet is in the way of the map the way a dialog is, and
      its fields are where focus mostly is while it is up, so the key that puts it away has
-     to work from them. Nothing in it means anything else there:
-     a number or a checkbox does nothing with Escape, an open menu's list takes the key for
-     itself and closes, and the note's text is not touched. An IME still composing keeps it. */
+     to work from them. Nothing in it means anything else there: a number or a checkbox
+     does nothing with Escape, an open menu's list takes the key for itself and closes, and
+     the note's text is not touched. An IME still composing keeps it. */
   const sheetField = e.key === 'Escape' && !e.isComposing && PHONE.matches &&
     document.body.classList.contains('binsheet') && $('s-bin').contains(t);
   if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA') &&
