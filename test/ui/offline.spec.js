@@ -100,12 +100,21 @@ test('Bins opens offline, with the drawer in its address', async ({ page, contex
   await binsReady(page);
   expect(await binCount(page)).toBe(2);
   await controlled(page);
+  /* Bins writes its address back in full a moment after it opens: the short link becomes
+     every field of every bin. So the address to hold the reload to is the one it settles
+     on, and the reloaded page is read once it has settled too. Read straight away, it
+     was the short link if the worker took over first, and the reloaded page could have
+     written it out in full by the time it was checked. */
+  const settled = () => page.waitForFunction(() => location.hash === '#' + descString());
+  await settled();
   const hash = await page.evaluate(() => location.hash);
+  expect(hash).toContain('bl=0-0-1-1-3-');
 
   await offline(context);
   const res = await page.reload();
   expect(res.fromServiceWorker()).toBe(true);
   await binsReady(page);
+  await settled();
   expect(await page.evaluate(() => location.hash)).toBe(hash);
   expect(await binCount(page)).toBe(2);
 
