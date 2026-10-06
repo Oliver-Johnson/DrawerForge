@@ -370,6 +370,35 @@ for (const tool of [{ name: 'baseplates', open: H.openPlates },
     });
 }
 
+/* The bar's scroll padding is for the pages with a bar. The guides share the stylesheet
+   and have none, and there it stopped the skip link 60 px short of the top. */
+test('the guide, which has no bar, keeps no room at the top for one', async ({ page }) => {
+  for (const url of [H.BINS_URL, H.PLATES_URL.replace(/index\.html$/, 'guide/index.html')]) {
+    await page.goto(url);
+    const m = await page.evaluate(() => ({ bar: !!document.getElementById('jumpbar'),
+      pad: getComputedStyle(document.documentElement).scrollPaddingTop }));
+    expect(m.pad, url).toBe(m.bar ? '60px' : 'auto');
+  }
+});
+
+/* A printout is narrower than 980 px, so it gets the phone's layout, and a box fixed to the
+   window prints on every page: the bar, and the sheet with its bin's settings. */
+test('bins: the bar and the sheet stay off a printout', async ({ page }) => {
+  await H.forgetSaved(page);
+  const errors = await H.openBins(page);
+  await fingerDrag(page, [1, 1], [2, 2]);
+  await page.evaluate(() => scrollTo(0, 3000));
+  await expect.poll(async () => (await page.locator('#jumpbar').boundingBox()).y).toBeCloseTo(0, 0);
+  expect((await sheet(page)).position, 'fixture: the sheet is up').toBe('fixed');
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('#jumpbar')).toBeHidden();
+  await expect(page.locator('#s-bin')).toBeHidden();
+  expect(await page.evaluate(() => getComputedStyle(document.body).paddingBottom)).toBe('0px');
+  await page.emulateMedia({ media: 'screen' });
+  await expect(page.locator('#s-bin')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 /* ---- baseplates: the panels after the first ----------------------------------- */
 
 test('baseplates opens with only the drawer panel open, from the first frame', async ({ page }) => {
@@ -435,6 +464,10 @@ test.describe('at 1440 × 1000 with a mouse', () => {
     expect(await page.evaluate(() => document.body.classList.contains('binsheet'))).toBe(true);
     await page.evaluate(() => document.body.classList.remove('binsheet'));
     expect(await read()).toEqual(m);
+    // and printed this wide, the panel is the rail's and is printed with it
+    await page.evaluate(() => document.body.classList.add('binsheet'));
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('#s-bin')).toBeVisible();
     expect(errors).toEqual([]);
   });
 
