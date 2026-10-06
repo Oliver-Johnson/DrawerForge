@@ -1928,7 +1928,7 @@ function saveNow() {
       if (stalled) writeKey(LINKED_KEY, '');
     }
   }
-  try { history.replaceState(null, '', '#' + h); }
+  try { history.replaceState(drawers.stamp(h), '', '#' + h); }   // marked as this tab's own
   catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                    worth an exception that stops the rest of the page working */ }
   saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
@@ -2298,7 +2298,11 @@ let arrivedWith = '';    // the design string this page was opened with, if it s
      or the guide handing it over, or a saved drawer opened. Read every time, so a stale
      note never lingers. */
   const note = drawers.arrival(incomingHash);
-  const handOver = fromLink ? note : null;
+  /* An address this tab wrote: a reload, or Back to an earlier page of yours. Never
+     someone's link, however far the save has moved on since — in another tab of this
+     tool, or on a later page in this one. */
+  const own = fromLink && !!note && note.own;
+  const handOver = fromLink && note && !note.own ? note : null;
   // a saved drawer opened from the list is yours, whatever it replaces
   const opened = !!handOver && handOver.open;
   // your own drawer, bed and infill settings, as the other page had them
@@ -2306,8 +2310,12 @@ let arrivedWith = '';    // the design string this page was opened with, if it s
   // the other page had nothing of anyone's link: your own layout come back
   const handedOver = !!handOver && (opened || !handOver.link.length);
   notLinked = handOver ? yours : [];
-  const replaces = fromLink && !opened &&
+  const replaces = fromLink && !opened && !own &&
     (saved.length <= 2 || !sameDesign(saved, src, yours));
+  /* A hand-over onto a save that is some saved drawer's — the other drawer's half, when a
+     drawer was opened on the other page — replaces nothing that is only here: it is kept
+     in that drawer. So nothing is set aside, and nothing is said. */
+  const kept = !!handOver && saved.length > 2 && drawers.holds(saved);
   const linked = readKey(LINKED_KEY);
   linkKept = handedOver ? '' : linked;
   /* Compared on what the record holds: one made without the settings that came with
@@ -2319,12 +2327,12 @@ let arrivedWith = '';    // the design string this page was opened with, if it s
      standing in for one that would not load. Not a link's own layout, untouched: what that
      link replaced is already set aside, and it is the one you would want back. */
   const aside = saved.length > 2 && saved !== pristine && !savedLinked &&
-    (replaces || !!stalled);
+    ((replaces && !kept) || !!stalled);
   if (aside) {
     writeKey(PREV_KEY, saved);
     writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
   }
-  const canPutBack = replaces && (aside || (savedLinked && !!readKey(PREV_KEY)));
+  const canPutBack = replaces && !kept && (aside || (savedLinked && !!readKey(PREV_KEY)));
   if (stalled) {
     showSetAside('This layout did not finish loading last time, so the page has started ' +
       'from its defaults rather than try it again.', canPutBack, true);

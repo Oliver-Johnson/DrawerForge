@@ -311,6 +311,129 @@ test('a second tab resizing the drawer is not undone when the first tab saves', 
   expect(errors).toEqual([]);
 });
 
+/* The backup slots beside each tool's save (see PREV_KEY in src/ui.js). None of the cases
+   below is a link replacing your layout, so none of them may write one. */
+const slots = (page) => page.evaluate(() => Object.fromEntries(['plates', 'bins'].flatMap((t) =>
+  [':prev', ':linked', ':prev:linked'].map((s) => [t + s, localStorage.getItem(`drawerforge:${t}:v1${s}`)]))));
+
+/* Opening a drawer on one page and then taking it to the other replaces what the other
+   page showed last, which is another drawer's half. That half is kept in its own drawer,
+   so this is no link replacing your layout: no banner, and the backup keeps what it had.
+   Someone's link onto the same page still gets both. */
+test('taking an opened drawer to the other page sets nothing aside', async ({ page }) => {
+  const errors = await openPlates(page);
+  await H.setField(page, 'drawerW', '400');
+  await saveAs(page, 'Kitchen');
+  await toBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  await toPlates(page);
+  await saveAs(page, 'Garage');
+  await H.setField(page, 'drawerW', '500');
+  await toBins(page);
+  await H.dragCells(page, [4, 0], [4, 0]);
+  await settle(page);
+  const before = await slots(page);
+
+  // Kitchen opened on the baseplates page, over Garage there; the bins page still has Garage
+  await toPlates(page);
+  await openDrawer(page, 'Kitchen', platesReady);
+  await toBins(page);
+  await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+  expect(await binCount(page)).toBe(1);
+  await expect(page.locator('#setAside')).toBeHidden();
+  await settle(page);
+
+  // and the other way: Garage opened on the bins page, over Kitchen on the baseplates page
+  await openDrawer(page, 'Garage', binsReady);
+  await toPlates(page);
+  await expect(page.locator('#drawerName')).toHaveText('Garage');
+  expect(await page.inputValue('#drawerW')).toBe('500');
+  await expect(page.locator('#setAside')).toBeHidden();
+  await settle(page);
+  expect(await slots(page), 'nothing was set aside').toEqual(before);
+
+  // someone's link is still a link, drawer or no drawer
+  await page.goto('about:blank');
+  await openPlates(page, '#w=333&d=444&v=2');
+  await expect(page.locator('#setAside')).toBeVisible();
+  await expect(page.locator('#drawerName')).toHaveText('not saved');
+  expect(errors).toEqual([]);
+});
+
+/* Two tabs of one tool on one drawer, and the second moves it on. Reloading the first is
+   that tab's own page coming back, not someone's link: no banner and nothing set aside,
+   and it is still the drawer, caught up with what the other tab set. It used to come
+   back unsaved on the old size, and nothing it did after reached the drawer. */
+for (const tool of ['plates', 'bins']) {
+  test(`reloading a ${tool} tab after another tab moved its drawer on`, async ({ page, context }) => {
+    const ready = tool === 'plates' ? platesReady : binsReady;
+    const errors = await openPlates(page);
+    await saveAs(page, 'Kitchen');
+    if (tool === 'bins') await toBins(page);
+    await settle(page);
+    const before = await slots(page);
+
+    const other = await context.newPage();
+    other.on('pageerror', (e) => errors.push(String(e)));
+    await other.goto(base + (tool === 'bins' ? 'bins/' : ''));
+    await ready(other);
+    await expect(other.locator('#drawerName')).toHaveText('Kitchen');
+    await H.setField(other, 'drawerW', '650');
+    await settle(other);
+
+    await page.reload();
+    await expect.poll(() => page.inputValue('#drawerW').catch(() => ''),
+      { message: 'caught up with the other tab', timeout: 20000 }).toBe('650');
+    await ready(page);
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    await expect(page.locator('#setAside')).toBeHidden();
+    await H.setField(page, 'drawerD', '420');
+    await settle(page);
+    expect((await stored(page)).Kitchen, 'its edits reach the drawer').toMatchObject({ w: '650', d: '420' });
+    expect(await slots(page), 'nothing was set aside').toEqual(before);
+    expect(errors).toEqual([]);
+  });
+}
+
+/* Back to an earlier page of your own, when the browser loads it again rather than keeping
+   it — Playwright keeps none, and nor does a browser that has evicted it. Its address is
+   older than the save, but it is still your page and not a link: no banner, nothing set
+   aside, still the drawer and caught up with it, and the next trip is a hand-over too. */
+test('Back to an earlier page of your own is not a link', async ({ page }) => {
+  const errors = await openPlates(page);
+  await saveAs(page, 'Kitchen');
+  await toBins(page);
+  await H.setField(page, 'drawerW', '450');
+  await H.setField(page, 'drawerD', '400');
+  await settle(page);
+  await toPlates(page);
+  await H.setField(page, 'drawerD', '410');
+  await settle(page);
+  await toBins(page);
+  await settle(page);
+  const before = await slots(page);
+
+  await page.goBack();
+  await platesReady(page);
+  await page.goBack();
+  await expect.poll(() => page.inputValue('#drawerD').catch(() => ''),
+    { message: 'shown at the drawer\'s depth now', timeout: 20000 }).toBe('410');
+  await binsReady(page);
+  expect(page.url()).toMatch(/\/bins\//);
+  await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+  await expect(page.locator('#setAside')).toBeHidden();
+  await settle(page);
+
+  await toPlates(page);
+  await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+  await expect(page.locator('#setAside')).toBeHidden();
+  await settle(page);
+  expect(await slots(page), 'nothing was set aside').toEqual(before);
+  expect((await stored(page)).Kitchen).toMatchObject({ w: '450', d: '410' });
+  expect(errors).toEqual([]);
+});
+
 test('export, clear the browser, import: the same design comes back', async ({ page }) => {
   const errors = await openPlates(page);
   await H.setField(page, 'drawerW', '412');
