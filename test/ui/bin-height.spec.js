@@ -381,3 +381,17 @@ test('the grid summary and Checks name the same tallest bin', async ({ page }) =
   await expect(page.locator('#warnings')).toContainText('The tallest that fits is 9 units');
   await expect(page.locator('#gridSummary')).toContainText('tallest single bin 9 units');
 });
+
+/* The field shows the height to the hundredth, and a step of 0.5 made most of those
+   figures ones the browser calls invalid — 14.95 on a 1.25 mm floor — and had the arrow
+   keys snap them to the next half instead of stepping from them. */
+test('a height the field shows is one it accepts, and the arrows step from it', async ({ page }) => {
+  await oneBin(page);
+  await H.setField(page, 'floorT', 1.25);
+  await page.selectOption('#hMode', 'inside');
+  await expect(page.locator('#hMm')).toHaveValue('14.95');
+  expect(await page.evaluate(() => document.getElementById('hMm').validity.valid)).toBe(true);
+  await page.locator('#hMm').focus();
+  await page.keyboard.press('ArrowUp');
+  await expect(page.locator('#hMm')).toHaveValue('15.95');
+});

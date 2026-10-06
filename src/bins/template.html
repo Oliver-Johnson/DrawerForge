@@ -221,10 +221,13 @@
          or as the depth wanted inside. Whichever way it is typed, the bin is still a
          whole number of units — the link and saved drawers carry units and only units —
          and the line under the field says what the typing came to. The menu is a
-         preference of the person, remembered on this device like the mm/inch switch. -->
+         preference of the person, remembered on this device like the mm/inch switch.
+         The length takes any step: it shows the height built to the hundredth, and a
+         step of 0.5 made most of those figures ones the browser called invalid, and had
+         the arrow keys snap to the next half instead of stepping from what is there. -->
     <div class="row">
       <label class="f" id="hUnitsRow"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
-      <label class="f" id="hMmRow" style="display:none"><b id="hMmLabel">Height overall (mm)</b><input id="hMm" type="number" step="0.5" min="0" max="2000"></label>
+      <label class="f" id="hMmRow" style="display:none"><b id="hMmLabel">Height overall (mm)</b><input id="hMm" type="number" step="any" min="0" max="2000"></label>
       <label class="f"><b>in</b><select id="hMode" aria-label="Height entered in">
         <option value="units">7 mm units</option>
         <option value="overall">overall mm</option>
