@@ -231,6 +231,18 @@ test('two bins with different notes raised on their shelves are two STLs, named 
   await H.dragCells(page, [5, 0], [5, 0]);
   await settle(page);
   expect(await names()).toEqual(['bin-1x1x3-m3-screws-qty1', 'bin-1x1x3-qty2']);
+
+  // a note that names the same as another ("M3 Screws" beside "M3 screws") is still its
+  // own part, and the ZIP still holds both: the name they share is numbered apart
+  await H.clickCell(page, 3, 3);
+  await settle(page);
+  await page.fill('#note', 'M3 Screws');
+  await settle(page);
+  await page.selectOption('#labelMode', '1');
+  await settle(page);
+  expect(await page.evaluate(() => new Set(types().map((t) => t.key)).size)).toBe(3);
+  expect(await page.evaluate(() => [...typeNames().values()].sort()))
+    .toEqual(['bin-1x1x3-m3-screws-2-qty1', 'bin-1x1x3-m3-screws-qty1', 'bin-1x1x3-qty1']);
 });
 
 /* Removable dividers, from the control to the part you can download.
