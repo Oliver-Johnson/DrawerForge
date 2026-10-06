@@ -677,7 +677,7 @@ function placeDividers() {
 }
 PHONE.addEventListener('change', placeDividers);
 placeDividers();
-/* The Steps switch goes in the drawer map's heading on a wider window, and beside the
+/* The Steps switch goes on the drawer map's heading row on a wider window, and beside the
    layer tabs on a phone, moved the same way and for the same reason. Beside the tabs,
    the map's card had to be as wide as two layers' tabs and the switch, which came out of
    the preview, and from a third layer the switch took a row of its own: at 1366 × 768
@@ -686,11 +686,18 @@ placeDividers();
    costs the map no height and the tabs have their row to themselves, as they did before
    it. A phone's heading has no room for it beside the title, and a 40 px button is
    taller than the heading, so there it stays on the tabs' row. drawMap is run again on
-   the change, which comes after the resize that already drew it. */
+   the change, which comes after the resize that already drew it.
+   On the row, beside the <h3> and never in it: inside it, the heading was read out as
+   "Drawer layout Steps Steps". And a button that had the focus keeps it: moving an
+   element in the document takes the focus off it, and a window narrowed past 980 px, or
+   zoomed, with the keyboard on Half cells left it on the page's body. */
 function placeSteps() {
   const card = $('s-layout'), steps = card.querySelector('.steps');
-  const home = card.querySelector(PHONE.matches ? '.maptools' : 'h3');
-  if (steps.parentNode !== home) home.appendChild(steps);
+  const home = card.querySelector(PHONE.matches ? '.maptools' : '.layouthead');
+  if (steps.parentNode === home) return;
+  const had = steps.contains(document.activeElement) ? document.activeElement : null;
+  home.appendChild(steps);
+  if (had) had.focus({ preventScroll: true });
 }
 PHONE.addEventListener('change', () => { placeSteps(); drawMap(); });
 placeSteps();
@@ -1621,28 +1628,32 @@ function drawMap() {
      The 52 px cell and 720 px caps are for a 1080-line window and grow with a taller
      one (row.big): at 1440 a cell may be 69 px rather than staying 52 while the screen
      round it got a third bigger. The labels scale with the cells, so they stay legible.
-     Paired, the card is the map's width, and no narrower than its heading needs for the
-     title and the Steps switch, which is in the heading on any window wide enough to
-     pair (placeSteps). The switch was first beside the layer tabs, and the card kept as
-     wide as that row: paired at the map's width alone, a 1366 × 768 window had no room
+     Paired, the card is the map's width. The Steps switch is on its heading's row on any
+     window wide enough to pair (placeSteps), and the title gives way to it rather than
+     widen the card (style.css): asked for the whole title beside the switch, the card
+     was 16 px wider than the map at 1366 × 768 in DejaVu Sans, out of the preview on
+     every layout. Only a map too narrow for the switch and the title's first word makes
+     the card wider than the map.
+     The switch was first beside the layer tabs, and the card kept as wide as that row:
+     paired at the map's width alone, a 1366 × 768 window had no room
      for the switch beside two layers' tabs, it dropped to a row of its own after the
      height was settled, and the map, its front marker and the coverage bar went 38 px
      under the window. Kept that wide, each layer took a tab's width, about 70 px, out of
      the preview, in a drawer of whole bins as much as in one of half; held at two
      layers' width, the switch's own row from a third layer still put the bar 21 px under
-     the window, the map there being within a pixel of its 40 px cells. In the heading it
-     costs no height, the tabs have their row to themselves as they did before it, and
-     the heading asks about as much width as the map's card has anyway.
+     the window, the map there being within a pixel of its 40 px cells. On the heading's
+     row it costs no height, and the tabs have their row to themselves as before it.
      "Above" is measured with the columns taken away (stageRow), and the map is sized
      again once paired, as the baseplates page's cut map is, should anything above it
      wrap all the same: the tabs' labels do, with five layers or more. */
   let headW = 0;
-  const steps = twoCol && $('s-layout').querySelector('h3 .steps');
+  const steps = twoCol && $('s-layout').querySelector('.layouthead > .steps');
   if (steps) {
-    const title = $('s-layout').querySelector('h3 > span');
-    // the heading's padding, the title, a gap, the switch and the card's border, up to
-    // the next pixel, which a rounded offsetWidth was not: 385.4 px in 385 overlaps
-    headW = Math.ceil(14 + title.getBoundingClientRect().width + 12 +
+    /* the heading at its narrowest (its min-width: padding and about a word), the switch
+       and its margin, and the card's border, up to the next pixel, which a rounded
+       offsetWidth was not: 385.4 px in 385 overlaps */
+    const h3 = $('s-layout').querySelector('.layouthead > h3');
+    headW = Math.ceil(parseFloat(getComputedStyle(h3).minWidth) +
                       steps.getBoundingClientRect().width + 14) + 2;
   }
   const chrome = () => svg.getBoundingClientRect().top - top.getBoundingClientRect().top + 41;

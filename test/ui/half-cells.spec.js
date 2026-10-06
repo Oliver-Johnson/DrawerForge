@@ -627,7 +627,7 @@ test('more layers take none of the preview\'s width, and at 1366 x 768 keep the 
     const why = $('stepWhy'), bottom = (el) => el.getBoundingClientRect().bottom;
     return { preview: Math.round($('threewrap').getBoundingClientRect().width), inCard,
              tabs: Math.round($('layerTabs').getBoundingClientRect().height),
-             steps: document.querySelector('#s-layout .steps').parentElement.matches('h3') ? 'heading' : 'tabs',
+             steps: document.querySelector('#s-layout .steps').parentElement.matches('.layouthead') ? 'heading' : 'tabs',
              low: Math.max(bottom($('fillmap')), bottom(why.previousElementSibling), bottom(why),
                            bottom(document.querySelector('#s-layout .covbar'))),
              fold: innerHeight, scrolled: document.querySelector('.stage').scrollTop };
@@ -694,4 +694,52 @@ test('a size the selected bin refused does not become the size of new bins', asy
   await settle(page);
   await H.clickCell(page, 4, 4);
   expect(await page.evaluate(() => [state.u, $('fillSize').textContent])).toEqual([1.5, '1.5×1']);
+});
+
+/* On a wider window the Steps switch is on the map card's heading row (placeSteps). It
+   was put inside the <h3>, which made the heading's name "Drawer layout Steps Steps", from
+   the switch's hidden label and its group's name, and put two buttons in a heading. It
+   now stands beside the heading on the same row. Moved in the document across 980 px, it
+   also took the focus with it: on Half cells at 1366 and narrowed to 900, the focus was
+   on the page's body. And it set the card's width: in a wider font than this machine's,
+   its heading needed 16 px more than the map, out of the preview on every layout. The
+   title gives way now, and the card is the map's width whatever the font; DejaVu Sans is
+   the wider font that showed it. */
+test('the Steps switch is on the heading row, not in the heading, and keeps the card to the map', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openAt(page, 'bl=' + bin(0, 0, 1, 1));
+  await expect(page.getByRole('heading', { name: 'Drawer layout', exact: true })).toHaveCount(1);
+  expect(await page.evaluate(() => document.querySelectorAll(
+    '.stage :is(h1, h2, h3, h4, h5, h6, [role=heading]) :is(button, [role=button])').length),
+    'no button in a heading on the stage').toBe(0);
+  const row = () => page.evaluate(() => {
+    const r = (el) => el.getBoundingClientRect();
+    const head = r(document.querySelector('#s-layout h3')), steps = r(document.querySelector('#s-layout .steps'));
+    return { onRow: steps.top >= head.top - 0.5 && steps.bottom <= head.bottom + 0.5,
+             buttons: [...document.querySelectorAll('#s-layout .steps button')].map((b) => r(b).height),
+             card: Math.round(r($('s-layout')).width), map: Math.round(r($('fillmap')).width) };
+  });
+  for (const font of [null, 'DejaVu Sans']) {
+    if (font) {
+      await page.evaluate((f) => { document.documentElement.style.setProperty('--sans', `'${f}'`); }, font);
+      await settle(page);
+      await page.evaluate(() => drawMap());
+      await settle(page);
+    }
+    const m = await row();
+    const at = font || 'this machine\'s font';
+    expect(m.onRow, `${at}: the switch on the heading's row`).toBe(true);
+    for (const h of m.buttons) expect(h, `${at}: a button 24 px tall or more`).toBeGreaterThanOrEqual(24);
+    expect(m.card, `${at}: the card is what the map needs, its padding and border`).toBe(m.map + 30);
+  }
+
+  // the focus stays on the button it was on, wherever the switch goes
+  await page.focus('#stepHalf');
+  for (const [w, where] of [[900, 'tabs'], [1366, 'heading'], [981, 'heading'], [979, 'tabs'], [1366, 'heading']]) {
+    await page.setViewportSize({ width: w, height: 768 });
+    await settle(page);
+    expect(await page.evaluate(() => [document.activeElement.id,
+      document.querySelector('#s-layout .steps').parentElement.closest('.maptools') ? 'tabs' : 'heading']),
+      `at ${w} px wide`).toEqual(['stepHalf', where]);
+  }
 });
