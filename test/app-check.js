@@ -164,6 +164,37 @@ const madeUpGot = [...new Set(app.subresources(madeUp, 'guide/x/index.html'))].s
 check('it finds the images a page loads: img src and srcset, CSS url()',
       JSON.stringify(madeUpGot) === JSON.stringify(madeUpWants), `found ${JSON.stringify(madeUpGot)}`);
 
+/* And on another, the ways a page can be written that are easy to misread. HTML lets an
+   attribute go without quotes. A query string is part of what the browser asks for, and
+   the worker looks a request up by all of it, so three.min.js?v=2 cached as three.min.js
+   is a script the page cannot find offline; the file behind it is still three.min.js. And
+   what is commented out, in the markup or in a style block, loads nothing — unlike a
+   "<!--" inside a script, which is only text and hides nothing after it. */
+const tricky = [
+  '<script src=../../vendor/bare.js></script>',
+  '<link rel=icon href=../../bare.ico><img src=../../bare.png alt=x>',
+  '<script src="../../vendor/lib.js?v=2"></script>',
+  '<img src="../../pic.png?w=1#top" alt="">',
+  '<!-- <script src="../../old.js"></script> -->',
+  '<!--<img src="../../gone.png">--><img src="../../kept.png">',
+  '<style>/* .a{background:url(../../retired.png)} */ .b{background:url(../../live.png)}</style>',
+  '<script>const s = "<!--";</script><img src="../../after-a-script.png">',
+].join('\n');
+const trickyGot = [...new Set(app.subresources(tricky, 'guide/x/index.html'))];
+const lacking = (...want) => want.filter((w) => !trickyGot.includes(w));
+check('it reads an attribute written without quotes',
+      lacking('vendor/bare.js', 'bare.ico', 'bare.png').length === 0,
+      `missed ${lacking('vendor/bare.js', 'bare.ico', 'bare.png').join(', ')}`);
+check('it keeps a query string, and caches it from the file without one',
+      lacking('vendor/lib.js?v=2', 'pic.png?w=1').length === 0 &&
+        app.fileFor('vendor/lib.js?v=2') === 'vendor/lib.js',
+      `found ${JSON.stringify(trickyGot)}, file ${app.fileFor('vendor/lib.js?v=2')}`);
+const commented = ['old.js', 'gone.png', 'retired.png'].filter((f) => trickyGot.includes(f));
+check('it skips what is commented out, and only that',
+      commented.length === 0 && lacking('kept.png', 'live.png', 'after-a-script.png').length === 0,
+      `found ${commented.join(', ') || 'nothing commented out'}; ` +
+      `missed ${lacking('kept.png', 'live.png', 'after-a-script.png').join(', ') || 'nothing'}`);
+
 /* The cache name is a hash of the cached files and of sw.js itself, so a deploy that
    changes any of them replaces the old cache rather than serving it. Recomputed here from
    the files on disk and from sw.js as it is served, with its own version taken back out
