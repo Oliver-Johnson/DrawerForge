@@ -441,7 +441,7 @@ test('a link from before half sizes downloads the same files, byte for byte', as
   got.link = sha(await page.evaluate(() => descString()));
   expect(got).toEqual({
     'README.txt': 'ccd56de89186e081',
-    'bin-2x1x3-low-walls-qty1.stl': '4f879f2b46d2fef3',
+    'bin-2x1x3-low-f50-l25-qty1.stl': '4f879f2b46d2fef3',
     'bin-2x1x3-qty1.stl': '1d5dddd4cc82d4d4',
     'bin-2x1x4-qty1.stl': '4b028774e7cab92a',
     'bin-2x2x2-qty1.stl': 'aa35a25aa8f07fe3',

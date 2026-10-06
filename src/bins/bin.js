@@ -1715,7 +1715,11 @@ function buildBin(G, cfg) {
     const holes = holeLayout(c, iw, id, H);
     const holesOn = !!holes.n;
     if (c.scoop > 0.05 && eF > 0 && !holesOn) {
-      const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9);
+      /* No taller than the front wall it fills the corner of. With the front lowered,
+         a scoop held only to the full height stood above the wall, and above the
+         height binTop quotes: a 2x1x4 with every wall at a quarter and an 8.5 mm scoop
+         was 14.45 mm built and 11.5 quoted, to its README and the bed check. */
+      const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF));
       if (r > 0.05) polys.push(...scoopPrism(G, iw, id, floorZ, r, Math.max(4, n)));
     }
     if (shelf) {
