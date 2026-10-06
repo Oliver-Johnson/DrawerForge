@@ -1380,6 +1380,56 @@ console.log('\na part too big for the bed takes no other part with it:');
   }
 }
 
+/* Plates from before half cells have to build the bytes they always did.
+ *
+ * Half cells went into the code every plate goes through — the margins gridCells hands
+ * out, the region cuts and the socket ring in buildPiece — and a plate without them was
+ * to come out of it unchanged, so a link or a saved drawer from before makes the same
+ * files. Nothing else here would notice a plate that moved by a micron and stayed
+ * watertight.
+ *
+ * Each row is a design and the first 16 hex digits of the SHA-256 of its pieces' STLs, in
+ * order, as the engine before half cells built them. They cover the paths the change
+ * touched: a margin on either side and none, margins custom and aligned, both mounting
+ * kinds, skeleton, a split, and rounded corners. The last row asks for half cells in a
+ * drawer with no room for them, and has to be the first row's bytes: no room means a
+ * solid margin, exactly as before. A change that MEANS to alter these will fail here:
+ * check that it should, then put in the digests this prints, and say so in the commit. */
+console.log('\nplates without half cells build the same bytes:');
+{
+  const crypto = require('crypto');
+  const OLD = [
+    ['306 x 380, the page as it opens', { drawerW: 306, drawerD: 380, marginMode: 'auto' }, '48eb1e780f7cffce'],
+    ['190 x 170, margin left and front', { drawerW: 190, drawerD: 170, marginMode: 'auto',
+      alignX: 'start', alignY: 'start', connector: 'none' }, '0643a57626c1be52'],
+    ['190 x 170, margin right and back', { drawerW: 190, drawerD: 170, marginMode: 'auto',
+      alignX: 'end', alignY: 'end', connector: 'none' }, '37b5f305cc4da6dd'],
+    ['126 x 126, magnets and screws', { drawerW: 126, drawerD: 126, marginMode: 'custom',
+      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, '061f12cb36018140'],
+    ['140 x 140, corner pockets', { drawerW: 140, drawerD: 140, marginMode: 'auto',
+      magnets: true, baseMode: 'bosses' }, '7088f24def428095'],
+    ['168 x 180, skeleton', { drawerW: 168, drawerD: 180, marginMode: 'auto',
+      plateStyle: 'skeleton', connector: 'none' }, '85f2999306d41bf9'],
+    ['400 x 300, bowtie split', { drawerW: 400, drawerD: 300, marginMode: 'auto',
+      connector: 'bowtie', keyType: 'bowtie' }, '055e2093ee5f3e27'],
+    ['190 x 195, custom, rounded corners', { drawerW: 190, drawerD: 195, marginMode: 'custom',
+      mLeft: 3, mRight: 5, mFront: 7, mBack: 9, outerRadius: 4 }, '0638c72a7fc0ac58'],
+    ['306 x 380, half cells with no room', { drawerW: 306, drawerD: 380, marginMode: 'half' },
+     '48eb1e780f7cffce'],
+  ];
+  const moved = OLD.map(([name, over, want]) => {
+    const cfg = Object.assign({}, G.DEFAULTS, { magnets: false, screws: false, arcSegs: 6 }, over);
+    const L = G.computeLayout(cfg);
+    const h = crypto.createHash('sha256');
+    for (const pc of L.pieces) h.update(Buffer.from(G.stlBinary(G.buildPiece(cfg, L, pc).polys, 'p')));
+    const got = h.digest('hex').slice(0, 16);
+    return got === want ? '' : `${name} now ${got}, was ${want}`;
+  }).filter(Boolean);
+  console.log('  ' + (moved.length ? 'CHANGED: ' + moved.join('; ')
+    : `${OLD.length} designs, each the same STLs to the byte`));
+  if (moved.length) bad++;
+}
+
 /* Every parameter in DEFAULTS is read by somebody.
  *
  * Two of the defects this file now covers were the same shape, and neither could fail a
