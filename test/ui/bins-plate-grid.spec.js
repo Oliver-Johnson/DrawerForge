@@ -205,3 +205,34 @@ test('the cell fields stop where the drawer does, margins and all', async ({ pag
   expect(await checksText(page)).not.toMatch(/bigger than/);
   expect(errors).toEqual([]);
 });
+
+/* Margins that leave the drawer no room for a cell stop the Baseplates page building
+   anything, and it says why. Bins drew its one cell regardless (grid() never draws
+   fewer) and said nothing, so the design looked fine here and failed there. */
+test('margins that leave no room for a cell are called out in Checks', async ({ page }) => {
+  const errors = watch(page);
+  await page.goto(site.base + 'bins/#w=306&d=380&mm=custom&ml=200&mr=100');
+  await binsReady(page);
+  await expect(page.locator('#warnings .w.err')
+    .filter({ hasText: /left and right margins leave 6 mm of the drawer's width/ })).toHaveCount(1);
+  expect(await checksText(page)).not.toMatch(/front and back margins/);
+
+  await page.goto('about:blank');
+  await page.goto(site.base + 'bins/#w=306&d=380&mm=custom&ml=1e9&mf=200&mb=200');
+  await binsReady(page);
+  const t = await checksText(page);
+  expect(t).toMatch(/left and right margins take up the drawer's whole width/);
+  expect(t).toMatch(/front and back margins take up the drawer's whole depth/);
+
+  /* Exactly one cell's room is room for one; margins the plate does not keep (any mode
+     but custom) take none; and a drawer too small for a cell without its margins is not
+     the margins' doing. */
+  for (const hash of ['w=306&d=380&mm=custom&ml=200&mr=64', 'w=306&d=380&mm=auto&ml=200&mr=100',
+                      'w=30&d=380&mm=custom&ml=5']) {
+    await page.goto('about:blank');
+    await page.goto(site.base + 'bins/#' + hash);
+    await binsReady(page);
+    expect(await checksText(page), hash).not.toMatch(/margins (leave|take up)/);
+  }
+  expect(errors).toEqual([]);
+});

@@ -1777,6 +1777,21 @@ function warnings() {
   }
   if (drawerAsked.w > DRAWER_MAX || drawerAsked.d > DRAWER_MAX)
     out.push({ err: true, t: `A ${drawerAsked.w} × ${drawerAsked.d} mm drawer is bigger than the ${DRAWER_MAX} mm a side this tool lays out, so it is drawn as ${state.drawerW} × ${state.drawerD} mm — a ${g.nx} × ${g.ny} grid. Check the drawer size; split a drawer that really is this big into parts.` });
+  /* Custom margins can leave the drawer no room for a cell. The Baseplates page builds
+     nothing from a design like that, and says why; this page drew its one cell anyway,
+     because grid() never draws fewer, and said nothing, so the design looked sound here
+     and failed there. The test is the plate's own (see warnings in src/ui.js). A drawer
+     too small for a cell without its margins is the drawer's doing, not theirs, and the
+     plate puts that first too. Only numbers go in: this goes into the panel as markup. */
+  const pm = plateMargins();
+  if (pm)
+    for (const [len, a, b, sides, dim, line] of [
+      [state.drawerW, pm.l, pm.r, 'left and right', 'width', 'column'],
+      [state.drawerD, pm.f, pm.b, 'front and back', 'depth', 'row']]) {
+      const free = len - Math.min(a, len) - Math.min(b, len), shown = +free.toFixed(1);
+      if (len < SPEC.pitch || free >= SPEC.pitch - 1e-6) continue;
+      out.push({ err: true, t: `The baseplate's ${sides} margins ${shown > 0 ? `leave ${shown} mm of the drawer's ${dim}, not enough for` : `take up the drawer's whole ${dim}, with no room for`} one ${SPEC.pitch} mm cell. The Baseplates page builds no plate from this design, and the one ${line} on this map has no socket under it: check the margins there, and the drawer size.` });
+    }
   /* A baseplate at another pitch has no socket a spec bin seats in, and nothing else on
      this page would say so: the map is drawn in 42 mm cells whatever the plate is. The
      figure is the link's, so it is written as a number and only when it reads as one —
