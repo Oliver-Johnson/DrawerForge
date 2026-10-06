@@ -1875,10 +1875,17 @@ function applySnap(snap) {
      is stable across an undo because the snapshot restores the same bin list; if the
      bin genuinely is not there any more, focus falls away as it should. */
   const keep = focused ? selected : -1;
+  const was = selected, wasCur = cur;
   layers = o.layers; cur = Math.min(o.cur, layers.length - 1);
   clearSel();
   if (keep >= 0 && B()[keep]) {
     selected = keep; B()[keep].sel = true; writeControls(B()[keep]);
+  } else if (was >= 0 && cur === wasCur && B()[was]) {
+    /* Out of focus the selection goes, and the panel, now "New bins", keeps the bin it
+       last showed, as it does when you click away from one. It has to be that bin as
+       the step left it: still showing what the step took back, the panel went on saying
+       the bin had it, and readControls below handed it to the next bin drawn. */
+    writeControls(B()[was]);
   }
   readControls(); drawLayerTabs(); drawMap(); refresh();
 }
