@@ -495,18 +495,21 @@ footer .mono{font-family:var(--mono);font-size:11px}
    was: a full-size switch made it 52 px where it is 35, and at 1366 × 768 the map has
    no height to give. Its buttons are 24 px, a comfortable target for a mouse; a phone,
    which needs 40 px, keeps the switch on the tabs' row.
-   The row never sets the card's width beyond the map's own (drawMap): the title gives
-   way, cut short with an ellipsis, rather than take it out of the preview, down to
-   about its first word, which with the switch is as narrow as the card goes. With this
-   machine's font, or the wider DejaVu Sans, it is whole beside the switch at 1366 × 768;
-   given the room it took there, the card was 16 px wider than the map in DejaVu Sans.
+   The title is never cut: drawMap keeps the card as wide as the whole title on one
+   line, the switch and the padding between, 290 to 310 px in the fonts tried, and the
+   map's own width where that is more. The title was let give way, with an ellipsis, so that the row
+   never made the card wider than the map, and every narrow drawer, and a 7-column one
+   on a window short enough to bring the map to its 40 px cells, showed "DRAWER LAYO…".
+   The 6 px after the title is what lets that 7-column map, 280 px wide, hold the row in
+   the wider DejaVu Sans; at 10 it was 3 px short. The ellipsis stays only for a column
+   narrower than the row, which a window wide enough to pair the map never has.
    The word "Steps" is for screen readers only up here, where it still names the pair
    of buttons. Shown, it ran on from the title as if one heading ("Drawer layout
    Steps"), and it needed 41 px more; the buttons say what they switch. */
 #s-layout > .layouthead{display:flex;align-items:center;border-bottom:1px solid var(--line)}
-#s-layout > .layouthead > h3{display:block;flex:1 1 auto;min-width:calc(24px + 5em);
-  padding-right:10px;border-bottom:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#s-layout > .layouthead > .steps{flex:none;margin-right:14px;white-space:nowrap}
+#s-layout > .layouthead > h3{display:block;flex:0 1 auto;min-width:0;padding-right:6px;
+  border-bottom:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#s-layout > .layouthead > .steps{flex:none;margin:0 14px 0 auto;white-space:nowrap}
 #s-layout > .layouthead .seg button{padding:4px 6px;min-height:24px;font-size:11px}
 #s-layout > .layouthead #stepsLabel{position:absolute;width:1px;height:1px;overflow:hidden;
   clip-path:inset(50%)}
