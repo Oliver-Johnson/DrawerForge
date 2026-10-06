@@ -460,6 +460,47 @@ test("someone's bins link carried to baseplates still keeps your drawer", async 
   expect(await stored(page, PLATES + ':prev')).toContain('w=512');
 });
 
+test("someone's bins link, edited, carried to baseplates still keeps your drawer",
+  async ({ page }) => {
+    await H.openPlates(page);
+    await H.setField(page, 'drawerW', '512');
+    await settle(page);
+    // their baseplate settings are the same as yours; only their drawer differs
+    const theirs = (await stored(page, PLATES)).replace(/(^|&)w=512/, '$1w=333') +
+      '&bl=0-0-1-1-3';
+    await arrive(page, H.BINS_URL + '#' + theirs);
+    await H.setField(page, 'gap', '6');               // changed, but still their drawer
+    await settle(page);
+    await arrive(page, H.BINS_URL);                   // and a reload does not make it yours
+
+    await viaButton(page, '#navPlates', H.PLATES_URL);
+    expect(await page.inputValue('#drawerW')).toBe('333');
+    await expect(page.locator('#putBack')).toBeVisible();
+    expect(await stored(page, PLATES + ':prev')).toContain('w=512');
+  });
+
+test('the guide passes a layout on without its own anchors in the way', async ({ page }) => {
+  await H.openPlates(page);
+  await H.setField(page, 'bottomPad', '2');           // a plate taller than the default
+  await settle(page);
+  const H0 = await page.evaluate(() => +binsHref().match(/(?:^|[#&])ph=([^&]*)/)[1]);
+  expect(H0).toBeGreaterThan(4.25);
+
+  // the guide is handed the plate height the bins page needs, as the Bins button hands it
+  await Promise.all([page.waitForEvent('load'), page.click('#navGuide')]);
+  const layout = await page.evaluate(() => location.hash);
+  expect(layout).toMatch(/(^#|&)ph=/);
+
+  // a guide link with an anchor of its own carries the layout, not "#heights#w=…"
+  await page.goto(H.PLATES_URL.replace(/index\.html$/, 'guide/drawer-sizes/index.html') + layout);
+  await Promise.all([page.waitForEvent('load'), page.click('a[href="../#heights"]')]);
+  expect(await page.evaluate(() => location.hash)).toBe(layout);
+
+  await page.goto(H.BINS_URL + layout);
+  await ready(page);
+  expect(await page.evaluate(() => state.plateH)).toBeCloseTo(H0, 2);
+});
+
 test('looking at a linked layout differently is not changing it', async ({ page }) => {
   await H.openBins(page);
   await H.dragCells(page, [0, 0], [1, 1]);

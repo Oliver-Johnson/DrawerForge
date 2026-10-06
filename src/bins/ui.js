@@ -2931,11 +2931,16 @@ let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
    defaults it stands in with put them over the layout it declined, and one more reload
    lost that layout for good. */
 let pristine = '', bootDesc = null;
-/* The link's layout this page opened with, while nobody has changed it, or ''. Compared
-   setting by setting, not as text, so looking at it differently — the drawer shown, a
-   bin opened on its own — is not changing it. */
-let linkedDesc = '';
-const holdsLink = () => !!linkedDesc && sameDesign(descString(), linkedDesc, false);
+/* The drawer, bed and infill of someone's link this page holds, or ''. While the page
+   still uses them they are the link's, not yours, whatever else has been changed: so
+   taking the design to the other page is not your own hand-over, and does not replace
+   yours there without setting it aside. */
+let linkShared = '';
+const sharedOf = (h) => {
+  const q = parseHash(h);
+  return JSON.stringify([...SHARED_KEYS].map((k) => (k in q ? q[k] : null)));
+};
+const holdsLink = () => !!linkShared && sharedOf(descString()) === linkShared;
 function leaveFor(url) {
   hashReady = false; clearTimeout(hashSaveT);   // no save of this page's may land after
   location.href = url;
@@ -3037,9 +3042,10 @@ function platesHref() { return '../#' + descString(); }
    once: a design arriving from the other tool may carry a drawer or bed changed there,
    and that is the same layout moving on, not a link replacing it. The guide passes the
    address through untouched, so going by way of it is marked the same.
-   Not while this page shows someone's link untouched: their drawer and bed are not yours
-   to carry over, and marked, they replaced yours on the other page with nothing set
-   aside. Unmarked, the other page sees the link it is, and keeps yours. */
+   Not while this page uses someone's link's drawer and bed: they are not yours to carry
+   over, and marked, they replaced yours on the other page with nothing set aside —
+   after any edit at all, since that was what ended "untouched". Unmarked, the other page
+   sees the link it is, and keeps yours. */
 const HANDOFF_KEY = 'drawerforge:handoff';
 function handOff(href) {
   try {
@@ -3190,6 +3196,7 @@ function sameDesign(a, b, handedOver) {
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
 let linkedNow = false;   // this page holds a link's layout, not yet changed by anyone
+let linkKept = '';       // the link this page last opened, unless a hand-over came since
 {
   const fromLink = isLayoutHash(incomingHash);
   const saved = readLocal();
@@ -3203,6 +3210,7 @@ let linkedNow = false;   // this page holds a link's layout, not yet changed by 
   const handedOver = takeHandOff() === incomingHash && fromLink;   // read every time
   const replaces = fromLink && (saved.length <= 2 || !sameDesign(saved, src, handedOver));
   const linked = readKey(LINKED_KEY);
+  linkKept = handedOver ? '' : linked;
   const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked, false);
   /* Set aside whatever is about to be replaced: by a different layout, or by the defaults
      standing in for one that would not load. Not a link's own layout, untouched: what that
@@ -3274,8 +3282,12 @@ bootDesc = descString();
    reloading the same link must be declined again, not tried again. */
 if (!stalled) {
   writeKey(LOADING_KEY, '');
-  linkedDesc = linkedNow ? bootDesc : '';
-  writeKey(LINKED_KEY, linkedDesc);
+  /* An untouched link is kept as it is. A changed one is kept only while the page still
+     uses its drawer, bed and infill, so a reload does not turn those into yours. */
+  const keep = linkedNow ? bootDesc
+    : linkKept && sharedOf(bootDesc) === sharedOf(linkKept) ? linkKept : '';
+  writeKey(LINKED_KEY, keep);
+  linkShared = keep ? sharedOf(keep) : '';
 }
 
 /* Applied straight to the selection rather than through readControls, for the reason
