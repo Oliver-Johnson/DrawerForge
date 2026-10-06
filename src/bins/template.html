@@ -197,9 +197,14 @@
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-bin"><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></button></h2>
   <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
-      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" max="50" value="1"></label>
-      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" max="50" value="1"></label>
+      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint"></label>
+      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint"></label>
     </div>
+    <!-- Half sizes need no special baseplate: a quarter foot seats in the corner of an
+         ordinary socket, two to a side. sizeWhy says why a size typed here was put back
+         when the map cannot show it — a whole size for a bin standing on a half step. -->
+    <div class="hint" id="sizeHalfHint">A half cell is 21 mm. Half-size bins have small feet that fit any Gridfinity baseplate, two to a socket.</div>
+    <div class="hint" id="sizeWhy" role="status" style="display:none;color:var(--red)"></div>
     <label class="f"><b>Height (7 mm units)</b><input id="hUnits" type="number" step="1" min="1" max="285" value="3"></label>
     <div class="hint" id="binSizeHint">—</div>
     <label class="f" id="noteRow"><b>What goes in it (optional)</b><input id="note" type="text" maxlength="28" placeholder="M3 screws, drill bits…"></label>
@@ -247,6 +252,7 @@
       <label class="tog"><input id="magnets" type="checkbox"> Magnet holes</label>
       <label class="tog"><input id="screws" type="checkbox"> Screw holes</label>
     </div>
+    <div class="hint" id="feetOff" style="display:none"></div>
     <label class="f" id="holesWhereRow" style="display:none"><b>Feet: where the holes go</b><select id="holesWhere">
       <option value="corners">Corners of the bin</option>
       <option value="every">Every cell</option></select></label>
@@ -310,6 +316,7 @@
     <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. <span class="haskeys">Alt-click does the same thing without turning the mode on. </span>Press <span class="haskeys">Escape or </span>the button again when you are done.</div>
     <button class="act" id="mergeBins" style="display:none">Merge into one bin</button>
     <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</div>
+    <div class="hint" id="shapeOff" style="display:none"></div>
     <div class="row" id="selActions" style="display:none">
       <button class="ghost" id="applyAll">Apply to all bins</button>
       <button class="ghost" id="delBin">Delete selected</button>
@@ -333,6 +340,18 @@
 <div class="stagecard" id="s-layout">
   <h3>Drawer layout</h3>
   <div style="padding:10px 14px 0"><div class="seg" id="layerTabs"></div></div>
+  <!-- Whole cells or half cells: what the map draws, drags and resizes in. Kept in this
+       browser, never in the link, and turned on by itself when the layout holds a
+       half-size bin. stepWhy says why the map refused a place when the map cannot show
+       it: a whole-size bin dropped on a half step looks like free cells. -->
+  <div class="steps" style="padding:8px 14px 0">
+    <span class="hint" id="stepsLabel">Steps</span>
+    <div class="seg" role="group" aria-labelledby="stepsLabel">
+      <button type="button" id="stepWhole" class="on" aria-pressed="true">Whole cells</button>
+      <button type="button" id="stepHalf" aria-pressed="false">Half cells</button>
+    </div>
+    <span class="hint" id="stepWhy" role="status"></span>
+  </div>
   <!-- The map and the preview both start with a label describing an empty drawer;
        drawMap and showScene rewrite it from the real state on every draw, so it says
        what is actually there rather than what the markup guessed. -->
