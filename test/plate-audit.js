@@ -1470,13 +1470,23 @@ console.log('\nthe smallest pitch the page allows:');
     while (meets(p)) p = Math.round((p + 0.01) * 100) / 100;
     const ok = buildAll(Object.assign({ pitch: p }, LAYOUTS[ln](p), CONFIGS[cn]));
     const earned = r.open > 0, clean = !ok.bad;
+    /* And every joint Checks names as one that fits instead, at this pitch on this
+       layout: each has to build watertight, or the page is sending you to another leak. */
+    const fit = G.jointsThatFit(r.cfg, r.L).map((j) => {
+      const b = buildAll(Object.assign({ pitch: P }, LAYOUTS[ln](P), CONFIGS[cn], j.over));
+      return { id: j.id, b, refused: G.keysMeet(b.cfg, b.L).length > 0 };
+    });
+    const badFit = fit.filter((f) => f.b.bad || f.refused);
     const many = meet.length > 1;
     console.log(`  refused: ${cn} @ ${ln}, ${many ? 'pieces' : 'piece'} ` +
                 `${meet.map((m) => m.id).join(', ')} ${many ? 'need' : 'needs'} ` +
                 `${needs.toFixed(2)} mm: ${leakText(r)} at ${P}` +
                 `${earned ? '' : ' — NOT OPEN, SO THE REFUSAL COSTS A PLATE THAT BUILDS'}; ` +
-                `taken again at ${p}, ${leakText(ok)}${clean ? '' : '   FAIL'}`);
-    if (!earned || !clean) bad++;
+                `taken again at ${p}, ${leakText(ok)}${clean ? '' : '   FAIL'}; ` +
+                `${fit.length} joints named instead, ` +
+                (badFit.length ? `NOT ALL BUILD: ${badFit.map((f) => `${f.id} ${f.refused ? 'REFUSED' : leakText(f.b)}`).join('; ')}`
+                               : `each watertight at ${P}`));
+    if (!earned || !clean || badFit.length || !fit.length) bad++;
   }
   // the step below: 13.3 opened the narrow pieces of four joints
   const below = Math.round((P - 0.2) * 10) / 10;

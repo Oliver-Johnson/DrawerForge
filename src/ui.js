@@ -480,22 +480,37 @@ function warningsList() {
   if (!heightFits())
     out.push({ err: true, t: `The plate is ${roundMm(plateHeightMm())} mm tall, more than ` +
       `your printer's ${state.bedH} mm build height — lower the extra floor, or check the bed height.` });
-  /* A key on each side of a piece one cell across, facing each other. Their housings run
-     into each other below about 14.35 mm and the plate leaks; keysMeet in core.js has the
-     measurements and why this is refused rather than built. Only a moved cut or a larger
-     pitch clears it. Not on a grid past the caps above, which is refused already and
-     would be thousands of housings to measure on every redraw. */
+  /* A key on each side of a piece one cell deep (or wide), facing each other. Their
+     housings run into each other below about 14.35 mm and the plate leaks; keysMeet in
+     core.js has the measurements and why this is refused rather than built. A moved cut,
+     a larger pitch or another joint clears it, and the joints named are the ones
+     jointsThatFit finds clear on this layout — test/plate-audit.js builds each of them on
+     every design it refuses. Not on a grid past the caps above, which is refused already
+     and would be thousands of housings to measure on every redraw. */
   if (!overCap()) {
     const meet = keysMeet(state, layout);
     if (meet.length) {
       const ids = meet.map((m) => m.id), one = ids.length === 1;
       const needs = Math.ceil(Math.max(...meet.map((m) => m.needs)) * 100 - 1e-6) / 100;
-      const named = one ? `Piece ${ids[0]} is`
-        : `Pieces ${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]} are`;
-      out.push({ err: true, t: `${named} one cell across between two seams, and at this ` +
-        `${state.pitch} mm pitch the keys on ${one ? 'its' : 'their'} two sides are too close: ` +
-        'their housings run into each other, which leaves holes in the plate. Move a cut so ' +
-        `${one ? 'it is' : 'they are'} two cells across, or use a pitch of ${needs} mm or more.` });
+      const list = (xs) => xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
+      // deep where the two seams are front and back, wide where they are left and right
+      const dirs = [...new Set(meet.map((m) => m.across))];
+      const dir = dirs.length === 1 ? dirs[0] : null;
+      const named = one ? `Piece ${ids[0]}`
+        : `Pieces ${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]}`;
+      const is = dir ? `${named} ${one ? 'is' : 'are'} one cell ${dir}`
+        : `${named} ${one ? 'has' : 'have'} one cell`;
+      const keyName = { bowtie: 'bowtie keys', puzzlekey: 'puzzle keys', snap: 'snap clips' }[state.connector];
+      const JOINT = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', hclip: 'H-clips',
+                      'snap top': 'snap clips put in from above',
+                      wall: `${keyName} inside the walls, put in from beneath` };
+      const fit = jointsThatFit(state, layout).map((j) => JOINT[j.id]);
+      out.push({ err: true, t: `${is} between two seams, and at this ${state.pitch} mm pitch ` +
+        `the keys on ${one ? 'its' : 'their'} two sides are too close: their housings run into ` +
+        'each other, which leaves holes in the plate. Move a cut so ' +
+        (dir ? `${one ? 'it is' : 'they are'} two cells ${dir}` : `${one ? 'it has' : 'they have'} two`) +
+        `, use a pitch of ${needs} mm or more` +
+        (fit.length ? `, or use a joint that fits at ${state.pitch} mm: ${list(fit)}.` : '.') });
     }
   }
   if (layout.pieces.some(pc => pc.nx*pc.ny === 1 && !pc.hR && !pc.hB))

@@ -2091,9 +2091,10 @@ function offJunction(bo, pitch, piece) {
   const off = (v) => Math.abs(v / pitch - Math.round(v / pitch)) > 0.25;
   return off(bo.s) && off(bo.s - g0);
 }
-/* The pieces in which two key housings would meet, as [{ id, needs }]: `needs` is how
- * deep the piece would have to be, in mm, for the pair that comes closest to stand a
- * BLOAT apart — which for a piece one cell deep is the pitch it needs.
+/* The pieces in which two key housings would meet, as [{ id, needs, across }]: `needs` is
+ * how deep the piece would have to be, in mm, for the pair that comes closest to stand a
+ * BLOAT apart — which for a piece one cell deep is the pitch it needs — and `across` says
+ * which way: 'deep' for keys in its front and back seams, 'wide' for its left and right.
  *
  * A piece one cell deep with a seam on each side takes a key from each, at the same place
  * along the two seams wherever the cuts line up, which is always for a midpoint. Each key's
@@ -2109,40 +2110,72 @@ function offJunction(bo, pitch, piece) {
  * be wrong, which is why this refuses rather than repairs. The key is 14 mm long, so
  * below 14 mm the two keys themselves overlap and the second will not go in, and from 14
  * up to where the housings clear they would share one slot, tip to tip. The page puts
- * this in Checks, where a moved cut or a larger pitch clears it; nothing here can.
+ * this in Checks, where a moved cut, a larger pitch or another joint clears it; nothing
+ * here can.
  *
  * Measured off the solids keySiteOps cuts, so it is the same housing buildPiece makes,
- * with the same sites: pieceConnectors' list less any a wall junction rules out. */
+ * with the same sites: pieceConnectors' list less any a wall junction rules out. Two keys
+ * on one seam are a pitch apart along it, and a key in a side seam sits a whole cell in
+ * from the corner, so only facing keys come this close: at a pitch that leaves room for
+ * two housings' reach and a BLOAT, nothing can meet and there is nothing to measure. The
+ * page asks on every redraw, and at 42 mm that is one housing rather than one per site. */
 function keysMeet(cfg, layout) {
   if (!['bowtie', 'puzzlekey', 'snap', 'hclip'].includes(cfg.connector)) return [];
   const plan = keyPlan(cfg), H = platePad(cfg) + cfg.plateHeight;
   const APART = 0.05;   // buildPiece's BLOAT
+  const box = (bo) => {
+    const b = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const p of keySiteOps(plan.kind, plan.shape, plan.prm, plan.clr, bo.edge, bo.e, bo.s, H).cut)
+      for (const v of p.verts) {
+        b[0] = Math.min(b[0], v[0]); b[1] = Math.min(b[1], v[1]);
+        b[2] = Math.max(b[2], v[0]); b[3] = Math.max(b[3], v[1]);
+      }
+    return b;
+  };
+  // how far a housing reaches into the piece from the seam it is cut from
+  if (cfg.pitch >= 2 * box({ edge: '-y', e: 0, s: 0 })[3] + APART - 1e-9) return [];
   const out = [];
   for (const piece of layout.pieces) {
     const hs = [];
     for (const bo of pieceConnectors(cfg, layout, piece).keyed) {
       if (plan.junction && offJunction(bo, cfg.pitch, piece)) continue;
-      const b = [Infinity, Infinity, -Infinity, -Infinity];
-      for (const p of keySiteOps(plan.kind, plan.shape, plan.prm, plan.clr, bo.edge, bo.e, bo.s, H).cut)
-        for (const v of p.verts) {
-          b[0] = Math.min(b[0], v[0]); b[1] = Math.min(b[1], v[1]);
-          b[2] = Math.max(b[2], v[0]); b[3] = Math.max(b[3], v[1]);
-        }
-      // how far it reaches into the piece from the seam it is cut from
+      const b = box(bo);
       const reach = bo.edge === '-x' ? b[2] - bo.e : bo.edge === '+x' ? bo.e - b[0]
                   : bo.edge === '-y' ? b[3] - bo.e : bo.e - b[1];
-      hs.push({ b, reach });
+      hs.push({ b, reach, across: bo.edge === '-y' || bo.edge === '+y' ? 'deep' : 'wide' });
     }
-    let needs = 0;
+    let needs = 0, across = null;
     for (let i = 0; i < hs.length; i++) for (let j = i + 1; j < hs.length; j++) {
       const a = hs[i].b, c = hs[j].b;
       const near = (lo, hi) => lo < hi + APART - 1e-9;
-      if (near(a[0], c[2]) && near(c[0], a[2]) && near(a[1], c[3]) && near(c[1], a[3]))
-        needs = Math.max(needs, hs[i].reach + hs[j].reach + APART);
+      if (near(a[0], c[2]) && near(c[0], a[2]) && near(a[1], c[3]) && near(c[1], a[3]) &&
+          hs[i].reach + hs[j].reach + APART > needs) {
+        needs = hs[i].reach + hs[j].reach + APART;
+        across = hs[i].across;
+      }
     }
-    if (needs) out.push({ id: piece.id, needs });
+    if (needs) out.push({ id: piece.id, needs, across });
   }
   return out;
+}
+/* Joints that would fit where keysMeet refuses, as [{ id, over }], `over` being the
+   settings that make it: the two tabs, which have no housing to meet; the H-clip; a snap
+   clip put in from above; and the same key housed in the wall and put in from beneath,
+   whose slim key reaches 6.6 mm. Each is put to keysMeet on the design as it stands, so
+   one is only named where it is clear, and test/plate-audit.js builds every one named on
+   every design it refuses: all five come out watertight at 13.5 mm. */
+const KEY_ALTERNATIVES = [
+  ['dovetail', { connector: 'dovetail' }],
+  ['puzzle', { connector: 'puzzle' }],
+  ['hclip', { connector: 'hclip' }],
+  ['snap top', { connector: 'snap', keyType: 'snap', keyInsert: 'top' }],
+  ['wall', { keyMount: 'wall', keyInsert: 'bottom' }],
+];
+function jointsThatFit(cfg, layout) {
+  const keyed = ['bowtie', 'puzzlekey', 'snap'].includes(cfg.connector);
+  return KEY_ALTERNATIVES.filter(([id, over]) => (id !== 'wall' || keyed) &&
+      keysMeet(Object.assign({}, cfg, over), layout).length === 0)
+    .map(([id, over]) => ({ id, over }));
 }
 
 /* Region-decomposed build: no global CSG. Each piece = margin/corner regions (plain
@@ -3041,7 +3074,7 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, keysMeet, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, keysMeet, jointsThatFit, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool

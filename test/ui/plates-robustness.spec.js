@@ -154,20 +154,34 @@ test.describe('ranges on the geometry fields', () => {
   /* Three rows, each its own piece, so the middle one is one cell deep with a seam on
      each side and a bowtie key from each, at the same place along both. Below 14.35 mm
      the two housings overlap and that piece came out with 47 open edges; the page said
-     nothing and offered the download (test/plate-audit.js, the smallest pitch). */
+     nothing and offered the download (test/plate-audit.js, the smallest pitch). The
+     joints it names are the ones that clear at this pitch, and the audit builds each. */
   const rows = (p, w) => `#pi=${p}&w=${w}&d=${w}&sp=manual&rc=1,2&cc=__&cn=bowtie`;
+  const instead = 'or use a joint that fits at 13\\.5 mm: dovetail tabs, puzzle tabs, H-clips, ' +
+    'snap clips put in from above or bowtie keys inside the walls, put in from beneath\\.';
   test('keys that meet across a piece one cell deep are a check, not a plate', async ({ page }) => {
     const errors = await openAt(page, rows(13.5, 40.5));
     expect(await page.evaluate(() => layout.pieces.map((pc) => `${pc.id} ${pc.nx}x${pc.ny}`)),
       'fixture: three rows, one cell deep each').toEqual(['A1 3x1', 'A2 3x1', 'A3 3x1']);
     expect(await text(page, 'warnings')).toMatch(new RegExp(
-      'Piece A2 is one cell across between two seams, and at this 13\\.5 mm pitch the keys ' +
+      'Piece A2 is one cell deep between two seams, and at this 13\\.5 mm pitch the keys ' +
       'on its two sides are too close: their housings run into each other, which leaves ' +
-      'holes in the plate\\. Move a cut so it is two cells across, or use a pitch of ' +
-      '14\\.35 mm or more\\.'));
+      'holes in the plate\\. Move a cut so it is two cells deep, use a pitch of ' +
+      '14\\.35 mm or more, ' + instead));
     expect(await text(page, 'pieceTail')).toMatch(/not building/);
     await page.locator('#openExport').click();
-    expect(await text(page, 'exFit')).toMatch(/Piece A2 is one cell across.*Nothing can be exported until that is fixed\./);
+    expect(await text(page, 'exFit')).toMatch(/Piece A2 is one cell deep.*Nothing can be exported until that is fixed\./);
+    expect(errors).toEqual([]);
+  });
+
+  // the same across three columns, where the piece is one cell wide
+  test('keys that meet across a piece one cell wide say wide', async ({ page }) => {
+    const errors = await openAt(page, '#pi=13.5&w=40.5&d=40.5&sp=manual&rc=&cc=1.2&cn=bowtie');
+    expect(await page.evaluate(() => layout.pieces.map((pc) => `${pc.id} ${pc.nx}x${pc.ny}`)),
+      'fixture: three columns, one cell wide each').toEqual(['A1 1x3', 'B1 1x3', 'C1 1x3']);
+    expect(await text(page, 'warnings')).toMatch(new RegExp(
+      'Piece B1 is one cell wide between two seams, .* Move a cut so it is two cells wide, ' +
+      'use a pitch of 14\\.35 mm or more, ' + instead));
     expect(errors).toEqual([]);
   });
 
