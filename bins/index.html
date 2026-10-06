@@ -1818,7 +1818,7 @@ const PLATE_MAX_CELLS = 900;
 const PLATE_RANGES = {
   pitch: { min: 13.5, max: 200 },
   topCutoff: { min: 0.1, max: 1 },
-  connClr: { min: 0, max: 1, dovetail: 0.3, snapTop: 0.35, puzzleKey: 0.8,
+  connClr: { min: 0, max: 1, dovetail: 0.3, snapTop: 0.3, puzzleKey: 0.8,
              smallPitch: 20, small: 0.3, puzzleRoom: 6.5 },
   bottomPad: { min: 0, max: 20 },
   magnetD: { min: 1 }, magnetH: { min: 0.5, max: 10 },
@@ -1848,10 +1848,16 @@ function fitClearances(field) {
  *   dovetail  0.3. Past it the pocket, cut 1.9 mm + this into the piece, breaks through
  *             the 2.15 mm socket wall and crosses the chamfer cone; it leaked from 0.34.
  *             The hint's own advice stops at 0.25.
- *   snaptop   0.35, in either housing. The clip's slot puts its seam-side wall
+ *   snaptop   0.3, in either housing. The clip's slot puts its seam-side wall
  *             0.3 − (the key's clearance) from the seam, so past a field of 0.35 that
  *             wall stands in the next piece — by 0.65 mm at 1 — and two pieces that print
- *             overlapping cannot butt together. On the coupon the pairs met at the seam.
+ *             overlapping cannot butt together; on the coupon the pairs met at the seam.
+ *             At 0.35 itself nothing overlaps, but the wall lies in the piece's own seam
+ *             face, about 9.4 mm² of face shared — the coplanar face ENGINE.md keeps
+ *             every shell off, with no bad edge to show for it — and the coupon's 0.3
+ *             pair did the same for any field from 0.3 up. 0.3 holds the wall one BLOAT,
+ *             0.05, inside the piece, the overlap the cell regions keep; the coupon's
+ *             slackest pair is this ceiling cut the key's way, so it stops there too.
  *   pitch     0.3 below 20 mm, for the three housings the field cuts that leaked there:
  *             the puzzle, and the bowtie and puzzle key in the floor. Past 0.3 they left
  *             holes from 13.5 to 19 mm — a puzzle key at 14 from 0.4, a bowtie at 18 at
