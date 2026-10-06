@@ -246,7 +246,11 @@ function readControls() {
      on them — see LIMITS. */
   state.alignX = $('alignX').value; state.alignY = $('alignY').value;
   const mm = $('marginMode').value;
-  state.marginMode = mm === 'custom' ? 'custom' : 'auto';
+  /* 'half' is kept as itself, not folded into 'auto' with the rest: it is the one
+     computeLayout lays the strips of half cells for (halfStrips in core.js). A page from
+     before it does not offer the value, so a link carrying it leaves that page's menu
+     where it was (set() in loadFromHash) and the plate there has a solid margin. */
+  state.marginMode = mm === 'custom' ? 'custom' : mm === 'half' ? 'half' : 'auto';
   state.noMargin = mm === 'none';
   state.connector = $('connector').value;
   state.keyType = KEY_CONN.includes(state.connector) ? state.connector : 'bowtie';
@@ -278,8 +282,16 @@ function readControls() {
   state.key = Object.assign({}, DEFAULTS.key, { clr: fit.key });
   state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: fit.hclip });
   state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr: fit.puzzle });
-  $('alignRow').style.display = mm === 'auto' ? '' : 'none';
+  // half cells keep the alignment: it places what is left after them
+  $('alignRow').style.display = mm === 'auto' || mm === 'half' ? '' : 'none';
+  $('halfHint').style.display = mm === 'half' ? '' : 'none';
   $('customMargins').style.display = mm === 'custom' ? '' : 'none';
+  /* A half cell is half the pitch, and panel 06 can move the pitch: the menu said 21 mm
+     whatever it was. Written only when it changes, so a screen reader is not told the
+     menu changed on every keystroke elsewhere. */
+  const halfOpt = $('marginMode').querySelector('option[value="half"]');
+  const halfText = `Fill with half cells where they fit (${roundMm(state.pitch / 2)} mm)`;
+  if (halfOpt && halfOpt.textContent !== halfText) halfOpt.textContent = halfText;
   $('magRow').style.display = state.magnets ? '' : 'none';
   $('screwRow').style.display = state.screws ? '' : 'none';
   $('connHintDove').style.display = state.connector === 'dovetail' ? '' : 'none';
@@ -351,6 +363,26 @@ function recomputeLayout(ev) {
   rememberState();
   noteDesignChange(ev);
 }
+
+/* The margins as the page quotes them: the plain plastic past the cells, half cells
+   included. computeLayout counts a strip of half cells into mR and mB (gridCells in
+   core.js), because to the bed check and the split that is width the piece takes, and
+   that is right for them. "R 21.5 mm" beside "plus a half column on the right" would say
+   the column is margin, so the summary, the export dialog and the README take it back
+   out. With no strip each is the layout's own number, unchanged. */
+function solidMargins() {
+  const h = state.pitch / 2;
+  return [layout.mL, layout.mR - layout.hX * h, layout.mF, layout.mB - layout.hY * h];
+}
+// "a half column on the right and a half row at the back", or '' with neither
+function halfStripText() {
+  const parts = [];
+  if (layout.hX) parts.push('a half column on the right');
+  if (layout.hY) parts.push('a half row at the back');
+  return parts.join(' and ');
+}
+// a piece's cells, "4 × 3", with a ½ on the side that carries a strip of half cells
+const cellsOf = (pc, sep = ' × ') => `${pc.nx}${pc.hR ? '½' : ''}${sep}${pc.ny}${pc.hB ? '½' : ''}`;
 
 /* The bed room a piece actually needs: its plate, plus the dovetail tabs that stick
    out past it. One function, because the export dialog reports the largest piece and
@@ -448,7 +480,10 @@ function warningsList() {
      width the drawer does not have. And it stopped a step short of the advice: the
      guide has a section on exactly this, so the warning links to it rather than leaving
      "double-check the measurement" as the whole of what the tool knows. */
-  const remX = state.drawerW - layout.nx*state.pitch, remY = state.drawerD - layout.ny*state.pitch;
+  /* Less any strip of half cells, which is that leftover put to use: with one in, what is
+     left is under half a cell and there is nothing here to say. */
+  const remX = state.drawerW - layout.nx*state.pitch - layout.hX*state.pitch/2;
+  const remY = state.drawerD - layout.ny*state.pitch - layout.hY*state.pitch/2;
   const spare = [];
   if (remX > state.pitch * 0.75) spare.push(`${remX.toFixed(0)} mm across the width`);
   if (remY > state.pitch * 0.75) spare.push(`${remY.toFixed(0)} mm across the depth`);
@@ -456,6 +491,19 @@ function warningsList() {
     out.push({ t: `Leftover space is large — ${spare.join(' and ')}, nearly another whole cell. ` +
       'Re-measure before you print; if the drawer really is that size, ' +
       '<a href="guide/drawer-sizes/#leftover">the guide covers what to do with the remainder</a>.' });
+  /* Half cells asked for. With room for none, the plate has a solid margin, and says why
+     in the drawer's own figures rather than leaving the menu looking ignored; with any,
+     it says what they will and will not take, since neither shows on the cut map — a
+     whole-size bin does not fit one, and buildPiece cuts no mounting holes in them. */
+  if (state.marginMode === 'half' && !tooSmall &&
+      !fieldErrors.has('drawerW') && !fieldErrors.has('drawerD')) {
+    const half = roundMm(state.pitch / 2);
+    if (!layout.hX && !layout.hY)
+      out.push({ t: `No room for half cells: ${roundMm(remX)} mm is left across and ` +
+        `${roundMm(remY)} mm deep, and a half cell needs ${half} mm.` });
+    else
+      out.push({ t: 'Half cells take half-size bins only, and have no magnet or screw holes.' });
+  }
   const keyedC = KEY_CONN.includes(state.connector);
   if ((keyedC && state.keyMount === 'floor' || state.connector === 'puzzle') && layout.pieces.length > 1) {
     const padV = state.connector === 'puzzle' ? 2.6 : state.key.depth + 0.8;
@@ -581,17 +629,29 @@ function drawMap() {
       const bad = !pieceFits(pc);
       s += `<rect x="${X(x0)}" y="${Y(y1)}" width="${(x1-x0)*sc}" height="${(y1-y0)*sc}" fill="${col}" opacity="${bad?0.28:0.16}"/>`;
       s += `<text class="plabel${bad?' bad':''}" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)-2}" text-anchor="middle">${pc.id}</text>`;
-      s += `<text class="psub" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)+11}" text-anchor="middle">${pc.nx}×${pc.ny}</text>`;
+      s += `<text class="psub" x="${X((x0+x1)/2)}" y="${Y((y0+y1)/2)+11}" text-anchor="middle">${cellsOf(pc, '×')}</text>`;
     });
+
+    /* Half cells, each a dashed box: the whole cells have no outline of their own here,
+       only the lines between them, so a strip drawn the same way would read as more of
+       the margin it replaces. Drawn under the grid lines, which run on through the
+       strips so the half cells line up with the cells they continue. */
+    const hw = pitch / 2, gx1 = gx0 + layout.nx * pitch, gy1 = gy0 + layout.ny * pitch;
+    const half = (x, y, w, d) =>
+      `<rect class="halfcell" x="${X(x)}" y="${Y(y + d)}" width="${w * sc}" height="${d * sc}"/>`;
+    if (layout.hX) for (let j = 0; j < layout.ny; j++) s += half(gx1, gy0 + j * pitch, hw, pitch);
+    if (layout.hY) for (let i = 0; i < layout.nx; i++) s += half(gx0 + i * pitch, gy1, pitch, hw);
+    if (layout.hX && layout.hY) s += half(gx1, gy1, hw, hw);
+    const gTop = gy1 + layout.hY * hw, gRight = gx1 + layout.hX * hw;
 
     // grid lines + hit targets
     for (let i = 1; i < layout.nx; i++) {
       const xm = gx0 + i * pitch;
-      s += `<line class="gridline" x1="${X(xm)}" y1="${Y(gy0)}" x2="${X(xm)}" y2="${Y(gy0 + layout.ny*pitch)}"/>`;
+      s += `<line class="gridline" x1="${X(xm)}" y1="${Y(gy0)}" x2="${X(xm)}" y2="${Y(gTop)}"/>`;
     }
     for (let j = 1; j < layout.ny; j++) {
       const ym = gy0 + j * pitch;
-      s += `<line class="gridline" x1="${X(gx0)}" y1="${Y(ym)}" x2="${X(gx0 + layout.nx*pitch)}" y2="${Y(ym)}"/>`;
+      s += `<line class="gridline" x1="${X(gx0)}" y1="${Y(ym)}" x2="${X(gRight)}" y2="${Y(ym)}"/>`;
     }
     // active cuts: rows
     const bandStarts = [0, ...layout.rowCuts];
@@ -647,10 +707,12 @@ function drawMap() {
      measured with. */
   const gw = layout.nx * state.pitch, gd = layout.ny * state.pitch;
   const inch = unit === 'in';
+  const [mL, mR, mF, mB] = solidMargins(), strips = halfStripText();
   $('gridSummary').innerHTML = `Grid: <span class="klabel">${layout.nx} × ${layout.ny}</span> cells (${gw.toFixed(0)} × ${gd.toFixed(0)} mm` +
     (inch ? `, ${FIELDS.inchText(gw)} × ${FIELDS.inchText(gd)} in` : '') +
-    `) · margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm` +
-    (inch ? ` (${[layout.mL, layout.mR, layout.mF, layout.mB].map(FIELDS.inchText).join(' / ')} in)` : '');
+    `)${strips ? `, plus ${strips}` : ''}` +
+    ` · margins L ${mL.toFixed(1)} / R ${mR.toFixed(1)} / F ${mF.toFixed(1)} / B ${mB.toFixed(1)} mm` +
+    (inch ? ` (${[mL, mR, mF, mB].map(FIELDS.inchText).join(' / ')} in)` : '');
 
   /* To anything that cannot see it the cut map is one image with no alt text — and it
      is the whole answer to "what did that setting just do". The label is rebuilt here
@@ -660,8 +722,8 @@ function drawMap() {
      lists every one of them as text a screen reader can navigate. */
   svg.setAttribute('aria-label', capped
     ? 'Cut map: not drawn — the grid is larger than this tool will build. See the checks below.'
-    : `Cut map: a ${layout.nx} by ${layout.ny} cell grid in a ${Wmm} by ${Dmm} millimetre ` +
-      `drawer, ${splitName()} split into ` +
+    : `Cut map: a ${layout.nx} by ${layout.ny} cell grid${strips ? `, plus ${strips},` : ''} ` +
+      `in a ${Wmm} by ${Dmm} millimetre drawer, ${splitName()} split into ` +
       `${plural(layout.pieces.length, 'piece')}. ` +
       'Front of the drawer is at the bottom.');
 
@@ -737,7 +799,7 @@ function drawPieceTable() {
     }
     return `<tr>
       <td><span class="sw" style="background:${PIECE_COLORS[i%PIECE_COLORS.length]}"></span><b>${pc.id}</b></td>
-      <td class="mono">${pc.nx} × ${pc.ny}</td>
+      <td class="mono">${cellsOf(pc)}</td>
       <td class="mono">${w.toFixed(1)} × ${d.toFixed(1)}</td>
       <td class="mono">${joints || '—'}</td>
       <td class="${fit?'':'bad'}">${fit ? 'fits' : footprintFits(pc) ? 'TOO TALL' : 'TOO BIG'}</td>
@@ -782,7 +844,8 @@ function updatePreviewLabel(blocked) {
     : buildFailed ? `3D preview: the build failed at piece ${buildFailed}.`
     : built < n
       ? `3D preview: building, ${built} of ${plural(n, 'piece')} so far.`
-      : `3D preview: a ${layout.nx} by ${layout.ny} cell baseplate, ` +
+      : `3D preview: a ${layout.nx} by ${layout.ny} cell baseplate` +
+        `${halfStripText() ? `, plus ${halfStripText()}` : ''}, ` +
         `${(layout.nx * state.pitch).toFixed(0)} by ` +
         `${(layout.ny * state.pitch).toFixed(0)} millimetres, split into ` +
         `${plural(n, 'piece')} and joined with ` +
@@ -1579,7 +1642,14 @@ function readmeText() {
   lines.push('https://drawerforge.co.uk');
   lines.push('');
   lines.push(`Drawer: ${state.drawerW} x ${state.drawerD} mm | Grid: ${layout.nx} x ${layout.ny} cells @ ${state.pitch} mm`);
-  lines.push(`Margins: L ${layout.mL.toFixed(1)} R ${layout.mR.toFixed(1)} F ${layout.mF.toFixed(1)} B ${layout.mB.toFixed(1)} mm`);
+  /* The solid margins, and the half cells on a line of their own after them: they take
+     the place of margin, and the README is read away from the page, where nothing else
+     says what a half cell will hold. */
+  const [mL, mR, mF, mB] = solidMargins();
+  lines.push(`Margins: L ${mL.toFixed(1)} R ${mR.toFixed(1)} F ${mF.toFixed(1)} B ${mB.toFixed(1)} mm`);
+  if (layout.hX || layout.hY)
+    lines.push(`Half cells: ${halfStripText()} (${roundMm(state.pitch / 2)} mm), for ` +
+               'half-size bins only; no magnet or screw holes in them');
   lines.push(`Split: ${splitName()} | Pieces: ${layout.pieces.length} in ${plural(rows, 'row band')}`);
   lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
   if (state.magnets) lines.push(`Magnets: ${state.magnetD} x ${state.magnetH} mm, from ${state.magnetSide}`);
@@ -1732,11 +1802,13 @@ function bedFitText() {
 function renderExportSummary() {
   const pitch = state.pitch;
   const g = materialGrams(), job = jobTime();
+  const [mL, mR, mF, mB] = solidMargins(), strips = halfStripText();
   $('exDesign').textContent =
-    `${layout.nx} × ${layout.ny} cell grid (${(layout.nx * pitch).toFixed(0)} × ${(layout.ny * pitch).toFixed(0)} mm) ` +
-    `in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
+    `${layout.nx} × ${layout.ny} cell grid (${(layout.nx * pitch).toFixed(0)} × ${(layout.ny * pitch).toFixed(0)} mm)` +
+    (strips ? `, plus ${strips},` : '') +
+    ` in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
     `${plural(layout.pieces.length, 'piece')}, ${splitName()} split, joined with ${CONNECTOR_NAMES[state.connector] || state.connector}\n` +
-    `margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm` +
+    `margins L ${mL.toFixed(1)} / R ${mR.toFixed(1)} / F ${mF.toFixed(1)} / B ${mB.toFixed(1)} mm` +
     /* The cost goes straight after the grams it is the price of, ahead of the note on
        the infill, which is about the grams. The time follows on a line of its own. */
     (g === null ? '' : `\nabout ${massText(g)} of PLA` +
