@@ -4625,6 +4625,7 @@ const DRAWERS = (function () {
   /* ---- one page's view of it ----------------------------------------------
    * o.tool    'plates' or 'bins'
    * o.owns    (key) => true for the keys this page's descriptor speaks for
+   * o.given   of those, the keys the other page sets on a hand-over (the plate height)
    * o.design  () => this page's design string, exactly as its share link carries it
    * o.stop    () => cancel any save still pending, before the page is replaced
    * o.els     the elements, looked up by the tool's ui.js
@@ -4729,6 +4730,24 @@ const DRAWERS = (function () {
     function reopen(d) {
       if (!handOver(d.id, d.hash, true, { open: true })) return false;
       go(d.hash);
+      return true;
+    }
+    /* This tool's own half again, on a hand-over from the other page. That page carries
+       this one's settings along from the address it arrived with, and when that is a page
+       you went Back to, they are older than the drawer: a bin placed since was not in
+       them, and the defaults standing in for it were saved over the drawer's bins. Nothing
+       on the other page changes this tool's half, so the drawer's is the one to show. The
+       page reloads with it, keeping what the other page does set: the drawer, bed and
+       printer, and the keys it hands over (o.given). True if the page is reloading. */
+    const half = (k) => o.owns(k) && !SHARED.has(k) && !(o.given || []).includes(k);
+    function restore(h, d, link) {
+      const mine = (s) => (parsePairs(s) || []).filter(([k]) => half(k))
+        .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+      const stored = mine(d.hash);
+      if (encodePairs(stored) === encodePairs(mine(h))) return false;
+      const merged = encodePairs((parsePairs(h) || []).filter(([k]) => !half(k)).concat(stored));
+      if (!handOver(d.id, merged, false, { link })) return false;
+      go(merged);
       return true;
     }
     /* Opening another drawer replaces what is on screen. That costs nothing when what is
@@ -5141,6 +5160,10 @@ const DRAWERS = (function () {
             attached = d.id;
             base = sharedOf(arrivedWith);
             if (!noted && d.marks[o.tool] !== fp && reopen(d)) return;
+            // a hand-over, onto a drawer this tool has saved into, with none of a link's settings
+            if (noted && next.open !== true && typeof d.marks[o.tool] === 'string' &&
+                !(Array.isArray(next.link) && next.link.length) &&
+                restore(arrivedWith, d, next.link)) return;
             if (!(noted && next.caughtUp) && catchUp(arrivedWith, d)) return;
             /* A hand-over is written down now rather than at the page's first save, which
                is 400 ms off: a reload before it found no record of this tool in the

@@ -3512,6 +3512,7 @@ const BINS_OWN = new Set(['v', ...Object.keys(KEYS), 'pr', 'dv', 'bl', 'bseg', '
 const drawers = DRAWERS.create({
   tool: 'bins',
   owns: (k) => BINS_OWN.has(k),
+  given: ['ph'],   // the baseplates page builds the plates, and says how tall they came out
   design: () => encodeDesc(descriptor()),
   stop: () => { clearTimeout(hashSaveT); hashReady = false; },
   els: {

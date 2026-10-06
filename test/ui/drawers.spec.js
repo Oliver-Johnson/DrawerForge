@@ -415,8 +415,8 @@ test('a reload never writes an older half back over the drawer', async ({ page, 
   await platesReady(other);
   await expect(other.locator('#drawerName')).toHaveText('Kitchen');
   await other.selectOption('#connector', 'snap');
-  await settle(other);
-  expect((await stored(page)).Kitchen.cn).toBe('snap');
+  await expect.poll(() => stored(page).then((s) => s.Kitchen.cn),
+    { message: 'the other tab saved into the drawer', timeout: 20000 }).toBe('snap');
 
   await page.reload();
   await expect.poll(() => page.inputValue('#connector').catch(() => ''),
@@ -433,8 +433,8 @@ test('a reload never writes an older half back over the drawer', async ({ page, 
   await binsReady(other);
   await expect(other.locator('#drawerName')).toHaveText('Kitchen');
   await H.dragCells(other, [0, 0], [1, 1]);
-  await settle(other);
-  expect((await stored(page)).Kitchen.bl).not.toBe('');
+  await expect.poll(() => stored(page).then((s) => s.Kitchen.bl || ''),
+    { message: 'the other tab saved into the drawer', timeout: 20000 }).not.toBe('');
   await page.reload();
   await expect.poll(() => binCount(page).catch(() => -1),
     { message: 'the bin the other tab added', timeout: 20000 }).toBe(1);
@@ -670,6 +670,53 @@ test('Back to a link after Put back is still that link', async ({ page }) => {
   await linkAgain();
   expect(await read(key('bins', ':prev'))).toBe(mineBins);
   expect(await read(key('bins', ':linked')), 'the link is still a link').toContain('bl=');
+  expect(errors).toEqual([]);
+});
+
+/* A page you went Back to carries the other tool's settings as they were when it was
+   written, before you changed them over there. Taking it to the other page by the header
+   link brings that page up as the drawer has it, not with those older settings: they
+   were saved into the drawer in place of yours, and the bins were gone. Both ways. */
+test('Back, then the header link, brings the other page up as the drawer has it', async ({ page }) => {
+  const errors = await openPlates(page);
+  await page.selectOption('#connector', 'snap');
+  await settle(page);
+  await saveAs(page, 'Kitchen');
+  await settle(page);
+  await toBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await H.setField(page, 'gap', '6');
+  await expect.poll(() => stored(page).then((s) => s.Kitchen.bgap),
+    { message: 'the bins saved into the drawer', timeout: 20000 }).toBe('6');
+  const bins = (await stored(page)).Kitchen.bl;
+
+  await page.goBack();
+  await platesReady(page);
+  await toBins(page);
+  await expect.poll(() => binCount(page).catch(() => -1),
+    { message: 'the bin placed before going Back', timeout: 20000 }).toBe(1);
+  await binsReady(page);
+  expect(await page.inputValue('#gap')).toBe('6');
+  await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+  await expect(page.locator('#setAside')).toBeHidden();
+  await settle(page);
+  expect((await stored(page)).Kitchen, 'and the drawer keeps them').toMatchObject({ bl: bins, bgap: '6' });
+
+  // the other way: a bins page you went Back to, taken to the baseplates page
+  await toPlates(page);
+  await page.selectOption('#connector', 'hclip');
+  await expect.poll(() => stored(page).then((s) => s.Kitchen.cn),
+    { message: 'the connector saved into the drawer', timeout: 20000 }).toBe('hclip');
+  await page.goBack();
+  await binsReady(page);
+  await toPlates(page);
+  await expect.poll(() => page.inputValue('#connector').catch(() => ''),
+    { message: 'the connector set before going Back', timeout: 20000 }).toBe('hclip');
+  await platesReady(page);
+  await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+  await expect(page.locator('#setAside')).toBeHidden();
+  await settle(page);
+  expect((await stored(page)).Kitchen, 'and the drawer keeps it').toMatchObject({ cn: 'hclip', bl: bins });
   expect(errors).toEqual([]);
 });
 
