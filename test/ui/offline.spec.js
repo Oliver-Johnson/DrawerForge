@@ -34,7 +34,7 @@ let site;
 test.beforeAll(async () => { site = await H.serveRoot(); });
 test.afterAll(() => site.close());
 // one server for the file, so a case that ends offline must not leave the next one offline
-test.afterEach(() => { site.down = false; site.files = {}; site.maxAge = 0; site.log = []; });
+test.afterEach(() => { site.down = false; site.cut = []; site.files = {}; site.maxAge = 0; site.log = []; });
 
 function watch(page) {
   const errors = [];
@@ -190,6 +190,27 @@ test('online, a page and its scripts are what the server has now, even inside th
     deploy('B');
     await page.goto(site.base + 'guide/');
     await expect(page).toHaveTitle('page B, script B');
+  });
+
+/* And a page from the server gets its scripts from the server alone. The cache may be
+   another deploy than the page, and the server's page with the cache's script is the same
+   mismatch as the other way round. So when one of them cannot be fetched — the connection
+   drops as the page loads — the script fails, as it would with no worker at all, and the
+   page can be opened again, page and scripts together, from the cache. */
+test('a page from the server whose script cannot be fetched does not get the cached one',
+  async ({ page, context }) => {
+    await cacheDeployA(page);
+    deploy('B');
+    site.cut = ['/vendor/jszip.min.js'];
+    await page.goto(site.base + 'guide/');
+    await expect(page).toHaveTitle('page B, script undefined');
+    // nor anything it asks for once the server has gone
+    await offline(context);
+    expect(await page.evaluate(() => fetch('../vendor/three.min.js').then((r) => r.text(), () => 'no answer')))
+      .toBe('no answer');
+    // and opened again, it is all deploy A
+    await page.reload();
+    await expect(page).toHaveTitle('page A, script A');
   });
 
 /* The cache is named for a hash of what it holds, so a deploy that changes anything is a
