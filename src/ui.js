@@ -1651,6 +1651,11 @@ let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
    defaults it stands in with put them over the layout it declined, and one more reload
    lost that layout for good. */
 let pristine = '', bootDesc = null;
+/* The link's layout this page opened with, while nobody has changed it, or ''. Compared
+   setting by setting, not as text, so looking at it differently — the drawer shown, a
+   bin opened on its own — is not changing it. */
+let linkedDesc = '';
+const holdsLink = () => !!linkedDesc && sameDesign(encodeDesc(descriptor()), linkedDesc, false);
 function leaveFor(url) {
   hashReady = false; clearTimeout(hashSaveT);   // no save of this page's may land after
   location.href = url;
@@ -1687,7 +1692,7 @@ function rememberState() {
     /* The first change is the moment the banner stops being true: "put my layout back"
        would now also throw away the edit, so it goes. */
     if (bootDesc !== null) {
-      if (h === bootDesc) { if (stalled) return; }
+      if (sameDesign(h, bootDesc, false)) { if (stalled) return; }
       else { bootDesc = null; $('setAside').style.display = 'none'; }
     }
     try { history.replaceState(null, '', '#' + h); }
@@ -1709,11 +1714,17 @@ function binsHref() {
 }
 /* The hand-over is marked as one, in this tab, for the page at the other end to read
    once: a design arriving from the other tool may carry a drawer or bed changed there,
-   and that is the same layout moving on, not a link replacing it. */
+   and that is the same layout moving on, not a link replacing it. The guide passes the
+   address through untouched, so going by way of it is marked the same.
+   Not while this page shows someone's link untouched: their drawer and bed are not yours
+   to carry over, and marked, they replaced yours on the other page with nothing set
+   aside. Unmarked, the other page sees the link it is, and keeps yours. */
 const HANDOFF_KEY = 'drawerforge:handoff';
 function handOff(href) {
-  try { sessionStorage.setItem(HANDOFF_KEY, href.slice(href.indexOf('#') + 1)); }
-  catch (err) { /* unmarked, the other page offers this layout back: a banner, no loss */ }
+  try {
+    if (holdsLink()) sessionStorage.removeItem(HANDOFF_KEY);
+    else sessionStorage.setItem(HANDOFF_KEY, href.slice(href.indexOf('#') + 1));
+  } catch (err) { /* unmarked, the other page offers this layout back: a banner, no loss */ }
   location.href = href;
 }
 function takeHandOff() {
@@ -1728,7 +1739,7 @@ for (const id of ['toBins', 'navBins'])
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  location.href = 'guide/#' + encodeDesc(descriptor());
+  handOff('guide/#' + encodeDesc(descriptor()));
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
@@ -1849,7 +1860,8 @@ let linkedNow = false;   // this page holds a link's layout, not yet changed by 
   stalled = src && readKey(LOADING_KEY) === src ? src : '';
   const handedOver = takeHandOff() === incomingHash && fromLink;   // read every time
   const replaces = fromLink && (saved.length <= 2 || !sameDesign(saved, src, handedOver));
-  const savedLinked = saved.length > 2 && saved === readKey(LINKED_KEY);
+  const linked = readKey(LINKED_KEY);
+  const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked, false);
   /* Set aside whatever is about to be replaced: by a different layout, or by the defaults
      standing in for one that would not load. Not a link's own layout, untouched: what that
      link replaced is already set aside, and it is the one you would want back. */
@@ -1865,7 +1877,12 @@ let linkedNow = false;   // this page holds a link's layout, not yet changed by 
     loadFromHash(src);
     if (!fromLink) $('restored').style.display = '';
     else if (canPutBack) showSetAside('This link replaced the layout you had here.', true, false);
-    linkedNow = fromLink ? replaces || savedLinked : savedLinked;
+    /* A hand-over is your own layout come back from the other page, never someone's
+       link, even onto an empty save; and one that moved the drawer or bed on has been
+       changed, by you, there. */
+    linkedNow = handedOver ? false
+      : fromLink ? replaces || (savedLinked && sameDesign(saved, src, false))
+      : savedLinked;
   }
   syncBedPreset();
 }
@@ -1876,7 +1893,8 @@ bootDesc = encodeDesc(descriptor());
    reloading the same link must be declined again, not tried again. */
 if (!stalled) {
   writeKey(LOADING_KEY, '');
-  writeKey(LINKED_KEY, linkedNow ? bootDesc : '');
+  linkedDesc = linkedNow ? bootDesc : '';
+  writeKey(LINKED_KEY, linkedDesc);
 }
 fitThree();
 

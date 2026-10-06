@@ -387,15 +387,16 @@ test('a saved layout that did not finish loading last time is set aside', async 
 
 /* The tools' own hand-over is not a link from someone. Comparing the save with the
    address as strings called every trip to baseplates and back a replaced layout,
-   because each page writes the keys in its own order. */
-async function handOver(page, url, hrefFn) {
-  const h = await page.evaluate((fn) => {
-    const href = window[fn]();
-    const hash = href.slice(href.indexOf('#') + 1);
-    sessionStorage.setItem(HANDOFF_KEY, hash);         // what the page's button does
-    return hash;
-  }, hrefFn);
-  await arrive(page, url + '#' + h);
+   because each page writes the keys in its own order.
+   The page's own button is clicked, so its own marking is what is tested. Over file://
+   its relative link opens a directory listing, which keeps the address, so the test
+   goes on from there to the page the link means. */
+async function viaButton(page, sel, url) {
+  await Promise.all([page.waitForEvent('load'), page.click(sel)]);
+  const hash = await page.evaluate(() => location.hash);
+  expect(hash.length, 'the button carried the layout').toBeGreaterThan(2);
+  await page.goto(url + hash);
+  await ready(page);
 }
 test('a trip to baseplates and back keeps the bins, with nothing offered back',
   async ({ page }) => {
@@ -404,17 +405,80 @@ test('a trip to baseplates and back keeps the bins, with nothing offered back',
     await H.dragCells(page, [3, 3], [3, 3]);
     await settle(page);
 
-    await handOver(page, H.PLATES_URL, 'platesHref');
+    await viaButton(page, '#navPlates', H.PLATES_URL);
     await expect(page.locator('#setAside')).toBeHidden();
     await H.setField(page, 'drawerW', '400');         // changed on the other page
     await settle(page);
 
-    await handOver(page, H.BINS_URL, 'binsHref');
+    await viaButton(page, '#navBins', H.BINS_URL);
     expect(await binsIn(page)).toBe(2);
     expect(await page.inputValue('#drawerW')).toBe('400');
     await expect(page.locator('#setAside')).toBeHidden();
     expect(await stored(page, BINS + ':prev')).toBeNull();
   });
+
+test('by way of the guide is a hand-over too', async ({ page }) => {
+  await H.openPlates(page);
+  await page.check('#magnets');                       // a baseplate layout of your own
+  await settle(page);
+  await viaButton(page, '#navBins', H.BINS_URL);
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await H.setField(page, 'drawerW', '400');
+  await settle(page);
+
+  await viaButton(page, '#navGuide', H.PLATES_URL);
+  expect(await page.inputValue('#drawerW')).toBe('400');
+  expect(await page.isChecked('#magnets')).toBe(true);
+  await expect(page.locator('#setAside')).toBeHidden();
+  expect(await stored(page, PLATES + ':prev')).toBeNull();
+});
+
+test('a layout handed over onto an empty page is yours, not a link', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await settle(page);
+  await viaButton(page, '#navPlates', H.PLATES_URL);  // baseplates had nothing saved
+  const handed = await stored(page, PLATES);
+
+  await arrive(page, H.PLATES_URL + '#w=333');
+  await expect(page.locator('#putBack')).toBeVisible();
+  expect(await stored(page, PLATES + ':prev')).toBe(handed);
+});
+
+test("someone's bins link carried to baseplates still keeps your drawer", async ({ page }) => {
+  await H.openPlates(page);
+  await H.setField(page, 'drawerW', '512');
+  await settle(page);
+  // their link was made after a trip through baseplates, so it carries its keys too
+  const theirs = (await stored(page, PLATES)).replace(/(^|&)w=512/, '$1w=333') +
+    '&bl=0-0-1-1-3';
+  await arrive(page, H.BINS_URL + '#' + theirs);
+
+  await viaButton(page, '#navPlates', H.PLATES_URL);
+  expect(await page.inputValue('#drawerW')).toBe('333');   // the link still wins
+  await expect(page.locator('#putBack')).toBeVisible();
+  expect(await stored(page, PLATES + ':prev')).toContain('w=512');
+});
+
+test('looking at a linked layout differently is not changing it', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await H.dragCells(page, [3, 3], [3, 3]);
+  await settle(page);
+  await arrive(page, H.BINS_URL + '#bl=0-0-1-1-3');
+  await expect(page.locator('#putBack')).toBeVisible();
+
+  await H.clickCell(page, 0, 0);                       // open their bin on its own
+  await page.click('#focusBin');
+  await settle(page);
+  expect(await stored(page, BINS)).toContain('bf=');
+  await expect(page.locator('#putBack')).toBeVisible();
+
+  // still their layout, untouched, so the next link keeps yours in the backup
+  await arrive(page, H.BINS_URL + '#bl=2-2-1-1-3');
+  await clickAndLoad(page, '#putBack');
+  expect(await binsIn(page)).toBe(2);
+});
 
 test('a link with your bins in a drawer of another size still offers yours back',
   async ({ page }) => {
