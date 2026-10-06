@@ -3585,11 +3585,12 @@ const heightSrc = () => scratch || (selected >= 0 && B()[selected] ? B()[selecte
 /* everything about a bin its heights depend on, bar the units being worked out. Screws
    are among them, because their holes raise the floor; so are dividers, which stand to
    the full height whatever the walls do, and the cells, because a carved bin's walls
-   are full height too. The new-bin settings have no size or cells of their own, and are
-   a whole rectangle. */
+   are full height too. The new-bin settings have no cells of their own, and are a whole
+   rectangle; nor is a half-size bin carved (buildBin drops its mask), so it is asked
+   without one, or it would be quoted walled full height. */
 const heightCfg = (b) => ({ floorT: b.floorT, screws: b.screws, solid: b.solid, edges: b.edges,
-                            divX: b.divX || 0, divY: b.divY || 0,
-                            u: b.u || 1, v: b.v || 1, cells: b.cells || null });
+                            divX: b.divX || 0, divY: b.divY || 0, u: b.u || 1, v: b.v || 1,
+                            cells: isHalfSize(b) ? null : b.cells || null });
 const heightsOf = (b) => binHeights(Object.assign(heightCfg(b), { hUnits: b.hUnits }));
 /* Which length the field takes for this bin. Inside depth when that is the menu's choice
    and the bin has an inside; a solid block has none at any height, nor has a tray open

@@ -179,7 +179,10 @@ const binTop = (c) => {
    it face to face, and the surface left inside the bin is that BLOAT higher. Measured
    from floorZ, every inside depth was quoted 0.05 mm deeper than the bin is. */
 function binHeights(cfg) {
-  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  /* Sized as buildBin sizes it, and a half-size bin's mask dropped as buildBin drops it:
+     asked with one, the quote took it for a carved bin, walled full height. */
+  const c = halfSized(Object.assign({}, BIN_DEFAULTS, cfg || {}));
+  if (isHalfSize(c)) c.cells = null;
   const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c), top = binTop(c);
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
