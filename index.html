@@ -3548,7 +3548,7 @@ function buildFitSample(cfg, H, joint) {
 const XML_ENTITY = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;',
                      '\t': '&#9;', '\n': '&#10;', '\r': '&#13;' };
 const xmlAttr = (s) => String(s)
-  .replace(/[^\t\n\r\x20-퟿-�\u{10000}-\u{10FFFF}]/gu, '')
+  .replace(/[^\t\n\r\x20-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '')
   .replace(/[&<>"'\t\n\r]/g, (c) => XML_ENTITY[c]);
 /* items: [{name, polys, tx, ty, tz, rot}] rot in {0,90}. Returns {model, contentTypes, rels} XML strings.
    Each part is turned about its own origin and then moved by (tx, ty, tz), so (tx, ty) is
