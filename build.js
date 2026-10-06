@@ -34,6 +34,7 @@ const TOOLS = require('./tools/manifest.js');
 
 const seo = require('./tools/seo.js');
 const generated = require('./tools/generated.js');
+const app = require('./tools/app.js');
 /* Everything the build reads is LF, so everything it writes is LF, so the bytes
    written are the bytes git stores are the bytes a checkout produces — on every
    platform. .gitattributes pins the checkout, which normally makes this a no-op; it
@@ -76,6 +77,10 @@ const thirdParty = (html) =>
 
 const MARK = (name) => new RegExp(`[ \\t]*\\r?\\n?/\\*__${name}__\\*/[ \\t]*\\r?\\n?`);
 let stale = 0;
+/* Each page as it will ship, by output path. The service worker's file list and the hash
+   in its cache name are worked out from these rather than from the files on disk, so
+   `--check` judges sw.js against the pages the sources make, not the ones last written. */
+const built = {};
 
 for (const tool of TOOLS) {
   const template = read(tool.template);
@@ -141,6 +146,7 @@ for (const tool of TOOLS) {
     fail(`[${tool.name}] ${shipped.length} third-party subresource(s) in the built ${tool.out}`,
          shipped);
 
+  built[tool.out] = out;
   const outPath = path.join(ROOT, tool.out);
   if (checkOnly) {
     const current = fs.existsSync(outPath) ? fs.readFileSync(outPath, 'utf8') : '';
@@ -175,6 +181,48 @@ for (const tool of TOOLS) {
   } else if (current !== xml) {
     fs.writeFileSync(smPath, xml);
     console.log(`  wrote sitemap.xml    ${TOOLS.length} urls`);
+  }
+}
+
+/* The web manifest and the service worker, which make the site installable and let the
+   tools open with no connection. Both are generated (see tools/app.js): the manifest's
+   colours from the stylesheet's tokens, and the worker's file list from the page manifest
+   and from what the pages above load. Neither goes in the sitemap — they are not pages. */
+{
+  const manifest = app.webManifest(TOOLS, read('src/shared-ui/style.css'),
+                                   require('./package.json').description);
+  const swSource = read(app.SW_SOURCE);
+  syntaxCheck(app.SW_SOURCE, swSource);
+  /* The bytes the worker will cache: the pages and the manifest as this build makes
+     them, everything else as it is on disk. A file the pages load that is not there is a
+     build failure, not a worker that fails to install on every visitor's browser. */
+  const bytes = (rel) => {
+    if (rel === app.MANIFEST) return manifest;
+    if (Object.prototype.hasOwnProperty.call(built, rel)) return built[rel];
+    const f = path.join(ROOT, rel);
+    if (!fs.existsSync(f))
+      fail(`sw.js would cache ${rel}, which does not exist`,
+           app.ICONS.some((i) => i.src === rel) ? ['run `node tools/app-icons.js` to draw the app icons'] : []);
+    return fs.readFileSync(f);
+  };
+  let sw;
+  try { sw = app.serviceWorker(swSource, TOOLS, bytes); } catch (e) { fail(e.message); }
+  syntaxCheck(app.SW, sw);
+
+  for (const [rel, text] of [[app.MANIFEST, manifest], [app.SW, sw]]) {
+    const p = path.join(ROOT, rel);
+    const current = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+    if (checkOnly) {
+      if (current !== text) {
+        console.error(`  STALE: ${rel} does not match src/ — run \`node build.js\``);
+        stale++;
+      } else {
+        console.log(`  ${rel} up to date (${text.length} bytes)`);
+      }
+    } else if (current !== text) {
+      fs.writeFileSync(p, text);
+      console.log(`  wrote ${rel.padEnd(20)} ${String(text.length).padStart(7)} bytes`);
+    }
   }
 }
 
