@@ -36,7 +36,7 @@
      the two copies are the same lines. -->
 <script>
 try {
-  if (['plates', 'bins', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
+  if (['used', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
     document.documentElement.classList.add('returning');
 } catch (e) { /* storage blocked: the full header */ }
 </script>

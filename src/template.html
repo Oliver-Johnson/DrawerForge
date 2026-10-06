@@ -33,16 +33,18 @@
 <!-- Whether this browser has been here before, decided before anything is drawn. A first
      visit gets the whole header: what the tool is and that nothing leaves the browser. After
      that it is a one-line bar, because the pitch is read once and then costs the top of every
-     screen. Any saved layout or drawer means someone has used the tools — and either tool
-     saves its layout within moments of opening. In the head, so the class is on <html> before
-     the header is laid out and the page never paints the long header and then jumps.
+     screen. Someone has used the tools once either tool has seen a design changed (ui.js sets
+     drawerforge:used:v1 on the first change, and says why a saved layout does not count: one
+     is written within moments of any visit) or once a drawer has been saved. In the head, so
+     the class is on <html> before the header is laid out and the page never paints the long
+     header and then jumps.
      localStorage throws outright when storage is blocked; that counts as a first visit,
      which shows more rather than less. The bins page carries the same lines.
      `fold` is this page's alone: on a phone, panels 02 to 05 arrive folded (ui.js says why),
      and deciding it here is what stops the first frame drawing them open. -->
 <script>
 try {
-  if (['plates', 'bins', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
+  if (['used', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
     document.documentElement.classList.add('returning');
 } catch (e) { /* storage blocked: the full header */ }
 if (window.matchMedia && matchMedia('(max-width: 980px)').matches)

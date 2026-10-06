@@ -3,9 +3,11 @@
  * The title, a two-line pitch and the privacy line took 202 px of a 1920 × 1080 window on
  * Baseplates and 245 on Bins, 304 and 287 of an 844 px phone, and 242 of a phone on its
  * side, which is 390 px tall — on every visit, to tell the visitor what they already knew.
- * After the first visit it is one line. These drive the real second arrival rather than
- * planting a key: the tool saves its own layout a moment after it opens, and that save is
- * what the next visit is told by.
+ * Once the tools have been used it is one line. These drive the real second arrival rather
+ * than planting a key: a design is changed, the tool notes its first change, and that note
+ * is what the next visit is told by. Only a change: the tool also saves its layout a moment
+ * after it opens, changed or not, and when that save was what counted a first visit that
+ * went from one tool to the other saw the second one's header already shortened.
  */
 'use strict';
 const fs = require('fs');
@@ -17,11 +19,18 @@ const TOOLS = [
   { name: 'baseplates', open: H.openPlates, key: 'drawerforge:plates:v1', file: 'index.html' },
   { name: 'bins', open: H.openBins, key: 'drawerforge:bins:v1', file: 'bins/index.html' },
 ];
+const USED = 'drawerforge:used:v1';
 
-/* The second arrival, the way it happens: the first visit's own save lands, then the page
-   is opened again. */
+/* Using the tool: the drawer made wider, which both tools have, and the save that notes
+   it landed. */
+async function use(page) {
+  await H.setField(page, 'drawerW', 400);
+  await page.waitForFunction((k) => !!localStorage.getItem(k), USED, { timeout: 5000 });
+}
+/* The second arrival, the way it happens: the first visit uses the tool, then the page is
+   opened again. */
 async function comeBack(page, tool) {
-  await page.waitForFunction((k) => !!localStorage.getItem(k), tool.key, { timeout: 5000 });
+  await use(page);
   return tool.open(page);
 }
 
@@ -98,7 +107,7 @@ for (const tool of TOOLS) {
   test(`${tool.name}: a return visit never paints the tall header first`, async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
     await tool.open(page);
-    await page.waitForFunction((k) => !!localStorage.getItem(k), tool.key);
+    await use(page);
     await page.addInitScript(() => {
       window.__frames = [];
       const tick = () => {
@@ -151,17 +160,52 @@ for (const tool of TOOLS) {
   });
 }
 
+/* Opening a tool is not using it. Each saves its layout a moment after it opens, changed or
+   not, and when that save counted, a first visit that looked at Baseplates and then went to
+   Bins arrived at Bins with the header for someone who knew it already. */
+test('a first visit going from one tool to the other keeps the whole header until something is changed',
+  async ({ page }) => {
+    // over HTTP: what one page stores for the next is only dependable on a real origin
+    const site = await H.serveRoot();
+    try {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await page.goto(site.base);
+      await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
+        null, { timeout: 20000 });
+      await page.waitForFunction(() => !!localStorage.getItem('drawerforge:plates:v1'));
+      await page.waitForTimeout(1500);   // anything the page does by itself after opening
+      expect(await page.evaluate((k) => localStorage.getItem(k), USED),
+        'nothing was changed on Baseplates').toBe(null);
+      await page.locator('header nav a', { hasText: 'Bins' }).click();
+      await page.waitForFunction(() => !!document.getElementById('fillmap'));
+      expect(page.url()).toContain('/bins/');
+      let h = await head(page);
+      expect(h.pitch, 'Bins, the second page of a first visit, says what it is').toBe(true);
+      expect(h.privacy).toBe(true);
+
+      // a change is using it: from the next page on, the header is the short one
+      await use(page);
+      await page.goto(site.base);
+      h = await head(page);
+      expect(h.pitch).toBe(false);
+      expect(h.height).toBeLessThan(70);
+    } finally {
+      await site.close();
+    }
+  });
+
 /* The guides have no layout of their own to come back to, and their header is the page's
-   introduction, so it stays whole whatever this browser has saved. */
+   introduction, so it stays whole whatever this browser has saved or done. */
 test('the guide keeps its whole header for a returning visitor', async ({ page }) => {
   // over HTTP: what one page stores for the next is only dependable on a real origin
   const site = await H.serveRoot();
   try {
     await page.goto(site.base + 'bins/');
-    await page.waitForFunction(() => !!localStorage.getItem('drawerforge:bins:v1'));
+    await page.waitForFunction(() => !!document.getElementById('fillmap'));
+    await use(page);
     await page.goto(site.base + 'guide/');
-    expect(await page.evaluate(() => !!localStorage.getItem('drawerforge:bins:v1')),
-      'fixture: the guide is visited by a browser that has a saved layout').toBe(true);
+    expect(await page.evaluate((k) => !!localStorage.getItem(k), USED),
+      'fixture: the guide is visited by a browser that has used the tools').toBe(true);
     const h = await head(page);
     expect(h.pitch).toBe(true);
     expect(h.privacy).toBe(true);

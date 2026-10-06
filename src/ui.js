@@ -1862,6 +1862,12 @@ const writeKey = (k, v) => {
   catch (err) { /* private mode: the guard and the backup go, the page does not */ }
 };
 let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* Set the first time anyone changes a design on either tool, and never cleared. The
+   template's <head> reads it, with the saved drawers, to draw the one-line header for a
+   browser that has used the tools rather than only opened them: the save above is written
+   within moments of any visit, so its being there said nothing, and a first visit that went
+   from one tool to the other arrived at the second with its header already shortened. */
+const USED_KEY = 'drawerforge:used:v1';
 /* What an untouched page saves, and what this one held when the boot finished — null
    from the first change on. Until that change a stalled page saves nothing: saving the
    defaults it stands in with put them over the layout it declined, and one more reload
@@ -1929,6 +1935,7 @@ function saveNow() {
       bootDesc = null; $('setAside').style.display = 'none';
       // what a stalled page goes on from is its defaults, not the link it declined
       if (stalled) writeKey(LINKED_KEY, '');
+      writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
   try { history.replaceState(null, '', '#' + h); }
