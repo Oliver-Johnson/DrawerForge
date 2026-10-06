@@ -621,7 +621,11 @@ function readControls() {
   /* Counts are rounded, not truncated: parseInt read "2.7" dividers as 2 and "1e3" as 1. */
   const count = (id, d) => fieldClamp(id, Math.round(num(id, d)));
   const len = (id, d) => { const x = FIELDS.lengthOf($(id), unit); return isFinite(x) ? x : d; };
-  const mm = (id, d) => fieldClamp(id, len(id, d));
+  /* Only the drawer's own fields are shown in inches. The wall, floor, scoop, label and
+     bed stay in millimetres whatever the unit, so reading them as lengths took a 1.2 mm
+     wall for 1.2 in: clamped to 10 mm, with a floor filling the bin and a 256 mm bed
+     read as 256 in and held at 2000 mm. */
+  const mm = (id, d) => fieldClamp(id, LENGTH_IDS.includes(id) ? len(id, d) : num(id, d));
   drawerAsked = { w: len('drawerW', 306), d: len('drawerD', 380) };
   state.drawerW = mm('drawerW', 306);
   state.drawerD = mm('drawerD', 380);
