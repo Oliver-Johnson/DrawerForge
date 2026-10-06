@@ -3016,6 +3016,13 @@ const lengthMode = (b) => (hMode === 'inside' && !heightsOf(b).hollow ? 'overall
    given the units that stand it, or hold the depth, at the height it is built to. */
 const unitsFor = (mm, b) => fieldClamp('hUnits', lengthMode(b) === 'inside'
   ? unitsForInside(mm, heightCfg(b)) : unitsForTop(mm, heightCfg(b)));
+/* An inside depth as it is shown: to the hundredth of `per` millimetres — one for
+   millimetres, 25.4 for inches — and rounded DOWN. To the nearest, it could be more than
+   the bin holds: 2 units on a bare floor hold 9.1 mm, 0.358 in, shown as 0.36, and 0.36
+   typed back is 9.144 mm, which takes 3. Rounded down, what is shown the bin holds, and
+   typed back it is the same bin. The epsilon keeps 36 from showing as 35.99 because the
+   sum that made it came to 35.99999999999999. */
+const depthDown = (mm, per) => Math.floor(mm / per * 100 + 1e-6) / 100 * per;
 /* What the typing came to, said beside the field. Millimetres to the hundredth because
    the inside depth is genuinely fractional — 35.95 on a 1.25 mm floor — and rounding
    it to 36 would quote a bin deeper than the one you get. A bin with every wall lowered
@@ -3024,10 +3031,13 @@ const unitsFor = (mm, b) => fieldClamp('hUnits', lengthMode(b) === 'inside'
 function heightText(b) {
   const h = heightsOf(b);
   const mm = (x) => `${Math.round(x * 100) / 100} mm` + (unit === 'in' ? ` / ${FIELDS.inchText(x)} in` : '');
+  // the depth in each unit as the field would show it in that unit
+  const depth = (x) => `${Math.round(depthDown(x, 1) * 100) / 100} mm` +
+    (unit === 'in' ? ` / ${FIELDS.inchText(depthDown(x, FIELDS.MM_PER_IN))} in` : '');
   return `${plural(b.hUnits, 'unit')} · ` +
     (h.top < h.H - 1e-6 ? `${mm(h.top)} tall` : `${mm(h.H)} overall`) +
     (h.lipH ? ` + ${h.lipH.toFixed(2)} mm lip` : '') +
-    (b.solid ? ' · solid, nothing inside' : !h.hollow ? ' · open on every side' : ` · ${mm(h.inside)} inside`);
+    (b.solid ? ' · solid, nothing inside' : !h.hollow ? ' · open on every side' : ` · ${depth(h.inside)} inside`);
 }
 /* Called from refresh(), so it follows every change of bin, floor or unit. The length
    field is rewritten with the height actually built — 43 after typing 40 inside —
@@ -3039,7 +3049,8 @@ function drawHeight() {
   $('hMmLabel').textContent = `${mode === 'inside' ? 'Inside depth' : 'Height overall'} (${unit})`;
   if (inMm && document.activeElement !== $('hMm')) {
     const h = heightsOf(b);
-    FIELDS.setLength($('hMm'), mode === 'inside' ? h.inside : h.top, unit);
+    FIELDS.setLength($('hMm'), mode === 'inside'
+      ? depthDown(h.inside, unit === 'in' ? FIELDS.MM_PER_IN : 1) : h.top, unit);
   }
   /* A live region is read out whenever it is written, the same words or not, and this
      runs on every redraw: typing a note announced the height again. */

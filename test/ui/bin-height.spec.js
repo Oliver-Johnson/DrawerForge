@@ -419,3 +419,41 @@ test('the menu beside the field is not labelled like a unit', async ({ page }) =
   await expect(page.locator('label:has(#hMode) > b')).toHaveText('Entered as');
   await expect(page.getByRole('combobox', { name: 'Height entered as' })).toBeVisible();
 });
+
+/* An inch figure is shown to the hundredth, and rounded to the nearest that could be more
+   than the bin holds: 2 units on a bare floor hold 9.1 mm, 0.358 in, shown as 0.36 — and
+   0.36 typed back is 9.144 mm, which takes 3. The inside depth is shown rounded down in
+   either unit, so what the field says the bin holds it holds, and typing back what it
+   says gives the same bin. On a bare floor, which is 0 whichever unit the floor field is
+   read in, so nothing here rests on that. */
+test('an inside depth shown, typed back, gives the same units', async ({ page }) => {
+  await oneBin(page);
+  await H.setField(page, 'floorT', 0);
+  await page.evaluate(() => document.getElementById('unitIn').click());
+  await page.waitForTimeout(300);
+  await page.selectOption('#hMode', 'inside');
+  for (const n of [1, 2, 3, 5, 6, 12, 9]) {
+    await H.setField(page, 'hUnits', n);
+    const shown = await page.locator('#hMm').inputValue();
+    await H.setField(page, 'hUnits', 20);
+    await typeHeight(page, shown);
+    expect(await units(page), `${shown} in`).toBe(n);
+    await leave(page);
+    await expect(page.locator('#hMm')).toHaveValue(shown);
+  }
+  // 9 units hold 58.1 mm, 2.287 in: the line says what the field says
+  await expect(page.locator('#hMm')).toHaveValue('2.28');
+  expect(await result(page)).toContain('58.1 mm / 2.28 in inside');
+
+  /* Millimetres too, where the field used to show three decimals rounded to the nearest:
+     3 units on a 1.2345 mm floor hold 14.9655, shown as 14.966, which typed back took 4. */
+  await page.evaluate(() => document.getElementById('unitMm').click());
+  await page.waitForTimeout(300);
+  await H.setField(page, 'floorT', 1.2345);
+  await H.setField(page, 'hUnits', 3);
+  await expect(page.locator('#hMm')).toHaveValue('14.96');
+  expect(await result(page)).toContain('14.96 mm inside');
+  await H.setField(page, 'hUnits', 20);
+  await typeHeight(page, 14.96);
+  expect(await units(page)).toBe(3);
+});
