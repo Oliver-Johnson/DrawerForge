@@ -2746,9 +2746,10 @@ const KEYS = { w: 'drawerW', d: 'drawerD', dh: 'drawerH', ph: 'plateH',
                dfh: 'drawerFrontH', bw: 'bedW', bd: 'bedD', bh: 'bedH', if: 'infill',
                bgap: 'gap' };
 /* What each may be when it arrives in a link: never negative, and never past the
-   largest drawer or bed the baseplates page accepts — a 100 m drawer froze this page
-   laying out its grid. A drawer or bed of no size is not one ("1 × 1 grid in a
-   -500 × -500 mm drawer" is what accepting it said), so that keeps the default. */
+   largest bed the baseplates page accepts. The drawer is held to the same 2000 mm by
+   readControls, which says so in Checks — a 100 m drawer froze this page laying out its
+   grid. A drawer or bed of no size is not one ("1 × 1 grid in a -500 × -500 mm drawer"
+   is what accepting it said), so that keeps the default. */
 const KEY_MAX = { if: 100 };
 const NEEDS_SIZE = new Set(['w', 'd', 'dh', 'bw', 'bd', 'bh']);
 /* Keys that describe how the design is being LOOKED at rather than what it is. They
