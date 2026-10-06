@@ -90,12 +90,12 @@ test.describe('ranges on the geometry fields', () => {
     ['#mg=1&md=20', 'errMagnet', /Magnet Ø must be 13\.8 mm or less at a 42 mm pitch/],
     ['#mg=1&ms=top&md=10', 'errMagnet', /Magnet Ø must be 8\.1 mm or less at a 42 mm pitch/],
     ['#mg=1&pi=30', 'errMagnet', /Magnet Ø must be 1\.8 mm or less at a 30 mm pitch/],
-    ['#mg=1&pi=20', 'errMagnet', /Magnet Ø: there is no room for one at a 20 mm pitch/],
-    ['#mg=1&bm=bosses&mh=3', 'errMagnet', /Magnet depth must be 2 mm or less with corner pockets/],
+    ['#mg=1&bm=bosses&mh=3', 'errMagnet', /Magnet depth must be 2\.4 mm or less with corner pockets/],
     ['#sc=1&sh=20', 'errScrew', /Screw hole Ø must be 8\.3 mm or less/],
     ['#sc=1&sd=30', 'errScrew', /Screw head Ø must be 14 mm or less/],
     ['#sc=1&se=50', 'errScrew', /Screw head depth must be 10 mm or less/],
-    ['#cl=1', 'errConnClr', /Fit clearance must be 0\.3 mm or less/],
+    ['#cl=1', 'errConnClr', /Fit clearance must be 0\.3 mm or less — any looser and a dovetail pocket/],
+    ['#cn=bowtie&cl=5', 'errConnClr', /Fit clearance must be 1 mm or less — check the figure is in millimetres/],
     ['#cl=-1', 'errConnClr', /Fit clearance must be at least 0 mm/],
     ['#pi=10', 'errPitch', /Grid pitch must be at least 13\.5 mm/],
   ];
@@ -150,6 +150,88 @@ test.describe('ranges on the geometry fields', () => {
     await page.locator('#openExport').click();
     expect(await text(page, 'exFit')).toMatch(/24\.25 mm tall and your printer builds 20 mm high/);
   });
+});
+
+/* ---- limits no tighter than the geometry ------------------------------------------ */
+/* The cases above are numbers refused one step before they break something. These are
+   the other side of the same ranges: numbers that build clean and were refused anyway,
+   because a limit measured on one configuration was held over others — and a pitch with
+   no room for a cut at all, which put its complaint on a field no value could satisfy. */
+test.describe('limits no tighter than the geometry', () => {
+  // 4 × 2 cells cut once: two pieces and one seam, quick to build
+  const SEAM = '#w=168&d=84&sp=manual&rc=&cc=2';
+
+  for (const cn of ['puzzle', 'bowtie', 'puzzlekey', 'snap', 'hclip'])
+    test(`a ${cn} at 0.5 mm clearance builds — the 0.3 ceiling is the dovetail's`, async ({ page }) => {
+      const errors = await openAt(page, `${SEAM}&cn=${cn}&cl=0.5`);
+      expect(await shown(page, 'errConnClr')).toBe(false);
+      expect(await text(page, 'pieceTail')).toMatch(/ready/);
+      expect(await page.evaluate(() => state.tab.clr)).toBe(0.5);
+      expect(await exportOff(page)).toBe(false);
+      expect(errors).toEqual([]);
+    });
+
+  /* The coupon prints four pairs from 0.05 tighter to 0.1 looser than the joint, so a
+     dovetail at 0.25 printed a 0.35 pair — a fit the field then refuses. At the top of
+     a joint's range the slackest pair is the ceiling itself, and all four still differ.
+     [link, the joint's clearance as set, its ceiling]: a bowtie's key is cut 0.05 under
+     the field, so the field's 1 mm is 0.95 on the key. */
+  for (const [hash, nominal, ceiling] of [[`${SEAM}&cn=dovetail&cl=0.25`, 0.25, 0.3],
+                                          [`${SEAM}&cn=dovetail&cl=0.3`, 0.3, 0.3],
+                                          [`${SEAM}&cn=bowtie&cl=1`, 0.95, 0.95]])
+    test(`the fit sample stays inside the range: ${hash}`, async ({ page }) => {
+      const errors = await openAt(page, hash);
+      const clrs = await page.evaluate(() => fitSample().clrs);
+      expect(clrs).toHaveLength(4);
+      expect(new Set(clrs.map((c) => c.toFixed(2))).size, 'four different fits').toBe(4);
+      for (const c of clrs) expect(c, `pairs ${clrs.join(', ')}`).toBeLessThanOrEqual(ceiling + 1e-9);
+      expect(clrs.map((c) => c.toFixed(2)), 'the joint as set is one of the pairs')
+        .toContain(nominal.toFixed(2));
+      expect(errors).toEqual([]);
+    });
+
+  // the Gridfinity spec's own magnet, 6.5 × 2.4, in a 2.6 mm boss with a layer over it
+  test('a 2.4 mm magnet in a corner boss builds', async ({ page }) => {
+    const errors = await openAt(page, '#w=84&d=84&mg=1&md=6.5&mh=2.4&bm=bosses');
+    expect(await shown(page, 'errMagnet')).toBe(false);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
+
+  /* 2.8 mm of floor holds a 2.4 mm magnet over 0.4 of plastic and always has: the plate
+     is 7.05 mm tall, and so is the height handed to the Bins page with it. */
+  test('a 2.4 mm magnet leaves the solid floor at 2.8 mm', async ({ page }) => {
+    await openAt(page, '#w=84&d=84&mg=1&md=6.5&mh=2.4');
+    const s = await page.evaluate(() => ({
+      planned: plateHeightMm(), built: builds[layout.pieces[0].id].meta.H }));
+    expect(s.planned).toBeCloseTo(7.05, 9);
+    expect(s.built).toBeCloseTo(7.05, 9);
+  });
+
+  for (const [hash, id, errId, carried, msg] of [
+    ['#sc=1&pi=34', 'screwHoleD', 'errScrew', 3,
+     /Screw hole Ø: there is no room for one at a 34 mm pitch.*Use a larger pitch, or turn off screw holes\./],
+    ['#mg=1&pi=20', 'magnetD', 'errMagnet', 6,
+     /Magnet Ø: there is no room for one at a 20 mm pitch.*Use a larger pitch, or turn off magnet pockets\./]])
+    test(`${hash}: no room at all is a check on the design, not a field nothing satisfies`,
+      async ({ page }) => {
+        const errors = await openAt(page, hash);
+        const f = await page.evaluate((i) => {
+          const e = document.getElementById(i);
+          return { valid: e.validity.valid, invalid: e.getAttribute('aria-invalid'),
+                   min: e.min, max: e.max, state: state[i] };
+        }, id);
+        expect(f.valid, `the field has to have a value it accepts (min ${f.min}, max ${f.max})`).toBe(true);
+        if (f.max !== '') expect(Number(f.max)).toBeGreaterThanOrEqual(Number(f.min));
+        expect(f.invalid).toBe('false');
+        expect(await shown(page, errId), 'no number in the field fixes this').toBe(false);
+        expect(f.state, 'the size the link carries is kept for a larger pitch').toBe(carried);
+        expect(await text(page, 'warnings')).toMatch(msg);
+        expect(await text(page, 'pieceTail')).toMatch(/not building/);
+        expect(await exportOff(page)).toBe(true);
+        expect(errors).toEqual([]);
+      });
 });
 
 /* ---- #19: a build that throws ----------------------------------------------------- */
@@ -238,6 +320,22 @@ test.describe('print plate spacing', () => {
     }));
     expect(s.zs.length, 'the fixture has to stack, or this proves nothing').toBeGreaterThan(0);
     for (const z of s.zs) expect(z).toBeGreaterThanOrEqual(s.H - 1e-6);
+  });
+
+  /* 0 is an answer for the spacing and stays 0, and it was let through for the stack gap
+     on the same terms — but there it stands the upper piece straight on the lower one,
+     and the slicer prints the two as one part. */
+  test('a stack gap of 0 still leaves a layer between stacked pieces', async ({ page }) => {
+    await openAt(page, TWO);
+    await page.waitForFunction(() => !!printPlan);
+    await page.evaluate(() => { document.getElementById('stackToggle').checked = true; });
+    await H.setField(page, 'stackGap', '0');
+    const s = await page.evaluate(() => ({
+      H: builds[layout.pieces[0].id].meta.H,
+      zs: printPlan.plates.flatMap((pl) => pl.placed.map((p) => p.z)).filter((z) => z > 0),
+    }));
+    expect(s.zs.length, 'the fixture has to stack, or this proves nothing').toBeGreaterThan(0);
+    for (const z of s.zs) expect(z, 'one 0.2 mm layer over the piece below').toBeGreaterThanOrEqual(s.H + 0.2 - 1e-6);
   });
 });
 

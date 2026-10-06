@@ -35,7 +35,8 @@
  *
  * `quarantine: '<reason>'` makes the audit fail BOTH if a healthy case regresses AND if
  * a quarantined one starts passing and nobody took it off the list. Red forever teaches
- * people to ignore a check; silent teaches them it never mattered.
+ * people to ignore a check; silent teaches them it never mattered. `worst: n` beside it
+ * fails the case again past n bad edges, so a known leak cannot quietly grow.
  */
 'use strict';
 const G = require('../src/core.js');
@@ -168,9 +169,12 @@ const CASES = [
      5 or 6.5 mm magnet, or a second cell in either direction all come out watertight),
      so it is two near-coincident outlines in the bottom cap's triangulation, a few
      microns apart and past healCsgSeams' tolerance. It matters because this is the
-     shape of the bin fit test tile, which is built the same way. */
+     shape of the bin fit test tile, which is built the same way.
+     `worst` pins it where it stands. A quarantine alone fails only when the case comes
+     good, so the hole could have grown to sixty edges or six hundred and this line
+     would have read "known" over every one of them. */
   { name: '1x1 magnets', drawerW: 42, drawerD: 42, magnets: true,
-    quarantine: 'bottom-face sliver at the pocket rim' },
+    quarantine: 'bottom-face sliver at the pocket rim', worst: 6 },
 ];
 
 let bad = 0;
@@ -231,8 +235,11 @@ for (const cs of CASES) {
   const dims = `${(x1 - x0).toFixed(2)} x ${(y1 - y0).toFixed(2)} x ${(z1 - z0).toFixed(2)}`;
   const ok = man.bad === 0;
 
+  const worse = cs.worst !== undefined && man.bad > cs.worst;
   const note = cs.quarantine
-    ? (ok ? '  NOW PASSES — take it out of quarantine' : `  known: ${cs.quarantine}`)
+    ? (ok ? '  NOW PASSES — take it out of quarantine'
+       : worse ? `  WORSE than the ${cs.worst} on file for: ${cs.quarantine}`
+       : `  known: ${cs.quarantine}`)
     : '';
   const many = pieces.length > 1 ? ` [${leaking}/${pieces.length} pieces leak]` : '';
   /* An edge used once is a hole; an edge used four times is two shells touching. Both
@@ -241,7 +248,7 @@ for (const cs of CASES) {
   console.log(`${cs.name.padEnd(24)} ${(L.nx + 'x' + L.ny).padEnd(6)} ${String(polys.length).padStart(6)}  ` +
               `${dims.padEnd(22)} ${ok ? 'watertight' : man.bad + ' BAD EDGES' + many}` +
               `${capBottom ? '' : '  NO BOTTOM FACE'}${capTop ? '' : '  NO TOP FACE'}${shape}${note}`);
-  if (cs.quarantine ? ok : !ok) bad++;
+  if ((cs.quarantine ? ok : !ok) || worse) bad++;
   /* Orientation gets its own quarantine key. The two questions are independent — a case
      can be watertight and folded, or leak and be perfectly wound — so one flag covering
      both would excuse a defect nobody had looked at. */
@@ -839,7 +846,13 @@ const leakText = (r) => r.bad ? `${r.bad} BAD EDGES${r.open ? ` (${r.open} open)
  * passed on both, because a hole straight through a plate is perfectly watertight.
  *
  * So this reads the plate along a vertical line through the pocket and measures what is
- * left between the pocket and the far face: platePad has to leave MOUNT_SKIN of it. */
+ * left between the pocket and the far face: platePad has to leave MOUNT_SKIN of it.
+ *
+ * And no more than that. `floor` is the socket floor's height, written out rather than
+ * worked out: 2.8 for anything up to 2.6 deep, because 2.8 is what those plates have
+ * always been and they printed — the spec's 6.5 × 2.4 magnet over 0.4 mm of floor. A
+ * thicker skin raises those plates for nothing, and the height the Bins page is handed
+ * with them, and it would pass every other line here. */
 console.log('\nmagnet and screw pockets keep a floor:');
 {
   const inTri = (t, px, py) => {
@@ -857,14 +870,28 @@ console.log('\nmagnet and screw pockets keep a floor:');
     return zs.sort((a, b) => a - b);
   };
   const POCKETS = [
-    { name: 'magnet 3 mm, from below', depth: 3, from: 'bottom', cfg: { magnets: true, magnetH: 3 } },
-    { name: 'magnet 3 mm, from above', depth: 3, from: 'top',
+    { name: 'magnet 3 mm, from below', depth: 3, floor: 3.2, from: 'bottom',
+      cfg: { magnets: true, magnetH: 3 } },
+    { name: 'magnet 3 mm, from above', depth: 3, floor: 3.2, from: 'top',
       cfg: { magnets: true, magnetH: 3, magnetSide: 'top' } },
-    { name: 'magnet 6 mm, from below', depth: 6, from: 'bottom', cfg: { magnets: true, magnetH: 6 } },
-    { name: 'magnet 2 mm, from below', depth: 2, from: 'bottom', cfg: { magnets: true, magnetH: 2 } },
+    { name: 'magnet 6 mm, from below', depth: 6, floor: 6.2, from: 'bottom',
+      cfg: { magnets: true, magnetH: 6 } },
+    { name: 'magnet 2 mm, from below', depth: 2, floor: 2.8, from: 'bottom',
+      cfg: { magnets: true, magnetH: 2 } },
+    { name: 'magnet 6.5 × 2.4, from below', depth: 2.4, floor: 2.8, from: 'bottom',
+      cfg: { magnets: true, magnetD: 6.5, magnetH: 2.4 } },
+    { name: 'magnet 6.5 × 2.4, from above', depth: 2.4, floor: 2.8, from: 'top',
+      cfg: { magnets: true, magnetD: 6.5, magnetH: 2.4, magnetSide: 'top' } },
+    // the deepest the 2.8 mm floor holds, and the first step past it
+    { name: 'magnet 2.6 mm, from below', depth: 2.6, floor: 2.8, from: 'bottom',
+      cfg: { magnets: true, magnetH: 2.6 } },
+    { name: 'magnet 2.7 mm, from below', depth: 2.7, floor: 2.9, from: 'bottom',
+      cfg: { magnets: true, magnetH: 2.7 } },
     // probed through the counterbore beside the shank, which goes right through by design
-    { name: 'screw head 3 mm', depth: 3, from: 'bottom', off: 2.25,
+    { name: 'screw head 3 mm', depth: 3, floor: 3.2, from: 'bottom', off: 2.25,
       cfg: { screws: true, screwHeadDepth: 3 } },
+    { name: 'screw head 2.5 mm', depth: 2.5, floor: 2.8, from: 'bottom', off: 2.25,
+      cfg: { screws: true, screwHeadDepth: 2.5 } },
   ];
   for (const pk of POCKETS) {
     // 2 × 2 rather than one cell: a single cell with magnets from below has a leak of
@@ -886,8 +913,12 @@ console.log('\nmagnet and screw pockets keep a floor:');
       skin = zs[zs.length - 1] - zs[zs.length - 2];
       depthOk = Math.abs(floorTop - zs[zs.length - 1] - pk.depth) < 1e-3;
     }
-    const good = r.bad === 0 && skin >= G.MOUNT_SKIN - 1e-6 && depthOk;
-    console.log(`  ${pk.name.padEnd(26)} floor ${floorTop.toFixed(2)} mm, ` +
+    // and exactly, in platePad: 2.6 + 0.2 came to 2.8000000000000003, which moved every
+    // face of a 2.8 mm plate by a hair and changed its file
+    const floorOk = Math.abs(floorTop - pk.floor) < 1e-3 && G.platePad(r.cfg) === pk.floor;
+    const good = r.bad === 0 && skin >= G.MOUNT_SKIN - 1e-6 && depthOk && floorOk;
+    console.log(`  ${pk.name.padEnd(30)} floor ${floorTop.toFixed(2)} mm` +
+                `${floorOk ? '' : ` NOT ${pk.floor.toFixed(2)}`}, ` +
                 `${isFinite(skin) ? skin.toFixed(2) + ' mm left under the pocket' : 'CUT STRAIGHT THROUGH'}` +
                 `${depthOk ? '' : ', POCKET NOT THE DEPTH ASKED'}, ${leakText(r)}${good ? '' : '   FAIL'}`);
     if (!good) bad++;
@@ -961,8 +992,7 @@ console.log('\nthe other limits, built at their ends:');
     ['rim cutoff at its maximum', { ...cell, topCutoff: R.topCutoff.max }],
     ['extra floor at its maximum', { ...cell, bottomPad: R.bottomPad.max }],
     ['dovetail, no clearance', { ...split, connector: 'dovetail', clr: R.connClr.min }],
-    ['dovetail, most clearance', { ...split, connector: 'dovetail', clr: R.connClr.max }],
-    ['bowtie, most clearance', { ...split, connector: 'bowtie', clr: R.connClr.max }],
+    ['dovetail, most clearance', { ...split, connector: 'dovetail', clr: G.connClrMax('dovetail') }],
     ['widest magnet, from below', { ...cell, magnets: true, magnetD: at42({}).magnetD }],
     ['widest magnet, from above', { ...cell, magnets: true, magnetSide: 'top',
       magnetD: at42({ magnetSide: 'top' }).magnetD }],
@@ -981,6 +1011,56 @@ console.log('\nthe other limits, built at their ends:');
   console.log(`  ${'dovetail at 0.35 clearance'.padEnd(28)} ${leakText(past)}` +
               (past.open ? ' — the cap is earned' : '   NOW CLOSED — the cap can go up'));
   if (!past.open) bad++;
+
+  /* Every other joint at its own ceiling. The dovetail's 0.3 is the dovetail's: held over
+     the rest, it refuses a bowtie link at 0.35 or 0.5 that builds closed, and gives the
+     dovetail's reason for it. So each housing whose cut the clearance moves is built at
+     the most the page lets it have, and that has to be past the dovetail's. The puzzle
+     carries its quarantine from the top of this file: shells touching are known, a hole
+     is not. */
+  const JOINTS = {
+    puzzle: { connector: 'puzzle' }, bowtie: { connector: 'bowtie' },
+    puzzlekey: { connector: 'puzzlekey' }, snap: { connector: 'snap' },
+    hclip: { connector: 'hclip' }, 'snap top': { connector: 'snap', keyInsert: 'top' },
+    'snap wall top': { connector: 'snap', keyMount: 'wall', keyInsert: 'top' },
+    'hclip top': { connector: 'hclip', keyInsert: 'top' },
+  };
+  for (const [cn, conf] of Object.entries(JOINTS)) {
+    const most = G.connClrMax(conf.connector);
+    const r = buildAll({ ...split, ...conf, clr: most });
+    const known = cn === 'puzzle' && r.bad && !r.open;
+    const good = most > G.connClrMax('dovetail') && (!r.bad || known);
+    console.log(`  ${`${cn}, most clearance (${most})`.padEnd(34)} ${leakText(r)}` +
+                `${known ? '  known: lobe apex sits on a region boundary' : ''}` +
+                `${most > G.connClrMax('dovetail') ? '' : '   HELD TO THE DOVETAIL\'S CEILING'}`);
+    if (!good) bad++;
+  }
+
+  /* A corner boss is 2.6 mm tall and does not grow, so the pocket in it is capped — at
+     what leaves a layer over it, which takes the spec's 6.5 × 2.4 magnet. Built at every
+     depth from where the boss stops growing with the pocket up to that cap, each way a
+     pocket can be cut, on one cell so the bosses' own abutting (quarantined above)
+     stays out of it. */
+  const cap = at42({ baseMode: 'bosses' }).depth;
+  const holds = cap >= 2.4 && 2.6 - cap >= G.PRINT_LAYER - 1e-9;
+  const POCKET = {
+    'magnet below': (d) => ({ magnets: true, magnetH: d }),
+    'magnet above': (d) => ({ magnets: true, magnetH: d, magnetSide: 'top' }),
+    'screw head': (d) => ({ screws: true, screwHeadDepth: d }),
+    'magnet and screw': (d) => ({ magnets: true, screws: true, magnetH: d, screwHeadDepth: d }),
+  };
+  const depths = [R.magnetH.min];
+  for (let d = 1.5; d <= cap + 1e-9; d += 0.1) depths.push(Math.round(d * 10) / 10);
+  const open = [];
+  for (const [pn, mk] of Object.entries(POCKET))
+    for (const d of depths) {
+      const r = buildAll({ drawerW: 42, drawerD: 42, baseMode: 'bosses', ...mk(d) });
+      if (r.bad) open.push(`${pn} ${d}: ${leakText(r)}`);
+    }
+  console.log(`  corner pockets up to ${cap} mm deep: ${depths.length * 4} builds, ` +
+              (open.length ? `LEAKING: ${open.join('; ')}` : 'all watertight') +
+              (holds ? '' : `   THE CAP ${cap} DOES NOT TAKE A 2.4 MM MAGNET UNDER A LAYER`));
+  bad += open.length + (holds ? 0 : 1);
 }
 
 /* Fewest plates, on a drawer too big for its search.
