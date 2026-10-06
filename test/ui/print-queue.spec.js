@@ -188,6 +188,51 @@ test('two bins of one shape with different notes list both against the one STL',
   await page.locator('#exportClose').click();
 });
 
+/* ...until the note is printed on the bin, raised on its label shelf. Then it is part of
+   the part: two bins of one shape with different notes raised are two STLs, each named
+   for its note, while the same two with their notes left unprinted are still one. */
+test('two bins with different notes raised on their shelves are two STLs, named apart', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await settle(page);
+  await page.fill('#note', 'M3 screws');
+  await settle(page);
+  await H.dragCells(page, [3, 3], [3, 3]);
+  await settle(page);
+  await page.fill('#note', 'drill bits');
+  await settle(page);
+  const names = () => page.evaluate(() => types().map((t) => typeName(t)).sort());
+  expect(await names(), 'unprinted notes share the one STL').toEqual(['bin-1x1x3-qty2']);
+
+  for (const [x, y] of [[0, 0], [3, 3]]) {
+    await H.clickCell(page, x, y);
+    await settle(page);
+    await page.selectOption('#labelMode', '1');
+    await settle(page);
+  }
+  expect(await names()).toEqual(['bin-1x1x3-drill-bits-qty1', 'bin-1x1x3-m3-screws-qty1']);
+  // the keys are what the 3MF names its objects: hashes, never the notes themselves
+  const keys = await page.evaluate(() => types().map((t) => t.key));
+  expect(new Set(keys).size).toBe(2);
+  for (const k of keys) expect(k).not.toMatch(/screws|drill/);
+
+  await page.click('#openExport');
+  await page.waitForTimeout(700);
+  const dlg = page.locator('#exportDlg');
+  await expect(dlg).toContainText('M3 screws');
+  await expect(dlg).toContainText('drill bits');
+  await page.locator('#exportClose').click();
+
+  // one of them back to unprinted, beside a third with no note at all: those two share
+  await H.clickCell(page, 3, 3);
+  await settle(page);
+  await page.selectOption('#labelMode', '0');
+  await settle(page);
+  await H.dragCells(page, [5, 0], [5, 0]);
+  await settle(page);
+  expect(await names()).toEqual(['bin-1x1x3-m3-screws-qty1', 'bin-1x1x3-qty2']);
+});
+
 /* Removable dividers, from the control to the part you can download.
  *
  * The geometry landed first and nothing reached it: no control, and typeKey did not

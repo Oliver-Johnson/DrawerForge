@@ -159,6 +159,8 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          // holes in the feet are per bin, the magnet they fit is the page's
                          magnets: b.magnets, screws: b.screws, holesEvery: b.holesEvery,
                          magnetD: state.magnetD, magnetH: state.magnetH,
+                         // the note goes in only to be raised on the shelf (labelMode 1)
+                         labelMode: b.labelMode, note: b.note,
                          arcSegs: state.arcSegs });
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
@@ -177,6 +179,74 @@ const holesText = (b) => {
   return [h.magnets ? plural(h.magnets, 'magnet') : '', h.screws ? plural(h.screws, 'screw') : '']
     .filter(Boolean).join(', ');
 };
+/* ---------- the note, raised on the label shelf ----------------------------
+   A bin set to it (labelMode 1) prints its note in raised letters on its label shelf:
+   bin.js decides where and whether, text.js which letters and how big. */
+/* What a bin prints on its shelf, shelfNote's answer, or null when it prints nothing
+   there. Only a bin set to raise its note can print one, so every other bin is answered
+   without working anything out. */
+const printedNote = (b) => {
+  if (+b.labelMode !== 1 || !b.note) return null;
+  const s = shelfNote(binCfg(b));
+  return s.fit ? s : null;
+};
+/* A bin printing its note is a part of its own: two with different notes are two
+   parts, and two whose letters come out the same are one. The key carries a hash of
+   the lines as printed, never the note itself: the key is the object's name in a 3MF,
+   and a note is whatever someone typed. */
+const noteKey = (b) => { const p = printedNote(b); return p ? '-n' + noteHash(p.fit.lines.join('\n')) : ''; };
+/* A character the font cannot draw, as the hint and Checks name it: itself, or its code
+   point when it is one nobody could see — a control, or a space of some other kind —
+   so a sentence never names a blank. */
+const charName = (ch) => (/^[\p{C}\p{Z}]+$/u.test(ch)
+  ? [...ch].map((c) => 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')).join(' ')
+  : ch);
+const charList = (list) => {
+  const n = list.map(charName);
+  return n.length < 2 ? n.join('') : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
+};
+const leftOff = (list) => `${charList(list)} cannot print, so ${list.length > 1 ? 'they are' : 'it is'} left off`;
+/* The note field's hint while the note is to be raised: what will print, how tall and on
+   how many lines, or why nothing will, and what is left off. [lead, rest], the rest for
+   behind "more" when there is one. The page writes it with textContent, through DF.hint:
+   a note is whatever was typed, and it is quoted back here. `b` is the bin the panel is
+   showing, or nothing when it is the settings for new bins, which start with no note. */
+function noteHintSay(b) {
+  if (!b) return ['New bins print their note raised on the label shelf, once you give each one a note.', ''];
+  const s = shelfNote(binCfg(b)), S = NOTE_SPEC, mm = (x) => +x.toFixed(1);
+  const many = s.dropped.length > 3;
+  const off = !s.dropped.length ? ''
+    : many ? ` ${s.dropped.length} characters cannot print, so they are left off.` : ` ${leftOff(s.dropped)}.`;
+  const offMore = many ? `They are ${charList(s.dropped)}.` : '';
+  const rest = (...parts) => parts.filter(Boolean).join(' ');
+  if (s.why === '') {
+    const f = s.fit;
+    return [`Prints ${mm(f.cap)} mm tall on ${f.lines.length > 1 ? 'two lines' : 'one line'}` +
+            `${f.cut ? ', cut short to fit' : ''}.${off}`,
+            rest(f.cut ? `It reads \u201c${f.lines.join(' / ')}\u201d: a wider bin, a deeper shelf or a shorter note fits more.` : '',
+                 f.cap < S.capMin - 1e-9 ? `That is under the ${S.capMin} mm that stays readable; a deeper shelf has room for bigger letters.` : '',
+                 offMore)];
+  }
+  if (s.why === 'empty')
+    return !(b.note || '').trim()
+      ? ['Type what goes in it above, and it prints raised on the label shelf.', '']
+      : ['Nothing in this note can print, so the shelf stays plain.',
+         `The letters are A to Z and a to z without accents, the digits, the punctuation on a ` +
+         `keyboard, and \u00b5 \u03a9 \u00b0 \u00b1 \u00d7 \u00d8. ${charList(s.dropped)} ${s.dropped.length > 1 ? 'are' : 'is'} not among them.`];
+  if (s.why === 'shallow')
+    return [(b.label < S.shelfMin
+      ? `The label shelf is ${mm(b.label)} mm deep, and letters need ${S.shelfMin} mm, so nothing prints.`
+      : s.depth < 0.05 ? 'A bin this short has no room under its rim for a shelf to print on, so nothing prints.'
+      : `A bin this tall has room under its rim for a shelf ${mm(s.depth)} mm deep, and letters need ${S.shelfMin} mm, so nothing prints.`) + off,
+      rest(b.label < S.shelfMin ? '' : 'The shelf slopes down to the wall at 45 degrees, so its depth is held to the room above the floor. A taller bin has room for a deeper one.', offMore)];
+  return [{
+    noshelf: 'Give it a label shelf above, and the note prints raised on it.',
+    carved: 'A carved shape has no label shelf, so the note does not print.',
+    back: 'With the back wall lowered there is no label shelf, so the note does not print.',
+    solid: 'A solid block has no label shelf, so the note does not print.',
+  }[s.why] || '', ''];
+}
+
 const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
   /* The floor as built: screws raise a thinner one to the same 1.85, so two bins that
      differ only below that are one part. Without screws it is the floor as asked. */
@@ -193,7 +263,8 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
      sizes do above. A half-size bin has no holes yet whatever its boxes say
      (feetHolesOff), so it is the plain part and is named as one. */
   (holesBuilt(b) ? `-h${feetBits({ magnets: b.magnets, screws: b.screws })}` +
-    (everyMatters(b) ? 'e' : '') + (b.magnets ? `m${state.magnetD}.${state.magnetH}` : '') : '');
+    (everyMatters(b) ? 'e' : '') + (b.magnets ? `m${state.magnetD}.${state.magnetH}` : '') : '') +
+  noteKey(b);
 
 /* ---------- half cells -----------------------------------------------------
    A bin's position and size are counted in cells, and since half-size bins they may end
@@ -826,7 +897,7 @@ function startScratch() {
   scratch = { x: 0, y: 0, u: state.u, v: state.v, hUnits: state.hUnits,
               wall: state.wall, floorT: state.floorT,
               divX: state.divX, divY: state.divY, solid: state.solid,
-              scoop: state.scoop, label: state.label, note: '',
+              scoop: state.scoop, label: state.label, labelMode: state.labelMode, note: '',
               magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
               edges: Object.assign({}, state.edges) };
   sUndoStack.length = 0; sRedoStack.length = 0;
@@ -971,6 +1042,7 @@ function readControls() {
     /* By character, not by UTF-16 unit: slicing units cut an emoji in half and left a
        lone surrogate in the note, the link and the README. */
     note: [...$('note').value].slice(0, 28).join(''),
+    labelMode: $('labelMode').value === '1' ? 1 : 0,
     divRemovable: $('divRemovable').checked,
     lid: $('lid').checked,
     magnets: $('magnets').checked, screws: $('screws').checked,
@@ -1094,6 +1166,16 @@ function readControls() {
   $('edgeHint').style.display = t.solid ? 'none' : '';
   $('featureRow').style.display = t.solid ? 'none' : '';
   $('featureHint').style.display = t.solid ? 'none' : '';
+  /* The note raised on the shelf: the menu sits with the shelf it prints on, the hint
+     under the note it describes, saying what will print. A solid block has no shelf. */
+  $('labelModeRow').style.display = t.solid ? 'none' : '';
+  const raise = t.labelMode === 1 && !t.solid;
+  $('noteHint').style.display = raise ? '' : 'none';
+  if (raise) {
+    const [lead, rest] = noteHintSay(target);
+    if (rest) DF.hint($('noteHint'), lead, rest);
+    else $('noteHint').textContent = lead;
+  }
   $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
   $('sizeRow').style.display = selAll().length > 1 ? 'none' : '';
@@ -1162,6 +1244,7 @@ function writeControls(src) {
   $('divX').value = src.divX; $('divY').value = src.divY;
   $('solid').checked = !!src.solid;
   $('scoop').value = src.scoop || 0; $('label').value = src.label || 0;
+  $('labelMode').value = +src.labelMode === 1 ? '1' : '0';
   $('done').checked = !!src.done;
   $('divRemovable').checked = !!src.divRemovable;
   $('lid').checked = !!src.lid;
@@ -1801,7 +1884,7 @@ function initMap() {
         B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                    floorT: state.floorT, divX: state.divX, divY: state.divY,
                    solid: state.solid, scoop: state.scoop, label: state.label,
-                   note: '',
+                   labelMode: state.labelMode, note: '',
                    magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
                    edges: Object.assign({}, state.edges) });
         selected = B().length - 1;
@@ -1841,7 +1924,7 @@ $('fillRest').addEventListener('click', () => {
       B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
                  floorT: state.floorT, divX: state.divX, divY: state.divY,
                  solid: state.solid, scoop: state.scoop, label: state.label,
-                 note: '',
+                 labelMode: state.labelMode, note: '',
                  magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
                  edges: Object.assign({}, state.edges) });
       for (const [px, py] of slotsOf(probe)) taken[py][px] = B().length - 1;
@@ -1940,7 +2023,7 @@ $('applyAll').addEventListener('click', () => {
   for (const b of B()) Object.assign(b, {
     hUnits: s.hUnits, wall: s.wall, floorT: s.floorT,
     divX: s.divX, divY: s.divY, solid: s.solid, scoop: s.scoop, label: s.label,
-    magnets: !!s.magnets, screws: !!s.screws, holesEvery: !!s.holesEvery,
+    labelMode: s.labelMode, magnets: !!s.magnets, screws: !!s.screws, holesEvery: !!s.holesEvery,
     edges: Object.assign({}, s.edges) });
   drawMap(); refresh();
 });
@@ -1990,6 +2073,7 @@ function settingsChange(b, t, nu, nv) {
   for (const k of ['solid', 'divRemovable', 'lid', 'magnets', 'screws', 'holesEvery'])
     if (!!t[k] !== !!b[k]) return k;
   for (const k of ['scoop', 'label']) if (!sameNum(t[k] || 0, b[k] || 0)) return k;
+  if ((+t.labelMode || 0) !== (+b.labelMode || 0)) return 'labelMode';
   if ((t.note || '') !== (b.note || '')) return 'note';
   if (lidSideBits(t.lidSides) !== lidSideBits(b.lidSides)) return 'lidSides';
   return EDGES.some((k) => !sameNum(edgeAt(t, k), edgeAt(b, k))) ? 'edges' : '';
@@ -2281,6 +2365,29 @@ function binIssues(b, k, claims) {
   if (!b.solid && b.wall > lipBase)
     out.push({ note: true, t: `has ${b.wall} mm walls, thicker than the ${lipBase} mm the stacking lip stands on — ` +
       `each side takes ${(b.wall - BIN_DEFAULTS.wall).toFixed(1)} mm more of the inside than the usual ${BIN_DEFAULTS.wall} mm` });
+  /* The note raised on the label shelf. Notes, not faults: the bin prints either way,
+     and these say how much of the note it prints. They name what was typed, which is
+     why drawWarnings writes text rather than markup. A carved bin's own note already
+     says its shelf is left off, and a solid block has no menu to have set. */
+  if (+b.labelMode === 1 && !b.solid && !isCarved(b)) {
+    const s = shelfNote(binCfg(b)), mm = (x) => +x.toFixed(1);
+    if (s.why === '' && s.fit.cut)
+      out.push({ note: true, t: `has its note cut short to fit its label shelf, ${mm(s.fit.cap)} mm tall: ` +
+        `it prints as \u201c${s.fit.lines.join(' / ')}\u201d` });
+    else if (s.why === '' && s.fit.lines.length > 1)
+      out.push({ note: true, t: `has its note on two lines, ${mm(s.fit.cap)} mm tall, as on one it would print ` +
+        `under the ${NOTE_SPEC.capMin} mm that stays readable` });
+    if (s.dropped.length && (s.why === '' || s.why === 'empty'))
+      out.push({ note: true, t: `has ${s.dropped.length > 1 ? 'characters' : 'a character'} in its note that ` +
+        `cannot print, so ${s.dropped.length > 1 ? 'they are' : 'it is'} left off: ${charList(s.dropped)}` });
+    if (s.why === 'shallow')
+      out.push({ note: true, t: (s.depth < 0.05 ? 'is too short for a label shelf to print its note on'
+        : `has a label shelf only ${mm(s.depth)} mm deep, under the ${NOTE_SPEC.shelfMin} mm letters need`) +
+        ', so its note is not printed' });
+    if (s.why === 'noshelf' || s.why === 'back')
+      out.push({ note: true, t: 'is set to print its note on its label shelf, but ' +
+        (s.why === 'back' ? 'its back wall is lowered, so it has none' : 'it has none') });
+  }
   return out;
 }
 
@@ -2324,7 +2431,7 @@ function warnings() {
      because grid() never draws fewer, and said nothing, so the design looked sound here
      and failed there. The test is the plate's own (see warnings in src/ui.js). A drawer
      too small for a cell without its margins is the drawer's doing, not theirs, and the
-     plate puts that first too. Only numbers go in: this goes into the panel as markup. */
+     plate puts that first too. Only numbers go in. */
   const pm = plateMargins();
   if (pm)
     for (const [len, a, b, sides, dim, line] of [
@@ -2336,8 +2443,8 @@ function warnings() {
     }
   /* A baseplate at another pitch has no socket a spec bin seats in, and nothing else on
      this page would say so: the map is drawn in 42 mm cells whatever the plate is. The
-     figure is the link's, so it is written as a number and only when it reads as one —
-     this goes into the panel as markup. To the thousandth, so that no pitch platePitch
+     figure is the link's, so it is written as a number and only when it reads as one,
+     though the panel is text now (drawWarnings). To the thousandth, so that no pitch platePitch
      calls non-standard is named as 42; and one too small to show there is not called a
      0 mm grid. */
   const pp = platePitch();
@@ -2385,21 +2492,30 @@ function warnings() {
  * and the panel opening itself the moment a sound layout stops being one.
  */
 const focusedAllClear = () => (fBin()
-  ? '<div class="hint">This bin is sound and fits your printer.</div>'
-  : '<div class="hint">Layout is sound and everything fits.</div>');
+  ? 'This bin is sound and fits your printer.'
+  : 'Layout is sound and everything fits.');
+/* Written as text, not markup. A check names what was typed into a bin's note when its
+   letters cannot all print, so a "<" there has to come out as a "<". */
+const checkLine = (t, cls) => {
+  const d = document.createElement('div');
+  if (!cls) { d.textContent = t; return d; }
+  d.className = cls;
+  d.appendChild(document.createElement('span')).textContent = t;
+  return d;
+};
 function drawWarnings() {
   const w = warnings();
   const errs = w.filter((x) => x.err);
-  $('warnings').innerHTML = w.length
-    ? w.map((x) => `<div class="w${x.err ? ' err' : ''}"><span>${x.t}</span></div>`).join('')
+  $('warnings').replaceChildren(...(w.length
+    ? w.map((x) => checkLine(x.t, `w${x.err ? ' err' : ''}`))
     /* 'Layout' is the drawer's word. Focus is looking at one bin, and a loose one
        has no layout at all to be sound. */
-    : focusedAllClear();
+    : [Object.assign(document.createElement('div'), { className: 'hint', textContent: focusedAllClear() })]));
 
   // errors only in the stage: the panel keeps the notes and the all-clear, and a
   // second copy of "this is a carved shape" beside the map would be noise
   $('mapChecks').style.display = errs.length ? '' : 'none';
-  $('mapChecksList').innerHTML = errs.map((x) => `<div>${x.t}</div>`).join('');
+  $('mapChecksList').replaceChildren(...errs.map((x) => checkLine(x.t)));
 
   $('warnBadge').textContent = errs.length ? `· ${plural(errs.length, 'problem')}` : '';
   $('warnBadge').style.display = errs.length ? '' : 'none';
@@ -2497,7 +2613,8 @@ function types() {
        thing a row of the download table cannot tell you: which of the four identical
        shapes on the plate is the one for drill bits. Notes are NOT part of typeKey — two
        bins the same shape share one STL whatever they are for — so a type can carry
-       several, and all of them are worth showing. */
+       several, and all of them are worth showing. The exception is a note printed on
+       the bin's shelf, which makes it a part of its own (noteKey). */
     const n = (b.note || '').trim();
     if (n && !t.notes.includes(n)) t.notes.push(n);
   }
@@ -3287,9 +3404,14 @@ function saveBlob(buf, name) {
 const holeTag = (b) => (!holesBuilt(b) ? ''
   : '-' + [b.magnets ? 'magnets' : '', b.screws ? 'screws' : ''].filter(Boolean).join('-') +
     (everyMatters(b) ? '-every-cell' : ''));
+/* A bin printing its note says so in its name, as the note shortened to a-z, 0-9 and
+   dashes (noteSlug): "bin-1x1x3-m3-screws-qty2.stl". Two bins with the same shape and
+   different notes are two files, and the name says which is which. A note that does not
+   print stays out of the name, as it always has. */
+const noteTag = (b) => { const p = printedNote(b); return p ? '-' + noteSlug(p.fit.lines.join(' ')) : ''; };
 function typeName(t) {
   return `bin-${t.b.u}x${t.b.v}x${t.b.hUnits}${t.b.solid ? '-solid' : ''}` +
-         `${t.b.divX || t.b.divY ? `-${t.b.divX}x${t.b.divY}div` : ''}${holeTag(t.b)}-qty${t.qty}`;
+         `${t.b.divX || t.b.divY ? `-${t.b.divX}x${t.b.divY}div` : ''}${holeTag(t.b)}${noteTag(t.b)}-qty${t.qty}`;
 }
 /* One bin type as an STL. Two places offer this — the row in "Bins to print" and the
    row in the download dialog — and they are the one pair that could give you two
@@ -4227,6 +4349,13 @@ for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable',
                   'lid', 'lidF', 'lidB', 'lidL', 'lidR',
                   'magnets', 'screws', 'holesWhere', 'magnetD', 'magnetH', ...BIN_FIELDS])
   $(id).addEventListener('change', schedule);
+/* Choosing the note raised on a bin with no label shelf gives it one, 12 mm deep: the
+   letters have nowhere else to go, and 12 is the depth the shelf's own hint suggests.
+   Before the read, so the bin takes both in one step. */
+$('labelMode').addEventListener('change', () => {
+  if ($('labelMode').value === '1' && !(parseFloat($('label').value) > 0)) $('label').value = 12;
+  schedule();
+});
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
   $('solid').checked = false;

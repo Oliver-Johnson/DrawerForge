@@ -264,6 +264,38 @@ test('notes from a link are one clean line of at most 28 characters', async ({ p
   expect(b).toBe('🙂'.repeat(14));       // whole emoji, never half of one
 });
 
+/* A note that is printed on its bin reaches more than the screen: the part's key, which
+   is the object's name in a 3MF, the STL's file name, the hint and Checks. One written to
+   break each of them, arriving by a link with the note raised (the 23rd field), leaves
+   the page working, the hint and Checks showing it as text, the 3MF well-formed XML and
+   every name made of plain characters. */
+test('a note full of markup and emoji, raised on its shelf, breaks nothing it reaches', async ({ page }) => {
+  const errors = watch(page);
+  const hostile = '<i>M3</i> & "x" \u{1F642}</script>';
+  const notes = encodeURIComponent(JSON.stringify([[hostile]]));
+  await arrive(page, H.BINS_URL + '#bl=0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-1&bnotes=' + notes);
+  expect(await page.evaluate(() => [B()[0].labelMode, B()[0].note])).toEqual([1, hostile.slice(0, 28)]);
+
+  await H.clickCell(page, 0, 0);
+  await page.waitForTimeout(400);
+  await expect(page.locator('#noteHint')).toContainText('cannot print, so it is left off');
+  await expect(page.locator('#warnings')).toContainText('left off: \u{1F642}');
+  expect(await page.locator('#noteHint *:not(span):not(button), #warnings i, #warnings script').count()).toBe(0);
+
+  const out = await page.evaluate(() => {
+    const t = types()[0];
+    const x = build3mfXML(platePolysAndItems(0)).model;
+    const doc = new DOMParser().parseFromString(x, 'application/xml');
+    return { key: t.key, name: typeName(t), bad: doc.getElementsByTagName('parsererror').length,
+             objects: [...doc.getElementsByTagName('object')].map((o) => o.getAttribute('name')) };
+  });
+  expect(out.bad, 'the 3MF parses as XML').toBe(0);
+  expect(out.objects).toEqual([out.key]);
+  expect(out.key).toMatch(/^[\w.,-]+$/);
+  expect(out.name).toMatch(/^bin-1x1x3-[a-z0-9-]+-qty1$/);
+  expect(errors).toEqual([]);
+});
+
 test('a fractional position is rounded rather than thrown on', async ({ page }) => {
   const errors = watch(page);
   await arrive(page, H.BINS_URL + '#bl=0-0.5-1-1-3');
