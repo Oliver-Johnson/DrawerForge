@@ -367,6 +367,20 @@ test.describe('the print time', () => {
     expect(f.readme).toMatch(/Print time: roughly .* on a standard printer over 4 plates\./);
   });
 
+  /* A piece too big for the bed is weighed and priced with the rest, but has no plate to
+     time, so every time that leaves it out says so. A 330 mm drawer split for a 220 x 180
+     bed leaves A1 too big, and "In all" gave the grams and cost of four pieces beside the
+     time of three, as if it were the whole job. */
+  test('baseplates: with a piece too big for the bed, the time says it is for the plates that fit', async ({ page }) => {
+    page.__errors = await H.openPlates(page);
+    await page.goto(H.PLATES_URL + '#w=330&d=330&bw=220&bd=180&mm=custom&ml=5&mr=0&mf=5&mb=0&cn=puzzle&v=2');
+    await page.waitForFunction(() => printPlan && printPlan.over.length > 0);
+    const f = await platesFigures(page);
+    expect(f.summary).toMatch(/^In all: .* of printing on a standard printer for the plates that fit \(a rough/);
+    expect(f.dialog).toMatch(/roughly .* of printing over \d plates on a standard printer for the plates that fit \(/);
+    expect(f.readme).toMatch(/Print time: roughly .* on a standard printer over \d plates for the plates that fit\./);
+  });
+
   /* The kind of printer comes from the list, where tools/printers.js marks the fast ones,
      and the override beats it. A size-only entry and Custom are timed as standard: the
      slower guess is the safer one. */
@@ -462,4 +476,21 @@ test('the README in the bins ZIP carries the cost and the time', async ({ page }
   expect(readme).toMatch(/about \$\d+\.\d\d at \$20\.00\/kg/);
   expect(readme).toMatch(/Print time: roughly /);
   expect(readme).toMatch(/your slicer gives the real figure/);
+});
+
+/* And in Bins, where the page already said it: the README weighs every bin, a 3 x 1 too
+   long for a 120 mm bed among them, so its time says it is for the plates that fit. */
+test('the bins README says its time leaves out a bin too big for the bed', async ({ page }) => {
+  page.__errors = await H.openBins(page);
+  await H.setField(page, 'bedPreset', 'custom');
+  await H.setField(page, 'bedW', 120);
+  await H.setField(page, 'bedD', 120);
+  await H.dragCells(page, [0, 0], [2, 0]);
+  await H.dragCells(page, [0, 1], [0, 1]);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => printPlan.plates.filter((p) => p.overflow).length),
+         'fixture: the 3 x 1 is too big').toBe(1);
+  await expect(page.locator('#plateSummary')).toContainText('for the plates that fit');
+  expect(await page.evaluate(() => layoutReadme()))
+    .toMatch(/Print time: roughly .* printer for the plates that fit\./);
 });

@@ -6362,11 +6362,13 @@ function renderPrintPlan() {
   }).join('');
   /* The job in one line under the plates: what it all weighs and costs, and roughly how
      long, said as the rough figure it is. The weight is materialGrams, the same total the
-     download dialog and the README quote. */
+     download dialog and the README quote. It weighs every piece, but only a plate can be
+     timed, so with a piece too big for the bed the time says it is for the plates that
+     fit (fitNote), as Bins says it. */
   const job = jobTime(), g = materialGrams();
   $('planTime').textContent = job.plates.length && g !== null
     ? `In all: ${massText(g)}${costTail(g)} · about ${ESTIMATE.duration(job.min)} of printing ` +
-      `on a ${speedName()} (${ESTIMATE.ROUGH}).`
+      `on a ${speedName()}${fitNote()} (${ESTIMATE.ROUGH}).`
     : '';
 }
 function platePolysAndItems(idx) {
@@ -6651,6 +6653,8 @@ function jobTime() {
   const plates = printPlan.plates.filter((pl) => !pl.overflow).map(plateEstimate);
   return { plates, min: plates.reduce((a, e) => a + e.min, 0) };
 }
+// what the time leaves out: the pieces too big for the bed, which have no plate to time
+const fitNote = () => (printPlan && printPlan.over.length ? ' for the plates that fit' : '');
 /* A new price or speed changes figures and nothing else, so it redraws the two places on
    the page that show them; the dialog follows, since both of these sync it. */
 function refreshEstimates() {
@@ -6784,7 +6788,7 @@ function readmeText() {
     });
     if (job.plates.length) {
       lines.push(`Print time: roughly ${ESTIMATE.duration(job.min)} on a ${speedName()}` +
-                 (job.plates.length > 1 ? ` over ${job.plates.length} plates.` : '.'));
+                 (job.plates.length > 1 ? ` over ${job.plates.length} plates` : '') + `${fitNote()}.`);
       lines.push('That is a rough estimate from the filament and the layer count, not a slice:');
       lines.push('your slicer gives the real figure.');
     }
@@ -6915,7 +6919,7 @@ function renderExportSummary() {
     (g === null || !job || !job.plates.length ? ''
       : `\nroughly ${ESTIMATE.duration(job.min)} of printing` +
         (job.plates.length > 1 ? ` over ${plural(job.plates.length, 'plate')}` : '') +
-        ` on a ${speedName()} (${ESTIMATE.ROUGH})`);
+        ` on a ${speedName()}${fitNote()} (${ESTIMATE.ROUGH})`);
   const fit = bedFitText();
   $('exFit').className = 'exfit ' + fit.cls;
   $('exFit').textContent = fit.t;

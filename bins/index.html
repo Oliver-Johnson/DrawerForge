@@ -7386,8 +7386,11 @@ function readmeCost(g) {
 }
 function readmeTime(job) {
   if (!job.plates.length) return [];
+  // the grams are every part's, but a part too big for the bed has no plate to time
+  const over = printPlan && printPlan.plates.some((p) => p.overflow);
   return [`Print time: roughly ${ESTIMATE.duration(job.min)} on a ${speedName()}` +
-            (job.plates.length > 1 ? ` over ${job.plates.length} plates.` : '.'),
+            (job.plates.length > 1 ? ` over ${job.plates.length} plates` : '') +
+            (over ? ' for the plates that fit.' : '.'),
           'That is a rough estimate from the filament and the layer count, not a slice:',
           'your slicer gives the real figure.'];
 }
