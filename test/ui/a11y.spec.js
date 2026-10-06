@@ -156,6 +156,35 @@ test('the map says what it is showing, and keeps saying it as the drawer fills',
     expect(layer2).toMatch(/no bins on this layer/i);
   });
 
+/* The Steps switch is two buttons in a group named by its label, each saying whether it
+   is the one on, and worked from the keyboard like any button. What it changes is how
+   the map draws, which a screen reader cannot see, so the map's own label says it. */
+test('the steps switch is a labelled pair a keyboard can work, and the map says which',
+  async ({ page }) => {
+    await H.openBins(page);
+    const group = page.getByRole('group', { name: 'Steps' });
+    await expect(group.getByRole('button')).toHaveText(['Whole cells', 'Half cells']);
+    const pressed = () => page.evaluate(() => ['stepWhole', 'stepHalf'].map((id) =>
+      document.getElementById(id).getAttribute('aria-pressed')));
+    const label = () => page.locator('#fillmap').getAttribute('aria-label');
+    expect(await pressed()).toEqual(['true', 'false']);
+    expect(await label()).not.toMatch(/half-cell steps/);
+
+    const { hit } = await tabUntil(page, (a) => a.id === 'stepHalf');
+    expect(hit, 'never tabbed onto the Half cells button').not.toBeNull();
+    await page.keyboard.press('Enter');
+    expect(await pressed()).toEqual(['false', 'true']);
+    expect(await label()).toMatch(/Drawing in half-cell steps\.$/);
+
+    await page.keyboard.press('Shift+Tab');
+    expect(await page.evaluate(() => document.activeElement.id)).toBe('stepWhole');
+    await page.keyboard.press('Space');
+    expect(await pressed()).toEqual(['true', 'false']);
+    expect(await label()).not.toMatch(/half-cell steps/);
+    // why a place was refused is said where a screen reader hears it
+    await expect(page.locator('#stepWhy')).toHaveAttribute('role', 'status');
+  });
+
 test('the 3D preview is labelled with what it contains', async ({ page }) => {
   await H.openBins(page);
   const label = () => page.locator('#three').getAttribute('aria-label');

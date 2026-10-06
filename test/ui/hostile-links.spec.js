@@ -273,19 +273,26 @@ test('a fractional position is rounded rather than thrown on', async ({ page }) 
   expect(errors).toEqual([]);
 });
 
-/* The link format reads half cells now, and the map does not take them yet: a bin at y 0.5
-   threw in the map and left the page dead. Until it does, a half reads the way a page
-   from before half sizes read it — rounded onto whole cells, 1.5 up to 2 — whether it
-   arrives as the layout or as the bin being edited on its own. */
-test('a link with half cells is put on whole cells, as before half sizes', async ({ page }) => {
+/* Half cells, from a link: a half-size bin keeps its half size and its half step, as the
+   layout and as the bin being edited on its own, and the save holds them as they came.
+   Before the map took half steps this was a page that threw (occupancy at y 0.5), and
+   then one that rounded every half onto whole cells. A whole-size bin on a half step is
+   still put on the grid, the way a fractional position always was: it sits on whole
+   cells. */
+test('a link with half cells keeps them, and a whole bin still sits on whole cells', async ({ page }) => {
   const errors = watch(page);
-  await arrive(page, H.BINS_URL + '#bl=0.5-0.5-1.5-0.5-3_3-0-0.5-2.5-3');
+  await arrive(page, H.BINS_URL + '#bl=0.5-0.5-1.5-0.5-3_3-0-0.5-2.5-3_4.5-3.5-2-1-3');
   expect(await page.evaluate(() => B().map((b) => [b.x, b.y, b.u, b.v])))
-    .toEqual([[1, 1, 2, 1], [3, 0, 1, 3]]);
-  expect(await stored(page, BINS)).toContain('bl=1-1-2-1-3');
+    .toEqual([[0.5, 0.5, 1.5, 0.5], [3, 0, 0.5, 2.5], [5, 4, 2, 1]]);
+  expect(await stored(page, BINS)).toContain('bl=0.5-0.5-1.5-0.5-3-');
+  expect(await stored(page, BINS)).toContain('_3-0-0.5-2.5-3-');
+  expect(await stored(page, BINS)).toContain('_5-4-2-1-3-');
+  // and the page does not just hold them: it draws them, with nothing claiming twice
+  expect(await page.locator('#fillmap .bin').count()).toBe(3);
+  expect(await page.evaluate(() => layerClaims(0).flat().some(Array.isArray))).toBe(false);
 
   await arrive(page, H.BINS_URL + '#bl=0-0-1-1-3&bs=0-0-1.5-0.5-3');
-  expect(await page.evaluate(() => [scratch.u, scratch.v])).toEqual([2, 1]);
+  expect(await page.evaluate(() => [scratch.u, scratch.v])).toEqual([1.5, 0.5]);
   expect(errors).toEqual([]);
 });
 
