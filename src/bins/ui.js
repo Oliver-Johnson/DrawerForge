@@ -1984,8 +1984,15 @@ function initThree() {
     $('threeempty').style.display = '';
     $('threehint').style.display = 'none';
     canvas.setAttribute('aria-label', '3D preview unavailable: this browser could not start WebGL.');
-    const expand = $('threewrap').querySelector('.previewbtn');
-    if (expand) expand.style.display = 'none';
+    /* Nothing to expand, so no Expand button. chrome.js makes it, and runs as the
+       page's last script, so during the boot there is no button yet and looking for
+       one here hid nothing; once the page has parsed, every script has run. */
+    const hideExpand = () => {
+      const expand = $('threewrap').querySelector('.previewbtn');
+      if (expand) expand.style.display = 'none';
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hideExpand);
+    else hideExpand();
     window.addEventListener('resize', () => drawMap());
     return;
   }

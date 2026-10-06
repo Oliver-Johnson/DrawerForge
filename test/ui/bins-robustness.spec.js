@@ -331,10 +331,13 @@ test('edits do not pile up geometry on the GPU', async ({ page }) => {
 /* A browser of its own, so the rest of the file keeps its GPU. Launched from the
    project's own launch options rather than through test.use, which would replace them —
    and with them the browser a local config points at. */
+const launchWithoutWebGL = ({ playwright, browserName, launchOptions }) =>
+  playwright[browserName].launch(Object.assign({}, launchOptions,
+    { args: [...((launchOptions && launchOptions.args) || []), '--disable-3d-apis'] }));
+
 test('without WebGL the map, the table, the export and saving all still work',
   async ({ playwright, browserName, launchOptions }) => {
-    const browser = await playwright[browserName].launch(Object.assign({}, launchOptions,
-      { args: [...((launchOptions && launchOptions.args) || []), '--disable-3d-apis'] }));
+    const browser = await launchWithoutWebGL({ playwright, browserName, launchOptions });
     try {
       const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
       const page = await ctx.newPage();
@@ -383,6 +386,32 @@ test('without WebGL the map, the table, the export and saving all still work',
       await page.waitForFunction(() => !!document.getElementById('fillmap'));
       await settle(page);
       expect(await page.evaluate(() => scratch && [scratch.u, scratch.v])).toEqual([2, 1]);
+      expect(errors).toEqual([]);
+    } finally {
+      await browser.close();
+    }
+  });
+
+/* The Expand button opened a full-screen box saying there was nothing to show. It was
+   meant to be hidden, but the page looked for it before chrome.js, the last script on
+   the page, had made it. */
+test('without WebGL there is no Expand button over the empty preview',
+  async ({ page, playwright, browserName, launchOptions }) => {
+    // with WebGL it is there, so the check below cannot pass on a button that never was
+    await openAt(page, 'bl=0-0-1-1-3');
+    await expect(page.locator('#threewrap .previewbtn')).toBeVisible();
+
+    const browser = await launchWithoutWebGL({ playwright, browserName, launchOptions });
+    try {
+      const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      const p = await ctx.newPage();
+      const errors = [];
+      p.on('pageerror', (e) => errors.push(String(e)));
+      await p.goto(H.BINS_URL + '#bl=0-0-1-1-3');
+      await p.waitForFunction(() => !!document.getElementById('fillmap'));
+      await expect(p.locator('#threeempty')).toContainText('3D preview unavailable');
+      await expect(p.locator('#threewrap .previewbtn')).toHaveCount(1);
+      await expect(p.locator('#threewrap .previewbtn')).toBeHidden();
       expect(errors).toEqual([]);
     } finally {
       await browser.close();
