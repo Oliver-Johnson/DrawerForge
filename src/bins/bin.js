@@ -130,6 +130,127 @@ function labelPrism(G, hwI, hdI, top, depth, t) {
   return G.profilePrism(prof, -hwI - BLOAT, hwI + BLOAT, (u, v) => [v, u]);
 }
 
+/* ...which suits a wall of the usual thickness and nothing much thinner. The prisms end
+   square, a BLOAT into the side walls, and the bin's outer corner is an arc of SPEC.r:
+   a wall under about 1.15 mm leaves those square ends standing out through the rounded
+   corners, 1.06 mm at the 0.4 minimum and 0.21 at 1.0. Such a bin builds the scoop and
+   the shelf over the cavity's own rounded outline instead, grown a BLOAT into the wall
+   all round, so their ends follow the corners. The usual wall keeps the prisms, and with
+   them the same bytes. `arcInside` is how far in the outline's chords come from the arc. */
+function cornersPoke(hw, hd, hwI, hdI, n) {
+  const arcInside = SPEC.r * Math.cos(Math.PI / (4 * n));
+  return Math.hypot(hwI + BLOAT - (hw - SPEC.r), hdI + BLOAT - (hd - SPEC.r)) > arcInside - 1e-6;
+}
+
+/* A solid standing over a convex outline in plan, between a bottom and a top that
+   depend on y alone and run straight between consecutive `stations`. Cut at the
+   stations, every band of it has a flat top and a flat bottom, so it is built as flat
+   faces: the outline's sides, and each band's top and bottom fanned from its middle.
+
+   Nothing in it is closer than WELD to anything else. checkManifold, and a slicer, weld
+   vertices a micron or so apart, and a scoop's arc runs into the floor at a tangent: a
+   0.09 mm scoop on a lowered front had stations 0.0004 mm apart and a top that never
+   rose a thousandth above its bottom, and welded, its faces folded onto each other. So
+   stations closer than ten times WELD are thinned out, a vertex that close to a station
+   is moved onto it, and the bottom stays a little way under the top's lowest point. */
+const WELD = 0.002;
+function bandSolid(G, ring, ylo, yhi, stations, zTop, zBot) {
+  const clip = (pts, y0, keep) => {                 // the part with keep * (y - y0) >= 0
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const da = keep * (a[1] - y0), db = keep * (b[1] - y0);
+      if (da >= 0) out.push(a);
+      if (da * db < 0) out.push([a[0] + (b[0] - a[0]) * da / (da - db), y0]);
+    }
+    return out;
+  };
+  const pts = clip(clip(ring, ylo, 1), yhi, -1);
+  let lo = Infinity, hi = -Infinity;
+  for (const p of pts) { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }
+  const cuts = [];
+  for (const s of stations.slice().sort((a, b) => a - b))
+    if (s > lo + 10 * WELD && s < hi - 10 * WELD && !(s - cuts[cuts.length - 1] < 10 * WELD)) cuts.push(s);
+  // a vertex wherever a station crosses the outline, and any vertex near one moved onto it
+  const rim = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const near = cuts.find((s) => Math.abs(a[1] - s) < WELD);
+    rim.push(near === undefined ? a : [a[0], near]);
+    const on = cuts.filter((s) => (s - a[1]) * (s - b[1]) < 0);
+    if (b[1] < a[1]) on.reverse();
+    for (const s of on) rim.push([a[0] + (b[0] - a[0]) * (s - a[1]) / (b[1] - a[1]), s]);
+  }
+  const vs = [];
+  for (const p of rim) {
+    const q = vs[vs.length - 1];
+    if (!q || Math.hypot(p[0] - q.x, p[1] - q.y) >= WELD)
+      vs.push({ x: p[0], y: p[1], t: zTop(p[1]), b: zBot(p[1]) });
+  }
+  while (vs.length > 1 && Math.hypot(vs[0].x - vs[vs.length - 1].x, vs[0].y - vs[vs.length - 1].y) < WELD)
+    vs.pop();
+  const polys = [];
+  const add = (verts) => { const p = G.makePoly(verts); if (p) polys.push(p); };
+  for (let i = 0; i < vs.length; i++) {             // sides, outwards: the outline is CCW
+    const a = vs[i], b = vs[(i + 1) % vs.length];
+    add([[a.x, a.y, a.b], [b.x, b.y, b.b], [b.x, b.y, b.t], [a.x, a.y, a.t]]);
+  }
+  /* Each band takes the outline's edges that lie in it. An edge along a station belongs
+     to the band the outline's inside is on: above it when the edge runs +x, as it does
+     anticlockwise along the bottom. */
+  const edges = [lo].concat(cuts, [hi]);
+  for (let k = 0; k + 1 < edges.length; k++) {
+    const y0 = edges[k], y1 = edges[k + 1];
+    const mine = vs.map((a, i) => {
+      const b = vs[(i + 1) % vs.length], m = (a.y + b.y) / 2;
+      if (a.y === b.y && (a.y === y0 || a.y === y1)) return a.y === (b.x > a.x ? y0 : y1);
+      return m > y0 && m < y1;
+    });
+    const band = vs.filter((v, i) => mine[i] || mine[(i - 1 + vs.length) % vs.length]);
+    const cx = band.reduce((s, v) => s + v.x, 0) / band.length;
+    const cy = band.reduce((s, v) => s + v.y, 0) / band.length;
+    for (let i = 0; i < band.length; i++) {
+      const a = band[i], b = band[(i + 1) % band.length];
+      add([[cx, cy, zTop(cy)], [a.x, a.y, a.t], [b.x, b.y, b.t]]);
+      add([[cx, cy, zBot(cy)], [b.x, b.y, b.b], [a.x, a.y, a.b]]);
+    }
+  }
+  return polys;
+}
+
+// straight between the points of a profile [[y, z], ...] sorted by y, flat beyond it
+function piecewise(prof) {
+  return (y) => {
+    if (y <= prof[0][0]) return prof[0][1];
+    for (let k = 1; k < prof.length; k++)
+      if (y <= prof[k][0]) {
+        const [y0, z0] = prof[k - 1], [y1, z1] = prof[k];
+        return y === y1 ? z1 : z0 + (z1 - z0) * (y - y0) / (y1 - y0);
+      }
+    return prof[prof.length - 1][1];
+  };
+}
+
+// the cavity's outline grown a BLOAT into the wall, without the straights' split points
+function cavityRing(hwI, hdI, wall, n) {
+  return roundRect(hwI + BLOAT, hdI + BLOAT, Math.max(0.4, SPEC.r - wall) + BLOAT, n,
+                   [[], [], [], []]);
+}
+function scoopRounded(G, hwI, hdI, wall, floorZ, r, segs, n) {
+  const y0 = -hdI, prof = [];
+  for (let k = segs; k >= 0; k--) {                 // the same arc, from the wall down
+    const a = (k / segs) * Math.PI / 2;
+    prof.push([y0 + r - r * Math.sin(a), floorZ + r - r * Math.cos(a)]);
+  }
+  return bandSolid(G, cavityRing(hwI, hdI, wall, n), -Infinity, y0 + r,
+                   prof.map(([y]) => y), piecewise(prof), () => floorZ - BLOAT / 2);
+}
+function labelRounded(G, hwI, hdI, wall, H, depth, t, n) {
+  const yb = hdI;
+  return bandSolid(G, cavityRing(hwI, hdI, wall, n), yb - depth, Infinity, [],
+                   () => H, piecewise([[yb - depth, H - t], [yb + BLOAT, H - t - depth]]));
+}
+
 /* The note raised on the label shelf (labelMode 1).
  *
  * The shelf is what a bin stacked on this one rests on: its feet come down at H, which
@@ -2007,7 +2128,7 @@ function buildBin(G, cfg) {
        first, because holes across the floor keep in front of it and under it, and a bin
        with holes has no scoop and no dividers: the holes take the floor. */
     const eF = c.edges && c.edges.f !== undefined ? c.edges.f : 1;
-    const iw = hw - c.wall, id = hd - c.wall;
+    const iw = hw - c.wall, id = hd - c.wall, poke = cornersPoke(hw, hd, iw, id, n);
     const shelf = shelfFor(c, iw, id, H);
     const holes = holeLayout(c, iw, id, H);
     const holesOn = !!holes.n;
@@ -2017,10 +2138,12 @@ function buildBin(G, cfg) {
          height binTop quotes: a 2x1x4 with every wall at a quarter and an 8.5 mm scoop
          was 14.45 mm built and 11.5 quoted, to its README and the bed check. */
       const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF));
-      if (r > 0.05) polys.push(...scoopPrism(G, iw, id, floorZ, r, Math.max(4, n)));
+      if (r > 0.05) polys.push(...(poke ? scoopRounded(G, iw, id, c.wall, floorZ, r, Math.max(4, n), n)
+                                        : scoopPrism(G, iw, id, floorZ, r, Math.max(4, n))));
     }
     if (shelf) {
-      polys.push(...labelPrism(G, iw, id, shelf.top, shelf.depth, c.labelT));
+      polys.push(...(poke ? labelRounded(G, iw, id, c.wall, shelf.top, shelf.depth, c.labelT, n)
+                          : labelPrism(G, iw, id, shelf.top, shelf.depth, c.labelT)));
       if (shelf.raised)
         polys.push(...NOTE_TEXT.noteShells(G, shelf.raised.fit.segs, shelf.top - BLOAT, H - NOTE_CLEAR));
     }
