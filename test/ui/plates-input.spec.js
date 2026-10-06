@@ -408,7 +408,9 @@ test('the filament estimate follows the infill, and says when it cannot', async 
   const estimate = async () => {
     await page.click('#openExport');
     await page.waitForTimeout(800);
-    const t = ((await page.locator('#exDesign').textContent()) || '').split('\n').pop();
+    // the material line, which the rough print time now follows
+    const t = ((await page.locator('#exDesign').textContent()) || '').split('\n')
+      .find((l) => /of PLA/.test(l)) || '';
     await page.locator('#exportClose').click();
     await page.waitForTimeout(250);
     return t;

@@ -41,6 +41,32 @@ test('a bin marked printed leaves the plates but stays in the drawer', async ({ 
   expect(await page.locator('#coverage').textContent()).toMatch(/2 bins/);
 });
 
+/* The figures follow the queue. A bin already sitting in the drawer costs nothing more
+   and takes no more printing, so marking it printed takes its grams, its cost and its
+   share of the plate's time off every total that quotes them — the page's and the
+   README's alike. */
+test('a bin marked printed comes off the weight, the cost and the time', async ({ page }) => {
+  await H.openBins(page);
+  await H.setField(page, 'filPrice', '20');
+  await placeTwo(page);
+  const figures = () => page.evaluate(() => ({
+    g: jobEstimate().grams, min: jobEstimate().min,
+    totals: document.getElementById('totals').textContent, readme: layoutReadme() }));
+  const both = await figures();
+
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  await page.check('#done');
+  await settle(page);
+  const one = await figures();
+
+  expect(one.g, 'two identical bins, one still to print').toBeCloseTo(both.g / 2, 6);
+  expect(one.min).toBeLessThan(both.min);
+  const cost = `$${(one.g / 1000 * 20).toFixed(2)}`;
+  expect(one.totals).toContain(`about ${cost}`);
+  expect(one.readme).toContain(`about ${one.g.toFixed(0)} g of PLA — about ${cost} at $20.00/kg`);
+});
+
 test('the toggle is hidden with nothing selected, so it cannot describe the next bin', async ({ page }) => {
   await H.openBins(page);
   await placeTwo(page);
