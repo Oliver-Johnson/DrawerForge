@@ -208,6 +208,109 @@ test.describe('the price', () => {
     await H.setField(page, 'filPrice', '20');
     await expect(page.locator('#totals')).toContainText(/about \$\d+\.\d\d/);
   });
+
+  /* Half of Europe writes a price with a decimal comma. The field was a number input,
+     and Chromium took "12,50" typed into it as 1250: saved, shared with the other tool,
+     written into the README, and the totals said about $199.15. A lone comma is a
+     decimal point now, and anything else that is not a plain number is refused out
+     loud — the field marked, a line saying what to type, and the price in use left as
+     it was — rather than guessed at. */
+  for (const tool of ['bins', 'baseplates']) {
+    test(`${tool}: a decimal comma is a decimal point, and anything else is refused, not guessed`, async ({ page }) => {
+      page.__errors = await (tool === 'bins' ? H.openBins(page) : H.openPlates(page));
+      // typed into as a person types, so on bins the printer panel is opened first
+      if (tool === 'bins') await page.locator('#s-printer .ph button').click();
+      const price = page.locator('#filPrice'), err = page.locator('#filPriceErr');
+      const inUse = () => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}').price, KEY);
+      await price.click();
+      await price.pressSequentially('12,50');
+      await page.waitForTimeout(300);
+      expect(await inUse()).toBe(12.5);
+      await expect(price).not.toHaveAttribute('aria-invalid', 'true');
+      await expect(err).toBeHidden();
+
+      for (const bad of ['12,50 €', '1.234,50', '12,5,0', '-5', 'twelve', '1e3']) {
+        await price.fill(bad);
+        await page.waitForTimeout(250);
+        await expect(price, bad).toHaveAttribute('aria-invalid', 'true');
+        await expect(err, bad).toBeVisible();
+        await expect(err, bad).toContainText('$12.50/kg');
+        expect(await inUse(), bad).toBe(12.5);
+      }
+      // left, it keeps what was typed, so it can be put right
+      await price.press('Tab');
+      await page.waitForTimeout(250);
+      await expect(price).toHaveValue('1e3');
+      await price.fill('22,99');
+      await page.waitForTimeout(250);
+      expect(await inUse()).toBe(22.99);
+      await expect(price).toHaveAttribute('aria-invalid', 'false');
+      await expect(err).toBeHidden();
+      await price.fill('');                  // empty is no price, not a mistake
+      await page.waitForTimeout(250);
+      expect(await inUse()).toBe(null);
+      await expect(err).toBeHidden();
+    });
+  }
+
+  /* Two tabs. A tab whose price box was left focused took a price set in the other but
+     went on showing its own, and its next change of currency read that stale box and
+     wrote it back over the new price. Untouched, the box now shows the new price at
+     once; typed into, it keeps what is being typed until it is left, and a currency or
+     speed change never reads it. */
+  test('a tab left with its price box focused does not write a stale price back', async ({ page, context }) => {
+    const srv = await H.serveRoot();
+    try {
+      page.__errors = [];
+      page.on('pageerror', (e) => page.__errors.push(String(e)));
+      const open = async (p) => {
+        await p.goto(srv.base + 'bins/');
+        await p.waitForFunction(() => !!document.getElementById('fillmap'));
+        await p.waitForTimeout(300);
+        await p.locator('#s-printer .ph button').click();
+      };
+      const inUse = () => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}').price, KEY);
+      await open(page);
+      const other = await context.newPage();
+      await open(other);
+
+      await page.locator('#filPrice').click();          // focused, nothing typed
+      await other.locator('#filPrice').fill('40');
+      await page.waitForTimeout(400);
+      await expect(page.locator('#filPrice')).toHaveValue('40');
+
+      await page.locator('#filPrice').fill('20');       // typed into, and left focused
+      await page.waitForTimeout(250);
+      await other.locator('#filPrice').fill('30');
+      await page.waitForTimeout(400);
+      expect(await inUse()).toBe(30);
+      await page.selectOption('#filSym', '€');
+      await page.waitForTimeout(250);
+      expect(await inUse()).toBe(30);
+      await page.locator('#filPrice').press('Tab');
+      await page.waitForTimeout(250);
+      await expect(page.locator('#filPrice')).toHaveValue('30');
+      expect(await inUse()).toBe(30);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  /* Past any real spool the price is held at 10000, and the field used to go on showing
+     the 1000000000 typed over costs worked out at 10000. Once it is left it shows the
+     price in use, as the other fields do; under the caret it is left alone. */
+  test('a price past the limit shows the price in use once the field is left', async ({ page }) => {
+    await binsJob(page);
+    await page.locator('#s-printer .ph button').click();
+    const price = page.locator('#filPrice');
+    await price.fill('1000000000');
+    await page.waitForTimeout(250);
+    await expect(price).toHaveValue('1000000000');
+    await price.press('Tab');
+    await page.waitForTimeout(250);
+    await expect(price).toHaveValue('10000');
+    await expect(page.locator('#totals')).toContainText(/about \$\d+\.\d\d/);
+  });
 });
 
 /* The symbol starts from the browser's region and is only ever a default: nothing is

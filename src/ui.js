@@ -21,7 +21,8 @@ let buildToken = 0;
    the design's, so ESTIMATE keeps them on this device, shared with the bins page, and they
    never reach the link or a saved drawer. A change redraws the figures and nothing else:
    the pieces are seconds of CSG, and a dearer spool changes none of them. */
-const est = ESTIMATE.bind({ price: $('filPrice'), sym: $('filSym'), speed: $('printSpeed') },
+const est = ESTIMATE.bind({ price: $('filPrice'), sym: $('filSym'), speed: $('printSpeed'),
+                            err: $('filPriceErr') },
                           () => refreshEstimates());
 /* The connector families, named once each. KEY_CONN is the three that take a flat key
    and offer the housing choice; KEYED adds the H-clip, whose clip is a loose part too —

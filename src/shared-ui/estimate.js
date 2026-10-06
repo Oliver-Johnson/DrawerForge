@@ -57,6 +57,19 @@ const ESTIMATE = (() => {
   // past any real spool, and well short of a typo the size of a phone number
   const PRICE_MAX = 10000;
   const priceOf = (v) => (typeof v === 'number' && isFinite(v) && v > 0 ? Math.min(v, PRICE_MAX) : null);
+  /* A price as it is typed: a plain number, with a decimal point or a decimal comma. Half
+     of Europe writes 12,50, and the number input this used to be took that as 1250 — a
+     price then saved, shared with the other tool and written into the README. A lone
+     comma with no point is a decimal comma. Anything else — a thousands separator, a
+     currency sign, a minus, an exponent — is not read at all, because any reading of it
+     would be a guess. The number; null for an empty field, which is no price; NaN for
+     text that is not a price. */
+  function parsePrice(text) {
+    const t = String(text).trim();
+    if (!t) return null;
+    const s = /^\d*,\d*$/.test(t) ? t.replace(',', '.') : t;
+    return /^(\d+\.?\d*|\.\d+)$/.test(s) ? parseFloat(s) : NaN;
+  }
 
   function load() {
     let p = null;
@@ -165,25 +178,66 @@ const ESTIMATE = (() => {
    * The price, the symbol and the speed override, in panel 02 of both tools. Filled from
    * storage at load, saved on every edit, and refilled when the other tool — or this one
    * in another tab — changes them, so a price typed on one page is the price on the
-   * other without a reload. `onChange` is the tool's own redraw. */
+   * other without a reload. `onChange` is the tool's own redraw. `els.err` is the line
+   * under the price that says when what was typed is not a price.
+   *
+   * The price is read from its own field and only from there. A change of symbol or
+   * speed used to read the price box as well, and a tab whose box was left focused when
+   * another tab changed the price wrote its own stale figure back over the new one. */
   function bind(els, onChange) {
     let prefs = load();
+    // typed into since it took focus: only then is the box the person's to keep
+    let edited = false, refused = false;
+    /* A price that is not one is said out loud, the way the drawer fields say a bad
+       measurement: marked for a screen reader and in red, and a line under it in words
+       that says what is still in use, since the price in use does not change. */
+    const mark = (bad) => {
+      refused = bad;
+      els.price.setAttribute('aria-invalid', bad ? 'true' : 'false');
+      els.price.style.borderColor = bad ? 'var(--red)' : '';
+      if (!els.err) return;
+      els.err.textContent = bad ? 'Type the price as a number, like 22.99 or 22,99 — ' +
+        (prefs.price ? `the costs still use ${perKg(prefs)}.` : 'no price is set.') : '';
+      els.err.hidden = !bad;
+    };
+    const showPrice = () => {
+      els.price.value = prefs.price === null ? '' : String(prefs.price);
+      mark(false);
+    };
     const show = () => {
-      if (document.activeElement !== els.price)
-        els.price.value = prefs.price === null ? '' : String(prefs.price);
+      if (document.activeElement !== els.price || !edited) showPrice();
+      else if (refused) mark(true);            // still refused, but the price in use moved
       els.sym.value = prefs.sym;
       els.speed.value = prefs.speed;
     };
     show();
-    const read = () => {
-      prefs = { price: priceOf(parseFloat(els.price.value)), sym: els.sym.value,
-                speed: SPEED_CHOICES.includes(els.speed.value) ? els.speed.value : 'auto' };
-      save(prefs);
-      onChange();
+    const commit = () => { save(prefs); onChange(); };
+    els.price.addEventListener('focus', () => { edited = false; });
+    els.price.addEventListener('input', () => {
+      edited = true;
+      const p = parsePrice(els.price.value);
+      mark(Number.isNaN(p));
+      if (refused) return;
+      prefs = Object.assign({}, prefs, { price: priceOf(p) });
+      commit();
+    });
+    /* Once it is left, the box shows the price in use, as the other fields show the value
+       in use: 1000000000 is held at the limit, 0 is no price, and a price another tab set
+       meanwhile is that price. What was typed stays when it is that price already — 12,50
+       is left as 12,50 — and when it was refused, so it can be put right. */
+    els.price.addEventListener('blur', () => {
+      edited = false;
+      const p = parsePrice(els.price.value);
+      if (!Number.isNaN(p) && p !== prefs.price) showPrice();
+    });
+    const choose = () => {
+      prefs = Object.assign({}, prefs, { sym: els.sym.value,
+        speed: SPEED_CHOICES.includes(els.speed.value) ? els.speed.value : 'auto' });
+      if (refused) mark(true);                  // the line names the price in the new symbol
+      commit();
     };
-    els.price.addEventListener('input', read);
-    els.sym.addEventListener('change', read);
-    els.speed.addEventListener('change', read);
+    els.sym.addEventListener('change', choose);
+    els.speed.addEventListener('change', choose);
     window.addEventListener('storage', (e) => {
       if (e.key !== KEY) return;
       prefs = load(); show(); onChange();
@@ -197,6 +251,6 @@ const ESTIMATE = (() => {
     if (o) o.textContent = `From the printer: ${listedSpeed(printerSelect)}`;
   }
 
-  return { KEY, SYMBOLS, SPEEDS, LAYER, ROUGH, regionSymbol, load, cost, perKg, money,
+  return { KEY, SYMBOLS, SPEEDS, LAYER, ROUGH, regionSymbol, load, parsePrice, cost, perKg, money,
            plateSeconds, roundMinutes, duration, speedOf, listedSpeed, bind, labelAuto };
 })();

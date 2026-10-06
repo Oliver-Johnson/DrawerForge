@@ -75,7 +75,8 @@ const unitsUnder = (room) => Math.max(0, Math.floor((room - LIP_H + 0.001) / SPE
    and they never reach the link or a saved drawer. A change redraws the figures and
    nothing else: no bin changes because a spool got dearer. Bound here, at the top,
    because refresh() reads it and refresh() can run from any of the boot paths below. */
-const est = ESTIMATE.bind({ price: $('filPrice'), sym: $('filSym'), speed: $('printSpeed') },
+const est = ESTIMATE.bind({ price: $('filPrice'), sym: $('filSym'), speed: $('printSpeed'),
+                            err: $('filPriceErr') },
                           // the dialog too: a price typed on the other page arrives here
                           () => { refresh(); if ($('exportDlg').open) renderExport(); });
 
