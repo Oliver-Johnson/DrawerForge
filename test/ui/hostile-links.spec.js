@@ -296,6 +296,31 @@ test('a link with half cells keeps them, and a whole bin still sits on whole cel
   expect(errors).toEqual([]);
 });
 
+/* No page writes 1.3 or 1.4, so a link that has one was typed by hand, and a page from
+   before half sizes read it as whole cells. It still reads that way: a 1.4 x 1.4 is the
+   1 x 1 it was, a 1.3 does not grow into the bin beside it, and a carved bin typed 2.5
+   wide keeps its shape as the 3 wide bin it was. */
+test('hand-typed sizes between halves read as they did before half sizes', async ({ page }) => {
+  const errors = watch(page);
+  const sizes = () => page.evaluate(() => B().map((b) => [b.x, b.y, b.u, b.v]));
+  const shared = () => page.evaluate(() =>
+    layerClaims(0).flat().some(Array.isArray) || warnings().some((w) => /shares cells/.test(w.t)));
+
+  await arrive(page, H.BINS_URL + '#bl=0-0-1.4-1.4-3');
+  expect(await sizes()).toEqual([[0, 0, 1, 1]]);
+
+  await arrive(page, H.BINS_URL + '#bl=0-0-1.3-1-3_1-0-1-1-3');
+  expect(await sizes()).toEqual([[0, 0, 1, 1], [1, 0, 1, 1]]);
+  expect(await shared()).toBe(false);
+
+  await arrive(page, H.BINS_URL + '#bl=0-0-2.5-2-3-1.2-1.2-0-0-0-1-1-1-1-0-0-110111');
+  expect(await sizes()).toEqual([[0, 0, 3, 2]]);
+  expect(await page.evaluate(() => [isCarved(B()[0]), binCells(B()[0]).length])).toEqual([true, 5]);
+  // drawn carved, one square for each cell it keeps
+  expect(await page.locator('#fillmap .bin').count()).toBe(5);
+  expect(errors).toEqual([]);
+});
+
 test('dividers and height from a link are capped', async ({ page }) => {
   const errors = watch(page);
   await arrive(page, H.BINS_URL + '#bl=0-0-1-1-3-1.2-1.2-100000-2.5');

@@ -1570,19 +1570,29 @@ const maxDividers = (inside, wall) =>
 const numAt = (p, i, d, hi) => (isFinite(p[i]) ? Math.min(hi, Math.max(0, p[i])) : d);
 const countAt = (p, i, d, lo, hi) =>
   (isFinite(p[i]) ? Math.min(hi, Math.max(lo, Math.round(p[i]))) : d);
-// the same in half cells: to the nearest half, so 0.25 is a half and 1.2 is a whole one
+/* A size or a place as a page writes it: whole, or since half-size bins, half a cell on.
+   Kept as it is. Anything else is read as countAt reads it, which is how a page from
+   before half sizes read every one: no page writes 1.3, so one is typed by hand, and was
+   a whole cell there. Snapped to the nearest half instead, 1.4 x 1.4 came back a cell and
+   a half where it had been a cell, and a 1.3 grew into the bin beside it. */
 const halfAt = (p, i, d, lo, hi) =>
-  (isFinite(p[i]) ? Math.min(hi, Math.max(lo, Math.round(p[i] * 2) / 2)) : d);
+  (isFinite(p[i]) && Number.isInteger(p[i] * 2) && p[i] >= 0.5 && p[i] <= hi ? p[i]
+    : countAt(p, i, d, Math.max(1, lo), hi));
+const placeAt = (p, i, hi) =>
+  (isFinite(p[i]) && Number.isInteger(p[i] * 2) && p[i] >= 0 && p[i] <= hi ? p[i]
+    : countAt(p, i, 0, 0, hi));
 /* Sizes and positions are in cells, and since half-size bins they may end in .5. The
    four fields are the same four, so the format did not grow and a link from before reads
-   exactly as it did: it only ever held whole numbers, and a whole number is its own
-   nearest half.
-     u and v snap to halves, the smallest half a cell.
-     x and y snap to halves for a half-size bin, and to whole cells for a whole one, which
+   exactly as it did: it only ever held whole numbers.
+     u and v keep a half (halfAt); anything between halves is a whole cell, as it was.
+     x and y keep a half for a half-size bin, and are whole cells for a whole one, which
    stays on whole cells (see binFeet): a whole bin on a half step is rounded onto the
    grid as a fractional position always was.
-     A half-size bin's mask is dropped. A mask counts whole cells and nothing carves a
-   half-size bin, so one can only be a link typed by hand.
+     A bin with a carve mask is read as a page from before half sizes read it, all four
+   rounded to whole cells, and keeps its mask. A mask counts whole cells, and no page
+   writes one for a half-size bin, so a bin that has one came from a whole-cell page or
+   was typed over one: read in halves, a 2.5 wide bin lost its shape where it had been
+   a 3 wide L.
    A page from before half sizes reads 1.5 as 2, and has no way to know it should not:
    neither page checks the link's version. That is the one thing a new link loses in an
    old tab. */
@@ -1591,21 +1601,24 @@ function unpackBin(t) {
   const p = raw.map(Number);
   const edges = {};
   PACK_EDGES.forEach((k, i) => { edges[k] = snapEdge(p[10 + i]); });
-  const u = halfAt(p, 2, BIN_DEFAULTS.u, 0.5, LINK_MAX.cells);
-  const v = halfAt(p, 3, BIN_DEFAULTS.v, 0.5, LINK_MAX.cells);
-  const half = isHalfSize({ u, v }), posAt = half ? halfAt : countAt;
+  const mask = raw[16] && raw[16] !== '0' ? raw[16] : '';
+  const sizeAt = mask ? countAt : halfAt;
+  const u = sizeAt(p, 2, BIN_DEFAULTS.u, 1, LINK_MAX.cells);
+  const v = sizeAt(p, 3, BIN_DEFAULTS.v, 1, LINK_MAX.cells);
+  const half = isHalfSize({ u, v });
+  const posAt = (i) => (half ? placeAt(p, i, LINK_MAX.cells) : countAt(p, i, 0, 0, LINK_MAX.cells));
   const hUnits = countAt(p, 4, BIN_DEFAULTS.hUnits, 1, LINK_MAX.hUnits);
   const H = hUnits * SPEC.unitH;
   const wall = numAt(p, 5, BIN_DEFAULTS.wall, LINK_MAX.wall);
   const inside = (n) => (n - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall;
   /* A floor or scoop past the bin's height, or a label shelf past its depth, builds
      the same part as one at it: the geometry already stops them there. */
-  return { x: posAt(p, 0, 0, 0, LINK_MAX.cells), y: posAt(p, 1, 0, 0, LINK_MAX.cells),
+  return { x: posAt(0), y: posAt(1),
            u, v, hUnits, wall, floorT: numAt(p, 6, BIN_DEFAULTS.floorT, H),
            divX: countAt(p, 7, 0, 0, maxDividers(inside(u), wall)),
            divY: countAt(p, 8, 0, 0, maxDividers(inside(v), wall)), solid: !!p[9],
            edges, scoop: numAt(p, 14, 0, H), label: numAt(p, 15, 0, v * SPEC.pitch),
-           cells: half ? null : bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v),
+           cells: half ? null : bitsToCells(mask, u, v),
            done: !!p[17], divRemovable: !!p[18],
            lid: !!p[19], lidSides: lidSidesFrom(p[20]), ...feetFrom(p[21]) };
 }
