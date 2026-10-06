@@ -196,18 +196,22 @@ function precache(pages, read) {
 const fileFor = (entry) => entry === './' ? 'index.html' : entry.endsWith('/') ? entry + 'index.html' : entry;
 
 /* A short hash of everything the worker caches, names and bytes both, and of the worker's
-   own code, `worker` (src/sw.js as written). Any change to any of them is a different
-   cache; no change is the same one.
+   own code, `worker`: sw.js exactly as it will be served, file list and all, with only
+   its version still to be filled in. Any change to any of them is a different cache; no
+   change is the same one.
 
    The code is in it because a cache must belong to one worker only. Without it, a deploy
-   that changed src/sw.js and nothing else would install the new worker into the very
+   that changed the worker and nothing else would install the new worker into the very
    cache the old one is still serving from, and a new worker whose install fails deletes
    its own cache — which would then be the old worker's, and the site would stop opening
-   offline until the next good install. */
+   offline until the next good install. It is the served text rather than src/sw.js
+   because that is what the browser compares: the list written another way here, with the
+   same files and the same source, is a new worker to the browser, and must not be the
+   same cache. */
 function version(files, read, worker) {
   const h = crypto.createHash('sha256');
   const code = Buffer.from(worker);
-  h.update(SW_SOURCE + '\n' + code.length + '\n');
+  h.update(SW + '\n' + code.length + '\n');
   h.update(code);
   for (const f of files) {
     const b = Buffer.from(read(fileFor(f)));
@@ -219,16 +223,19 @@ function version(files, read, worker) {
 
 /* sw.js, from src/sw.js with the version and the file list filled in. The markers are
    comments in front of valid placeholders, so the source parses and can be syntax-checked
-   on its own. */
+   on its own.
+
+   The list goes in first and the version last, because the version is a hash of the text
+   it goes into: everything in sw.js but itself. The version's own marker is still in
+   that text when it is hashed, and test/app-check.js puts it back to check the hash. */
 function serviceWorker(source, pages, read) {
   const files = precache(pages, read);
-  const v = version(files, read, source);
   for (const marker of ["/*__VERSION__*/''", '/*__FILES__*/[]'])
     if (!source.includes(marker)) throw new Error(`${SW_SOURCE} is missing the ${marker} marker`);
   const list = '[\n' + files.map((f) => '  ' + JSON.stringify(f) + ',').join('\n') + '\n]';
-  return source
-    .replace("/*__VERSION__*/''", () => JSON.stringify(v))
-    .replace('/*__FILES__*/[]', () => list);
+  const unversioned = source.replace('/*__FILES__*/[]', () => list);
+  const v = version(files, read, unversioned);
+  return unversioned.replace("/*__VERSION__*/''", () => JSON.stringify(v));
 }
 
 module.exports = { MANIFEST, SW, SW_SOURCE, NAME, ICONS, SHORTCUTS, tokens, themeColor,
