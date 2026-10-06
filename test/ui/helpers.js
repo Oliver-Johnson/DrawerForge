@@ -7,6 +7,7 @@
  * clicks. getScreenCTM is the only mapping that accounts for it.
  */
 'use strict';
+const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
@@ -133,36 +134,43 @@ const setField = async (page, id, value) => {
    next is only dependable on a real origin: from file:// pages the CI browser has now
    and then opened the second page with the first page's localStorage write missing,
    through reloads. The server listens on a port the system picks, so there is no port
-   to collide on. Resolves to { base, close }, and two switches for the offline cases:
+   to collide on. Resolves to { base, close }, and some switches for the offline cases:
 
-     down   set true and every request is cut off unanswered, as a dropped connection
-            is, until it is set false again
-     files  { '/path': text } served in place of the file on disk, to stand in for a
-            deploy that has changed it
+     down    set true and every request is cut off unanswered, as a dropped connection
+             is, until it is set false again
+     files   { '/path': text } served in place of the file on disk, to stand in for a
+             deploy that has changed it
+     maxAge  seconds; set it and every answer says the browser may keep it that long and
+             carries an ETag, and a request that sends the ETag back is answered 304 with
+             no body — what GitHub Pages does, with 600. Unset, nothing is cacheable.
+     log     every request answered, as { path, ifNoneMatch, status }
 
    The manifest's type is the one GitHub Pages sends for .webmanifest. */
 async function serveRoot() {
   const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
                   '.svg': 'image/svg+xml', '.png': 'image/png',
                   '.webmanifest': 'application/manifest+json' };
-  const site = { down: false, files: {} };
+  const site = { down: false, files: {}, maxAge: 0, log: [] };
   const server = http.createServer((req, res) => {
     if (site.down) { req.socket.destroy(); return; }
     const asked = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     const p = asked.endsWith('/') ? asked + 'index.html' : asked;
-    const type = { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' };
-    if (Object.prototype.hasOwnProperty.call(site.files, asked)) {
-      res.writeHead(200, type);
-      res.end(site.files[asked]);
-      return;
-    }
+    const ifNoneMatch = req.headers['if-none-match'] || null;
+    const answer = (status, body) => {
+      const head = status === 200 ? { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' } : {};
+      if (status === 200 && site.maxAge) {
+        head['cache-control'] = `max-age=${site.maxAge}`;
+        head.etag = '"' + crypto.createHash('sha1').update(body).digest('hex') + '"';
+        if (ifNoneMatch === head.etag) { status = 304; body = undefined; }
+      }
+      site.log.push({ path: asked, ifNoneMatch, status });
+      res.writeHead(status, head);
+      res.end(body);
+    };
+    if (Object.prototype.hasOwnProperty.call(site.files, asked)) { answer(200, site.files[asked]); return; }
     const f = path.join(ROOT, p);
-    if (!f.startsWith(ROOT + path.sep)) { res.writeHead(403); res.end(); return; }
-    fs.readFile(f, (err, buf) => {
-      if (err) { res.writeHead(404); res.end(); return; }
-      res.writeHead(200, type);
-      res.end(buf);
-    });
+    if (!f.startsWith(ROOT + path.sep)) { answer(403); return; }
+    fs.readFile(f, (err, buf) => answer(err ? 404 : 200, err ? undefined : buf));
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   site.base = `http://127.0.0.1:${server.address().port}/`;
