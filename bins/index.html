@@ -349,6 +349,18 @@ select{font-family:var(--sans)}
 .tog input:focus-visible{outline:1px solid var(--cyan)}
 .hint{font-size:12.5px;color:var(--dim);line-height:1.55}
 .hint.amber{color:var(--amber)}
+/* "more" in a long hint: the first sentence stays, the rest opens underneath it in place
+   (chrome.js does the toggling). Drawn as a link in the hint's own type rather than as
+   one of the page's buttons, because it is a footnote to the sentence and not something
+   to do; a button for all that, so it takes the keyboard and says whether it is open.
+   [hidden] is restated because the display that opens the rest would otherwise beat the
+   browser's own rule for it, the trap the tip jar's comment below describes. */
+.hint button.more{all:unset;display:inline-block;color:var(--cyan);cursor:pointer;
+  text-decoration:underline dotted;text-underline-offset:3px;border-radius:3px}
+.hint button.more:hover{text-decoration-style:solid}
+.hint button.more:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+.hint .moretext{display:block;margin-top:4px}
+.hint .moretext[hidden]{display:none}
 button.act{background:var(--cyan);color:#0c1116;border:none;border-radius:6px;padding:9px 12px;
   font-weight:600;cursor:pointer;font-size:13px}
 button.act:disabled{opacity:.45;cursor:default}
@@ -681,6 +693,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .stagecard h3 .tail{font-size:12px}
   label.f{font-size:12px}
   .hint{font-size:12px}
+  /* A 40 px target without a 40 px line: the padding makes the box a finger can hit and the
+     equal negative margin takes it back out of the layout, so the sentence it ends does
+     not open a gap above and below itself. */
+  .hint button.more{padding:11px 8px;margin:-11px -8px}
   .tog{font-size:13px;min-height:40px}
   /* every control a finger has to hit */
   input,select,button{min-height:40px}
@@ -929,16 +945,20 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       <label class="f"><b>or grid width (cells)</b><input id="gridX" type="number" step="1" min="1" value="7"></label>
       <label class="f"><b>or grid depth (cells)</b><input id="gridY" type="number" step="1" min="1" value="9"></label>
     </div>
-    <div class="hint">Count the cells of the baseplate you already have and these fill the drawer size in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
+    <!-- A hint past four lines or so shows its first sentence; "more" opens the rest in
+         place (chrome.js), inside the hint, where the tests read it. The two hints that
+         hold controls of their own keep them in view: the lid's sides below, and the
+         removable dividers' thickness and clearance, which stay whole. -->
+    <div class="hint">Count the cells of the baseplate you already have and these fill the drawer size in — 4 × 6 cells is a 168 × 252 mm drawer. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</span></div>
     <div class="row">
       <label class="f"><b>Usable height (<span data-unit>mm</span>)</b><input id="drawerH" type="number" step="0.5" min="1" max="2000" value="84"></label>
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
     <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
     <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (<span data-unit>mm</span>)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
-    <div class="hint" id="drawerViewHint" style="display:none">Draws the real drawer in the preview — floor and four walls, translucent so the bins still show through. The sides stand at the usable height you gave above, because that is the number the fit check already uses and a second side measurement could only disagree with it. The front panel is often taller or lower than the sides, so it gets its own figure; leave it at 0 to match them. The walls sit at the drawer's inside dimensions, so the gap between them and the baseplate is the space the grid cannot reach. It is a view only — nothing you download changes.</div>
+    <div class="hint" id="drawerViewHint" style="display:none">Draws the real drawer in the preview — floor and four walls, translucent so the bins still show through. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>The sides stand at the usable height you gave above, because that is the number the fit check already uses and a second side measurement could only disagree with it. The front panel is often taller or lower than the sides, so it gets its own figure; leave it at 0 to match them. The walls sit at the drawer's inside dimensions, so the gap between them and the baseplate is the space the grid cannot reach. It is a view only — nothing you download changes.</span></div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
-    <div class="hint">Only affects the material estimate, not the geometry. Thin parts — walls, floor, dividers, lip — print solid whatever you set; the feet are thick enough to be infilled, and they dominate. Assumes 2 perimeters and 4 solid top/bottom layers.</div>
+    <div class="hint">Only affects the material estimate, not the geometry. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Thin parts — walls, floor, dividers, lip — print solid whatever you set; the feet are thick enough to be infilled, and they dominate. Assumes 2 perimeters and 4 solid top/bottom layers.</span></div>
     <div class="mono" id="gridSummary">—</div>
     <div style="margin-top:8px"><a id="toPlates" class="ghost" href="../">← back to baseplates</a></div>
   </div>
@@ -1005,7 +1025,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <div class="row" id="doneRow" style="display:none">
       <label class="tog"><input id="done" type="checkbox"> Already printed — leave off the plates</label>
     </div>
-    <div class="hint" id="doneHint">A bin marked printed stays in the drawer and in the layout, and drops out of the print plates, the STL downloads and the filament estimate. It is what you want when you are filling a drawer a few prints at a time.</div>
+    <div class="hint" id="doneHint">A bin marked printed stays in the drawer and in the layout, and drops out of the print plates, the STL downloads and the filament estimate. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>It is what you want when you are filling a drawer a few prints at a time.</span></div>
     <div class="row" id="edgeRowA">
       <label class="f"><b>Front wall</b><select id="edgeF">
         <option value="1">Full height</option><option value="0.66">Two thirds</option>
@@ -1040,13 +1060,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       <label class="f"><b>Slot clearance (mm)</b><input id="divClr" type="number" step="0.05" min="0" max="1" value="0.25"></label>
     </div>
     Clearance is per side. 0.25 slides; tighten it to 0.15 if your dividers rattle, loosen it if they bind.</div>
-    <div class="hint" id="featureHint">A scoop fills the front inside corner with a curve so you can sweep contents out — try 8 mm. The label shelf juts in from the top of the back wall with a 45° underside, so it prints without support; 12 mm suits a printed label. Both need their wall to exist.</div>
+    <div class="hint" id="featureHint">A scoop fills the front inside corner with a curve so you can sweep contents out — try 8 mm. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>The label shelf juts in from the top of the back wall with a 45° underside, so it prints without support; 12 mm suits a printed label. Both need their wall to exist.</span></div>
     <!-- A lid grips the bin's stacking lip, so it is only offered on a bin that still
          has one — lowering any wall drops the lip from all four. -->
     <div class="row" id="lidRow">
       <label class="tog"><input id="lid" type="checkbox"> Lid for this bin</label>
     </div>
-    <div class="hint" id="lidHint" style="display:none">A flat plate with a skirt that seats inside the bin&rsquo;s lip. Prints upside down, so the plate is the first layer and there are no feet to print — a fraction of the filament a bin costs. Untick a side to leave its skirt off, for an edge you want to reach past.
+    <div class="hint" id="lidHint" style="display:none">A flat plate with a skirt that seats inside the bin&rsquo;s lip. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Prints upside down, so the plate is the first layer and there are no feet to print — a fraction of the filament a bin costs. Untick a side to leave its skirt off, for an edge you want to reach past.</span>
       <div class="row" style="margin-top:6px">
         <label class="tog"><input id="lidF" type="checkbox" checked> Front</label>
         <label class="tog"><input id="lidB" type="checkbox" checked> Back</label>
@@ -1056,7 +1076,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     </div>
     <div class="hint" id="lidNoLip" style="display:none;color:var(--red)">This bin has a lowered wall, so it has no stacking lip for a lid to grip. Set every wall to full height to give it one.</div>
     <div class="hint" id="lidCarved" style="display:none;color:var(--red)">A lid is a plain rectangle, so on a carved bin it would hang out over the cells you cut away. It is left off the downloads; lids are made for rectangular bins.</div>
-    <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. Corner posts stay full height and a lowered wall ramps up to meet them, so the side walls keep their ends — a wall that stopped square against the post snapped off there. The ramp is 8.5 mm at each end whatever the bin&rsquo;s footprint, so a wider bin keeps the same corner and gains a longer flat opening. Lowering any wall removes the stacking lip — nothing can sit on it.</div>
+    <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Corner posts stay full height and a lowered wall ramps up to meet them, so the side walls keep their ends — a wall that stopped square against the post snapped off there. The ramp is 8.5 mm at each end whatever the bin&rsquo;s footprint, so a wider bin keeps the same corner and gains a longer flat opening. Lowering any wall removes the stacking lip — nothing can sit on it.</span></div>
     <button class="ghost" id="presetTray" style="margin-top:8px">Make this a flat tray</button>
     <label class="f"><b>Corner smoothness</b>
       <select id="arcSegs">
@@ -1065,19 +1085,19 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
         <option value="24">Smooth — 24 segments</option>
       </select></label>
     <button class="act" id="splitFit" style="display:none">Split this bin to fit the bed</button>
-    <div class="hint" id="splitHint" style="display:none">Splits it into the fewest pieces that each fit, covering the same cells. They sit side by side on the baseplate, so nothing is lost but the wall between them — and if you want one continuous compartment, set the facing walls of the new bins to Open.</div>
+    <div class="hint" id="splitHint" style="display:none">Splits it into the fewest pieces that each fit, covering the same cells. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>They sit side by side on the baseplate, so nothing is lost but the wall between them — and if you want one continuous compartment, set the facing walls of the new bins to Open.</span></div>
     <!-- The same slot as the focus button, which is only offered with a bin selected.
          With nothing selected this panel is called "New bins" and holds the size you
          have just typed, so it is the honest place to say "make that, and nothing
          else". -->
     <button class="act" id="scratchBin" style="display:none">Design one bin on its own</button>
-    <div class="hint" id="scratchBinHint" style="display:none">For when you want a single bin and not a drawer of them. Opens the same uncluttered page, with no grid to place it on and no drawer measurements to fill in — just the bin, its preview and its download. You can drop it into the drawer at the end, or never.</div>
+    <div class="hint" id="scratchBinHint" style="display:none">For when you want a single bin and not a drawer of them. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Opens the same uncluttered page, with no grid to place it on and no drawer measurements to fill in — just the bin, its preview and its download. You can drop it into the drawer at the end, or never.</span></div>
     <button class="act" id="focusBin" style="display:none">Edit this bin on its own</button>
     <div class="hint" id="focusBinHint" style="display:none">Hides the drawer, the layers and the map, and gives this one bin the whole page. Everything here still works and the bin stays exactly where it is — this only changes what you are shown.</div>
     <button class="act" id="carveMode" style="display:none">Carve this bin into a shape</button>
-    <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. <span class="haskeys">Alt-click does the same thing without turning the mode on. </span>Press <span class="haskeys">Escape or </span>the button again when you are done.</div>
+    <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden><span class="haskeys">Alt-click does the same thing without turning the mode on. </span>Press <span class="haskeys">Escape or </span>the button again when you are done.</span></div>
     <button class="act" id="mergeBins" style="display:none">Merge into one bin</button>
-    <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</div>
+    <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</span></div>
     <div class="row" id="selActions" style="display:none">
       <button class="ghost" id="applyAll">Apply to all bins</button>
       <button class="ghost" id="delBin">Delete selected</button>
@@ -1121,7 +1141,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <!-- Carving was taught as Alt-click only, and a touch screen has no Alt key, so on a
          phone the one sentence about L and U shapes described something impossible.
          The Carve button in panel 03 is the route there, and the touch wording names it. -->
-    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <span class="haskeys"><b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</span><span class="hastouch">To make an L or a U, tap a bin, press <b>Carve this bin into a shape</b> in panel 03, then tap the cells to cut out — tap a gap to put one back.</span></div>
+    <div class="hint">Drag across empty cells to place a bin. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <span class="haskeys"><b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</span><span class="hastouch">To make an L or a U, tap a bin, press <b>Carve this bin into a shape</b> in panel 03, then tap the cells to cut out — tap a gap to put one back.</span></span></div>
     <div class="row3">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>
@@ -3936,6 +3956,26 @@ const DF = {
      pass their own plural; everything so far takes an s. */
   plural(n, one, many) {
     return `${n} ${n === 1 ? one : many || one + 's'}`;
+  },
+  /* A long hint the page writes itself, given the same "more" as the long hints written
+     into the markup: the first sentence, the button, and the rest hidden until it is
+     pressed (chrome.js toggles it; style.css draws it). The plate style hint is the case —
+     it describes whichever style is picked, so its words change after load. The parts are
+     made once and only their text is rewritten after that, so a hint someone has opened
+     stays open while they change the setting it describes. */
+  hint(el, lead, rest) {
+    let btn = el.querySelector(':scope>button.more');
+    if (!btn) {
+      el.textContent = '';
+      btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'more'; btn.textContent = 'more';
+      btn.setAttribute('aria-expanded', 'false');
+      const more = document.createElement('span');
+      more.className = 'moretext'; more.hidden = true;
+      el.append(document.createTextNode(''), btn, more);
+    }
+    el.firstChild.nodeValue = lead + ' ';
+    btn.nextElementSibling.textContent = rest;
   },
   /* An STL is an 84-byte header plus 50 bytes a triangle, and a polygon fans into
      verts-2 of them, so the exact file size follows from polygons already in memory. */
@@ -10068,6 +10108,25 @@ addEventListener('resize', closeMenu);
       e.preventDefault();
       t.focus();
     });
+
+  /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
+     read before you reached its controls, and on a phone it pushed the working surface
+     further down. Each long one shows its first sentence and then this button, and the
+     rest opens in place under it. The words never leave the hint: the build's audits and
+     the tests read them there, and a hint the page shows or hides by joint type still
+     holds its whole text either way. Delegated rather than wired per button, because the
+     page writes some hints itself after load (DF.hint in widgets.js) and theirs is the
+     same button. The label says which way it goes; aria-expanded says it to a screen
+     reader. */
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.hint button.more') : null;
+    var rest = b && b.nextElementSibling;
+    if (!rest || !rest.classList.contains('moretext')) return;
+    var open = b.getAttribute('aria-expanded') !== 'true';
+    b.setAttribute('aria-expanded', String(open));
+    b.textContent = open ? 'less' : 'more';
+    rest.hidden = !open;
+  });
 
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
      described controls that do not exist there. Rewritten rather than removed: the

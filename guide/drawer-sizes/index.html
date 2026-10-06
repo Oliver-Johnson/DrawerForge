@@ -330,6 +330,18 @@ select{font-family:var(--sans)}
 .tog input:focus-visible{outline:1px solid var(--cyan)}
 .hint{font-size:12.5px;color:var(--dim);line-height:1.55}
 .hint.amber{color:var(--amber)}
+/* "more" in a long hint: the first sentence stays, the rest opens underneath it in place
+   (chrome.js does the toggling). Drawn as a link in the hint's own type rather than as
+   one of the page's buttons, because it is a footnote to the sentence and not something
+   to do; a button for all that, so it takes the keyboard and says whether it is open.
+   [hidden] is restated because the display that opens the rest would otherwise beat the
+   browser's own rule for it, the trap the tip jar's comment below describes. */
+.hint button.more{all:unset;display:inline-block;color:var(--cyan);cursor:pointer;
+  text-decoration:underline dotted;text-underline-offset:3px;border-radius:3px}
+.hint button.more:hover{text-decoration-style:solid}
+.hint button.more:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+.hint .moretext{display:block;margin-top:4px}
+.hint .moretext[hidden]{display:none}
 button.act{background:var(--cyan);color:#0c1116;border:none;border-radius:6px;padding:9px 12px;
   font-weight:600;cursor:pointer;font-size:13px}
 button.act:disabled{opacity:.45;cursor:default}
@@ -662,6 +674,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .stagecard h3 .tail{font-size:12px}
   label.f{font-size:12px}
   .hint{font-size:12px}
+  /* A 40 px target without a 40 px line: the padding makes the box a finger can hit and the
+     equal negative margin takes it back out of the layout, so the sentence it ends does
+     not open a gap above and below itself. */
+  .hint button.more{padding:11px 8px;margin:-11px -8px}
   .tog{font-size:13px;min-height:40px}
   /* every control a finger has to hit */
   input,select,button{min-height:40px}
@@ -976,6 +992,25 @@ items, is a perfectly good design and uses far less filament.</p>
       e.preventDefault();
       t.focus();
     });
+
+  /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
+     read before you reached its controls, and on a phone it pushed the working surface
+     further down. Each long one shows its first sentence and then this button, and the
+     rest opens in place under it. The words never leave the hint: the build's audits and
+     the tests read them there, and a hint the page shows or hides by joint type still
+     holds its whole text either way. Delegated rather than wired per button, because the
+     page writes some hints itself after load (DF.hint in widgets.js) and theirs is the
+     same button. The label says which way it goes; aria-expanded says it to a screen
+     reader. */
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.hint button.more') : null;
+    var rest = b && b.nextElementSibling;
+    if (!rest || !rest.classList.contains('moretext')) return;
+    var open = b.getAttribute('aria-expanded') !== 'true';
+    b.setAttribute('aria-expanded', String(open));
+    b.textContent = open ? 'less' : 'more';
+    rest.hidden = !open;
+  });
 
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
      described controls that do not exist there. Rewritten rather than removed: the
