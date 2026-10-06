@@ -7615,19 +7615,18 @@ function descriptor() {
    README. */
 const encodeDesc = (o) => Object.entries(o)
   .map(([k, x]) => `${encodeURIComponent(k)}=${encodeURIComponent(x)}`).join('&');
-/* packBin no longer throws, but if packing ever fails again it must cost one save,
-   not every save after it with the share, hand-over and README links. Those all build
-   from here, and the last string that did pack stands in. `strip` names keys to leave
-   out, for the README's link. */
-let lastDesc = '';
+/* packBin no longer throws, but if packing ever fails again it must cost that save and
+   no more: an empty string, which the save skips, rather than an exception through the
+   share, hand-over and README links that all build from here. An older string standing
+   in was worse than none, since a layout that failed from the start stood in for by the
+   boot's defaults saved those over it. `strip` names keys to leave out, for the README's
+   link. */
 function descString(strip) {
   try {
     const o = descriptor();
     for (const k of strip || []) delete o[k];
-    const s = encodeDesc(o);
-    if (!strip) lastDesc = s;
-    return s;
-  } catch (err) { return lastDesc; }
+    return encodeDesc(o);
+  } catch (err) { return ''; }
 }
 /* One bad pair costs that pair. A malformed escape (%E0%A4%A) used to throw out of the
    whole load, which took the page with it. */
@@ -7720,29 +7719,43 @@ addEventListener('hashchange', () => {
   if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
 });
 
-/* Two more slots beside the save, so a layout is set aside rather than lost.
+/* More slots beside the save, so a layout is set aside rather than lost.
  *
  * PREV_KEY: following a link overwrote the save within 400 ms with no way back, so
  * whatever is about to replace it — a link, or the defaults standing in for a layout
  * that would not load — copies it here first, and the page offers to put it back.
  *
+ * LINKED_KEY: the save a link wrote, while nobody has changed it. That save is the
+ * sender's drawer, not yours, so a second link replacing it leaves PREV_KEY holding
+ * yours; setting it aside instead lost your layout to the first link you had opened.
+ *
  * LOADING_KEY: names the layout being loaded, and is cleared once the page has drawn
  * it. Still there at the next visit, for the same layout, means the last attempt hung or
  * crashed the tab; loading it again would only do that again, on every visit. */
-const PREV_KEY = SAVE_KEY + ':prev', LOADING_KEY = SAVE_KEY + ':loading';
+const PREV_KEY = SAVE_KEY + ':prev', LINKED_KEY = SAVE_KEY + ':linked',
+  LOADING_KEY = SAVE_KEY + ':loading';
 const readKey = (k) => { try { return localStorage.getItem(k) || ''; } catch (err) { return ''; } };
 const writeKey = (k, v) => {
   try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); }
   catch (err) { /* private mode: the guard and the backup go, the page does not */ }
 };
 let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* What an untouched page saves, and what this one held when the boot finished — null
+   from the first change on. Until that change a stalled page saves nothing: saving the
+   defaults it stands in with put them over the layout it declined, and one more reload
+   lost that layout for good. */
+let pristine = '', bootDesc = null;
 function leaveFor(url) {
   hashReady = false; clearTimeout(hashSaveT);   // no save of this page's may land after
   location.href = url;
 }
+/* Swapped rather than copied over: what is here now goes aside in its place, so putting
+   a layout back is never the step that loses one. */
 function putBack() {
   const prev = readKey(PREV_KEY);
   if (!prev) return;
+  const cur = descString();
+  if (cur && cur !== pristine && !(stalled && cur === bootDesc)) writeKey(PREV_KEY, cur);
   saveLocal(prev);
   leaveFor(location.href.split('#')[0]);   // a bare visit restores it, and says so
 }
@@ -7766,6 +7779,12 @@ function rememberState() {
   hashSaveT = setTimeout(() => {
     const h = descString();
     if (!h) return;
+    /* The first change is the moment the banner stops being true: "put my layout back"
+       would now also throw away the edit, so it goes. */
+    if (bootDesc !== null) {
+      if (h === bootDesc) { if (stalled) return; }
+      else { bootDesc = null; $('setAside').style.display = 'none'; }
+    }
     try { history.replaceState(null, '', '#' + h); }
     catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                      worth an exception that stops the rest of the page working */ }
@@ -7798,11 +7817,16 @@ function loadFromHash(src) {
     if (k === 'bnotes') { pendingNotes = val; continue; }
     if (k === 'bf') { pendingFocus = val; continue; }
     if (k === 'bs') { pendingScratch = val; continue; }
-    const id = Object.hasOwn(KEYS, k) ? KEYS[k] : '';
+    // not Object.hasOwn, which Safari only has from 15.4
+    const id = Object.prototype.hasOwnProperty.call(KEYS, k) ? KEYS[k] : '';
     if (!id) { hashExtras[k] = val; continue; }
     const x = Number(val);
     if (val === '' || !isFinite(x) || x < 0 || (x === 0 && NEEDS_SIZE.has(k))) continue;
-    if ($(id)) $(id).value = String(Math.min(x, KEY_MAX[k] || 2000));
+    /* Not the drawer: readControls holds it to the field's limit and Checks says so, as
+       for a typed one. Cut down here, a 5 m drawer from a link was drawn 2 m wide with
+       nothing said. */
+    const max = k === 'w' || k === 'd' ? Infinity : KEY_MAX[k] || 2000;
+    if ($(id)) $(id).value = String(Math.min(x, max));
   }
 }
 // the guide holds no state, so hand it ours and it can hand it back
@@ -7818,8 +7842,24 @@ $('shareBtn').addEventListener('click', () => {
 });
 // the whole bins descriptor travels; baseplates re-emits what it doesn't own
 function platesHref() { return '../#' + descString(); }
+/* The hand-over is marked as one, in this tab, for the page at the other end to read
+   once: a design arriving from the other tool may carry a drawer or bed changed there,
+   and that is the same layout moving on, not a link replacing it. */
+const HANDOFF_KEY = 'drawerforge:handoff';
+function handOff(href) {
+  try { sessionStorage.setItem(HANDOFF_KEY, href.slice(href.indexOf('#') + 1)); }
+  catch (err) { /* unmarked, the other page offers this layout back: a banner, no loss */ }
+  location.href = href;
+}
+function takeHandOff() {
+  try {
+    const h = sessionStorage.getItem(HANDOFF_KEY) || '';
+    sessionStorage.removeItem(HANDOFF_KEY);
+    return h;
+  } catch (err) { return ''; }
+}
 for (const id of ['toPlates', 'navPlates'])
-  $(id).addEventListener('click', (e) => { e.preventDefault(); location.href = platesHref(); });
+  $(id).addEventListener('click', (e) => { e.preventDefault(); handOff(platesHref()); });
 
 /* ---------- boot ---------------------------------------------------------- */
 let timer = null;
@@ -7925,9 +7965,34 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+/* The printer menu names the bed in the fields below it, or says Custom. Only choosing
+   from it ever set it, so a bed from a link, from the baseplates page or typed in kept
+   showing whichever printer was picked last. */
+function syncBedPreset() {
+  const v = ['bedW', 'bedD', 'bedH'].map((id) => +$(id).value).join(',');
+  $('bedPreset').value = [...$('bedPreset').options].some((o) => o.value === v) ? v : 'custom';
+}
+for (const id of ['bedW', 'bedD', 'bedH']) $(id).addEventListener('input', syncBedPreset);
+
+/* Whether two saves hold the same bins, compared setting by setting on what this page
+   owns. Compared as strings, the baseplates page handing the drawer back — its keys in
+   its own order, with its own extras — was a link that had replaced your layout, on
+   every trip there and back. A hand-over also leaves out the drawer and the bed, the
+   settings the two pages share: changing them on the other page is not a different
+   layout. A link from someone keeps them, since a drawer of another size is exactly what
+   one brings. The view keys are left out always: how the design is looked at is not
+   what it is. */
+const SHARED_KEYS = new Set(['w', 'd', 'bw', 'bd', 'bh', 'if']);
+const OWN_KEYS = [...Object.keys(KEYS), 'bl', 'bs', 'bseg', 'bdt', 'bdc', 'bnotes']
+  .filter((k) => k !== 'ph' && !VIEW_KEYS.includes(k));
+function sameDesign(a, b, handedOver) {
+  const p = parseHash(a), q = parseHash(b);
+  return OWN_KEYS.every((k) => (handedOver && SHARED_KEYS.has(k)) || p[k] === q[k]);
+}
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
+let linkedNow = false;   // this page holds a link's layout, not yet changed by anyone
 {
   const fromLink = isLayoutHash(incomingHash);
   const saved = readLocal();
@@ -7936,21 +8001,29 @@ const incomingHash = (location.hash || '').replace(/^#/, '');
      one's work, so replacing it sets nothing aside — or every link would offer the
      defaults back. */
   readControls();
-  const pristine = descString();
+  pristine = descString();
   stalled = src && readKey(LOADING_KEY) === src ? src : '';
-  // set aside whatever is about to replace the save: a different link, or the defaults
-  const aside = saved.length > 2 && saved !== pristine &&
-    (saved !== src || (!!stalled && !fromLink));
+  const handedOver = takeHandOff() === incomingHash && fromLink;   // read every time
+  const replaces = fromLink && (saved.length <= 2 || !sameDesign(saved, src, handedOver));
+  const savedLinked = saved.length > 2 && saved === readKey(LINKED_KEY);
+  /* Set aside whatever is about to be replaced: by a different layout, or by the defaults
+     standing in for one that would not load. Not a link's own layout, untouched: what that
+     link replaced is already set aside, and it is the one you would want back. */
+  const aside = saved.length > 2 && saved !== pristine && !savedLinked &&
+    (replaces || !!stalled);
   if (aside) writeKey(PREV_KEY, saved);
+  const canPutBack = replaces && (aside || (savedLinked && !!readKey(PREV_KEY)));
   if (stalled) {
     showSetAside('This layout did not finish loading last time, so the page has started ' +
-      'from its defaults rather than try it again.', aside && saved !== src, true);
+      'from its defaults rather than try it again.', canPutBack, true);
   } else if (src) {
     writeKey(LOADING_KEY, src);
     loadFromHash(src);
     if (!fromLink) $('restored').style.display = '';
-    else if (aside) showSetAside('This link replaced the layout you had here.', true, false);
+    else if (canPutBack) showSetAside('This link replaced the layout you had here.', true, false);
+    linkedNow = fromLink ? replaces || savedLinked : savedLinked;
   }
+  syncBedPreset();
 }
 if (pendingNotes) {                       // applied after the layout so indices line up
   try {
@@ -7993,9 +8066,13 @@ if (pendingScratch) {
     enterFocus();
   }
 }
+bootDesc = descString();
 /* Laid out and drawn, so the marker has done its job. A stalled layout keeps its marker:
    reloading the same link must be declined again, not tried again. */
-if (!stalled) writeKey(LOADING_KEY, '');
+if (!stalled) {
+  writeKey(LOADING_KEY, '');
+  writeKey(LINKED_KEY, linkedNow ? bootDesc : '');
+}
 
 /* Applied straight to the selection rather than through readControls, for the reason
    given where doneRow is hidden: readControls also writes `state`, the template for the

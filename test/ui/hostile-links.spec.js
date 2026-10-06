@@ -154,9 +154,93 @@ test('a link that did not finish loading last time is not loaded again', async (
   await expect(page.locator('#setAside')).toContainText(/did not finish loading/);
   expect(await stored(page, PLATES + ':prev')).toContain('w=512');
 
+  // the stand-in defaults were never saved over the drawer the page declined
+  expect(await stored(page, PLATES)).toContain('w=512');
+
   await clickAndLoad(page, '#tryAnyway');
   expect(await page.inputValue('#drawerW')).toBe('333');
   expect(await stored(page, PLATES + ':loading')).toBeNull();
+  // so the link that did load can still be undone
+  await expect(page.locator('#putBack')).toBeVisible();
+  await clickAndLoad(page, '#putBack');
+  expect(await page.inputValue('#drawerW')).toBe('512');
+});
+
+test('a saved layout that did not finish loading is still declined after a reload',
+  async ({ page }) => {
+    await H.openPlates(page);
+    await H.setField(page, 'drawerW', '512');
+    await settle(page);
+    const save = await stored(page, PLATES);
+    await page.evaluate(([k, v]) => localStorage.setItem(k, v), [PLATES + ':loading', save]);
+
+    for (let visit = 0; visit < 2; visit++) {
+      await arrive(page, H.PLATES_URL);
+      expect(await page.inputValue('#drawerW')).toBe('306');
+      await expect(page.locator('#setAside')).toContainText(/did not finish loading/);
+      expect(await stored(page, PLATES), 'nothing saved over it').toBe(save);
+    }
+    // the first change is a choice to start again, so it is saved and the banner goes
+    await H.setField(page, 'drawerW', '400');
+    await settle(page);
+    expect(await stored(page, PLATES)).toContain('w=400');
+    await expect(page.locator('#setAside')).toBeHidden();
+    expect(await stored(page, PLATES + ':prev')).toBe(save);
+  });
+
+test('a second link does not push your own layout out of the backup', async ({ page }) => {
+  await H.openPlates(page);
+  await H.setField(page, 'drawerW', '512');
+  await settle(page);
+  await arrive(page, H.PLATES_URL + '#w=333');
+  await arrive(page, H.PLATES_URL + '#w=444');
+  await expect(page.locator('#putBack')).toBeVisible();
+  expect(await stored(page, PLATES + ':prev')).toContain('w=512');
+
+  // putting it back sets the link's layout aside in its place, rather than losing it
+  await clickAndLoad(page, '#putBack');
+  expect(await page.inputValue('#drawerW')).toBe('512');
+  expect(await stored(page, PLATES + ':prev')).toContain('w=444');
+});
+
+test('changing a linked layout takes the offer to put yours back away', async ({ page }) => {
+  await H.openPlates(page);
+  await H.setField(page, 'drawerW', '512');
+  await settle(page);
+  await arrive(page, H.PLATES_URL + '#w=333');
+  await expect(page.locator('#setAside')).toBeVisible();
+  await page.waitForTimeout(600);                      // the boot's own save is no edit
+  await expect(page.locator('#setAside')).toBeVisible();
+  await H.setField(page, 'drawerW', '340');
+  await settle(page);
+  await expect(page.locator('#setAside')).toBeHidden();
+  // and that edited layout is yours now: the next link sets it aside
+  await arrive(page, H.PLATES_URL + '#w=444');
+  expect(await stored(page, PLATES + ':prev')).toContain('w=340');
+});
+
+test('the printer menu names the bed a link brings', async ({ page }) => {
+  await arrive(page, H.PLATES_URL + '#bw=220&bd=220&bh=250');
+  expect(await page.inputValue('#bedPreset')).toBe('220,220,250');
+  await arrive(page, H.PLATES_URL + '#bw=200&bd=210&bh=220');
+  expect(await page.inputValue('#bedPreset')).toBe('custom');
+  await H.setField(page, 'bedH', '230');
+  expect(await page.inputValue('#bedPreset')).toBe('custom');
+  await page.selectOption('#bedPreset', '300,300,300');
+  await H.setField(page, 'bedW', '299');
+  expect(await page.inputValue('#bedPreset')).toBe('custom');
+});
+
+test('the pages do not need Object.hasOwn', async ({ page }) => {
+  const errors = watch(page);
+  await page.addInitScript(() => { delete Object.hasOwn; });
+  await arrive(page, H.PLATES_URL + '#sp=plates&w=500');
+  expect(await page.evaluate(() => typeof Object.hasOwn)).toBe('undefined');
+  expect(await page.evaluate(() => [state.splitMode, layout.pieces.length > 0])).toEqual(['plates', true]);
+  await arrive(page, H.BINS_URL + '#bl=0-0-1-1-3&bw=220');
+  expect(await binsIn(page)).toBe(1);
+  expect(await page.inputValue('#bedW')).toBe('220');
+  expect(errors).toEqual([]);
 });
 
 /* ---------- bins ------------------------------------------------------------ */
@@ -240,6 +324,9 @@ test('bed, infill and gap survive a trip through baseplates and back', async ({ 
 
   await arrive(page, H.BINS_URL + hashOf(await page.evaluate(() => binsHref())));
   for (const [id, v] of want) expect(await page.inputValue('#' + id), id).toBe(v);
+  // the same layout come back, not a link that replaced it
+  await expect(page.locator('#setAside')).toBeHidden();
+  expect(await page.inputValue('#bedPreset')).toBe('custom');
 });
 
 test('a drawer of no size, or an absurd one, in a link is not used', async ({ page }) => {
@@ -296,4 +383,92 @@ test('a saved layout that did not finish loading last time is set aside', async 
   await clickAndLoad(page, '#tryAnyway');
   expect(await binsIn(page)).toBe(1);
   expect(await stored(page, BINS + ':loading')).toBeNull();
+});
+
+/* The tools' own hand-over is not a link from someone. Comparing the save with the
+   address as strings called every trip to baseplates and back a replaced layout,
+   because each page writes the keys in its own order. */
+async function handOver(page, url, hrefFn) {
+  const h = await page.evaluate((fn) => {
+    const href = window[fn]();
+    const hash = href.slice(href.indexOf('#') + 1);
+    sessionStorage.setItem(HANDOFF_KEY, hash);         // what the page's button does
+    return hash;
+  }, hrefFn);
+  await arrive(page, url + '#' + h);
+}
+test('a trip to baseplates and back keeps the bins, with nothing offered back',
+  async ({ page }) => {
+    await H.openBins(page);
+    await H.dragCells(page, [0, 0], [1, 1]);
+    await H.dragCells(page, [3, 3], [3, 3]);
+    await settle(page);
+
+    await handOver(page, H.PLATES_URL, 'platesHref');
+    await expect(page.locator('#setAside')).toBeHidden();
+    await H.setField(page, 'drawerW', '400');         // changed on the other page
+    await settle(page);
+
+    await handOver(page, H.BINS_URL, 'binsHref');
+    expect(await binsIn(page)).toBe(2);
+    expect(await page.inputValue('#drawerW')).toBe('400');
+    await expect(page.locator('#setAside')).toBeHidden();
+    expect(await stored(page, BINS + ':prev')).toBeNull();
+  });
+
+test('a link with your bins in a drawer of another size still offers yours back',
+  async ({ page }) => {
+    await H.openBins(page);
+    await H.dragCells(page, [0, 0], [1, 1]);
+    await settle(page);
+    const save = await stored(page, BINS);
+    await arrive(page, H.BINS_URL + '#' + save.replace(/(^|&)w=\d+/, '$1w=500'));
+    expect(await page.evaluate(() => state.drawerW)).toBe(500);
+    await expect(page.locator('#putBack')).toBeVisible();
+    expect(await stored(page, BINS + ':prev')).toBe(save);
+  });
+
+test('reloading a bins layout that did not finish loading does not lose it',
+  async ({ page }) => {
+    await H.openBins(page);
+    await H.dragCells(page, [0, 0], [1, 1]);
+    await settle(page);
+    const save = await stored(page, BINS);
+    await page.evaluate(([k, v]) => localStorage.setItem(k, v), [BINS + ':loading', save]);
+
+    // a reload keeps the layout in the address, which is how it usually comes back
+    for (let visit = 0; visit < 2; visit++) {
+      await arrive(page, H.BINS_URL + '#' + save);
+      expect(await binsIn(page)).toBe(0);
+      await expect(page.locator('#setAside')).toContainText(/did not finish loading/);
+      expect(await stored(page, BINS), 'nothing saved over it').toBe(save);
+      expect(await page.evaluate(() => location.hash.slice(1))).toBe(save);
+    }
+    expect(await stored(page, BINS + ':prev')).toBe(save);
+    await clickAndLoad(page, '#tryAnyway');
+    expect(await binsIn(page)).toBe(1);
+  });
+
+test('a drawer too big for the page, from a link, is said in Checks', async ({ page }) => {
+  await arrive(page, H.BINS_URL + '#w=5000&d=380&bl=0-0-1-1-3');
+  expect(await page.evaluate(() => state.drawerW)).toBe(2000);
+  await expect(page.locator('#warnings')).toContainText('5000 × 380 mm drawer is bigger than the 2000 mm');
+});
+
+test('the bins printer menu names the bed a link brings', async ({ page }) => {
+  await arrive(page, H.BINS_URL + '#bw=220&bd=220&bh=250');
+  expect(await page.inputValue('#bedPreset')).toBe('220,220,250');
+  await arrive(page, H.BINS_URL + '#bw=200&bd=210&bh=220');
+  expect(await page.inputValue('#bedPreset')).toBe('custom');
+});
+
+test('a layout that will not write is not saved as something else', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  const save = await stored(page, BINS);
+  await page.evaluate(() => { window.descriptor = () => { throw new Error('no'); }; });
+  await H.dragCells(page, [3, 3], [3, 3]);
+  await settle(page);
+  expect(await stored(page, BINS)).toBe(save);
 });
