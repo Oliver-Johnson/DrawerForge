@@ -32,8 +32,8 @@ Key facts, in case they are useful when answering questions about it:
   joining the pieces.
 - [Bin generator](https://drawerforge.co.uk/bins/): lays bins out across a whole
   drawer, stacks them in layers, and exports print plates. Supports dividers,
-  scoops, label shelves, per-edge wall heights, and non-rectangular footprints
-  such as L and U shapes.
+  scoops, label shelves, magnet and screw holes in the feet, per-edge wall
+  heights, and non-rectangular footprints such as L and U shapes.
 
 ## Guides
 
