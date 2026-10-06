@@ -7,7 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
-        lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE } = require('../src/bins/bin.js');
+        lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
+        unpackBin } = require('../src/bins/bin.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
 // the browser hand-assembles its own G; make sure core still exports everything
@@ -18,6 +19,9 @@ const { checkOrientation, orientationNote } = require('./orientation.js');
     process.exit(1);
   }
 }
+
+// half a cell along either axis, decided here rather than by asking the engine
+const halfSize = (c) => c.u % 1 !== 0 || c.v % 1 !== 0;
 
 const cellsExcept = (u, v, drop) => {
   const out = [];
@@ -188,6 +192,22 @@ const CASES = [
   { name: 'L-3x3-mag', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]), magnets: true },
   { name: 'L-3x3-mag-scr', u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]),
     magnets: true, screws: true, holesEvery: true },
+  /* Half-size bins: quarter feet under the same body, lip, dividers, scoop and label any
+     bin gets, half a cell along either axis or both. The section on quarter feet further
+     down probes the feet themselves; these are the shapes, and their STLs. */
+  { name: '0.5x0.5x3', u: 0.5, v: 0.5, hUnits: 3 },
+  { name: '0.5x0.5x1', u: 0.5, v: 0.5, hUnits: 1 },
+  { name: '0.5x1x3', u: 0.5, v: 1, hUnits: 3 },
+  { name: '1x0.5x3', u: 1, v: 0.5, hUnits: 3 },
+  { name: '1.5x1x3', u: 1.5, v: 1, hUnits: 3 },
+  { name: '1.5x1.5x3', u: 1.5, v: 1.5, hUnits: 3 },
+  { name: '0.5x1x3-solid', u: 0.5, v: 1, hUnits: 3, solid: true },
+  { name: '2.5x1x4-div', u: 2.5, v: 1, hUnits: 4, divX: 2 },
+  { name: '0.5x2x6-railed', u: 0.5, v: 2, hUnits: 6, divY: 1, divRemovable: true },
+  { name: '0.5x1x3-scoop-label', u: 0.5, v: 1, hUnits: 3, scoop: 8, label: 10 },
+  { name: '1.5x1x3-scoop-label', u: 1.5, v: 1, hUnits: 3, scoop: 8, label: 10 },
+  { name: '1.5x1x3-openfront', u: 1.5, v: 1, hUnits: 3, edges: { f: 0 } },
+  { name: '3.5x2.5x5-everything', u: 3.5, v: 2.5, hUnits: 5, divX: 2, divY: 1, scoop: 6, label: 10 },
 ];
 
 /* Every carved footprint builds one outer fillet per reflex corner, and every one of
@@ -254,9 +274,10 @@ for (const cs of CASES) {
               `${hOk ? '' : '  HEIGHT MISMATCH: zmax ' + zmax.toFixed(2) + ' vs totalH ' + r.meta.totalH.toFixed(2) + ', pitch ' + r.meta.H}`);
   /* A carved shape is still a bin: it takes a stacking lip like any other, so it
      must report one and stand the same height as the rectangle of the same units.
-     Losing the lip silently would make anything carved unstackable. */
+     Losing the lip silently would make anything carved unstackable. A half-size bin
+     is held to the same: it stacks on a half-size bin as a bin sits on a plate. */
   let lipOk = true;
-  if (cs.cells && !cs.solid && !cs.edges) {
+  if ((cs.cells || halfSize(cs)) && !cs.solid && !cs.edges) {
     const expTotal = cs.hUnits * 7 + 3.95;
     lipOk = r.meta.hasLip === true && Math.abs(r.meta.totalH - expTotal) < 0.001;
     if (!lipOk) console.log(`${''.padEnd(14)}  LIP MISSING: hasLip ${r.meta.hasLip}, ` +
@@ -319,6 +340,113 @@ for (const [what, holes] of [['', {}],
                 `${flatOk && radOk ? (sameOk ? 'ok' : 'MOVED from the plain foot') : 'MISMATCH'}`);
     if (!(flatOk && radOk && sameOk)) bad++;
   });
+}
+
+/* Half-size bins stand on quarter feet, and the feet have to be BUILT that way, not
+ * merely closed: a half-size bin on whole feet, or on one half foot per axis, is just as
+ * watertight, and its footprint is set by the body, so the footprint check above would
+ * pass it too. So the feet are read off the mesh.
+ *
+ * A quarter foot is the spec foot on a 21 mm pitch: 10.5 mm in from a whole foot on
+ * every side at every level of the published profile, with the spec's corner radius
+ * there. Its half-width is the spec's less 10.5, and its corner reaches the spec's
+ * 17.00 arc centre less 10.5 along each axis, plus that radius. Every quarter of every
+ * half-size case is sliced on its own at the heights the whole foot is, against those
+ * numbers. Then each is probed from the bed: at its centre the bed has to cover it, and
+ * on every line between two quarters nothing may come below the body, which starts at
+ * the top of the feet. A whole foot, or a half foot along that line, covers it from 0.
+ */
+console.log('\nhalf-size bins stand on quarter feet, against the spec:');
+{
+  const Q = SPEC.pitch / 2, IN = Q / 2;         // a quarter's pitch, and how far in it is
+  const C = SPEC.centre;
+  const pointsAt = (tris, z) => {
+    const out = [];
+    for (const t of tris)
+      for (let i = 0; i < 3; i++) {
+        const a = t[i], b = t[(i + 1) % 3];
+        if ((a[2] - z) * (b[2] - z) >= 0) continue;
+        const s = (z - a[2]) / (b[2] - a[2]);
+        out.push([a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1])]);
+      }
+    return out;
+  };
+  // every centre along one axis, n halves of a cell across: from the size alone
+  const centres = (n) => Array.from({ length: Math.round(n * 2) }, (_, i) => (i + 0.5) * Q - n * Q);
+  for (const cs of CASES.filter(halfSize)) {
+    const r = buildBin(G, cs), tris = G.polysToTriangles(r.polys), at = prober(r.polys);
+    const xs = centres(cs.u), ys = centres(cs.v), faults = [];
+    let worstFlat = 0, worstRad = 0;
+    for (const [z, expHalf] of SLICES) {
+      const pts = pointsAt(tris, z);
+      const wantHalf = expHalf - IN, wantRad = (C - IN) * Math.SQRT2 + (expHalf - C);
+      for (const fx of xs) for (const fy of ys) {
+        let maxAbs = 0, maxRad = 0;
+        for (const [x, y] of pts) {
+          const dx = Math.abs(x - fx), dy = Math.abs(y - fy);
+          if (dx >= IN || dy >= IN) continue;      // another quarter's
+          maxAbs = Math.max(maxAbs, dx, dy);
+          maxRad = Math.max(maxRad, Math.hypot(dx, dy));
+        }
+        worstFlat = Math.max(worstFlat, Math.abs(maxAbs - wantHalf));
+        worstRad = Math.max(worstRad, Math.abs(maxRad - wantRad));
+        if (Math.abs(maxAbs - wantHalf) >= 0.03 || Math.abs(maxRad - wantRad) >= 0.06)
+          faults.push(`quarter at ${fx},${fy} sliced at ${z}: half-width ${maxAbs.toFixed(3)} for ` +
+                      `${wantHalf.toFixed(2)}, corner ${maxRad.toFixed(3)} for ${wantRad.toFixed(2)}`);
+      }
+    }
+    const first = (x, y) => { const z = at(x, y)[0]; return z === undefined ? Infinity : z; };
+    for (const fx of xs) for (const fy of ys)
+      if (Math.abs(first(fx, fy)) > 1e-6) faults.push(`the bed does not cover the quarter at ${fx},${fy}`);
+    const seams = [];
+    for (let i = 0; i + 1 < xs.length; i++) for (const fy of ys) seams.push([(xs[i] + xs[i + 1]) / 2, fy]);
+    for (let j = 0; j + 1 < ys.length; j++) for (const fx of xs) seams.push([fx, (ys[j] + ys[j + 1]) / 2]);
+    for (let i = 0; i + 1 < xs.length; i++) for (let j = 0; j + 1 < ys.length; j++)
+      seams.push([(xs[i] + xs[i + 1]) / 2, (ys[j] + ys[j + 1]) / 2]);
+    for (const [x, y] of seams)
+      if (first(x, y) < SPEC.footH - 0.1)
+        faults.push(`a foot reaches over the line between quarters at ${x},${y} from ${first(x, y).toFixed(2)}`);
+    console.log(`  ${cs.name.padEnd(22)} ` + (faults.length ? 'WRONG: ' + faults.slice(0, 4).join('; ')
+      : `${xs.length * ys.length} quarter feet, open between, within ${worstFlat.toFixed(3)} on the flats ` +
+        `and ${worstRad.toFixed(3)} at the corners`));
+    if (faults.length) bad++;
+  }
+}
+
+/* A half-size bin builds no holes in its feet whatever it asks for: where one would meet
+   the plate's magnet depends on where the bin sits on the half grid (feetHolesOff). The
+   settings stay on the bin, and nothing about the part may change with them — not the
+   mesh, not the counts the page reads, not the floor screws would raise, nor the divider
+   plate that stands on it. And a mask, which counts whole cells, is ignored. */
+console.log('\nhalf-size bins build no holes, and no carve');
+{
+  const stl = (cfg) => Buffer.from(G.stlBinary(buildBin(G, cfg).polys, 'b')).toString('base64');
+  const SETS = [{ magnets: true }, { screws: true }, { magnets: true, screws: true }, BOTH];
+  const fails = [];
+  let n = 0;
+  for (const base of [{ u: 0.5, v: 0.5, hUnits: 3 }, { u: 1.5, v: 1, hUnits: 3, divX: 1, divRemovable: true },
+                      { u: 1, v: 2.5, hUnits: 2, solid: true }]) {
+    const plain = stl(base), name = `${base.u}x${base.v}`;
+    if (!feetHolesOff(base)) fails.push(`${name} gives no reason for having no holes`);
+    for (const holes of SETS) {
+      const cfg = Object.assign({}, base, holes), r = buildBin(G, cfg);
+      const what = `${name} ${Object.keys(holes).join('+')}`;
+      n++;
+      if (stl(cfg) !== plain) fails.push(`${what} is not the bin without`);
+      if (r.meta.magnets || r.meta.screws || holeSites(cfg).length)
+        fails.push(`${what} counts ${r.meta.magnets} magnets, ${r.meta.screws} screws`);
+      if (Math.abs(r.meta.floorZ - (SPEC.footH + BIN_DEFAULTS.floorT)) > 1e-9)
+        fails.push(`${what} raised its floor to ${r.meta.floorZ.toFixed(2)}`);
+      if (base.divRemovable && dividerPart(G, cfg, 'y').meta.tall !== dividerPart(G, base, 'y').meta.tall)
+        fails.push(`${what} shortened its divider plate`);
+    }
+  }
+  if (feetHolesOff({ u: 2, v: 1 })) fails.push('a whole bin is given a reason for no holes');
+  const carved = { u: 1.5, v: 1, hUnits: 3, cells: [[0, 0]] };
+  if (stl(carved) !== stl({ u: 1.5, v: 1, hUnits: 3 })) fails.push('a 1.5x1 with a mask came out carved');
+  console.log('  ' + (fails.length ? 'WRONG: ' + fails.join('; ')
+    : `${n} holed builds, each the bin without; no such reason on a whole bin; a mask ignored`));
+  if (fails.length) bad++;
 }
 
 /* Holes in the feet, every set on every shape that builds a foot or a slab differently.
@@ -684,7 +812,9 @@ console.log('\na lid fits the lip it is made for');
 
   for (const [name, cfg] of [['every side', { u: 3, v: 5 }],
                              ['front left open', { u: 3, v: 5, lidSides: { f: false } }],
-                             ['one cell', { u: 1, v: 1 }]]) {
+                             ['one cell', { u: 1, v: 1 }],
+                             ['half a cell', { u: 0.5, v: 0.5 }],
+                             ['1.5 x 0.5, front left open', { u: 1.5, v: 0.5, lidSides: { f: false } }]]) {
     const L = lidPartOf(G, cfg);
     const m = G.checkManifold(L.polys);
     const expW = (cfg.u - 1) * 42 + 41.5;
@@ -739,6 +869,10 @@ console.log('\nwalls across the whole range the page accepts');
       ['2x2x3 railed', { u: 2, v: 2, hUnits: 3, divX: 1, divY: 1, divRemovable: true }],
       ['2x1x3 open front', { u: 2, v: 1, hUnits: 3, edges: { f: 0.5 } }],
       ['L-3x3', { u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) }],
+      /* Half a cell is 20.5 mm across, so the thickest wall the field takes leaves a
+         slot 0.5 mm wide inside it, with a scoop and a label shelf to fit in that. */
+      ['0.5x0.5x3', { u: 0.5, v: 0.5, hUnits: 3 }],
+      ['1.5x0.5x4 everything', { u: 1.5, v: 0.5, hUnits: 4, divX: 1, scoop: 8, label: 12 }],
       /* A wall past 6.2 mm reaches over the screw holes from inside, and a label shelf
          on one past 5 mm: both stand above the screw's end, which the probes check. The
          walls around the lip's base have nothing to do with the feet, so these take the
@@ -812,7 +946,9 @@ for (const hUnits of [1, 3, 6]) {
                               ['L-2x2, 3 mm walls', { u: 2, v: 2, cells: L3, wall: 3 }],
                               // a floor under 1.85 is built at 1.85 with screws
                               ['rectangle, holes', { u: 2, v: 1, magnets: true, screws: true }],
-                              ['L-2x2, holes', { u: 2, v: 2, cells: L3, magnets: true, screws: true }]])
+                              ['L-2x2, holes', { u: 2, v: 2, cells: L3, magnets: true, screws: true }],
+                              ['half-size, scoop + label', { u: 1.5, v: 0.5, scoop: H, label: 42 }],
+                              ['half-size, rails', { u: 0.5, v: 1.5, divY: 1, divRemovable: true }]])
     sweepReport(`${hUnits}u ${name}`, floors.map((floorT) =>
       [`floor ${floorT.toFixed(2)}`, Object.assign({ hUnits, floorT }, base)]));
 }
@@ -824,11 +960,11 @@ console.log('\nas many dividers as the fields allow');
    2x1) or the rails exactly one rail apart (0.95 mm, 0.9 in a 3x1), and neighbours
    touched face to face. A wall of 0 is counted for a 0 mm wall and built at 0.4, which
    packs the rails a hair closer than one apart. Those walls are swept along with a
-   spread of ordinary ones. */
+   spread of ordinary ones, on half-size bins as well as whole. */
 {
   const most = (n, wall) =>
     Math.max(0, Math.floor(((n - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall) / Math.max(wall, 1.2)) - 1);
-  for (const n of [1, 2, 3]) {
+  for (const n of [0.5, 1, 1.5, 2, 3]) {
     const walls = [0, 0.4, 0.9, 0.95, 1.2, 2, 4.15, 5, 8.35, 10];
     for (const divRemovable of [false, true])
       sweepReport(`${n}x1 ${divRemovable ? 'rails' : 'fixed'}`, walls.map((wall) =>
@@ -892,6 +1028,46 @@ console.log('\nlabel shelves as deep as the bin\'s height allows');
         rows.push([`floor ${floorT} wall ${wall} label ${label}`, Object.assign({ floorT, wall, label }, base)]);
     sweepReport(name, rows);
   }
+}
+
+/* Links from before half sizes have to build the bytes they always did.
+ *
+ * Half sizes went into the very code every bin goes through — the feet, what counts as
+ * a full rectangle, how a link's sizes and positions are read — and a whole bin was to
+ * come out of it unchanged, byte for byte, so that a link or a saved drawer from before
+ * makes the same files and a bin already printed still matches its file. Nothing else
+ * here would notice a whole bin that moved by a micron and stayed watertight.
+ *
+ * Each row is a link of one bin as the page wrote it before half sizes, and the first 16
+ * hex digits of the SHA-256 of its STL as that engine built it, at the page's default
+ * settings. Read through unpackBin, so the link is checked along with the geometry.
+ * A change that MEANS to alter whole bins will fail here: check that it should, then put
+ * in the digests this prints, and say so in the commit. */
+console.log('\nlinks from before half sizes build the same bytes');
+{
+  const crypto = require('crypto');
+  const OLD = [
+    ['1x1x3', '0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15-0', 'a6b5ca988bcf9ec4'],
+    ['1x1x1', '4-1-1-1-1-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15-0', '055b9aa96e86b515'],
+    ['3x2x5, dividers, scoop and label', '1-2-3-2-5-1.2-1.2-2-1-0-1-1-1-1-6-10-0-0-0-0-15-0', '66c515b3c3ab2fcc'],
+    ['2x2x3, removable dividers', '0-0-2-2-3-1.2-1.2-1-1-0-1-1-1-1-0-0-0-0-1-0-15-0', '857e407d5b6d51d2'],
+    ['2x1x3, front at half, left at a quarter', '0-0-2-1-3-1.2-1.2-0-0-0-0.5-1-0.25-1-0-0-0-0-0-0-15-0', '1838902a9b3e1fda'],
+    ['2x2x2 tray', '0-0-2-2-2-1.2-1.2-0-0-0-0-0-0-0-0-0-0-0-0-0-15-0', '16583a72aa4bdfc9'],
+    ['1x1x3 solid', '0-0-1-1-3-1.2-1.2-0-0-1-1-1-1-1-0-0-0-0-0-0-15-0', 'c6e857cede8b8d80'],
+    ['L-3x3', '0-0-3-3-3-1.2-1.2-0-0-0-1-1-1-1-0-0-111111110-0-0-0-15-0', 'ea2255a79030ae95'],
+    ['U-3x3', '0-0-3-3-3-1.2-1.2-0-0-0-1-1-1-1-0-0-111110111-0-0-0-15-0', 'a59a28b55e03af19'],
+    ['3x2x4, magnets and screws in every cell', '0-0-3-2-4-1.2-1.2-2-1-0-1-1-1-1-8-12-0-0-0-0-15-7', 'f17b747e3c0e9cea'],
+    ['L-3x3, magnets in the corners', '0-0-3-3-3-1.2-1.2-0-0-0-1-1-1-1-0-0-111111110-0-0-0-15-1', 'ad9b58c05deaba4d'],
+    ['2x1x4 with a lid, 21 fields', '0-0-2-1-4-0.85-2.35-0-0-0-1-1-1-1-0-0-0-0-0-1-14', 'a7bc7318f00e19f5'],
+  ];
+  const moved = OLD.map(([name, link, want]) => {
+    const got = crypto.createHash('sha256')
+      .update(Buffer.from(G.stlBinary(buildBin(G, unpackBin(link)).polys, 'b'))).digest('hex').slice(0, 16);
+    return got === want ? '' : `${name} (${link}) now ${got}, was ${want}`;
+  }).filter(Boolean);
+  console.log('  ' + (moved.length ? 'CHANGED: ' + moved.join('; ')
+    : `${OLD.length} links, each the same STL to the byte`));
+  if (moved.length) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');

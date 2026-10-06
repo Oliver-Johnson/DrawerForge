@@ -165,6 +165,65 @@ console.log('\nholes in the feet');
   if (misread.length) bad++;
 }
 
+/* Half-size bins ride in the same four fields as every bin's size and position, counted
+   in cells as always and now allowed to end in .5, so the format did not grow. What a
+   link from before held was whole, and a whole number reads as it always did. A whole
+   bin stays on whole cells, so one on a half step is put back on the grid the way a
+   fractional position always was; a mask counts whole cells, so one on a half-size bin
+   is dropped; and a size between halves goes to the nearest, never below one half. */
+console.log('\nhalf-size bins');
+{
+  const KEYS4 = ['x', 'y', 'u', 'v'];
+  const read = (b) => KEYS4.map((k) => `${k} ${b[k]}`).join(', ');
+  for (const [name, b, want] of [
+    ['half a cell, at the origin', bin({ u: 0.5, v: 0.5 }), [0, 0, 0.5, 0.5]],
+    ['1.5 x 0.5 on a half step both ways', bin({ x: 2.5, y: 0.5, u: 1.5, v: 0.5 }), [2.5, 0.5, 1.5, 0.5]],
+    ['1 x 2.5 on a half step across', bin({ x: 3.5, y: 4, u: 1, v: 2.5, divX: 1, scoop: 6 }), [3.5, 4, 1, 2.5]],
+    ['a whole bin on a half step is rounded', bin({ x: 2.5, y: 0.5, u: 2, v: 1 }), [3, 1, 2, 1]],
+  ]) {
+    const back = unpackBin(packBin(b));
+    const ok = KEYS4.every((k, i) => back[k] === want[i]) && back.hUnits === b.hUnits &&
+               back.divX === b.divX && back.scoop === b.scoop;
+    console.log(`  ${name.padEnd(38)} ${ok ? 'intact' : 'WRONG: ' + read(back)}`);
+    if (!ok) bad++;
+  }
+
+  // typed by hand: sizes and positions between halves
+  const tail = '3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15-0';
+  for (const [name, link, want] of [
+    ['0.25 snaps to a half, not to nothing', `0.25-0.75-0.25-0.25-${tail}`, [0.5, 1, 0.5, 0.5]],
+    ['a size under a quarter is still a half', `0-0-0.1-0-${tail}`, [0, 0, 0.5, 0.5]],
+    ['1.3 is 1.5, and 1.2 is 1', `1.3-1.2-1.3-1.2-${tail}`, [1.5, 1, 1.5, 1]],
+    ['a whole bin is not moved by a quarter', `1.3-1.75-2-1-${tail}`, [1, 2, 2, 1]],
+  ]) {
+    const back = unpackBin(link);
+    const ok = KEYS4.every((k, i) => back[k] === want[i]);
+    console.log(`  ${name.padEnd(38)} ${ok ? 'snapped' : 'WRONG: ' + read(back)}`);
+    if (!ok) bad++;
+  }
+
+  /* A mask on a half-size bin is never written and never read back. The 6-cell mask is
+     what a 2 x 3 would carry, which is how 1.5 x 2.5 rounds in a page from before. */
+  const masked = unpackBin('0-0-1.5-2.5-3-1.2-1.2-0-0-0-1-1-1-1-0-0-110111');
+  const written = packBin(bin({ u: 1.5, v: 1, cells: [[0, 0]] })).split('-')[16];
+  const maskOk = masked.cells === null && masked.u === 1.5 && masked.v === 2.5 && written === '0';
+  console.log(`  ${'a mask on a half-size bin is dropped'.padEnd(38)} ` +
+              (maskOk ? 'dropped' : `WRONG: read ${JSON.stringify(masked.cells)}, wrote ${written}`));
+  if (!maskOk) bad++;
+
+  /* Holes in the feet are not built on a half-size bin yet, but what was asked for is
+     kept: the bin is the same bin, and the day they are built the link already says. */
+  const holed = packBin(bin({ u: 0.5, v: 1.5, magnets: true, screws: true, holesEvery: true }));
+  const hb = unpackBin(holed);
+  const holesOk = holed.split('-')[21] === '7' && hb.magnets && hb.screws && hb.holesEvery;
+  console.log(`  ${'its hole settings survive the trip'.padEnd(38)} ${holesOk ? 'intact' : 'LOST from ' + holed}`);
+  if (!holesOk) bad++;
+
+  const count = packBin(bin({ x: 0.5, y: 1.5, u: 2.5, v: 0.5 })).split('-').length;
+  console.log(`  ${'the field count does not grow'.padEnd(38)} ${count === 22 ? '22, correct' : count + ' — WRONG'}`);
+  if (count !== 22) bad++;
+}
+
 /* A number that is not one. Nothing on the page is known to make a NaN, but one used to
    be written as 0, and 0 is a real value for most fields: it came back as a bin with no
    wall, no floor or an open side, where a field that says nothing should read as its
@@ -212,7 +271,8 @@ console.log('\nmalformed hashes fall back instead of throwing');
     let why = '';
     try {
       const b = unpackBin(s);
-      if (!(b.u >= 1 && b.v >= 1 && b.hUnits >= 1)) why = `footprint ${b.u}x${b.v}x${b.hUnits}`;
+      // half a cell is the smallest footprint, since half-size bins
+      if (!(b.u >= 0.5 && b.v >= 0.5 && b.hUnits >= 1)) why = `footprint ${b.u}x${b.v}x${b.hUnits}`;
       else if (!isFinite(b.wall) || !isFinite(b.floorT)) why = 'wall or floor is NaN';
       else {
         const r = buildBin(G, { u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
