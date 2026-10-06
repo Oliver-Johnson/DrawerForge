@@ -433,6 +433,32 @@ test('a one-piece plate offers no keys, plans none and zips none', async ({ page
   expect(buf.readUInt16LE(8), 'the ZIP is stored uncompressed').toBe(8);
 });
 
+/* A piece whose joints take it past the bed. The check above the plan counts only a
+   dovetail's tabs, so this one builds; the plan noted it as a plate of its own that
+   prints nothing, and the next piece was packed onto that plate. Drawn and downloaded,
+   that was a plate that looked like it held A1 and a file without it. The plan now
+   leaves it out, every other piece is on a plate that has a file, and A1 is named. */
+test('a piece too big for the bed with its joints is named, and takes no other piece with it',
+  async ({ page }) => {
+    const errors = await openAt(page,
+      '#w=330&d=330&bw=220&bd=180&mm=custom&ml=5&mr=0&mf=5&mb=0&cn=puzzle&v=2', 60000);
+    await page.waitForFunction(() => !!printPlan, null, { timeout: 60000 });
+    const s = await page.evaluate(() => ({
+      pieces: layout.pieces.map((pc) => pc.id),
+      planned: printPlan.plates.map((pl) => pl.placed.map((p) => p.id)),
+      over: printPlan.over,
+    }));
+    expect(s.over).toEqual(['A1']);
+    expect(s.planned.every((ids) => ids.length > 0), 'no plate without anything on it').toBe(true);
+    expect(s.planned.flat().sort(), 'every other piece is on a plate')
+      .toEqual(s.pieces.filter((id) => id !== 'A1').sort());
+    expect(await text(page, 'planTail')).toContain('1 part too big for the bed');
+    expect(await text(page, 'platesRow')).toContain('Piece A1 does not fit the 220 × 180 mm bed');
+    await page.locator('#openExport').click();
+    expect(await page.locator('#exFiles [data-ex="plate"]').count()).toBe(s.planned.length);
+    expect(errors).toEqual([]);
+  });
+
 /* ---- #24: one piece too big to build, and output size ----------------------------- */
 test('a piece of 900 cells is refused rather than built', async ({ page }) => {
   // a 1260 mm drawer on a "2000 mm bed" was one piece, 22 s of frozen page and a 189 MB STL
