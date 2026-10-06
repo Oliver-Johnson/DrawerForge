@@ -17,6 +17,12 @@ const state = Object.assign({}, DEFAULTS, {
 let layout = null;
 let builds = {};            // pieceId -> {polys, meta}
 let buildToken = 0;
+/* The filament price and the printer speed override, in panel 02. They are yours and not
+   the design's, so ESTIMATE keeps them on this device, shared with the bins page, and they
+   never reach the link or a saved drawer. A change redraws the figures and nothing else:
+   the pieces are seconds of CSG, and a dearer spool changes none of them. */
+const est = ESTIMATE.bind({ price: $('filPrice'), sym: $('filSym'), speed: $('printSpeed') },
+                          () => refreshEstimates());
 /* The connector families, named once each. KEY_CONN is the three that take a flat key
    and offer the housing choice; KEYED adds the H-clip, whose clip is a loose part too —
    see keysStl for what the ZIP did while it kept its own shorter copy of that list.
@@ -706,7 +712,7 @@ function drawPieceTable() {
      self-contradiction this whole guard exists to remove — the screen said "resolve the
      errors above to generate" and "-50.0 × 211.0 … fits" at the same time. */
   if (stopped) {
-    tb.innerHTML = '<tr><td colspan="6">Nothing to list until the checks above are clear.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="7">Nothing to list until the checks above are clear.</td></tr>';
     $('pieceTail').textContent = 'not building — see the checks above';
     updatePreviewLabel(true);
     syncExportDialog();
@@ -731,6 +737,7 @@ function drawPieceTable() {
       <td class="mono">${w.toFixed(1)} × ${d.toFixed(1)}</td>
       <td class="mono">${joints || '—'}</td>
       <td class="${fit?'':'bad'}">${fit ? 'fits' : footprintFits(pc) ? 'TOO TALL' : 'TOO BIG'}</td>
+      <td class="mono">${built ? massText(pieceGrams(pc.id)) + costTail(pieceGrams(pc.id)) : '…'}</td>
       <td><button class="ghost" data-dl="${pc.id}" ${built?'':'disabled'}>STL</button></td>
     </tr>`;
   }).join('');
@@ -1087,19 +1094,26 @@ function computePrintPlan() {
      Same for the size: measured off the mesh connectorPart returns, not off the
      parameters that made it. The two are the same rectangle for a flat key and are
      nothing like each other for the U-clip, whose prm describes a cross-section. */
+  /* The key's material is measured here too, off the same part, for the plates' weights
+     and times: one key is the same part on every plate that carries one. */
+  let keyMat = null;
   if (shipsKeys()) {
-    const ext = partExtent(connectorPart().polys);
+    const part = connectorPart();
+    const ext = partExtent(part.polys);
+    keyMat = meshMaterial(part.polys);
     items.push({ id: 'key', w: ext.w, d: ext.d, h: ext.h,
                  qty: keysNeeded(), stackable: false });
   }
   printPlan = { plates: packPlates(items, state.bedW, state.bedD, gap,
-    { stack, zGap, bedH: state.bedH || 1e9 }), merged: items, zGap };
+    { stack, zGap, bedH: state.bedH || 1e9 }), merged: items, zGap, keyMat };
   renderPrintPlan();
 }
 function renderPrintPlan() {
   const row = $('platesRow');
   updateExportTail();
-  if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; return; }
+  // the speed menu's own entry says which kind of printer the list makes this one
+  ESTIMATE.labelAuto($('printSpeed'), $('bedPreset'));
+  if (!printPlan) { row.innerHTML = '<div class="hint">Print plan appears when all pieces are built.</div>'; $('planTail').textContent = ''; $('planTime').textContent = ''; return; }
   const plates = printPlan.plates;
   const stacked = plates.some(pl => pl.placed.some(p => p.z > 0.01));
   $('planTail').textContent = plural(plates.length, 'print plate') + (stacked ? ' · stacked' : '');
@@ -1114,8 +1128,17 @@ function renderPrintPlan() {
         svg += `<text x="${(p.x+p.w/2)*sc+1}" y="${(state.bedD-p.y-p.d/2)*sc+4+(lvl*10)}" text-anchor="middle" font-size="10" fill="var(--ink)">${p.id}${p.z>0.01?' ↥':''}</text>`;
     }
     svg += '</svg>';
-    return `<div style="display:grid;gap:4px;justify-items:center">${svg}<div class="hint">plate ${i+1}</div></div>`;
+    return `<div style="display:grid;gap:4px;justify-items:center">${svg}<div class="hint">plate ${i+1}` +
+           (pl.overflow ? '' : `<br>${plateFigures(plateEstimate(pl))}`) + `</div></div>`;
   }).join('');
+  /* The job in one line under the plates: what it all weighs and costs, and roughly how
+     long, said as the rough figure it is. The weight is materialGrams, the same total the
+     download dialog and the README quote. */
+  const job = jobTime(), g = materialGrams();
+  $('planTime').textContent = job.plates.length && g !== null
+    ? `In all: ${massText(g)}${costTail(g)} · about ${ESTIMATE.duration(job.min)} of printing ` +
+      `on a ${speedName()} (${ESTIMATE.ROUGH}).`
+    : '';
 }
 function platePolysAndItems(idx) {
   const pl = printPlan.plates[idx];
@@ -1362,6 +1385,51 @@ function materialGrams() {
   return mm3 * PLA_DENSITY / 1000;
 }
 
+/* ---------- money and time --------------------------------------------------
+ * Every gram figure on the page is written through these, so none of them can be the one
+ * that forgot the cost: the piece table, the print plan, the download dialog and the
+ * README. The money is empty until a price is set, and then it is everywhere. The time is
+ * ESTIMATE's rough one, per plate and summed, for whichever kind of printer the list or
+ * the override says. */
+const costOf = (g) => ESTIMATE.cost(g, est.get());
+// " · £0.42", or nothing without a price
+const costTail = (g) => { const c = costOf(g); return c ? ` · ${c}` : ''; };
+const speedNow = () => ESTIMATE.speedOf($('bedPreset'), est.get());
+const speedName = () => `${ESTIMATE.SPEEDS[speedNow()].name} printer`;
+// one piece's filament in grams, once it exists; the same blend as the total
+function pieceGrams(id) {
+  return builds[id] ? filamentOf(builds[id].mat) * PLA_DENSITY / 1000 : null;
+}
+/* What one plate of the plan weighs and roughly takes: its pieces, stacked ones included,
+   and its keys, each measured the way the total measures them. */
+function plateEstimate(pl) {
+  const keyMm3 = printPlan.keyMat ? filamentOf(printPlan.keyMat) : 0;
+  const parts = pl.placed.map((p) => ({
+    vol: p.id === 'key' ? keyMm3 : builds[p.id] ? filamentOf(builds[p.id].mat) : 0,
+    h: p.h, z: p.z }));
+  const mm3 = parts.reduce((a, p) => a + p.vol, 0);
+  return { grams: mm3 * PLA_DENSITY / 1000,
+           min: ESTIMATE.roundMinutes(ESTIMATE.plateSeconds(parts, speedNow())) };
+}
+// "64 g · £1.28 · ≈ 2 h 15 min": a plate's weight, its cost once priced, its rough time
+function plateFigures(e) {
+  return `${massText(e.grams)}${costTail(e.grams)} · ≈ ${ESTIMATE.duration(e.min)}`;
+}
+/* Every plate's figures and the time in all, which is the sum of the plate times as
+   shown, so the plates and the total add up. Null until there is a plan to time. */
+function jobTime() {
+  if (!printPlan) return null;
+  const plates = printPlan.plates.filter((pl) => !pl.overflow).map(plateEstimate);
+  return { plates, min: plates.reduce((a, e) => a + e.min, 0) };
+}
+/* A new price or speed changes figures and nothing else, so it redraws the two places on
+   the page that show them; the dialog follows, since both of these sync it. */
+function refreshEstimates() {
+  if (!layout) return;
+  drawPieceTable();
+  renderPrintPlan();
+}
+
 // bounding box of a part, for laying copies out and for reserving bed space
 function partExtent(polys) {
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
@@ -1458,6 +1526,14 @@ function readmeText() {
   lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
   if (state.magnets) lines.push(`Magnets: ${state.magnetD} x ${state.magnetH} mm, from ${state.magnetSide}`);
   if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ${state.screwHeadD} mm counterbore`);
+  /* The figure the dialog quotes, said the way it says it, with the price it was worked
+     out at: the README is read away from the page. The ZIP is only made once every piece
+     exists, so there is always a total to give. */
+  const g = materialGrams();
+  if (g !== null)
+    lines.push(`Material: about ${massText(g)} of PLA` +
+               (costOf(g) ? ` (about ${costOf(g)} at ${ESTIMATE.perKg(est.get())})` : '') +
+               ` ${infillNote()}.`);
   lines.push('');
   lines.push('LAYOUT (front of drawer at the bottom):');
   const bandIds = {};
@@ -1467,7 +1543,23 @@ function readmeText() {
   lines.push('PRINTING: flat as oriented, no supports needed. Print the test tile first');
   lines.push('and check a bin fits before committing to the full plates.');
   lines.push('');
-  if (printPlan) lines.push(`PRINT PLATES: ${printPlan.plates.length} — pre-arranged 3MF files in print-plates/ open directly in your slicer.`);
+  if (printPlan) {
+    lines.push(`PRINT PLATES: ${printPlan.plates.length} — pre-arranged 3MF files in print-plates/ open directly in your slicer.`);
+    // numbered as the files in print-plates/ are
+    const job = jobTime();
+    printPlan.plates.forEach((pl, i) => {
+      if (pl.overflow) return;
+      const e = plateEstimate(pl), c = costOf(e.grams);
+      lines.push(`  plate ${i + 1}: ${plural(pl.placed.length, 'part')}, about ${massText(e.grams)}` +
+                 (c ? `, ${c}` : '') + `, roughly ${ESTIMATE.duration(e.min)}`);
+    });
+    if (job.plates.length) {
+      lines.push(`Print time: roughly ${ESTIMATE.duration(job.min)} on a ${speedName()}` +
+                 (job.plates.length > 1 ? ` over ${job.plates.length} plates.` : '.'));
+      lines.push('That is a rough estimate from the filament and the layer count, not a slice:');
+      lines.push('your slicer gives the real figure.');
+    }
+  }
   lines.push('');
   /* Which assembly the reader is walked through is the same question the geometry
      answered, so it is asked with the same predicates. It was asked here with its own
@@ -1581,13 +1673,20 @@ function bedFitText() {
 
 function renderExportSummary() {
   const pitch = state.pitch;
-  const g = materialGrams();
+  const g = materialGrams(), job = jobTime();
   $('exDesign').textContent =
     `${layout.nx} × ${layout.ny} cell grid (${(layout.nx * pitch).toFixed(0)} × ${(layout.ny * pitch).toFixed(0)} mm) ` +
     `in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
     `${plural(layout.pieces.length, 'piece')}, ${splitName()} split, joined with ${CONNECTOR_NAMES[state.connector] || state.connector}\n` +
     `margins L ${layout.mL.toFixed(1)} / R ${layout.mR.toFixed(1)} / F ${layout.mF.toFixed(1)} / B ${layout.mB.toFixed(1)} mm` +
-    (g === null ? '' : `\nabout ${massText(g)} of PLA ${infillNote()}`);
+    /* The cost goes straight after the grams it is the price of, ahead of the note on
+       the infill, which is about the grams. The time follows on a line of its own. */
+    (g === null ? '' : `\nabout ${massText(g)} of PLA` +
+      (costOf(g) ? ` (about ${costOf(g)} at ${ESTIMATE.perKg(est.get())})` : '') + ` ${infillNote()}`) +
+    (g === null || !job || !job.plates.length ? ''
+      : `\nroughly ${ESTIMATE.duration(job.min)} of printing` +
+        (job.plates.length > 1 ? ` over ${plural(job.plates.length, 'plate')}` : '') +
+        ` on a ${speedName()} (${ESTIMATE.ROUGH})`);
   const fit = bedFitText();
   $('exFit').className = 'exfit ' + fit.cls;
   $('exFit').textContent = fit.t;
@@ -1622,11 +1721,16 @@ function renderExportFiles() {
 
   if (printPlan) {
     const n = printPlan.plates.length;
+    /* Each plate says what it weighs, costs and roughly takes, and so does the whole set:
+       "which plate tonight" is a question about time. */
+    const job = jobTime();
+    const all = { grams: job.plates.reduce((a, e) => a + e.grams, 0), min: job.min };
     exGroup('Pre-arranged print plates');
     // named as the recommended path, because it is: every part already placed on a bed,
     // in the order the plan worked out, with nothing left to arrange
     exRow('Every plate — recommended',
-          `${plural(n, 'plate')} · 3MF` + (n > 1 ? ' in a ZIP' : '') + ' · the whole job, arranged',
+          `${plural(n, 'plate')} · ${plateFigures(all)} · 3MF` + (n > 1 ? ' in a ZIP' : '') +
+          ' · the whole job, arranged',
           'Download', downloadAllPlates,
           { 'data-ex': 'allplates', 'aria-label': 'Download every print plate (3MF)' });
     /* Per-plate downloads. The combined export already builds each plate on its own
@@ -1634,7 +1738,8 @@ function renderExportFiles() {
        off — and it is what you want when one print failed, or when tonight's print is
        only this plate. */
     printPlan.plates.forEach((pl, i) => exRow(`Plate ${i + 1}`,
-      `${plural(pl.placed.length, 'part')} on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      `${plural(pl.placed.length, 'part')} on a ${state.bedW} × ${state.bedD} mm bed · ` +
+      `${plateFigures(plateEstimate(pl))} · 3MF`, 'Download',
       async () => saveBlob(await plate3mfBytes(i), `plate-${i + 1}.3mf`),
       { 'data-ex': 'plate', 'aria-label': `Download plate ${i + 1} (3MF)` }));
   }

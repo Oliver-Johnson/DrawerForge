@@ -146,6 +146,21 @@
     <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
     <div class="hint">Only affects the material estimate, not the geometry. A baseplate is nearly all shell — the socket walls are a couple of perimeters wide and print solid whatever you set — so this moves the figure much less than it does for bins. It is the slab under a solid plate that the infill actually reaches.</div>
+    <!-- Cost and print time. Both describe your filament and your printer rather than the
+         design, so they are kept on this device — one setting the bins page shares — and
+         never put in the link. src/shared-ui/estimate.js fills these in and saves them. -->
+    <div class="row">
+      <label class="f"><b>Filament price per kg</b><input id="filPrice" type="number" step="any" min="0" max="10000" placeholder="not set" inputmode="decimal"></label>
+      <label class="f"><b>Currency</b><select id="filSym">
+        <option value="£">£</option><option value="€">€</option><option value="$">$</option><option value="">no symbol</option>
+      </select></label>
+    </div>
+    <label class="f"><b>Printer speed</b><select id="printSpeed">
+      <option value="auto">From the printer</option>
+      <option value="fast">Fast — CoreXY or input shaping</option>
+      <option value="standard">Standard — a classic bed-slinger</option>
+    </select></label>
+    <div class="hint">With a price set, a cost goes beside every gram figure; leave it empty and none is shown. Both settings stay on this device, are shared with the bins page and never go in the link. The speed only steers the print time, which is a rough estimate from the filament and the layer count — only your slicer can give the real one.</div>
     <span class="hint" id="errBedW" style="color:var(--red)" hidden></span>
     <span class="hint" id="errBedD" style="color:var(--red)" hidden></span>
     <span class="hint" id="errBedH" style="color:var(--red)" hidden></span>
@@ -302,13 +317,14 @@
     </div>
     <div class="hint" id="stackHint" style="display:none">Experimental: any piece that fits fully inside the footprint of the one below prints stacked on top, separated by the gap layer — snap apart afterwards. Needs well-tuned bridging (the layer above spans open sockets); test with two first. Respects your printer's Z height.</div>
     <div id="platesRow" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+    <div class="hint" id="planTime"></div>
   </div>
 </div>
 
 <div class="stagecard">
   <h3>Pieces <span class="tail" id="pieceTail"></span></h3>
   <table class="pieces"><thead><tr>
-    <th>Piece</th><th>Grid</th><th>Size (mm)</th><th>Joints</th><th>Bed fit</th><th></th>
+    <th>Piece</th><th>Grid</th><th>Size (mm)</th><th>Joints</th><th>Bed fit</th><th>Material</th><th></th>
   </tr></thead><tbody id="pieceRows"></tbody></table>
 </div>
 
@@ -386,6 +402,9 @@
 </script>
 <script>
 /*__FIELDS__*/
+</script>
+<script>
+/*__ESTIMATE__*/
 </script>
 <script>
 /*__DRAWERS__*/

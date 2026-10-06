@@ -70,6 +70,15 @@ const LIP_H = lipHeight(0.55);
    one the check then passes. Zero when not even one unit fits. */
 const unitsUnder = (room) => Math.max(0, Math.floor((room - LIP_H + 0.001) / SPEC.unitH));
 
+/* The filament price and the printer speed override, in panel 02. They are yours and not
+   the layout's, so ESTIMATE keeps them on this device, shared with the baseplates page,
+   and they never reach the link or a saved drawer. A change redraws the figures and
+   nothing else: no bin changes because a spool got dearer. Bound here, at the top,
+   because refresh() reads it and refresh() can run from any of the boot paths below. */
+const est = ESTIMATE.bind({ price: $('filPrice'), sym: $('filSym'), speed: $('printSpeed') },
+                          // the dialog too: a price typed on the other page arrives here
+                          () => { refresh(); if ($('exportDlg').open) renderExport(); });
+
 /* ---------- model --------------------------------------------------------- */
 /* The largest drawer the map will lay out, and so the most cells a side. Every draw
    walks every cell, and a 21 m drawer typed by accident — 500 cells a side — froze the
@@ -333,6 +342,80 @@ function volumeMm3(c) {
   const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
   return { raw: baseRaw + thin, filament: baseFil + thin };
+}
+
+/* The volume a closed mesh encloses: the signed volume of the tetrahedron each triangle
+   makes with the origin, summed, which over a closed mesh is the volume inside wherever
+   the origin falls. For the lids, which have no parameters to estimate from the way a
+   bin does — and which are a thin plate and a thinner skirt, solid whatever the infill,
+   so what they enclose is the filament they take. */
+function meshVolume(polys) {
+  let v = 0;
+  for (const p of polys) {
+    const q = p.verts;
+    for (let i = 1; i + 1 < q.length; i++) {
+      const a = q[0], b = q[i], c = q[i + 1];
+      v += (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) +
+            a[2] * (b[0] * c[1] - b[1] * c[0])) / 6;
+    }
+  }
+  return Math.abs(v);
+}
+
+/* ---------- grams, money and time -----------------------------------------
+   Every gram figure on the page is written through these, so none of them can be the one
+   that forgot the cost: the parts table, the totals, the plan, the download dialog and
+   the README. The money is empty until a price is set, and then it is everywhere. The
+   time is ESTIMATE's rough one, per plate and summed, for whichever kind of printer the
+   list or the override says. */
+const gramsOf = (mm3) => mm3 / 1000 * PLA_DENSITY;
+const costOf = (g) => ESTIMATE.cost(g, est.get());
+// " · £0.42", or nothing without a price
+const costTail = (g) => { const c = costOf(g); return c ? ` · ${c}` : ''; };
+const speedNow = () => ESTIMATE.speedOf($('bedPreset'), est.get());
+/* What one plate of the plan weighs and roughly takes. Every part on it counts, divider
+   plates and lids included — a plate of nothing but dividers is not a free plate. */
+function plateEstimate(pl) {
+  const byKey = new Map(printPlan.types.map((t) => [t.key, t]));
+  const parts = pl.placed.map((p) => ({ vol: (byKey.get(p.id) || {}).vol || 0, h: p.h, z: p.z }));
+  const vol = parts.reduce((a, p) => a + p.vol, 0);
+  return { grams: gramsOf(vol),
+           min: ESTIMATE.roundMinutes(ESTIMATE.plateSeconds(parts, speedNow())) };
+}
+/* The whole job: grams of every part, whether or not it fits the bed, and the time of the
+   plates that can be printed — a part too big for the bed has no plate to time. The total
+   time is the sum of the per-plate times as shown, so the plates and the total add up. */
+function jobEstimate() {
+  if (!printPlan) return { grams: 0, min: 0, plates: [] };
+  const plates = goodPlates().map(([pl]) => plateEstimate(pl));
+  const vol = printPlan.types.reduce((a, t) => a + t.vol * t.qty, 0);
+  return { grams: gramsOf(vol), min: plates.reduce((a, p) => a + p.min, 0), plates };
+}
+// "fast printer", for the sentences that say what the time is for
+const speedName = () => `${ESTIMATE.SPEEDS[speedNow()].name} printer`;
+/* "2 dividers and 1 lid": the loose parts a total weighs along with the bins, named so
+   that a total larger than the bins table adds up to says why. Empty when there are none. */
+function looseParts() {
+  if (!printPlan) return '';
+  let d = 0, l = 0;
+  for (const t of printPlan.types) {
+    if (t.key.startsWith('div:')) d += t.qty;
+    else if (t.key.startsWith('lid:')) l += t.qty;
+  }
+  return [d ? plural(d, 'divider') : '', l ? plural(l, 'lid') : ''].filter(Boolean).join(' and ');
+}
+/* The README's versions. It is read at the printer, away from the page, so the cost says
+   which price it was worked out at, and the time says in full what it is and is not. */
+function readmeCost(g) {
+  const c = costOf(g);
+  return c ? ` — about ${c} at ${ESTIMATE.perKg(est.get())}` : '';
+}
+function readmeTime(job) {
+  if (!job.plates.length) return [];
+  return [`Print time: roughly ${ESTIMATE.duration(job.min)} on a ${speedName()}` +
+            (job.plates.length > 1 ? ` over ${job.plates.length} plates.` : '.'),
+          'That is a rough estimate from the filament and the layer count, not a slice:',
+          'your slicer gives the real figure.'];
 }
 
 /* ---------- controls ------------------------------------------------------ */
@@ -1845,7 +1928,8 @@ function lidParts() {
     if (!t.b.lid || !lidFits(t.b)) continue;
     const L = L_LID(t.b);
     const key = `${t.b.u}x${t.b.v}:${L.meta.sides.join('')}`;
-    if (!m.has(key)) m.set(key, { key, b: t.b, meta: L.meta, qty: 0 });
+    // measured off the mesh this build already made, once per kind of lid
+    if (!m.has(key)) m.set(key, { key, b: t.b, meta: L.meta, vol: meshVolume(L.polys), qty: 0 });
     m.get(key).qty += t.qty;
   }
   return [...m.values()].sort((a, b) => b.qty - a.qty);
@@ -1916,6 +2000,8 @@ function refresh() {
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
   drawHeight();
+  // the speed menu's own entry says which kind of printer the list makes this one
+  ESTIMATE.labelAuto($('printSpeed'), $('bedPreset'));
 
   /* Cells covered, not cells claimed: summing every bin's cells counted two bins on one
      cell twice and a bin off the grid in full, which is how 500 copies of one bin read
@@ -1940,20 +2026,23 @@ function refresh() {
   $('covfill').style.width = pct + '%';
 
   const ts = types();
-  let vol = 0;
+  /* The plan first: the totals below weigh every part it packs, the divider plates and
+     lids as well as the bins, and the plate times come from it. */
+  computePlan();
+  const job = jobEstimate();
   /* The table is built as markup and a note is text someone typed, so a note goes in
      escaped: a "<" in a note is a "<" on the screen, not the start of a tag. */
   const asText = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   $('typeRows').innerHTML = ts.map((t) => {
     const gm = geomFor(t.b);
-    vol += gm.vol * t.qty;
+    const g = gramsOf(gm.vol * t.qty);
     return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${t.b.divX || t.b.divY ? ` · ${(t.b.divX + 1) * (t.b.divY + 1)} comp` : ''}` +
       /* what it is for, beside what it is — the row is how you tell four identical
          shapes apart when they come off the plate */
       `${t.notes && t.notes.length ? `<span class="tnote">${asText(t.notes.join(', '))}</span>` : ''}</td>` +
       `<td class="mono">${gm.meta.W.toFixed(1)} × ${gm.meta.D.toFixed(1)} × ${gm.meta.totalH.toFixed(1)}</td>` +
       `<td class="mono">${t.qty}</td>` +
-      `<td class="mono">${(gm.vol * t.qty / 1000 * PLA_DENSITY).toFixed(0)} g</td>` +
+      `<td class="mono">${g.toFixed(0)} g${costTail(g)}</td>` +
       `<td><button data-t="${t.key}">STL</button></td></tr>`;
   }).join('') || '<tr><td colspan="5" class="mono">no bins placed</td></tr>';
   for (const btn of $('typeRows').querySelectorAll('button[data-t]'))
@@ -1973,8 +2062,10 @@ function refresh() {
     ? `${plural(inScope.length, 'bin')}` +
       (doneN ? ` · ${plural(inScope.length - doneN, 'bin')} still to print` : '') +
       ` · ${plural(ts.length, 'distinct type')} · ` +
-      `≈ ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g PLA at ${state.infill}% infill` +
+      `≈ ${job.grams.toFixed(0)} g PLA at ${state.infill}% infill` +
       (doneN ? ' for those' : '') +
+      (looseParts() ? `, ${looseParts()} included` : '') +
+      (costOf(job.grams) ? `, about ${costOf(job.grams)}` : '') +
       (fBin() && fBin().done ? ' · this one is marked printed' : '')
     : '—';
 
@@ -1997,15 +2088,19 @@ function computePlan() {
      the job: you would print the whole drawer and then have to come back for the parts
      that divide it. Both are just rectangles with a height as far as the packer is
      concerned, so they go in the same list rather than getting a pass of their own. */
+  /* `vol` is the filament one of each takes, in mm³, for the grams, the cost and the
+     time: a bin's from its own estimate, which knows about infill; a divider plate's
+     from its size, since a plate that thin prints solid; a lid's off its mesh. */
   const parts = ts.map((t) => ({
     key: t.key, b: t.b, qty: t.qty,
-    meta: geomFor(t.b).meta, polys: () => geomFor(t.b).polys,
+    meta: geomFor(t.b).meta, polys: () => geomFor(t.b).polys, vol: geomFor(t.b).vol,
   })).concat(dividerParts().map((d) => ({
     key: 'div:' + d.key, b: null, qty: d.qty, divider: d,
     meta: d.meta, polys: () => B_DIV(d.b, d.axis).polys,
+    vol: d.meta.span * d.meta.tall * d.meta.t,
   }))).concat(lidParts().map((d) => ({
     key: 'lid:' + d.key, b: null, qty: d.qty,
-    meta: d.meta, polys: () => L_LID(d.b).polys,
+    meta: d.meta, polys: () => L_LID(d.b).polys, vol: d.vol,
   })));
   const items = parts.map((t) => ({
     id: t.key, w: t.meta.W, d: t.meta.D, h: t.meta.totalH, qty: t.qty, ids: [t.key],
@@ -2023,7 +2118,7 @@ function countOf(placed) {
           lids ? plural(lids, 'lid') : ''].filter(Boolean).join(' + ') || '0 bins';
 }
 function drawPlan() {
-  computePlan();
+  // computed by refresh(), which weighs the job from it before this draws it
   if (!printPlan) {
     $('plateWrap').innerHTML = '';
     $('plateSummary').textContent = '—';
@@ -2064,12 +2159,20 @@ function drawPlan() {
     }
     svg += '</svg>';
     return `<div style="display:grid;gap:4px;justify-items:center">${svg}` +
-           `<div class="hint">plate ${i + 1} — ${countOf(pl.placed)}</div></div>`;
+           `<div class="hint">plate ${i + 1} — ${countOf(pl.placed)}<br>` +
+           `${plateFigures(plateEstimate(pl))}</div></div>`;
   }).join('');
+  const job = jobEstimate();
   $('plateSummary').textContent =
     `${plural(good.length, 'plate')} on a ${state.bedW} × ${state.bedD} mm bed · ` +
     `${countOf(good.flatMap((p) => p.placed))} packed` +
-    (over.length ? ` · ${plural(over.length, 'part')} TOO BIG for the bed` : '');
+    (over.length ? ` · ${plural(over.length, 'part')} TOO BIG for the bed` : '') +
+    (good.length ? ` · about ${ESTIMATE.duration(job.min)} of printing on a ${speedName()}` +
+                   (over.length ? ' for the plates that fit' : '') + ` (${ESTIMATE.ROUGH})` : '');
+}
+// "96 g · £1.92 · ≈ 3 h 15 min": a plate's weight, its cost once priced, its rough time
+function plateFigures(e) {
+  return `${e.grams.toFixed(0)} g${costTail(e.grams)} · ≈ ${ESTIMATE.duration(e.min)}`;
 }
 
 /* ---------- three.js preview ---------------------------------------------- */
@@ -2671,7 +2774,10 @@ function layoutReadme() {
     if (b.divX || b.divY) L.push(`Compartments: ${(b.divX + 1) * (b.divY + 1)}` +
       (b.divRemovable ? '  (removable divider plates, printed loose)' : ''));
     if (b.lid && lidFits(b)) L.push('Lid: yes — prints upside down, no supports.');
-    L.push(`Material: about ${(gm.vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill.`);
+    const job = jobEstimate();
+    L.push(`Material: about ${job.grams.toFixed(0)} g of PLA at ${state.infill}% infill` +
+           (looseParts() ? `, ${looseParts()} included` : '') + `${readmeCost(job.grams)}.`);
+    L.push(...readmeTime(job));
     L.push('');
     L.push(scratch
       ? 'Designed on its own. It is not placed in a drawer.'
@@ -2693,10 +2799,8 @@ function layoutReadme() {
   L.push(`Layers: ${layers.length}`);
   L.push('');
   L.push('BINS TO PRINT:');
-  let vol = 0;
   for (const t of ts) {
     const gm = geomFor(t.b);
-    vol += gm.vol * t.qty;
     L.push(`  ${String(t.qty).padStart(3)} x  ${t.b.u}x${t.b.v}x${t.b.hUnits}` +
       `  (${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip)` +
       `${t.b.solid ? '  solid' : ''}${t.b.divX || t.b.divY ? `  ${(t.b.divX + 1) * (t.b.divY + 1)} compartments` : ''}` +
@@ -2705,7 +2809,9 @@ function layoutReadme() {
       `${t.notes && t.notes.length ? `  — ${t.notes.join(', ')}` : ''}`);
   }
   L.push('');
-  L.push(`Total: ${plural(scoped().length, 'bin')}, about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA.`);
+  const job = jobEstimate();
+  L.push(`Total: ${plural(scoped().length, 'bin')}` + (looseParts() ? ` plus ${looseParts()}` : '') +
+         `, about ${job.grams.toFixed(0)} g of PLA${readmeCost(job.grams)}.`);
   L.push('');
   layers.forEach((Ly, k) => {
     L.push(`LAYER ${k + 1} (front of the drawer at the bottom):`);
@@ -2721,6 +2827,13 @@ function layoutReadme() {
   if (printPlan) {
     const good = printPlan.plates.filter((p) => !p.overflow);
     L.push(`PRINT PLATES: ${good.length} on a ${state.bedW} x ${state.bedD} mm bed.`);
+    // numbered as the plate files are, among the plates that fit (see plateName)
+    good.forEach((pl, k) => {
+      const e = job.plates[k], c = costOf(e.grams);
+      L.push(`  plate ${k + 1}: ${countOf(pl.placed)}, about ${e.grams.toFixed(0)} g` +
+             (c ? `, ${c}` : '') + `, roughly ${ESTIMATE.duration(e.min)}`);
+    });
+    L.push(...readmeTime(job));
     L.push('');
   }
   L.push('ASSEMBLY: lay layer 1 into the baseplate, then drop each higher layer into');
@@ -2975,8 +3088,17 @@ function bedFitText() {
 
 function renderExport() {
   const g = grid(), ts = types(), n = scoped().length;
-  let vol = 0;
-  for (const t of ts) vol += geomFor(t.b).vol * t.qty;
+  /* The material line weighs everything the files hold, divider plates and lids too, and
+     carries the cost once there is a price; the line after it is the rough time. */
+  const job = jobEstimate();
+  const material = `about ${job.grams.toFixed(0)} g of PLA at ${state.infill}% infill` +
+    (looseParts() ? `, ${looseParts()} included` : '') +
+    (costOf(job.grams) ? `, about ${costOf(job.grams)} at ${ESTIMATE.perKg(est.get())}` : '');
+  const time = job.plates.length
+    ? `\nroughly ${ESTIMATE.duration(job.min)} of printing` +
+      (job.plates.length > 1 ? ` over ${plural(job.plates.length, 'plate')}` : '') +
+      ` on a ${speedName()} (${ESTIMATE.ROUGH})`
+    : '';
   /* In focus the dialog is about one bin, and saying "7 × 9 cell grid" over a single
      STL is the same disagreement the README has to avoid. */
   const fb = fBin();
@@ -2985,11 +3107,11 @@ function renderExport() {
       (scratch ? 'designed on its own, not placed in a drawer'
                : `from column ${fb.x + 1}, row ${fb.y + 1} of your drawer` +
                  (layers.length > 1 ? `, layer ${cur + 1}` : '')) + '\n' +
-      `about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill`
+      material + time
     : n
     ? `${g.nx} × ${g.ny} cell grid in a ${state.drawerW} × ${state.drawerD} mm drawer\n` +
       `${plural(n, 'bin')} of ${plural(ts.length, 'distinct type')} over ${plural(layers.length, 'layer')}\n` +
-      `about ${(vol / 1000 * PLA_DENSITY).toFixed(0)} g of PLA at ${state.infill}% infill`
+      material + time
     : `${g.nx} × ${g.ny} cell grid in a ${state.drawerW} × ${state.drawerD} mm drawer — no bins in it yet`;
   const fit = bedFitText();
   $('exFit').className = 'exfit ' + fit.cls;
@@ -2999,14 +3121,20 @@ function renderExport() {
   const good = goodPlates();
   if (good.length) {
     exGroup('Pre-arranged print plates');
-    exRow('Every plate', `${plural(good.length, 'plate')} · 3MF` + (good.length > 1 ? ' in a ZIP' : ''),
+    /* Each plate says what it weighs, costs and roughly takes, and so does the whole
+       set: "which plate tonight" is a question about time. The whole set's figures are
+       the job's — every plate that fits, summed as the plan sums them. */
+    const all = { grams: job.plates.reduce((a, e) => a + e.grams, 0), min: job.min };
+    exRow('Every plate', `${plural(good.length, 'plate')} · ${plateFigures(all)} · 3MF` +
+          (good.length > 1 ? ' in a ZIP' : ''),
           'Download', downloadAllPlates, { 'data-ex': 'allplates' });
     /* Per-plate downloads. The combined export already builds each plate on its own
        and zips them, so one plate at a time is the same call with the zip left off —
        and it is what you want when a print fails, or when you are only doing one
        plate's worth this evening. */
     good.forEach(([pl], k) => exRow(`Plate ${k + 1}`,
-      `${countOf(pl.placed)} on a ${state.bedW} × ${state.bedD} mm bed · 3MF`, 'Download',
+      `${countOf(pl.placed)} on a ${state.bedW} × ${state.bedD} mm bed · ` +
+      `${plateFigures(job.plates[k])} · 3MF`, 'Download',
       () => downloadPlate(k), { 'data-ex': 'plate' }));
   }
   if (ts.length) {
