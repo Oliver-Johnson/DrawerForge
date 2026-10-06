@@ -395,3 +395,20 @@ test('a height the field shows is one it accepts, and the arrows step from it', 
   await page.keyboard.press('ArrowUp');
   await expect(page.locator('#hMm')).toHaveValue('15.95');
 });
+
+/* The line under the field is a live region: a screen reader reads it out whenever it
+   changes. It was rewritten on every redraw, so typing a note or a wall thickness
+   announced again a height nobody had touched. */
+test('the height line is only rewritten when what it says changes', async ({ page }) => {
+  await oneBin(page);
+  await page.evaluate(() => {
+    window.__said = 0;
+    new MutationObserver((m) => { window.__said += m.length; })
+      .observe(document.getElementById('hResult'), { childList: true, characterData: true, subtree: true });
+  });
+  await H.setField(page, 'note', 'M3 screws');
+  await H.setField(page, 'wall', 1.6);
+  expect(await page.evaluate(() => window.__said)).toBe(0);
+  await H.setField(page, 'hUnits', 4);
+  expect(await page.evaluate(() => window.__said)).toBeGreaterThan(0);
+});

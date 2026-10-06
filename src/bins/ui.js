@@ -3041,7 +3041,10 @@ function drawHeight() {
     const h = heightsOf(b);
     FIELDS.setLength($('hMm'), mode === 'inside' ? h.inside : h.top, unit);
   }
-  $('hResult').textContent = heightText(b);
+  /* A live region is read out whenever it is written, the same words or not, and this
+     runs on every redraw: typing a note announced the height again. */
+  const said = heightText(b);
+  if ($('hResult').textContent !== said) $('hResult').textContent = said;
 }
 /* Typing a length writes the units field and then goes the way typing units always
    went, so a bin can only ever be given a height through one door. A blank or a zero is
