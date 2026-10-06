@@ -12,6 +12,7 @@
  */
 'use strict';
 const D = require('../src/shared-ui/drawers.js');
+const { packLayers, unpackLayers } = require('../src/bins/bin.js');
 
 let bad = 0;
 const check = (name, ok, detail) => {
@@ -29,6 +30,15 @@ console.log('round trip');
     { name: 'Garage, top', hash: D.encodePairs([['w', '612.5'], ['d', '410'],
       ['bl', '0-0-2-2-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-0~3-0-1-1-6'], ['bnotes', notes],
       ['v', '2']]) },
+    /* Bins with holes in their feet carry a 22nd field, and the drawer its own magnet
+       size: written by the engine's own packer, so this is the string a save holds. */
+    { name: 'Toolbox', hash: D.encodePairs([['w', '306'], ['d', '380'],
+      ['bl', packLayers([{ bins: [
+        { x: 0, y: 0, u: 2, v: 1, hUnits: 3, wall: 1.2, floorT: 1.2, divX: 0, divY: 0,
+          magnets: true, screws: true, holesEvery: true },
+        { x: 2, y: 0, u: 1, v: 1, hUnits: 3, wall: 1.2, floorT: 1.85, divX: 0, divY: 0,
+          magnets: true, cells: null }] }])],
+      ['bmd', '5.5'], ['bmh', '2.5'], ['v', '2']]) },
   ];
   const text = D.designFile(designs, new Date('2026-01-02T03:04:05Z'));
   const back = D.readDesignFile(text).drawers;
@@ -36,6 +46,11 @@ console.log('round trip');
   check('names come back exactly', back.every((b, i) => b.name === designs[i].name));
   check('designs come back byte for byte', back.every((b, i) => b.hash === designs[i].hash),
     back.map((b) => b.hash).join(' | '));
+  const holed = unpackLayers(new URLSearchParams(back[2].hash).get('bl'))[0].bins;
+  check('holes in the feet come back with their bins',
+    holed.length === 2 && holed[0].magnets && holed[0].screws && holed[0].holesEvery &&
+    holed[1].magnets && !holed[1].screws && !holed[1].holesEvery,
+    JSON.stringify(holed.map((b) => [b.magnets, b.screws, b.holesEvery])));
   const parsed = JSON.parse(text);
   check('settings are readable in the file, not a link string',
     parsed.drawers[1].design.bnotes === notes && parsed.drawers[0].design.rc === '2,5');
