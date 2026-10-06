@@ -34,7 +34,7 @@ let site;
 test.beforeAll(async () => { site = await H.serveRoot(); });
 test.afterAll(() => site.close());
 // one server for the file, so a case that ends offline must not leave the next one offline
-test.afterEach(() => { site.down = false; site.files = {}; });
+test.afterEach(() => { site.down = false; site.files = {}; site.maxAge = 0; site.log = []; });
 
 function watch(page) {
   const errors = [];
@@ -55,6 +55,11 @@ const binCount = (page) => page.evaluate(() => B().length);
 // the worker installs after load, caches the site, then takes over the page
 const controlled = (page) => page.waitForFunction(() =>
   !!navigator.serviceWorker && !!navigator.serviceWorker.controller, null, { timeout: 30000 });
+/* The caches there are, by the version at the end of each name. A wait for the caches to
+   change polls this with expect.poll: page.waitForFunction takes an async check's promise
+   for a truthy answer and returns at once, without waiting for anything. */
+const versions = (page) => page.evaluate(() => caches.keys())
+  .then((keys) => keys.map((k) => k.split(' ').pop()));
 async function offline(context) {
   await context.setOffline(true);
   site.down = true;
@@ -126,6 +131,67 @@ test('online, a page and its files are what the server has now, not the cached c
       .toContain('<!-- new -->');
   });
 
+/* A page and the scripts it loads have to be one deploy: vendor/three.min.js keeps its
+   name across upgrades, so a page from one deploy running another's would fail with
+   nothing to say why. There are three places a page or a script can come from — the
+   server, the worker's cache, and the copy the browser keeps of what it was last sent,
+   which GitHub Pages lets it use for ten minutes without asking — and the browser's copy
+   can be a deploy the worker's cache is not: one the visitor saw since, whose own worker
+   failed to install or has not finished.
+
+   Two tiny deploys of the guide stand in for the site here, each page saying which deploy
+   its script came from. The worker's cache is filled with A; a visit after B is deployed
+   leaves the browser holding B for ten minutes, as if B's worker had failed. Each page
+   also has a second script it loads only when asked, later(), for a page still loading
+   when the connection comes back. */
+const deploy = (d) => {
+  site.files['/guide/'] = '<!doctype html><title>-</title><script src="../vendor/jszip.min.js"></script>' +
+    `<script>document.title = 'page ${d}, script ' + self.deploy;\n` +
+    'window.later = () => new Promise((done) => { const s = document.createElement("script");' +
+    ` s.src = "../vendor/three.min.js"; s.onload = () => done("page ${d}, script " + self.later);` +
+    ' document.head.append(s); });</script>';
+  site.files['/vendor/jszip.min.js'] = `self.deploy = '${d}';`;
+  site.files['/vendor/three.min.js'] = `self.later = '${d}';`;
+};
+async function cacheDeployA(page) {
+  deploy('A');
+  await page.goto(site.base + 'guide/');
+  await page.evaluate(() => navigator.serviceWorker.register('../sw.js'));
+  await controlled(page);
+}
+
+test('offline, a page from the cache gets its scripts from the cache, not the browser\'s copies',
+  async ({ page, context }) => {
+    await cacheDeployA(page);
+    deploy('B');
+    site.maxAge = 600;   // as GitHub Pages
+    await page.goto(site.base + 'guide/');
+    await expect(page).toHaveTitle('page B, script B');
+
+    await offline(context);
+    await page.reload();
+    await expect(page).toHaveTitle('page A, script A');
+    // a page opened offline comes from the cache too, never from the browser's copy
+    await page.goto(site.base + 'guide/');
+    await expect(page).toHaveTitle('page A, script A');
+    // and if the connection comes back while it loads, the rest it loads is still deploy A
+    await context.setOffline(false);
+    site.down = false;
+    expect(await page.evaluate(() => window.later())).toBe('page A, script A');
+  });
+
+/* And online, both come from the server now, even while the browser holds copies it is
+   allowed to use: a page from the server with a script the browser kept would be the
+   same mismatch the other way round. */
+test('online, a page and its scripts are what the server has now, even inside the ten minutes',
+  async ({ page }) => {
+    site.maxAge = 600;
+    await cacheDeployA(page);
+    deploy('B');
+    await page.goto(site.base + 'guide/');
+    await expect(page).toHaveTitle('page B, script B');
+  });
+
 /* The cache is named for a hash of what it holds, so a deploy that changes anything is a
    new worker, and when it takes over the old cache goes — a visitor's browser does not
    keep every version of a 600 KB three.js it has ever been sent. */
@@ -134,16 +200,72 @@ test('a new deploy replaces the old cache rather than adding to it', async ({ pa
   await controlled(page);
   const sw = fs.readFileSync(path.join(H.ROOT, 'sw.js'), 'utf8');
   const version = sw.match(/const VERSION = "([0-9a-f]+)";/)[1];
-  const keys = () => page.evaluate(() => caches.keys());
-  expect((await keys()).map((k) => k.split(' ').pop())).toEqual([version]);
+  expect(await versions(page)).toEqual([version]);
 
   site.files['/sw.js'] = sw.replace(`"${version}"`, '"0123456789ab"');
   await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r.update()));
-  await page.waitForFunction(async () => {
-    const k = await caches.keys();
-    return k.length === 1 && k[0].endsWith(' 0123456789ab');
-  }, null, { timeout: 30000 });
+  await expect.poll(() => versions(page), { timeout: 30000 }).toEqual(['0123456789ab']);
 });
+
+/* The host lets the browser keep anything for ten minutes, so a new worker must not fill
+   its cache from the browser's copies, which can be the deploy before. But a file the
+   server says has not changed need not be sent again, and most of what the worker caches
+   does not change from one deploy to the next. */
+test('an install caches each file as the server has it now, without sending again what has not changed',
+  async ({ page }) => {
+    site.maxAge = 600;                  // as GitHub Pages
+    await page.goto(site.base + 'guide/');
+    await controlled(page);             // and the browser now holds its own copy of every file
+    const sw = fs.readFileSync(path.join(H.ROOT, 'sw.js'), 'utf8');
+    const version = sw.match(/const VERSION = "([0-9a-f]+)";/)[1];
+    site.files['/sw.js'] = sw.replace(`"${version}"`, '"0123456789ab"');
+    site.files['/favicon.svg'] = '<svg xmlns="http://www.w3.org/2000/svg"><!-- deployed since --></svg>';
+    site.log = [];
+    await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r.update()));
+    await expect.poll(() => versions(page), { timeout: 30000 }).toEqual(['0123456789ab']);
+    const cached = (rel) => page.evaluate((u) => caches.match(u).then((r) => r.text()), site.base + rel);
+
+    // three.js had not changed: the server was asked, said so, and sent none of it...
+    expect(site.log.filter((l) => l.path === '/vendor/three.min.js').map((l) => [!!l.ifNoneMatch, l.status]))
+      .toEqual([[true, 304]]);
+    // ...and the new cache holds all of it, from the browser's copy
+    expect((await cached('vendor/three.min.js')).length)
+      .toBe(fs.readFileSync(path.join(H.ROOT, 'vendor/three.min.js'), 'utf8').length);
+    // the favicon had changed, and the new cache has the new one, not the browser's copy
+    expect(await cached('favicon.svg')).toContain('<!-- deployed since -->');
+  });
+
+/* A deploy whose worker never installs: its list names a file the server does not have,
+   so one fetch fails while the rest are coming in. The browser keeps the worker it has,
+   and the cache the failed one had begun to fill goes with it rather than sitting in the
+   visitor's storage until some later install deletes it. */
+test('a failed install leaves no cache behind, and the worker before it still opens the site offline',
+  async ({ page, context }) => {
+    await page.goto(site.base + 'guide/');
+    await controlled(page);
+    const sw = fs.readFileSync(path.join(H.ROOT, 'sw.js'), 'utf8');
+    const version = sw.match(/const VERSION = "([0-9a-f]+)";/)[1];
+    site.files['/sw.js'] = sw.replace(`"${version}"`, '"0123456789ab"')
+      .replace('const FILES = [', 'const FILES = [\n  "nowhere.js",');
+    // asks for the new worker, and waits for the browser to give up on it
+    const state = await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) =>
+      new Promise((resolve) => {
+        r.addEventListener('updatefound', () => {
+          const w = r.installing;
+          w.addEventListener('statechange', () => {
+            if (w.state === 'redundant' || w.state === 'activated') resolve(w.state);
+          });
+        });
+        r.update().catch(() => {});
+      })));
+    expect(state).toBe('redundant');
+    expect(await versions(page)).toEqual([version]);
+
+    await offline(context);
+    const res = await page.reload();
+    expect(res.fromServiceWorker()).toBe(true);
+    await expect(page.locator('h1')).toContainText('GUIDE');
+  });
 
 test('opened from a file, no worker is registered and nothing is logged', async ({ page }) => {
   const errors = watch(page);
