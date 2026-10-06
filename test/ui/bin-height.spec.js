@@ -231,6 +231,7 @@ test('a half-size bin is quoted as the engine builds it', async ({ page }) => {
       { u: 0.5, v: 0.5, hUnits: 3 }, { u: 1.5, v: 1, hUnits: 6, edges: half },
       { u: 1.5, v: 0.5, hUnits: 4, screws: true }, { u: 0.5, v: 2, hUnits: 2, edges: { f: 0, b: 0, l: 0, r: 0 } },
       { u: 2.5, v: 1, hUnits: 6, edges: half, cells: [[0, 0], [1, 0]] },
+      { u: 0.5, v: 0.5, hUnits: 2, edges: half, cells: [[0, 0]] },
     ].map((c) => {
       const q = binHeights(c), built = buildBin(G, c), m = built.meta;
       let zmax = -Infinity;
@@ -253,6 +254,9 @@ test('a half-size bin is quoted as the engine builds it', async ({ page }) => {
   expect(rows[1].q.top).toBeCloseTo(24, 9);      // 6 to the slab, then half of the 36 above it
   expect(rows[2].q.floorZ).toBe(rows[0].q.floorZ);   // screws, and the floor not raised
   expect(rows[4].q.top).toBeCloseTo(24, 9);      // the mask ignored: half walls, as built
+  // 2 units at half walls stand 10 mm, and hold 4: quoted 14 overall and 8 inside with the mask
+  expect(rows[5].q.top).toBeCloseTo(10, 9);
+  expect(rows[5].q.inside).toBeCloseTo(4, 9);
 
   // and on the map, selected, the line says so, and asked with a mask the page says the same
   await page.goto('about:blank');
