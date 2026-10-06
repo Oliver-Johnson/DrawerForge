@@ -153,11 +153,17 @@ const setField = async (page, id, value) => {
 
      down    set true and every request is cut off unanswered, as a dropped connection
              is, until it is set false again
+     cut     [ '/path' ] cut off unanswered in the same way, and only those, as a
+             connection that drops while a page is loading
      files   { '/path': text } served in place of the file on disk, to stand in for a
              deploy that has changed it
      maxAge  seconds; set it and every answer says the browser may keep it that long and
              carries an ETag, and a request that sends the ETag back is answered 304 with
              no body — what GitHub Pages does, with 600. Unset, nothing is cacheable.
+             The ETag here is a hash of what is sent, so a file a test leaves alone
+             keeps its ETag across a stand-in deploy. GitHub Pages' is the deploy's time
+             and the file's size, which every deploy changes, so there a 304 only ever
+             answers a file asked for twice within one deploy.
      log     every request answered, as { path, ifNoneMatch, status }
 
    The manifest's type is the one GitHub Pages sends for .webmanifest. */
@@ -165,10 +171,11 @@ async function serveRoot() {
   const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
                   '.svg': 'image/svg+xml', '.png': 'image/png',
                   '.webmanifest': 'application/manifest+json' };
-  const site = { down: false, files: {}, maxAge: 0, log: [] };
+  const site = { down: false, cut: [], files: {}, maxAge: 0, log: [] };
   const server = http.createServer((req, res) => {
     if (site.down) { req.socket.destroy(); return; }
     const asked = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (site.cut.includes(asked)) { req.socket.destroy(); return; }
     const p = asked.endsWith('/') ? asked + 'index.html' : asked;
     const ifNoneMatch = req.headers['if-none-match'] || null;
     const answer = (status, body) => {

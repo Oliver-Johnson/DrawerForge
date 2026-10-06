@@ -29,7 +29,9 @@
  * the server says it has not changed, and what a page loads is marked so that the copy
  * the browser keeps in memory cannot go round this worker either (see marked()).
  * Then a page the server could not give comes from this cache, and so do the scripts
- * that page loads, even if the connection comes back while it loads.
+ * that page loads, even if the connection comes back while it loads. A page the server
+ * did give gets its scripts from the server alone: one the server cannot give fails, as
+ * it would with no worker, rather than come from a cache that may be another deploy.
  *
  * A request to another site, or for anything this site did not cache, is never answered
  * here at all. The browser handles it as it would without a worker, and nothing from
@@ -42,9 +44,9 @@
 
 /* Filled in by build.js. FILES is every page in tools/manifest.js, everything those pages
    load from this site, and the app's icons and manifest, as paths from the root. VERSION
-   is a hash of all of those files, names and bytes, and of this script as it stands in
-   src/sw.js. */
-const VERSION = "81db4a9f107a";
+   is a hash of all of those files, names and bytes, and of this script as it is served,
+   FILES filled in and everything else but VERSION itself. */
+const VERSION = "fafac75d3845";
 const FILES = [
   "./",
   "bins/",
@@ -93,8 +95,12 @@ self.addEventListener('install', (e) => {
        worker installed just after a deploy could fill its new cache with the previous
        deploy's files. Asking, rather than fetching everything again ('reload'), is just
        as fresh, and a file the server says has not changed comes back as a 304 and is
-       taken from the browser's copy — most of the 1.9 MB, in a deploy that changed one
-       page. */
+       taken from the browser's copy. That saves less than it might: GitHub Pages' ETag is
+       the deploy's time and the file's size, not the file's content, so a deploy changes
+       every file's ETag, changed or not, and every copy from before it is sent again. What
+       the 304s save is a second download within one deploy: the page that registered the
+       worker and the scripts it has just loaded, and what an install that failed had
+       already fetched, when it is tried again. */
     fetch(new Request(u, { cache: 'no-cache' })).then((r) => {
       if (!r.ok) throw new Error(u + ' answered ' + r.status);
       return plain(r).then((p) => cache.put(u, p));
@@ -138,12 +144,14 @@ function cachedAs(req) {
   return PAGES.has(u.href) ? u.href : null;
 }
 
-/* The pages answered from the cache, by the id of the client (the tab or frame) each
-   opened in, so that the scripts they load come from the cache as well. Kept in memory,
-   which lasts only as long as the worker does, but a page asks for its scripts within
-   moments of arriving. A page this has no id for — a browser that gives none, a worker
-   started since — gets what every other request gets: the server, then the cache. */
-const fromCache = new Set();
+/* Where each page came from, 'cache' or 'server', by the id of the client (the tab or
+   frame) it opened in, so that the scripts it loads come from the same place. Kept in
+   memory, which lasts only as long as the worker does, but a page asks for its scripts
+   within moments of arriving, and the browser stops a worker soon after it goes idle, so
+   the record stays small. A page this has no record of — a browser that gives no id, a
+   worker started since — gets what every other request gets: the server, then the
+   cache. */
+const cameFrom = new Map();
 
 /* What a page loads is marked to be asked for again before it is used again
    (Cache-Control: no-cache). A browser keeps the scripts a page loaded in memory and
@@ -167,8 +175,11 @@ self.addEventListener('fetch', (e) => {
   const key = cachedAs(req);
   if (!key) return;
   const cached = () => caches.open(CACHE).then((c) => c.match(key));
+  const page = req.mode === 'navigate';
+  const note = (from) => { if (page && e.resultingClientId) cameFrom.set(e.resultingClientId, from); };
+  const pageFrom = page ? null : cameFrom.get(e.clientId);
   // a script for a page from the cache: the same deploy, without asking the server
-  if (req.mode !== 'navigate' && fromCache.has(e.clientId)) {
+  if (pageFrom === 'cache') {
     e.respondWith(cached().then((hit) => hit || fetch(req)).then(marked));
     return;
   }
@@ -176,12 +187,19 @@ self.addEventListener('fetch', (e) => {
      the server's and not the browser's copy (see the top of this file). A browser that
      will not copy a navigation into a new request, as older ones would not, sends it as
      it came. The cache only when the server gave nothing, and if the browser has evicted
-     that too, its own offline page. */
+     that too, its own offline page.
+
+     But never the cache for a script whose page came from the server. The page is the
+     deploy the server has now, and the cache can be another, so a failure is answered as
+     a failure: the page breaks as it would with no worker, and opened again with no
+     connection it comes from the cache, its scripts and all. */
   let ask = req;
   try { ask = new Request(req, { cache: 'no-cache' }); } catch (err) { /* as it came */ }
-  e.respondWith(fetch(ask).catch(() => cached().then((hit) => {
+  const fromServer = fetch(ask).then((r) => { note('server'); return r; });
+  const answer = pageFrom === 'server' ? fromServer : fromServer.catch(() => cached().then((hit) => {
     if (!hit) return Response.error();
-    if (req.mode === 'navigate' && e.resultingClientId) fromCache.add(e.resultingClientId);
+    note('cache');
     return hit;
-  })).then((r) => (req.mode === 'navigate' ? r : marked(r))));
+  }));
+  e.respondWith(answer.then((r) => (page ? r : marked(r))));
 });
