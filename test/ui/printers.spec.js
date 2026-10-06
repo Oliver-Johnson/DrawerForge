@@ -382,7 +382,7 @@ test('bins: the drawer is typed in inches, the height and front too', async ({ p
 /* Inches are for the drawer only. The bin's wall, floor, scoop and label shelf and the
    printer's bed are labelled in millimetres in either unit, and were read as inches:
    a bin drawn in inches had a 10 mm wall (1.2 in, clamped), a floor filling the whole
-   bin and a 6502 mm bed. */
+   bin and a 2000 mm bed (256 in, clamped). */
 test('bins: in inches, a bin is drawn with its millimetre wall, floor and bed', async ({ page }) => {
   await H.forgetSaved(page);
   await H.openBins(page);
