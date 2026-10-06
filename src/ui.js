@@ -1897,6 +1897,7 @@ function sameDesign(a, b, skip = []) {
 const incomingHash = (location.hash || '').replace(/^#/, '');
 let linkedNow = false;   // this page holds a link's layout, not yet changed by anyone
 let linkKept = '';       // the link this page last opened, unless a hand-over came since
+let notLinked = [];      // settings a link arrived with that were yours on the other page
 {
   const fromLink = isLayoutHash(incomingHash);
   const saved = readLocal();
@@ -1913,6 +1914,7 @@ let linkKept = '';       // the link this page last opened, unless a hand-over c
   const yours = handOver ? [...SHARED_KEYS].filter((k) => !handOver.link.includes(k)) : [];
   // the other page had nothing of anyone's link: your own layout come back
   const handedOver = !!handOver && !handOver.link.length;
+  notLinked = handOver ? yours : [];
   const replaces = fromLink && (saved.length <= 2 || !sameDesign(saved, src, yours));
   const linked = readKey(LINKED_KEY);
   linkKept = handedOver ? '' : linked;
@@ -1951,9 +1953,14 @@ bootDesc = encodeDesc(descriptor());
    reloading the same link must be declined again, not tried again. */
 if (!stalled) {
   writeKey(LOADING_KEY, '');
-  /* An untouched link is kept as it is. A changed one is kept while the page still uses
-     any of its drawer, bed and infill values, so a reload does not turn those into yours. */
-  const keep = linkedNow ? bootDesc : linkKeys(bootDesc, linkKept).length ? linkKept : '';
+  /* An untouched link is kept as it is, less any drawer, bed or infill settings that came
+     with it as yours: kept, they were the link's from then on, and a later trip that
+     changed them on the other page was a link replacing your layout there. A changed one
+     is kept while the page still uses any of its values, so a reload does not turn those
+     into yours. */
+  const keep = linkedNow ? bootDesc.split('&').filter((kv) =>
+    !notLinked.includes(kv.slice(0, kv.indexOf('=')))).join('&')
+    : linkKeys(bootDesc, linkKept).length ? linkKept : '';
   writeKey(LINKED_KEY, keep);
   heldLink = keep;
 }

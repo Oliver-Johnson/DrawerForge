@@ -563,6 +563,38 @@ test("someone's drawer changed on baseplates comes back to bins as yours", async
   expect(await stored(page, BINS + ':prev')).toBe(mine);
 });
 
+/* A drawer you typed on someone's link is yours on the other page too, not the link's.
+   Recorded there as the link's, a later trip that changed it was a link replacing your
+   bins, and set your own original aside over the one the link had set aside. */
+test("your own drawer on someone's link is not recorded as theirs", async ({ page }) => {
+  await H.openPlates(page);
+  await H.setField(page, 'drawerW', '512');
+  await settle(page);
+  const theirs = (await stored(page, PLATES)).replace(/(^|&)w=512/, '$1w=333')
+    .replace(/(^|&)bw=[^&]*/, '$1bw=220').replace(/(^|&)bd=[^&]*/, '$1bd=220') + '&bl=0-0-1-1-3';
+  expect(theirs).toContain('bw=220');
+  await arrive(page, H.BINS_URL);
+  await H.dragCells(page, [0, 0], [1, 1]);            // your own bins
+  await settle(page);
+  const mine = await stored(page, BINS);
+
+  await arrive(page, H.BINS_URL + '#' + theirs);
+  await H.setField(page, 'drawerW', '500');           // your drawer, their bed
+  await H.setField(page, 'drawerD', '400');
+  await settle(page);
+  await viaButton(page, '#navPlates', H.PLATES_URL);
+  await expect(page.locator('#putBack')).toBeVisible();
+
+  await arrive(page, H.BINS_URL);
+  await H.setField(page, 'drawerW', '600');
+  await settle(page);
+  await arrive(page, H.PLATES_URL);
+  await viaButton(page, '#navBins', H.BINS_URL);
+  expect(await page.inputValue('#drawerW')).toBe('500');
+  await expect(page.locator('#setAside')).toBeHidden();
+  expect(await stored(page, BINS + ':prev')).toBe(mine);
+});
+
 test('a page that declined a link goes on from its defaults, not the link', async ({ page }) => {
   await arrive(page, H.BINS_URL + '#w=333&bl=0-0-1-1-3');
   expect(await stored(page, BINS + ':linked')).not.toBeNull();
