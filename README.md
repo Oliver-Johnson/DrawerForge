@@ -77,20 +77,30 @@ the *Source code* link in the page footers at your own fork and that covers it. 
 name off it (see [License](#license)).
 
 three.js and JSZip are vendored in [`vendor/`](vendor/) and served from your own origin, so
-a page makes no third-party request at all and works offline once loaded. Copy that
-directory along with the HTML. The build refuses to emit a page that references an external
-script or stylesheet, so a CDN URL cannot creep back in.
+a page makes no third-party request at all. Copy that directory along with the HTML. The
+build refuses to emit a page that references an external script or stylesheet, so a CDN URL
+cannot creep back in.
 
-The tab icon (`favicon.svg`, `apple-touch-icon.png`) and the picture a shared link is shown
-with (`og-image.png`) sit at the root beside the pages. The icons are linked relatively and
-follow a fork anywhere; the link-preview image is an absolute `drawerforge.co.uk` URL, as the
-canonical links are, because a crawler has no page to resolve a relative one against. Both
-are set in one place, `tools/seo.js`.
+The site also installs as an app. Once any page has been opened over http(s), a service
+worker (`sw.js`) keeps a copy of every page and of `vendor/`, so the tools open with no
+connection at all, layout link included, and the browser offers to install it to a home
+screen or dock from `manifest.webmanifest`. Both sit at the root and have to stay there: a
+worker only looks after pages in its own folder and below. A page opened from a file does
+not use either, and works offline as it always has.
+
+The tab icon (`favicon.svg`, `apple-touch-icon.png`), the installed app's icons
+(`icon-192.png`, `icon-512.png`, `icon-maskable-512.png`) and the picture a shared link is
+shown with (`og-image.png`) sit at the root beside the pages. The icons are linked
+relatively and follow a fork anywhere; the link-preview image is an absolute
+`drawerforge.co.uk` URL, as the canonical links are, because a crawler has no page to
+resolve a relative one against. The tab icon and the link preview are set in
+`tools/seo.js`, the app's icons and manifest in `tools/app.js`.
 
 ## Building
 
-`index.html`, `bins/index.html` and every page under `guide/` are **generated**. Edit the
-sources in `src/`, never the built files:
+`index.html`, `bins/index.html` and every page under `guide/` are **generated**, and so are
+`sw.js` and `manifest.webmanifest` (from `src/sw.js` and `tools/app.js`). Edit the sources,
+never the built files:
 
 | file | contents |
 |---|---|
@@ -116,6 +126,14 @@ want a shared link to show, rebuild and then run:
 
 ```bash
 node tools/social-image.js
+```
+
+The app icons are drawn from `favicon.svg` the same way. After changing the favicon, run
+the script and then the build, because the service worker's cache name is a hash of the
+files it caches and the icons are among them:
+
+```bash
+node tools/app-icons.js && node build.js
 ```
 
 The build refuses to emit output unless three checks pass, each of which has caught a

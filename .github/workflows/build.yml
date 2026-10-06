@@ -41,6 +41,10 @@ jobs:
       # The IndexNow key file and the URLs the submitter would send. Every way that
       # wiring breaks is a 403 in a job's log rather than anything visible on the site.
       - run: node test/indexnow-check.js
+      # The web manifest and the service worker: the fields a browser needs before it
+      # offers to install, icons at the size the manifest claims, and a worker that caches
+      # every page and everything those pages load. Broken, none of it shows online.
+      - run: node test/app-check.js
 
   # Everything above tests the geometry and the build. This tests the page: place
   # bins, carve, merge, resize, and assert what the interface actually did. Every
