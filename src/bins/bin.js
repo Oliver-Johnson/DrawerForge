@@ -1675,14 +1675,28 @@ function buildBin(G, cfg) {
        wherever it stands. Plain, it reached a BLOAT into each wall as the shelf does and
        stopped at the rim as the shelf does, so the two shared their top front edge; cut
        from the outline grown less than a BLOAT, it reaches the walls short of the shelf's
-       ends and shares nothing. */
+       ends and shares nothing.
+       What the cut leaves is thinned as bandSolid thins a band, and for the same reason.
+       An outline vertex just inside a line the box was cut along is nearly in line with
+       the cut's own edge there, and the cap made a triangle of the three: 0.20 µm across
+       on a 1x1 with a 0.8 mm wall and 16 pairs of rails at smoothness 24, where the bin
+       had 2.65 µm before boxes were cut. So a vertex within ten times WELD of a line that
+       cuts the outline goes, and the vertex the cut put on that line stays. Thinned the
+       other way round, by distance to the next vertex alone, a vertex on the line could be
+       the one to go, and the side of the box along the line leant over by up to 1.6 µm.
+       Only lines that cut count: the box's ends stand a little way past the outline it
+       is cut from, and the outline's own corners are as near to those as this. */
     const box = (pts, grow, onShelf) => {
       if (!onShelf && !pts.some(([x, y]) => outsideArc(hw, hd, x, y, n)))
         return G.extrudePoly(pts, floorZ - BLOAT, H);
       const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      const lines = [[0, Math.min(...xs)], [0, Math.max(...xs)], [1, Math.min(...ys)], [1, Math.max(...ys)]];
       let cut = cavityRing(iw, id, c.wall, n, grow);
-      cut = clipSide(clipSide(cut, 0, Math.min(...xs), 1), 0, Math.max(...xs), -1);
-      cut = clipSide(clipSide(cut, 1, Math.min(...ys), 1), 1, Math.max(...ys), -1);
+      cut = clipSide(clipSide(cut, 0, lines[0][1], 1), 0, lines[1][1], -1);
+      cut = clipSide(clipSide(cut, 1, lines[2][1], 1), 1, lines[3][1], -1);
+      const cuts = lines.filter(([ax, v]) => cut.some((p) => p[ax] === v));
+      cut = cut.filter((p) => cuts.some(([ax, v]) => p[ax] === v) ||
+                              !cuts.some(([ax, v]) => Math.abs(p[ax] - v) < 10 * WELD));
       cut = cut.filter((p, i) => Math.hypot(p[0] - cut[(i + 1) % cut.length][0],
                                             p[1] - cut[(i + 1) % cut.length][1]) >= WELD);
       return cut.length >= 3 && Math.abs(G.polyArea2D(cut)) > 0.01

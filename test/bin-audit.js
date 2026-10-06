@@ -1074,6 +1074,61 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
   if (!exact || fails.length) bad++;
 }
 
+console.log('\ndivider boxes cut to the cavity\'s rounded corner');
+/* A divider or rail box that would stand out through a rounded corner is the cavity's
+   outline cut to the box, and both of the faults that cut could make leave the mesh
+   watertight. An outline vertex a micron or two inside a cut line made a sliver of the
+   cap, 0.20 µm across at the thinnest; and a vertex on the cut line could be the one
+   thinned away instead of the one beside it, leaving the side along the line leaning by
+   up to 1.6 µm, where every side of a box is square to an axis. So every box's bottom cap
+   is measured for its thinnest triangle, and every side standing from the bottom to the
+   top for one that is nearly square to an axis without being so, over thin walls with
+   dividers and rails both ways, at the three smoothnesses the page offers. The count of
+   bins with a box cut to the outline is printed and must not be zero. */
+{
+  const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
+  const altitude = (t) => {
+    const ab = [0, 1, 2].map((i) => t[1][i] - t[0][i]), ac = [0, 1, 2].map((i) => t[2][i] - t[0][i]);
+    const cr = [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]];
+    const len = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    return Math.hypot(...cr) / Math.max(len(t[0], t[1]), len(t[1], t[2]), len(t[2], t[0]));
+  };
+  let thin = Infinity, lean = 0, cutBins = 0, n = 0, thinAt = '', leanAt = '';
+  for (const arcSegs of [8, 12, 24])
+    for (const [u, v] of [[1, 1], [0.5, 1], [1.5, 1]])
+      for (const wall of [0.4, 0.6, 0.8, 1])
+        for (const divRemovable of [false, true])
+          for (const share of [0.5, 0.75, 1]) {
+            const nx = Math.max(1, Math.round(share * most((u - 1) * 42 + 41.5 - 2 * wall, wall)));
+            const ny = Math.max(1, Math.round(share * most((v - 1) * 42 + 41.5 - 2 * wall, wall)));
+            for (const [divX, divY] of [[nx, 0], [0, ny]]) {
+              const cfg = { u, v, hUnits: 3, wall, divX, divY, divRemovable, arcSegs }, what = JSON.stringify(cfg);
+              const r = buildBin(G, cfg), zb = r.meta.floorZ - 0.05, H = 3 * SPEC.unitH;   // boxes start a BLOAT down
+              let anyCut = false;
+              n++;
+              for (const p of r.polys) {
+                const w = p.verts;
+                if (w.length === 3 && w.every((q) => Math.abs(q[2] - zb) < 1e-9)) {
+                  const a = altitude(w);
+                  if (a < thin) { thin = a; thinAt = what; }
+                }
+                if (w.length === 4 && Math.abs(w[0][2] - zb) < 1e-9 && Math.abs(w[2][2] - H) < 1e-9) {
+                  const dx = Math.abs(w[1][0] - w[0][0]), dy = Math.abs(w[1][1] - w[0][1]);
+                  if (dx > 0 && dy > 0) anyCut = true;            // a side along the outline
+                  const off = Math.min(dx, dy);
+                  if (off > 0 && off < 1e-3 * Math.max(dx, dy) && off > lean) { lean = off; leanAt = what; }
+                }
+              }
+              if (anyCut) cutBins++;
+            }
+          }
+  const ok = cutBins > 0 && thin >= 1e-3 && lean === 0;
+  console.log(`  ${n} bins, ${cutBins} with a box cut to the outline: ` + (!cutBins ? 'NONE CUT, so nothing was measured'
+    : `thinnest cap triangle ${(thin * 1000).toFixed(2)} µm${thin < 1e-3 ? ` (UNDER 1 µm: ${thinAt})` : ''}, ` +
+      (lean ? `a side LEANING by ${(lean * 1000).toFixed(3)} µm: ${leanAt}` : 'no side leaning')));
+  if (!ok) bad++;
+}
+
 /* The label shelf's underside runs down at 45 degrees, so the deeper the shelf the
    lower its foot, and one deeper than the bin is tall came out through the floor among
    the feet. The limit that stopped it held the foot 0.2 above the floor, and that cut
