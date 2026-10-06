@@ -17,6 +17,11 @@ const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const H = require('./helpers.js');
 
+/* Over HTTP the pages register the service worker (sw.js), and a request the worker
+   answers never reaches page.route — so the slowed reload below would quietly stop being
+   slow. Nothing here is about the worker; offline.spec.js is. */
+test.use({ serviceWorkers: 'block' });
+
 let site, base;
 test.beforeAll(async () => { site = await H.serveRoot(); base = site.base; });
 test.afterAll(() => site.close());

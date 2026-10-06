@@ -1,0 +1,168 @@
+/* Installed, and opened with no connection.
+ *
+ * The tools always worked offline once they were open. Opening one did not: with no
+ * connection there was no page to show. sw.js caches the site so that it can be, and
+ * this is the check that it really is — the tool loads, three.js and all, and the drawer
+ * in the address is the drawer on screen.
+ *
+ * Served over HTTP by H.serveRoot, because a service worker needs an origin and a page
+ * opened from a file has none.
+ *
+ * "Offline" is two switches here, not one. context.setOffline() is what a browser with no
+ * connection looks like to the page, but it reaches the service worker through DevTools,
+ * and with the Chromium these were written against it did not stop the worker's own
+ * requests: offline, the worker fetched /bins/ from the server and the page loaded from
+ * the network. A test that passes because the network answered proves nothing, so the
+ * server goes dark as well and cuts off every request unanswered. Then the only place a
+ * page can come from is the cache.
+ *
+ * The layout matters as much as the page. It is in the fragment, which the browser never
+ * sends to a server, so an offline visit to /bins/#bl=… has to find the cached /bins/
+ * rather than a page the cache has never seen.
+ *
+ * The last case is the other half of the promise: opened from a file, as these tests and
+ * plenty of people open it, the page registers nothing and logs nothing.
+ */
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const { pathToFileURL } = require('url');
+const { test, expect } = require('@playwright/test');
+const H = require('./helpers.js');
+
+let site;
+test.beforeAll(async () => { site = await H.serveRoot(); });
+test.afterAll(() => site.close());
+// one server for the file, so a case that ends offline must not leave the next one offline
+test.afterEach(() => { site.down = false; site.files = {}; });
+
+function watch(page) {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  return errors;
+}
+const platesReady = (page) => page.waitForFunction(() => {
+  const t = document.getElementById('pieceTail');
+  return typeof THREE !== 'undefined' && t && /ready/.test(t.textContent);
+}, null, { timeout: 30000 });
+const binsReady = async (page) => {
+  await page.waitForFunction(() => typeof THREE !== 'undefined' &&
+    !!document.getElementById('fillmap') && typeof B === 'function');
+  await page.waitForTimeout(200);
+};
+const binCount = (page) => page.evaluate(() => B().length);
+// the worker installs after load, caches the site, then takes over the page
+const controlled = (page) => page.waitForFunction(() =>
+  !!navigator.serviceWorker && !!navigator.serviceWorker.controller, null, { timeout: 30000 });
+async function offline(context) {
+  await context.setOffline(true);
+  site.down = true;
+}
+
+test('Baseplates opens offline, with the drawer in its address', async ({ page, context }) => {
+  const errors = watch(page);
+  // the layout can only come from the address: nothing this browser saved is there to restore
+  await H.forgetSaved(page);
+  await page.goto(site.base + '#w=333&d=444');
+  await platesReady(page);
+  expect(await page.inputValue('#drawerW')).toBe('333');
+  await controlled(page);
+  const hash = await page.evaluate(() => location.hash);   // as the page wrote it back
+
+  await offline(context);
+  const res = await page.reload();
+  expect(res.fromServiceWorker()).toBe(true);
+  await platesReady(page);                                  // three.js came from the cache too
+  expect(await page.evaluate(() => location.hash)).toBe(hash);
+  expect(await page.inputValue('#drawerW')).toBe('333');
+  expect(await page.inputValue('#drawerD')).toBe('444');
+
+  /* And the other tool, which this browser has never opened: cached when the worker
+     installed, not merely kept from a visit. */
+  const bins = await page.goto(site.base + 'bins/#w=333&d=444&bl=0-0-2-1-3');
+  expect(bins.fromServiceWorker()).toBe(true);
+  await binsReady(page);
+  expect(await binCount(page)).toBe(1);
+  expect(await page.evaluate(() => [B()[0].u, B()[0].v])).toEqual([2, 1]);
+  expect(errors).toEqual([]);
+});
+
+test('Bins opens offline, with the drawer in its address', async ({ page, context }) => {
+  const errors = watch(page);
+  await H.forgetSaved(page);
+  await page.goto(site.base + 'bins/#bl=0-0-1-1-3_1-0-2-2-4');
+  await binsReady(page);
+  expect(await binCount(page)).toBe(2);
+  await controlled(page);
+  const hash = await page.evaluate(() => location.hash);
+
+  await offline(context);
+  const res = await page.reload();
+  expect(res.fromServiceWorker()).toBe(true);
+  await binsReady(page);
+  expect(await page.evaluate(() => location.hash)).toBe(hash);
+  expect(await binCount(page)).toBe(2);
+
+  // the guide comes along too, with the layout passing through it as it does online
+  await page.goto(site.base + 'guide/split/' + hash);
+  await expect(page.locator('h1')).toContainText('GUIDE');
+  expect(errors).toEqual([]);
+});
+
+/* Online, a page comes from the network rather than the cache, so a fix deployed since
+   the last visit shows at once rather than one visit late. The files a page loads do too,
+   or a new page could find itself running an old library out of the cache. */
+test('online, a page and its files are what the server has now, not the cached copies',
+  async ({ page }) => {
+    await page.goto(site.base + 'guide/');
+    await controlled(page);
+    site.files['/guide/'] = '<!doctype html><title>deployed since</title><h1>NEW</h1>';
+    site.files['/favicon.svg'] = '<svg xmlns="http://www.w3.org/2000/svg"><!-- new --></svg>';
+    const res = await page.reload();
+    expect(res.fromServiceWorker()).toBe(true);             // answered through the worker...
+    await expect(page.locator('h1')).toHaveText('NEW');     // ...with what the server has now
+    expect(await page.evaluate(() => fetch('../favicon.svg').then((r) => r.text())))
+      .toContain('<!-- new -->');
+  });
+
+/* The cache is named for a hash of what it holds, so a deploy that changes anything is a
+   new worker, and when it takes over the old cache goes — a visitor's browser does not
+   keep every version of a 600 KB three.js it has ever been sent. */
+test('a new deploy replaces the old cache rather than adding to it', async ({ page }) => {
+  await page.goto(site.base + 'guide/');
+  await controlled(page);
+  const sw = fs.readFileSync(path.join(H.ROOT, 'sw.js'), 'utf8');
+  const version = sw.match(/const VERSION = "([0-9a-f]+)";/)[1];
+  const keys = () => page.evaluate(() => caches.keys());
+  expect((await keys()).map((k) => k.split(' ').pop())).toEqual([version]);
+
+  site.files['/sw.js'] = sw.replace(`"${version}"`, '"0123456789ab"');
+  await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r.update()));
+  await page.waitForFunction(async () => {
+    const k = await caches.keys();
+    return k.length === 1 && k[0].endsWith(' 0123456789ab');
+  }, null, { timeout: 30000 });
+});
+
+test('opened from a file, no worker is registered and nothing is logged', async ({ page }) => {
+  const errors = watch(page);
+  // count the attempts, however the page might make one
+  await page.addInitScript(() => {
+    window.__registers = 0;
+    const C = window.ServiceWorkerContainer;
+    if (C && C.prototype.register) {
+      const real = C.prototype.register;
+      C.prototype.register = function () { window.__registers++; return real.apply(this, arguments); };
+    }
+  });
+  for (const rel of ['index.html', 'bins/index.html', 'guide/index.html']) {
+    await page.goto(pathToFileURL(path.join(H.ROOT, rel)).href);
+    await page.waitForFunction(() => document.readyState === 'complete');
+    await page.waitForTimeout(500);   // registration waits for load; give it the chance
+    expect(await page.evaluate(() => window.__registers), rel).toBe(0);
+    expect(await page.evaluate(() => !!(navigator.serviceWorker && navigator.serviceWorker.controller)),
+           rel).toBe(false);
+  }
+  expect(errors).toEqual([]);
+});
