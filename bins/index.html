@@ -7494,8 +7494,13 @@ function platePitch() {
 function plateCells(W, D) {
   const pm = plateMargins();
   // each held to the drawer, as the plate's fields hold them
+  /* A plate with half cells in its leftover (see halfStrips in core.js) has the same
+     whole cells, and its margins take the strip on the right and the back: asked as
+     'auto', the drawer was drawn up to half a cell off where the plate sits in it. The
+     strip is not offered to bins here yet, so to this page it is margin. */
   const c = gridCells({ drawerW: W, drawerD: D, pitch: SPEC.pitch,
-    marginMode: pm ? 'custom' : 'auto', alignX: hashExtras.ax, alignY: hashExtras.ay,
+    marginMode: pm ? 'custom' : hashExtras.mm === 'half' ? 'half' : 'auto',
+    alignX: hashExtras.ax, alignY: hashExtras.ay,
     mLeft: pm ? Math.min(pm.l, W) : 0, mRight: pm ? Math.min(pm.r, W) : 0,
     mFront: pm ? Math.min(pm.f, D) : 0, mBack: pm ? Math.min(pm.b, D) : 0 });
   return { nx: Math.max(1, Math.min(GRID_MAX, c.nx)), ny: Math.max(1, Math.min(GRID_MAX, c.ny)),
