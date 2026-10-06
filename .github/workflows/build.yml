@@ -31,6 +31,11 @@ jobs:
       - run: node test/plate-audit.js
       # A layout travels in the URL hash; it must survive the round trip byte for byte.
       - run: node test/hash-roundtrip.js
+      # A part's name in a 3MF is an XML attribute: it has to come back out of the file
+      # as it went in, and leave the file well-formed whatever it holds. And the
+      # transform convention the print plates are placed by, which
+      # test/ui/plate-files.spec.js checks end to end.
+      - run: node test/plate-files.js
       # A saved-drawers file comes from another device or another person, so the
       # importer is tested on the files it must refuse as well as the ones it reads.
       - run: node test/drawers-file.js
