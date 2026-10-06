@@ -15,11 +15,12 @@
  * Everything here is generated rather than written by hand, for the same reason the
  * sitemap is. The worker's list of files comes from the page manifest (tools/manifest.js)
  * and from what the built pages themselves load, so a page or a vendored script cannot
- * be added without being cached. Its cache name carries a hash of exactly those bytes, so
- * a deploy that changes any of them is a new worker with a new cache, and one that
- * changes none of them is no change at all — which is what keeps `build.js --check`
- * deterministic. The colours come from the page's own tokens in style.css, so the title
- * bar of the installed app is the colour of the header beneath it.
+ * be added without being cached. Its cache name carries a hash of exactly those bytes and
+ * of the worker's own code, so a deploy that changes any of them is a new worker with a
+ * new cache, and one that changes none of them is no change at all — which is what keeps
+ * `build.js --check` deterministic. The colours come from the page's own tokens in
+ * style.css, so the title bar of the installed app is the colour of the header beneath
+ * it.
  *
  * build.js writes manifest.webmanifest and sw.js from this, test/ci-sim.js rebuilds both
  * from git's stored bytes with the same functions, and test/app-check.js reads them back.
@@ -131,18 +132,44 @@ function tags(html, out) {
   return html.replace(anchor, (m) => m + '\n' + add);   // LF, for the reason in seo.inject()
 }
 
-/* Every file the pages load from this site, as paths from the root: scripts, and the
-   icon and manifest links. Read from the built page rather than listed, so a script tag
-   added to a template is cached without anyone remembering to say so — and a page that
-   opened offline without its three.js would be worse than one that did not open. */
+/* Every file the pages load from this site, as paths from the root: scripts, the icon
+   and manifest links, images (img src, and srcset on an img or a picture's source), and
+   anything a style block or a style attribute names with url(). Read from the built page
+   rather than listed, so a script tag or an image added to a template is cached without
+   anyone remembering to say so — and a page that opened offline without its three.js
+   would be worse than one that did not open.
+
+   The inline scripts are left out of the reading: an <img> or a url() in a script's
+   string is not something the page loads as it opens, and what it would load is not a
+   path that can be read from here. A url() inside a linked stylesheet would be relative
+   to the stylesheet rather than the page, and is not followed: the pages carry their
+   styles inline. */
 function subresources(html, out) {
   const base = 'https://site.invalid/' + out;
   const found = [];
+  const markup = html.replace(/(<script\b[^>]*>)[\s\S]*?<\/script\s*>/gi, '$1</script>');
+  // an attribute's value in a tag, '' when it has none; `\s` first, so src is not data-src
+  const attr = (tag, name) => {
+    const m = tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i'));
+    return m ? (m[1] !== undefined ? m[1] : m[2]) : '';
+  };
+  const css = [
+    ...[...markup.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)].map((m) => m[1]),
+    ...[...markup.matchAll(/<[a-z][^>]*>/gi)].map((m) => attr(m[0], 'style')),
+  ];
   const refs = [
-    ...[...html.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]),
-    ...[...html.matchAll(/<link\b[^>]*>/gi)]
+    ...[...markup.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]),
+    ...[...markup.matchAll(/<link\b[^>]*>/gi)]
       .filter((m) => /\brel\s*=\s*["'](icon|apple-touch-icon|manifest|stylesheet|preload|modulepreload)["']/i.test(m[0]))
       .map((m) => (m[0].match(/\bhref\s*=\s*["']([^"']+)["']/i) || [, ''])[1]),
+    ...[...markup.matchAll(/<img\b[^>]*>/gi)].map((m) => attr(m[0], 'src')),
+    /* A srcset is candidates split by commas, each a URL and then what it is for ("2x",
+       "800w"). A URL can hold a comma itself — a data: URL always does — so a candidate
+       starts only at a comma that follows the URL before it, never at one inside it. */
+    ...[...markup.matchAll(/<(?:img|source)\b[^>]*>/gi)]
+      .flatMap((m) => [...attr(m[0], 'srcset').matchAll(/(?:^|,)\s*(\S*[^\s,])/g)].map((c) => c[1])),
+    ...css.flatMap((t) => [...t.matchAll(/\burl\(\s*(?:"([^"]*)"|'([^']*)'|([^\s"')]+))\s*\)/gi)]
+      .map((m) => m[1] || m[2] || m[3])),
   ];
   for (const ref of refs) {
     if (!ref || /^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(ref)) continue;   // another origin, data:, or a fragment
@@ -168,10 +195,20 @@ function precache(pages, read) {
    in it. */
 const fileFor = (entry) => entry === './' ? 'index.html' : entry.endsWith('/') ? entry + 'index.html' : entry;
 
-/* A short hash of everything the worker caches, names and bytes both. Any change to any
-   of them is a different cache; no change is the same one. */
-function version(files, read) {
+/* A short hash of everything the worker caches, names and bytes both, and of the worker's
+   own code, `worker` (src/sw.js as written). Any change to any of them is a different
+   cache; no change is the same one.
+
+   The code is in it because a cache must belong to one worker only. Without it, a deploy
+   that changed src/sw.js and nothing else would install the new worker into the very
+   cache the old one is still serving from, and a new worker whose install fails deletes
+   its own cache — which would then be the old worker's, and the site would stop opening
+   offline until the next good install. */
+function version(files, read, worker) {
   const h = crypto.createHash('sha256');
+  const code = Buffer.from(worker);
+  h.update(SW_SOURCE + '\n' + code.length + '\n');
+  h.update(code);
   for (const f of files) {
     const b = Buffer.from(read(fileFor(f)));
     h.update(f + '\n' + b.length + '\n');
@@ -185,7 +222,7 @@ function version(files, read) {
    on its own. */
 function serviceWorker(source, pages, read) {
   const files = precache(pages, read);
-  const v = version(files, read);
+  const v = version(files, read, source);
   for (const marker of ["/*__VERSION__*/''", '/*__FILES__*/[]'])
     if (!source.includes(marker)) throw new Error(`${SW_SOURCE} is missing the ${marker} marker`);
   const list = '[\n' + files.map((f) => '  ' + JSON.stringify(f) + ',').join('\n') + '\n]';
