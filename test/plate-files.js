@@ -9,7 +9,9 @@
  * and the rest of the name is read as markup. A slicer refuses a file like that, or
  * worse, reads a different part list out of it. So every character XML gives a meaning
  * to is written as its entity, and this reads the names back out of the model to check
- * they arrive as they were sent.
+ * they arrive as they were sent. A tab, newline or return goes as a character reference,
+ * and the few control characters XML has no way to carry at all are dropped, so the
+ * file stays XML whatever a name holds.
  *
  * Then the transform, because the convention it is written in is what the print plates
  * got wrong: build3mfXML turns a part about its own origin and then moves it, so the
@@ -41,10 +43,23 @@ const cube = () => {
 /* Every attribute in the model, read the way an XML parser reads one: a name, '=', and
    a value running to the next matching quote. A value holding a raw '<' or a bare '&' is
    not well-formed, and a raw quote cannot be inside one at all — it ends it, and what
-   follows has to look like another attribute or the tag's end. */
+   follows has to look like another attribute or the tag's end.
+
+   And the three rules of XML 1.0 that a name holding a control character runs into.
+   Node has no XML parser to ask, so they are applied here as the standard writes them.
+   A document holds only the characters XML calls Char (section 2.2): a raw U+0001
+   anywhere, or a reference to one, and the file is not XML at all, so a slicer reads
+   none of it. Every line end is read as a newline, whatever was written (2.11). And an
+   attribute's value is normalized (3.3.3): each raw tab, newline or return in it is
+   read as a space, and only a character reference brings one through as itself. */
+const NOT_CHAR = /[^\t\n\r\x20-퟿-�\u{10000}-\u{10FFFF}]/u;
 const ENTITY = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+const hex = (c) => 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
 function tagsOf(xml) {
   const out = [], problems = [];
+  const stray = NOT_CHAR.exec(xml);
+  if (stray) problems.push(`the model holds ${hex(stray[0])}, which XML allows nowhere`);
+  xml = xml.replace(/\r\n?/g, '\n');
   for (const m of xml.matchAll(/<([A-Za-z][\w:.-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)\s*\/?>/g)) {
     const attrs = {};
     let rest = m[2];
@@ -55,7 +70,14 @@ function tagsOf(xml) {
       if (/</.test(raw)) problems.push(`<${m[1]} ${a[1]}> holds a raw '<'`);
       const bare = raw.replace(/&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g, '');
       if (/&/.test(bare)) problems.push(`<${m[1]} ${a[1]}> holds an '&' that begins no entity`);
-      attrs[a[1]] = raw.replace(/&(amp|lt|gt|quot|apos);/g, (_, e) => ENTITY[e]);
+      attrs[a[1]] = raw.replace(/[\t\n]/g, ' ')
+        .replace(/&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g, (ref, e) => {
+          if (e[0] !== '#') return ENTITY[e];
+          const n = e[1] === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+          const c = n <= 0x10FFFF ? String.fromCodePoint(n) : '￿';
+          if (NOT_CHAR.test(c)) problems.push(`<${m[1]} ${a[1]}> refers to ${ref}, which is no character XML has`);
+          return c;
+        });
       rest = rest.slice(a[0].length);
     }
     out.push({ tag: m[1], attrs });
@@ -85,6 +107,32 @@ console.log('part names');
      differ in placement, not in what every part is called. */
   for (const name of NAMES.slice(0, 5))
     check(`${name} is written as itself`, model.includes(`name="${name}"`));
+
+  /* The characters XML cannot carry as they are. A raw tab, newline or return in an
+     attribute is read back as a space, so each is written as a character reference,
+     which is read back as itself. The other control characters, U+FFFE, U+FFFF and half
+     a surrogate pair are not characters XML has at all, raw or referred to, and any one
+     of them left the whole file unreadable: they are dropped, and the rest of the name
+     kept. Nothing typed reaches a name today; this is for the day something does. */
+  const ODD = [
+    ['tab\there', 'tab\there'], ['two\nlines', 'two\nlines'], ['cr\rand\r\nlf', 'cr\rand\r\nlf'],
+    ['bell\u0007', 'bell'], ['\u0001start', 'start'], ['nul\u0000end', 'nulend'],
+    ['esc\u001b[0m', 'esc[0m'], ['not￾a￿char', 'notachar'],
+    ['half \uD83D a pair', 'half  a pair'], ['tail \uDCE6', 'tail '],
+    ['Größe 📦 ✓', 'Größe 📦 ✓'], ['del\u007F', 'del\u007F'],
+  ];
+  const odd = tagsOf(build3mfXML(ODD.map(([name], i) =>
+    ({ name, polys: cube(), tx: i * 2, ty: 0, tz: 0, rot: 0 }))).model);
+  check('control characters in names leave the model well-formed', !odd.problems.length,
+    odd.problems.join('; '));
+  const oddObjects = odd.tags.filter((t) => t.tag === 'object');
+  // JSON escapes the C0 controls and lone surrogates but prints these raw, unseen
+  const say = (s) => JSON.stringify(s).replace(/[\u007F-\u009F￾￿]/g,
+    (c) => '\\u' + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0'));
+  for (const [i, [name, want]] of ODD.entries()) {
+    const got = oddObjects[i] && oddObjects[i].attrs.name;
+    check(`${say(name)} comes back as ${say(want)}`, got === want, `read back ${say(got)}`);
+  }
 }
 
 console.log('\nwhere a part goes');
