@@ -141,27 +141,41 @@ function tags(html, out) {
 
    The inline scripts are left out of the reading: an <img> or a url() in a script's
    string is not something the page loads as it opens, and what it would load is not a
-   path that can be read from here. A url() inside a linked stylesheet would be relative
-   to the stylesheet rather than the page, and is not followed: the pages carry their
-   styles inline. */
+   path that can be read from here. So is anything commented out, in the markup or in a
+   style block, which loads nothing. The scripts and the comments come out in one pass
+   from the top, because whichever opens first decides, as it does for the browser: a
+   "<!--" in a script is only text, and a <script> in a comment is only a comment. A
+   style block is passed over whole for the same reason, its "<!--" being only text too.
+
+   A url() inside a linked stylesheet would be relative to the stylesheet rather than the
+   page, and is not followed: the pages carry their styles inline.
+
+   A reference keeps its query string. The browser asks for three.min.js?v=2 and the
+   worker looks the request up by all of it, so that is what has to be cached; fileFor()
+   gives the file behind it. */
 function subresources(html, out) {
   const base = 'https://site.invalid/' + out;
   const found = [];
-  const markup = html.replace(/(<script\b[^>]*>)[\s\S]*?<\/script\s*>/gi, '$1</script>');
-  // an attribute's value in a tag, '' when it has none; `\s` first, so src is not data-src
+  const markup = html.replace(
+    /<!--(?:-?>|[\s\S]*?(?:--!?>|$))|(<script\b[^>]*>)[\s\S]*?<\/script\s*>|<style\b[^>]*>[\s\S]*?<\/style\s*>/gi,
+    (m, script) => (script ? script + '</script>' : m.startsWith('<!--') ? '' : m));
+  /* an attribute's value in a tag, '' when it has none; `\s` first, so src is not
+     data-src. Quotes are optional in HTML, and a value without them runs to the next
+     space or the end of the tag. */
   const attr = (tag, name) => {
-    const m = tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i'));
-    return m ? (m[1] !== undefined ? m[1] : m[2]) : '';
+    const m = tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'));
+    return m ? m[1] || m[2] || m[3] || '' : '';
   };
   const css = [
     ...[...markup.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)].map((m) => m[1]),
     ...[...markup.matchAll(/<[a-z][^>]*>/gi)].map((m) => attr(m[0], 'style')),
-  ];
+  ].map((t) => t.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, ''));   // CSS's own comments out too
+  const LOADED = ['icon', 'apple-touch-icon', 'manifest', 'stylesheet', 'preload', 'modulepreload'];
   const refs = [
-    ...[...markup.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]),
+    ...[...markup.matchAll(/<script\b[^>]*>/gi)].map((m) => attr(m[0], 'src')),
     ...[...markup.matchAll(/<link\b[^>]*>/gi)]
-      .filter((m) => /\brel\s*=\s*["'](icon|apple-touch-icon|manifest|stylesheet|preload|modulepreload)["']/i.test(m[0]))
-      .map((m) => (m[0].match(/\bhref\s*=\s*["']([^"']+)["']/i) || [, ''])[1]),
+      .filter((m) => attr(m[0], 'rel').toLowerCase().split(/\s+/).some((r) => LOADED.includes(r)))
+      .map((m) => attr(m[0], 'href')),
     ...[...markup.matchAll(/<img\b[^>]*>/gi)].map((m) => attr(m[0], 'src')),
     /* A srcset is candidates split by commas, each a URL and then what it is for ("2x",
        "800w"). A URL can hold a comma itself — a data: URL always does — so a candidate
@@ -175,7 +189,7 @@ function subresources(html, out) {
     if (!ref || /^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(ref)) continue;   // another origin, data:, or a fragment
     const u = new URL(ref, base);
     if (u.origin !== 'https://site.invalid') continue;
-    found.push(decodeURIComponent(u.pathname.slice(1)));
+    found.push(decodeURIComponent(u.pathname.slice(1)) + u.search);
   }
   return found;
 }
@@ -192,22 +206,30 @@ function precache(pages, read) {
 }
 
 /* The file behind a precache entry: a page's URL is its folder, its file the index.html
-   in it. */
-const fileFor = (entry) => entry === './' ? 'index.html' : entry.endsWith('/') ? entry + 'index.html' : entry;
+   in it, and a query string is for the server, which sends the same file whatever it
+   says. */
+const fileFor = (entry) => {
+  const f = entry.split('?')[0];
+  return f === './' ? 'index.html' : f.endsWith('/') ? f + 'index.html' : f;
+};
 
 /* A short hash of everything the worker caches, names and bytes both, and of the worker's
-   own code, `worker` (src/sw.js as written). Any change to any of them is a different
-   cache; no change is the same one.
+   own code, `worker`: sw.js exactly as it will be served, file list and all, with only
+   its version still to be filled in. Any change to any of them is a different cache; no
+   change is the same one.
 
    The code is in it because a cache must belong to one worker only. Without it, a deploy
-   that changed src/sw.js and nothing else would install the new worker into the very
+   that changed the worker and nothing else would install the new worker into the very
    cache the old one is still serving from, and a new worker whose install fails deletes
    its own cache — which would then be the old worker's, and the site would stop opening
-   offline until the next good install. */
+   offline until the next good install. It is the served text rather than src/sw.js
+   because that is what the browser compares: the list written another way here, with the
+   same files and the same source, is a new worker to the browser, and must not be the
+   same cache. */
 function version(files, read, worker) {
   const h = crypto.createHash('sha256');
   const code = Buffer.from(worker);
-  h.update(SW_SOURCE + '\n' + code.length + '\n');
+  h.update(SW + '\n' + code.length + '\n');
   h.update(code);
   for (const f of files) {
     const b = Buffer.from(read(fileFor(f)));
@@ -219,16 +241,19 @@ function version(files, read, worker) {
 
 /* sw.js, from src/sw.js with the version and the file list filled in. The markers are
    comments in front of valid placeholders, so the source parses and can be syntax-checked
-   on its own. */
+   on its own.
+
+   The list goes in first and the version last, because the version is a hash of the text
+   it goes into: everything in sw.js but itself. The version's own marker is still in
+   that text when it is hashed, and test/app-check.js puts it back to check the hash. */
 function serviceWorker(source, pages, read) {
   const files = precache(pages, read);
-  const v = version(files, read, source);
   for (const marker of ["/*__VERSION__*/''", '/*__FILES__*/[]'])
     if (!source.includes(marker)) throw new Error(`${SW_SOURCE} is missing the ${marker} marker`);
   const list = '[\n' + files.map((f) => '  ' + JSON.stringify(f) + ',').join('\n') + '\n]';
-  return source
-    .replace("/*__VERSION__*/''", () => JSON.stringify(v))
-    .replace('/*__FILES__*/[]', () => list);
+  const unversioned = source.replace('/*__FILES__*/[]', () => list);
+  const v = version(files, read, unversioned);
+  return unversioned.replace("/*__VERSION__*/''", () => JSON.stringify(v));
 }
 
 module.exports = { MANIFEST, SW, SW_SOURCE, NAME, ICONS, SHORTCUTS, tokens, themeColor,
