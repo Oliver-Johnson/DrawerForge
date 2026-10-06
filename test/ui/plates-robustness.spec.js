@@ -181,8 +181,9 @@ test.describe('limits no tighter than the geometry', () => {
                                           [`${SEAM}&cn=dovetail&cl=0.3`, 0.3, 0.3],
                                           [`${SEAM}&cn=bowtie&cl=1`, 0.95, 0.95],
                                           // the other ceilings, each at its own; a snap clip
-                                          // dropped in from above is cut to the key's 0.3
-                                          [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.35`, 0.3, 0.3],
+                                          // dropped in from above is cut to the key's 0.25,
+                                          // whose slot stands a BLOAT off the seam face
+                                          [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.3`, 0.25, 0.25],
                                           [`${SEAM}&cn=puzzlekey&cl=0.8`, 0.75, 0.75],
                                           [`${seamAt(18)}&cn=bowtie&cl=0.3`, 0.25, 0.25],
                                           [`${seamAt(13.5)}&cn=puzzle&cl=0.25`, 0.25, 0.25]])
@@ -245,7 +246,8 @@ test.describe('limits no tighter than the geometry', () => {
 /* ---- the clearance ceiling is the joint's and the pitch's ---------------------------- */
 /* A 1 mm ceiling for every joint but the dovetail let through two kinds of plate. A snap
    clip dropped in from above is housed in a slot whose seam-side wall stands 0.3 mm less
-   the clearance from the seam, so past 0.35 on the field the wall is in the next piece;
+   the clearance from the seam, so at 0.35 on the field the wall lies in the seam face and
+   past it in the next piece — the field stops at 0.3, a BLOAT short of the face;
    and under 20 mm the puzzle, the bowtie and the puzzle key leave holes in the plate at
    clearances that build closed at 42. Each case is refused at the field, clamped to the
    ceiling in the state a link loads into, and says which joint and which pitch — the
@@ -254,8 +256,8 @@ test.describe('limits no tighter than the geometry', () => {
 test.describe('the clearance ceiling is the joint\'s and the pitch\'s', () => {
   const SEAM = '#w=168&d=84&sp=manual&rc=&cc=2';
   for (const [hash, ceiling, msg] of [
-    [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.5`, 0.35,
-     /Fit clearance must be 0\.35 mm or less — any looser and the housing of a snap clip dropped in from above crosses the seam into the next piece\./],
+    [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.35`, 0.3,
+     /Fit clearance must be 0\.3 mm or less — any looser and the housing of a snap clip dropped in from above runs up to the seam and on into the next piece\./],
     ['#pi=18&cn=bowtie&cl=1', 0.3,
      /Fit clearance must be 0\.3 mm or less at an 18 mm pitch — on cells under 20 mm a looser bowtie key opens holes in the plate\./],
     ['#pi=14&cn=puzzlekey&cl=0.5', 0.3,

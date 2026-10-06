@@ -1062,10 +1062,18 @@ console.log('\nthe other limits, built at their ends:');
  * at its lobe apex is the quarantine at the top of this file.
  *
  * Then the step past each ceiling that set it, which has to be open or across the seam
- * still: if the engine closes one, this says that ceiling can go up. And the fit coupon at
- * each ceiling, which is the same joint at four clearances up to it — its pairs have to
- * stay at or under the ceiling, and a housing must not reach into the gap between a
- * pair's two tiles, where it meets the other tile's. */
+ * still: if the engine closes one, this says that ceiling can go up. It has to be past the
+ * ceiling as well, refused by the field. A puzzle key in the floor loosened to 0.9 built
+ * clean at 20, 30 and 42 and its step past, 0.82, leaked as before, so a ceiling moved
+ * over the very number that earned it passed; now the field taking that number fails.
+ * And the fit coupon at each ceiling, which is the same joint at four clearances up to
+ * it — its pairs have to stay at or under the ceiling, and a housing must not reach into
+ * the gap between a pair's two tiles, where it meets the other tile's.
+ *
+ * Last, a snap clip dropped in from above at its ceiling, on the plate and on the
+ * coupon: its slot's seam-side wall has to stand at least a BLOAT inside its own piece.
+ * At 0.35 it lay in the seam face itself, about 9.4 mm² of face shared, with no bad edge
+ * and nothing past the piece's width for the checks above to see. */
 console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
 {
   const VARIANTS = {
@@ -1101,13 +1109,47 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
      hole. */
   const KNOWN = { 'dovetail @ 42 mm 1-cell pieces': 3 };
   const OVER = 1e-6;
+  /* How near a snap-from-above housing comes to the seam face it opens onto: every vertex
+     of the housing keySiteOps hands back for a site, found in the solid built there, and
+     the least of their depths into the piece. A site whose housing is not in the solid
+     is passed over — buildPiece has none on a seam's midpoint — and a plate or a coupon
+     with none found fails, since then nothing was measured. BLOAT is buildPiece's. */
+  const BLOAT = 0.05;
+  const offSeam = { plate: { near: Infinity, sites: 0 }, coupon: { near: Infinity, sites: 0 } };
+  const seamGap = (into, at, polys, sites, H) => {
+    const vk = (v) => v.map((x) => x.toFixed(6)).join(',');
+    const have = new Set();
+    for (const p of polys) for (const v of p.verts) have.add(vk(v));
+    let found = 0;
+    for (const { edge, e, s, clr } of sites) {
+      const vs = G.keySiteOps('snaptop', null, null, clr, edge, e, s, H).add.flatMap((p) => p.verts);
+      if (!vs.every((v) => have.has(vk(v)))) continue;
+      found++;
+      const ax = edge[1] === 'x' ? 0 : 1, inward = edge[0] === '+' ? -1 : 1;
+      for (const v of vs) {
+        const d = inward * (v[ax] - e);
+        if (d < into.near) { into.near = d; into.at = at; }
+      }
+    }
+    into.sites += found;
+    return found;
+  };
   const ceilings = new Map();
   for (const [vn, conf] of Object.entries(VARIANTS)) {
     const fails = [], at = [], known = [];
+    const snapTop = G.jointKind(conf.connector, conf.keyMount, conf.keyInsert) === 'snaptop';
     for (const P of bands(conf)) {
       const most = ceiling(conf, P);
       for (const [ln, lay] of Object.entries(PIECE_LAYOUTS)) {
         const r = buildAll({ pitch: P, ...lay(P), ...conf, clr: most });
+        if (snapTop) {
+          // buildPiece's height, and the clip's clearance as buildPiece takes it
+          const H = G.platePad(r.cfg) + r.cfg.plateHeight;
+          const found = r.pieces.reduce((n, polys, i) => n + seamGap(offSeam.plate,
+            `${vn} @ ${P} mm ${ln}`, polys, G.pieceConnectors(r.cfg, r.L, r.L.pieces[i]).keyed
+              .map((st) => ({ ...st, clr: r.cfg.key.clr })), H), 0);
+          if (!found) fails.push(`${P} mm ${ln}: NO SNAP HOUSING FOUND TO MEASURE`);
+        }
         const pinned = KNOWN[`${vn} @ ${P} mm ${ln}`];
         const touching = r.bad && !r.open && (vn === 'puzzle' || r.bad <= pinned);
         if (touching && vn !== 'puzzle') known.push(`${P} mm ${ln}: ${leakText(r)}`);
@@ -1124,13 +1166,19 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
                 (known.length ? `  known: ${known.join('; ')}` : ''));
     bad += fails.length;
   }
-  // the dovetail's reason is the dovetail's: at the spec pitch nothing else is held to it
-  const held = Object.entries(VARIANTS)
-    .filter(([vn, conf]) => vn !== 'dovetail' && ceiling(conf, 42) <= C.dovetail).map(([vn]) => vn);
-  console.log(`  at 42 mm, past the dovetail's ${C.dovetail}: ` +
-              (held.length ? `HELD TO IT: ${held.join(', ')}` : 'every other joint'));
+  /* The dovetail's reason is the dovetail's: at the spec pitch nothing else is held to it.
+     A snap clip dropped in from above stops at the same 0.3 for a reason of its own, its
+     slot's wall a BLOAT inside the seam face, which is measured below. */
+  const held = Object.entries(VARIANTS).filter(([vn, conf]) => {
+    const c = G.connClrCeiling({ ...G.DEFAULTS, ...conf, pitch: 42 });
+    return vn !== 'dovetail' && c.by !== 'snaptop' && c.max <= C.dovetail;
+  }).map(([vn]) => vn);
+  console.log(`  at 42 mm, past the dovetail's ${C.dovetail}: ` + (held.length
+    ? `HELD TO IT: ${held.join(', ')}` : `every other joint but the snap from above, at its own ${C.snapTop}`));
   if (held.length) bad++;
 
+  /* The puzzle key in the floor's step is 0.82, the first clearance that leaked at every
+     pitch measured from 20 to 60; a ceiling at or over it lets the field take it. */
   const PAST = [
     ['snap from above, 0.4 at 42', { connector: 'snap', keyInsert: 'top', pitch: 42, clr: 0.4 }, '2x2 pieces'],
     ['puzzle, 0.3 at 13.5', { connector: 'puzzle', pitch: 13.5, clr: 0.3 }, '1-cell pieces'],
@@ -1142,9 +1190,11 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
   for (const [what, o, ln] of PAST) {
     const r = buildAll({ ...PIECE_LAYOUTS[ln](o.pitch), ...o });
     const still = r.open > 0 || r.beyond > OVER;
+    const most = G.connClrCeiling(r.cfg).max, refused = o.clr > most + 1e-9;
     console.log(`  ${what.padEnd(28)} ${r.beyond > OVER ? `${r.beyond} mm into the next piece` : leakText(r)}` +
-                (still ? ' — the ceiling is earned' : '   NOW CLEAN — that ceiling can go up'));
-    if (!still) bad++;
+                (!refused ? `   THE FIELD TAKES IT: the ceiling went up to ${most}`
+                  : still ? ' — the ceiling is earned' : '   NOW CLEAN — that ceiling can go up'));
+    if (!still || !refused) bad++;
   }
 
   /* activeJoint in src/ui.js, with the field at the ceiling — a fixture, as in the coupon
@@ -1162,9 +1212,17 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
                                            clrMax: puzzle ? top.puzzle : top.tab } };
     }
     const hclip = cfg.connector === 'hclip';
-    const slim = kind !== 'snaptop' && !hclip && cfg.keyMount === 'wall';
-    const prm = hclip ? G.hclipPrm(cfg.hclip) : slim ? { ...G.DEFAULTS.keySlim } : { ...cfg.key };
+    /* The dimensions as activeKeyDims gives them, which asks where the key is housed and
+       not how it goes in: a snap clip dropped in from above, wall-mounted, has keySlim.
+       This took keySlim only where the clearance is the slim key's own, and so built that
+       coupon with the full key. Nothing measured here could tell: the snap's slot is cut
+       from snapTopPrm and the clearance alone, its pad is 2.0 deep either way, and the
+       loose key laid beside the tiles is watertight at both sizes. */
+    const prm = hclip ? G.hclipPrm(cfg.hclip)
+      : cfg.keyMount === 'wall' ? { ...G.DEFAULTS.keySlim } : { ...cfg.key };
     if (cfg.keyInsert === 'top' && (hclip || cfg.keyMount === 'wall')) prm.depth = 2.0;
+    // only a key whose clearance is its own, which the field does not move, has no ceiling
+    const slim = kind !== 'snaptop' && !hclip && cfg.keyMount === 'wall';
     const shape = hclip ? 'snap' : cfg.connector;
     return { cfg, keyed: true, joint: { kind, shape, prm, pad: prm.depth + 0.8,
       clr: kind === 'snaptop' ? fit.key : prm.clr,
@@ -1185,14 +1243,30 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
     let inGap = 0;
     if (keyed) for (const p of s.polys) for (const v of p.verts)
       if (v[0] <= tilesEnd + 1e-6 && Math.abs(v[1]) < 0.6 - 1e-6) inGap++;
-    if (leaks || !apart || !under || inGap)
+    // and each pair's two housings, one either side of the gap at that pair's clearance
+    const unseen = joint.kind === 'snaptop' && !seamGap(offSeam.coupon, name, s.polys,
+      s.clrs.flatMap((clr, i) => [{ edge: '+y', e: -0.6, s: i * 25 + 9, clr },
+                                  { edge: '-y', e: 0.6, s: i * 25 + 9, clr }]), H);
+    if (leaks || !apart || !under || inGap || unseen)
       met.push(`${name}: pairs ${s.clrs.map((c) => c.toFixed(2)).join('/')}` +
                (under ? '' : ` OVER ${joint.clrMax.toFixed(2)}`) + (apart ? '' : ' NOT FOUR FITS') +
-               (inGap ? `, ${inGap} vertices IN THE SEAM GAP` : '') + (leaks ? `, ${leaks} BAD EDGES` : ''));
+               (inGap ? `, ${inGap} vertices IN THE SEAM GAP` : '') + (leaks ? `, ${leaks} BAD EDGES` : '') +
+               (unseen ? ', NO SNAP HOUSING FOUND TO MEASURE' : ''));
   }
   console.log(`  fit coupons at ${ceilings.size} ceilings: ` +
               (met.length ? `FAIL: ${met.join('; ')}` : 'pairs at or under each, apart, watertight'));
   bad += met.length;
+
+  const { plate, coupon } = offSeam;
+  const clear = (m) => m.sites > 0 && m.near >= BLOAT - 1e-6;
+  // rounded, and + 0 so a wall in the face reads 0.000 rather than -0.000
+  const said = (m) => m.sites ? `${(Math.round(m.near * 1e4) / 1e4 + 0).toFixed(3)} mm on ${m.sites} housings`
+                              : 'NO HOUSING MEASURED';
+  console.log(`  snap from above, its slot off the seam face: ${said(plate)} of the plate, ` +
+              `${said(coupon)} of the coupon` +
+              (clear(plate) && clear(coupon) ? `, a BLOAT (${BLOAT}) or more` : `   UNDER A BLOAT (${BLOAT}): ` +
+               [plate, coupon].filter((m) => m.sites && !clear(m)).map((m) => m.at).join('; ')));
+  bad += [plate, coupon].filter((m) => !clear(m)).length;
 }
 
 /* Fewest plates, on a drawer too big for its search.
