@@ -1984,8 +1984,15 @@ function initThree() {
     $('threeempty').style.display = '';
     $('threehint').style.display = 'none';
     canvas.setAttribute('aria-label', '3D preview unavailable: this browser could not start WebGL.');
-    const expand = $('threewrap').querySelector('.previewbtn');
-    if (expand) expand.style.display = 'none';
+    /* Nothing to expand, so no Expand button. chrome.js makes it, and runs as the
+       page's last script, so during the boot there is no button yet and looking for
+       one here hid nothing; once the page has parsed, every script has run. */
+    const hideExpand = () => {
+      const expand = $('threewrap').querySelector('.previewbtn');
+      if (expand) expand.style.display = 'none';
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hideExpand);
+    else hideExpand();
     window.addEventListener('resize', () => drawMap());
     return;
   }
@@ -2542,6 +2549,11 @@ function platePolysAndItems(idx) {
   }
   return objs;
 }
+/* Deflated, for the reason the baseplates page gives beside its own copy in src/ui.js:
+   JSZip stores files unless asked, and a 3MF is a ZIP of XML text, so every plate and
+   every ZIP left this page several times the size it needed to be. A copy, because the
+   two pages share no script that zips. Slicers read either. */
+const ZIP_DEFLATE = { compression: 'DEFLATE', compressionOptions: { level: 6 } };
 async function plate3mfBytes(idx) {
   const x = build3mfXML(platePolysAndItems(idx).map((o) => ({
     name: o.name, polys: transformPolys(o.polys, 0, 0, 0, o.rot), tx: o.tx, ty: o.ty, tz: o.tz, rot: 0 })));
@@ -2549,7 +2561,7 @@ async function plate3mfBytes(idx) {
   pz.file('[Content_Types].xml', x.contentTypes);
   pz.file('_rels/.rels', x.rels);
   pz.file('3D/3dmodel.model', x.model);
-  return pz.generateAsync({ type: 'uint8array' });
+  return pz.generateAsync({ type: 'uint8array', ...ZIP_DEFLATE });
 }
 const goodPlates = () =>
   printPlan ? printPlan.plates.map((p, i) => [p, i]).filter(([p]) => !p.overflow) : [];
@@ -2572,7 +2584,7 @@ async function downloadAllPlates() {
   if (good.length === 1) return downloadPlate(0);
   const zip = new JSZip();
   for (let k = 0; k < good.length; k++) zip.file(plateName(k), await plate3mfBytes(good[k][1]));
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }),
                 `drawerforge-bin-plates-x${good.length}.zip`);
 }
 async function downloadBinZip() {
@@ -2587,7 +2599,7 @@ async function downloadBinZip() {
   for (const d of lidParts())
     zip.file(lidName(d) + '.stl', G.stlBinary(L_LID(d.b).polys, 'lid'));
   zip.file('README.txt', layoutReadme());
-  saveBlobAsync(await zip.generateAsync({ type: 'blob' }),
+  saveBlobAsync(await zip.generateAsync({ type: 'blob', ...ZIP_DEFLATE }),
                 `drawerforge-bins-${grid().nx}x${grid().ny}.zip`);
 }
 function saveBlobAsync(blob, name) {
