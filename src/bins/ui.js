@@ -3355,13 +3355,26 @@ function shareLink() {
 function designLink() {
   return location.origin + location.pathname + '#' + descString(VIEW_KEYS);
 }
+/* The link format takes half cells now (unpackBin), and this page does not yet: its map,
+   its occupancy and its drag all count whole cells, and a bin at y 0.5 threw in the map
+   and left the page dead. So a layout read here is put on whole cells the way a page from
+   before half cells reads it, 1.5 up to 2, until the map learns half steps. No page has
+   written a half yet, so this only meets a link typed by hand. */
+function onWholeCells(ls) {
+  for (const L of ls)
+    for (const b of L.bins) {
+      b.u = Math.max(1, Math.round(b.u)); b.v = Math.max(1, Math.round(b.v));
+      b.x = Math.round(b.x); b.y = Math.round(b.y);
+    }
+  return ls;
+}
 function loadFromHash(src) {
   const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
   if (!h) return;
   const q = parseHash(h);
   for (const [k, val] of Object.entries(q)) {
     if (k === 'v') continue;
-    if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
+    if (k === 'bl') { const ls = onWholeCells(unpackLayers(val)); if (ls.length) layers = ls; continue; }
     // a menu takes only a value it offers; anything else leaves it blank and reads NaN
     if (k === 'bseg') {
       if ([...$('arcSegs').options].some((o) => o.value === val)) $('arcSegs').value = val;
@@ -3683,7 +3696,7 @@ updateUndoButtons();
    you did not want to look at. Indices are safe to trust here because the same hash
    carried the layout they point into. */
 if (pendingScratch) {
-  const ls = unpackLayers(pendingScratch);
+  const ls = onWholeCells(unpackLayers(pendingScratch));
   const b = ls[0] && ls[0].bins[0];
   if (b) {
     scratch = b;
