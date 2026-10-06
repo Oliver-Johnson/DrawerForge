@@ -1656,12 +1656,17 @@ addEventListener('hashchange', () => {
  * LINKED_KEY: the save a link wrote, while nobody has changed it. That save is the
  * sender's drawer, not yours, so a second link replacing it leaves PREV_KEY holding
  * yours; setting it aside instead lost your layout to the first link you had opened.
+ * Changed, it is kept while the page still uses any of the link's drawer, bed and infill.
+ *
+ * PREV_LINKED_KEY: the LINKED_KEY of the layout in PREV_KEY. Whether a layout is a link's
+ * travels with it, so a link put back is still the link's and your own put back is not;
+ * left behind, it went to whatever was put back in its place.
  *
  * LOADING_KEY: names the layout being loaded, and is cleared once the page has drawn
  * it. Still there at the next visit, for the same layout, means the last attempt hung or
  * crashed the tab; loading it again would only do that again, on every visit. */
 const PREV_KEY = SAVE_KEY + ':prev', LINKED_KEY = SAVE_KEY + ':linked',
-  LOADING_KEY = SAVE_KEY + ':loading';
+  PREV_LINKED_KEY = PREV_KEY + ':linked', LOADING_KEY = SAVE_KEY + ':loading';
 const readKey = (k) => { try { return localStorage.getItem(k) || ''; } catch (err) { return ''; } };
 const writeKey = (k, v) => {
   try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); }
@@ -1673,16 +1678,17 @@ let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
    defaults it stands in with put them over the layout it declined, and one more reload
    lost that layout for good. */
 let pristine = '', bootDesc = null;
-/* The drawer, bed and infill of someone's link this page holds, or ''. While the page
-   still uses them they are the link's, not yours, whatever else has been changed: so
-   taking the design to the other page is not your own hand-over, and does not replace
-   yours there without setting it aside. */
-let linkShared = '';
-const sharedOf = (h) => {
-  const q = parseHash(h);
-  return JSON.stringify([...SHARED_KEYS].map((k) => (k in q ? q[k] : null)));
-};
-const holdsLink = () => !!linkShared && sharedOf(encodeDesc(descriptor())) === linkShared;
+/* Someone's link this page holds, or ''. Each of its drawer, bed and infill values the
+   page still uses is the link's, not yours, whatever else has been changed: so taking
+   the design to the other page does not replace yours there without setting it aside.
+   Key by key: compared as one group, changing only the infill made the drawer yours. */
+let heldLink = '';
+// the drawer, bed and infill settings in which a design still has a link's values
+function linkKeys(h, link) {
+  if (!link) return [];
+  const p = parseHash(h), q = parseHash(link);
+  return [...SHARED_KEYS].filter((k) => k in q && p[k] === q[k]);
+}
 function leaveFor(url) {
   hashReady = false; clearTimeout(hashSaveT);   // no save of this page's may land after
   location.href = url;
@@ -1692,9 +1698,14 @@ function leaveFor(url) {
 function putBack() {
   const prev = readKey(PREV_KEY);
   if (!prev) return;
+  const prevLinked = readKey(PREV_LINKED_KEY);
   const cur = encodeDesc(descriptor());
-  if (cur !== pristine && !(stalled && cur === bootDesc)) writeKey(PREV_KEY, cur);
+  if (cur !== pristine && !(stalled && cur === bootDesc)) {
+    writeKey(PREV_KEY, cur);
+    writeKey(PREV_LINKED_KEY, heldLink);
+  }
   saveLocal(prev);
+  writeKey(LINKED_KEY, prevLinked);
   leaveFor(location.href.split('#')[0]);   // a bare visit restores it, and says so
 }
 function tryAnyway() {
@@ -1719,8 +1730,12 @@ function rememberState() {
     /* The first change is the moment the banner stops being true: "put my layout back"
        would now also throw away the edit, so it goes. */
     if (bootDesc !== null) {
-      if (sameDesign(h, bootDesc, false)) { if (stalled) return; }
-      else { bootDesc = null; $('setAside').style.display = 'none'; }
+      if (sameDesign(h, bootDesc)) { if (stalled) return; }
+      else {
+        bootDesc = null; $('setAside').style.display = 'none';
+        // what a stalled page goes on from is its defaults, not the link it declined
+        if (stalled) writeKey(LINKED_KEY, '');
+      }
     }
     try { history.replaceState(null, '', '#' + h); }
     catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
@@ -1743,24 +1758,26 @@ function binsHref() {
    once: a design arriving from the other tool may carry a drawer or bed changed there,
    and that is the same layout moving on, not a link replacing it. The guide passes the
    address through untouched, so going by way of it is marked the same.
-   Not while this page uses someone's link's drawer and bed: they are not yours to carry
-   over, and marked, they replaced yours on the other page with nothing set aside —
-   after any edit at all, since that was what ended "untouched". Unmarked, the other page
-   sees the link it is, and keeps yours. */
+   The mark names any drawer, bed and infill settings still at someone's link's values:
+   those are not yours to carry over, and the other page compares them as a link's, so
+   they do not replace yours there without setting it aside. Left out of the comparison,
+   they did, after any edit at all. */
 const HANDOFF_KEY = 'drawerforge:handoff';
 function handOff(href) {
   try {
-    if (holdsLink()) sessionStorage.removeItem(HANDOFF_KEY);
-    else sessionStorage.setItem(HANDOFF_KEY, href.slice(href.indexOf('#') + 1));
-  } catch (err) { /* unmarked, the other page offers this layout back: a banner, no loss */ }
+    const h = href.slice(href.indexOf('#') + 1);
+    const link = linkKeys(encodeDesc(descriptor()), heldLink);
+    sessionStorage.setItem(HANDOFF_KEY, JSON.stringify({ h, link }));
+  } catch (err) { /* unmarked, the other page takes it all for a link and sets yours aside */ }
   location.href = href;
 }
 function takeHandOff() {
   try {
-    const h = sessionStorage.getItem(HANDOFF_KEY) || '';
+    const m = sessionStorage.getItem(HANDOFF_KEY) || '';
     sessionStorage.removeItem(HANDOFF_KEY);
-    return h;
-  } catch (err) { return ''; }
+    const o = JSON.parse(m);
+    return o && typeof o.h === 'string' && Array.isArray(o.link) ? o : null;
+  } catch (err) { return null; }
 }
 for (const id of ['toBins', 'navBins'])
   $(id).addEventListener('click', (e) => { e.preventDefault(); handOff(binsHref()); });
@@ -1867,13 +1884,13 @@ initThree();
    owns. Compared as strings, the bins page handing the drawer back — its keys in its own
    order, with its own extras — was a link that had replaced your layout, on every trip
    there and back. A hand-over also leaves out the drawer and the bed, the settings the
-   two pages share: changing them on the other page is not a different layout. A link
-   from someone keeps them, since a drawer of another size is exactly what one brings. */
+   two pages share: changing them on the other page is not a different layout, unless
+   the other page still had them from someone's link. A link from someone keeps them,
+   since a drawer of another size is exactly what one brings. */
 const SHARED_KEYS = new Set(['w', 'd', 'bw', 'bd', 'bh', 'if']);
-function sameDesign(a, b, handedOver) {
+function sameDesign(a, b, skip = []) {
   const p = parseHash(a), q = parseHash(b);
-  return [...OWNED].every((k) => k === 'v' || k === 'ph' ||
-    (handedOver && SHARED_KEYS.has(k)) || p[k] === q[k]);
+  return [...OWNED].every((k) => k === 'v' || k === 'ph' || skip.includes(k) || p[k] === q[k]);
 }
 /* A link beats a saved layout, always. Reading the hash first and only falling back
    means a shared drawer is never quietly replaced by the recipient's own. */
@@ -1890,17 +1907,25 @@ let linkKept = '';       // the link this page last opened, unless a hand-over c
   readControls();
   pristine = encodeDesc(descriptor());
   stalled = src && readKey(LOADING_KEY) === src ? src : '';
-  const handedOver = takeHandOff() === incomingHash && fromLink;   // read every time
-  const replaces = fromLink && (saved.length <= 2 || !sameDesign(saved, src, handedOver));
+  const mark = takeHandOff();                                       // read every time
+  const handOver = fromLink && mark && mark.h === incomingHash ? mark : null;
+  // your own drawer, bed and infill settings, as the other page had them
+  const yours = handOver ? [...SHARED_KEYS].filter((k) => !handOver.link.includes(k)) : [];
+  // the other page had nothing of anyone's link: your own layout come back
+  const handedOver = !!handOver && !handOver.link.length;
+  const replaces = fromLink && (saved.length <= 2 || !sameDesign(saved, src, yours));
   const linked = readKey(LINKED_KEY);
   linkKept = handedOver ? '' : linked;
-  const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked, false);
+  const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked);
   /* Set aside whatever is about to be replaced: by a different layout, or by the defaults
      standing in for one that would not load. Not a link's own layout, untouched: what that
      link replaced is already set aside, and it is the one you would want back. */
   const aside = saved.length > 2 && saved !== pristine && !savedLinked &&
     (replaces || !!stalled);
-  if (aside) writeKey(PREV_KEY, saved);
+  if (aside) {
+    writeKey(PREV_KEY, saved);
+    writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
+  }
   const canPutBack = replaces && (aside || (savedLinked && !!readKey(PREV_KEY)));
   if (stalled) {
     showSetAside('This layout did not finish loading last time, so the page has started ' +
@@ -1912,9 +1937,9 @@ let linkKept = '';       // the link this page last opened, unless a hand-over c
     else if (canPutBack) showSetAside('This link replaced the layout you had here.', true, false);
     /* A hand-over is your own layout come back from the other page, never someone's
        link, even onto an empty save; and one that moved the drawer or bed on has been
-       changed, by you, there. */
+       changed, by you, there. One still holding a link's settings is that link's. */
     linkedNow = handedOver ? false
-      : fromLink ? replaces || (savedLinked && sameDesign(saved, src, false))
+      : fromLink ? replaces || (savedLinked && sameDesign(saved, src))
       : savedLinked;
   }
   syncBedPreset();
@@ -1926,12 +1951,11 @@ bootDesc = encodeDesc(descriptor());
    reloading the same link must be declined again, not tried again. */
 if (!stalled) {
   writeKey(LOADING_KEY, '');
-  /* An untouched link is kept as it is. A changed one is kept only while the page still
-     uses its drawer, bed and infill, so a reload does not turn those into yours. */
-  const keep = linkedNow ? bootDesc
-    : linkKept && sharedOf(bootDesc) === sharedOf(linkKept) ? linkKept : '';
+  /* An untouched link is kept as it is. A changed one is kept while the page still uses
+     any of its drawer, bed and infill values, so a reload does not turn those into yours. */
+  const keep = linkedNow ? bootDesc : linkKeys(bootDesc, linkKept).length ? linkKept : '';
   writeKey(LINKED_KEY, keep);
-  linkShared = keep ? sharedOf(keep) : '';
+  heldLink = keep;
 }
 fitThree();
 

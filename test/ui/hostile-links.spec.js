@@ -479,6 +479,102 @@ test("someone's bins link, edited, carried to baseplates still keeps your drawer
     expect(await stored(page, PLATES + ':prev')).toContain('w=512');
   });
 
+/* Each of a link's drawer, bed and infill settings is the link's while it is in use, key
+   by key. Compared as one group, changing any one of them made the rest yours, and the
+   trip brought them onto your baseplates with nothing set aside. */
+async function theirBinsLink(page) {
+  await H.openPlates(page);
+  await H.setField(page, 'drawerW', '512');
+  await settle(page);
+  // made after a trip through baseplates, with the same baseplate settings as yours
+  const theirs = (await stored(page, PLATES)).replace(/(^|&)w=512/, '$1w=333') +
+    '&bl=0-0-1-1-3';
+  await arrive(page, H.BINS_URL + '#' + theirs);
+}
+for (const [id, value] of [['infill', '20'], ['bedH', '200'], ['drawerD', '300']]) {
+  test(`someone's bins link with only #${id} changed still keeps your drawer`,
+    async ({ page }) => {
+      await theirBinsLink(page);
+      await H.setField(page, id, value);
+      await settle(page);
+
+      await viaButton(page, '#navPlates', H.PLATES_URL);
+      expect(await page.inputValue('#drawerW')).toBe('333');
+      await expect(page.locator('#putBack')).toBeVisible();
+      expect(await stored(page, PLATES + ':prev')).toContain('w=512');
+    });
+}
+
+// whether a layout is a link's goes aside with it, and comes back with it
+test("an edited link put back is still the link's", async ({ page }) => {
+  await theirBinsLink(page);
+  await H.setField(page, 'gap', '6');
+  await settle(page);
+  await arrive(page, H.BINS_URL + '#bl=2-2-1-1-3');   // sets the edited one aside
+  await clickAndLoad(page, '#putBack');
+  expect(await page.inputValue('#gap')).toBe('6');
+
+  await viaButton(page, '#navPlates', H.PLATES_URL);
+  expect(await page.inputValue('#drawerW')).toBe('333');
+  await expect(page.locator('#putBack')).toBeVisible();
+  expect(await stored(page, PLATES + ':prev')).toContain('w=512');
+});
+
+test("your own layout put back is not the link's, even in the same drawer",
+  async ({ page }) => {
+    await H.openPlates(page);
+    await page.check('#magnets');
+    await settle(page);
+    await viaButton(page, '#navBins', H.BINS_URL);
+    await H.dragCells(page, [0, 0], [0, 0]);
+    await H.setField(page, 'drawerW', '400');
+    await settle(page);
+    const mine = await stored(page, BINS);
+    await arrive(page, H.BINS_URL + '#' + mine.replace(/(^|&)bl=[^&]*/, '$1bl=2-2-1-1-3'));
+    await clickAndLoad(page, '#putBack');
+    expect(await binsIn(page)).toBe(1);
+
+    await viaButton(page, '#navPlates', H.PLATES_URL);
+    expect(await page.inputValue('#drawerW')).toBe('400');
+    expect(await page.isChecked('#magnets')).toBe(true);
+    await expect(page.locator('#setAside')).toBeHidden();
+    expect(await stored(page, PLATES + ':prev')).toBeNull();
+  });
+
+/* The settings you changed are yours on the way back, while the ones still at the link's
+   values are compared. Not marking the trip at all, because some were still the link's,
+   called this a link replacing your bins and pushed your own out of the backup. */
+test("someone's drawer changed on baseplates comes back to bins as yours", async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  const mine = await stored(page, BINS);
+  await arrive(page, H.BINS_URL + '#w=333&bl=0-0-1-1-3');
+  await H.setField(page, 'gap', '6');
+  await settle(page);
+  await viaButton(page, '#navPlates', H.PLATES_URL);
+  await H.setField(page, 'drawerW', '400');           // their bed and infill still in use
+  await settle(page);
+
+  await viaButton(page, '#navBins', H.BINS_URL);
+  expect(await page.inputValue('#drawerW')).toBe('400');
+  expect(await page.inputValue('#gap')).toBe('6');
+  await expect(page.locator('#setAside')).toBeHidden();
+  expect(await stored(page, BINS + ':prev')).toBe(mine);
+});
+
+test('a page that declined a link goes on from its defaults, not the link', async ({ page }) => {
+  await arrive(page, H.BINS_URL + '#w=333&bl=0-0-1-1-3');
+  expect(await stored(page, BINS + ':linked')).not.toBeNull();
+  const save = await stored(page, BINS);
+  await page.evaluate(([k, v]) => localStorage.setItem(k, v), [BINS + ':loading', save]);
+  await arrive(page, H.BINS_URL);
+  await expect(page.locator('#setAside')).toContainText(/did not finish loading/);
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await settle(page);
+  expect(await stored(page, BINS + ':linked')).toBeNull();
+});
+
 test('the guide passes a layout on without its own anchors in the way', async ({ page }) => {
   await H.openPlates(page);
   await H.setField(page, 'bottomPad', '2');           // a plate taller than the default

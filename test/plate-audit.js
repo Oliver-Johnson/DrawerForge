@@ -1180,7 +1180,7 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
   /* The puzzle key in the floor's step is 0.82, the first clearance that leaked at every
      pitch measured from 20 to 60; a ceiling at or over it lets the field take it. */
   const PAST = [
-    ['snap from above, 0.4 at 42', { connector: 'snap', keyInsert: 'top', pitch: 42, clr: 0.4 }, '2x2 pieces'],
+    ['snap from above, 0.35 at 42', { connector: 'snap', keyInsert: 'top', pitch: 42, clr: 0.35 }, '2x2 pieces'],
     ['puzzle, 0.3 at 13.5', { connector: 'puzzle', pitch: 13.5, clr: 0.3 }, '1-cell pieces'],
     ['puzzle, 0.35 at 19', { connector: 'puzzle', pitch: 19, clr: 0.35 }, '2x2 pieces'],
     ['bowtie, 0.35 at 15', { connector: 'bowtie', pitch: 15, clr: 0.35 }, '2x2 pieces'],
@@ -1189,9 +1189,20 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
   ];
   for (const [what, o, ln] of PAST) {
     const r = buildAll({ ...PIECE_LAYOUTS[ln](o.pitch), ...o });
-    const still = r.open > 0 || r.beyond > OVER;
+    /* A snap from above earns its ceiling in the seam face, before anything crosses the
+       seam: one step past, its slot's wall is nearer the face than a BLOAT. */
+    const face = { near: Infinity, sites: 0 };
+    if (o.keyInsert === 'top') {
+      const H = G.platePad(r.cfg) + r.cfg.plateHeight;
+      r.pieces.forEach((polys, i) => seamGap(face, what, polys, G.pieceConnectors(r.cfg, r.L,
+        r.L.pieces[i]).keyed.map((st) => ({ ...st, clr: r.cfg.key.clr })), H));
+    }
+    const inFace = face.sites > 0 && face.near < BLOAT - 1e-6;
+    const still = r.open > 0 || r.beyond > OVER || inFace;
     const most = G.connClrCeiling(r.cfg).max, refused = o.clr > most + 1e-9;
-    console.log(`  ${what.padEnd(28)} ${r.beyond > OVER ? `${r.beyond} mm into the next piece` : leakText(r)}` +
+    console.log(`  ${what.padEnd(28)} ${r.beyond > OVER ? `${r.beyond} mm into the next piece`
+      : inFace ? `its slot ${(Math.round(face.near * 1e4) / 1e4 + 0).toFixed(3)} mm off the seam face`
+      : leakText(r)}` +
                 (!refused ? `   THE FIELD TAKES IT: the ceiling went up to ${most}`
                   : still ? ' — the ceiling is earned' : '   NOW CLEAN — that ceiling can go up'));
     if (!still || !refused) bad++;
