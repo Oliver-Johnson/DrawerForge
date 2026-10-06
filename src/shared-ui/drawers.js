@@ -402,6 +402,18 @@ const DRAWERS = (function () {
       go(merged);
       return true;
     }
+    /* This tool's whole half of the drawer, not only the keys both pages share. A page
+       of this tool that is not the last one to save into the drawer — this tab's own page
+       come back after a later page or another tab moved the drawer on — has its half out
+       of date, and its first save would write that old half back over the new one: a
+       bin added in the other tab was gone. So it reloads onto the drawer as stored, the
+       way opening it does, and the note makes that reload the drawer, caught up. True if
+       the page is reloading. */
+    function reopen(d) {
+      if (!handOver(d.id, d.hash, true, { open: true })) return false;
+      go(d.hash);
+      return true;
+    }
     /* Opening another drawer replaces what is on screen. That costs nothing when what is
        on screen is itself a saved drawer, or is the untouched page you get on a first
        visit; anything else is work that exists nowhere but here. */
@@ -723,11 +735,14 @@ const DRAWERS = (function () {
     /* A page the browser kept in its back-forward cache comes back without loading, so
        attach never sees the return. Coming Back from the other page is exactly when the
        drawer's size may have changed, so this gets the same chance to catch up as a
-       reload does. */
+       reload does — the whole half, when a later page of this tool saved into it. */
     addEventListener('pageshow', (e) => {
       if (!e.persisted || !attached) return;
       const d = find(loadAll(), attached);
-      if (d) catchUp(o.design(), d);
+      if (!d) return;
+      const h = o.design();
+      if (d.marks[o.tool] !== fingerprint(h)) reopen(d);   // a later page saved into it
+      else catchUp(h, d);
     });
 
     return {
@@ -808,6 +823,7 @@ const DRAWERS = (function () {
           if (d) {
             attached = d.id;
             base = sharedOf(arrivedWith);
+            if (!noted && d.marks[o.tool] !== fp && reopen(d)) return;
             if (!(noted && next.caughtUp) && catchUp(arrivedWith, d)) return;
             /* A hand-over is written down now rather than at the page's first save, which
                is 400 ms off: a reload before it found no record of this tool in the

@@ -2312,10 +2312,11 @@ let arrivedWith = '';    // the design string this page was opened with, if it s
   notLinked = handOver ? yours : [];
   const replaces = fromLink && !opened && !own &&
     (saved.length <= 2 || !sameDesign(saved, src, yours));
-  /* A hand-over onto a save that is some saved drawer's — the other drawer's half, when a
-     drawer was opened on the other page — replaces nothing that is only here: it is kept
-     in that drawer. So nothing is set aside, and nothing is said. */
-  const kept = !!handOver && saved.length > 2 && drawers.holds(saved);
+  /* Your own layout handed over onto a save that is some saved drawer's — the other
+     drawer's half, when a drawer was opened on the other page — replaces nothing that is
+     only here: it is kept in that drawer. So nothing is set aside, and nothing is said.
+     A hand-over still carrying someone's link is that link arriving, and says so. */
+  const kept = !!handOver && !handOver.link.length && saved.length > 2 && drawers.holds(saved);
   const linked = readKey(LINKED_KEY);
   linkKept = handedOver ? '' : linked;
   /* Compared on what the record holds: one made without the settings that came with
