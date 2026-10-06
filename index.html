@@ -3538,9 +3538,16 @@ function buildFitSample(cfg, H, joint) {
    as its entity. The names today are piece ids and type keys with none of these in them,
    but typed text may reach them later, and a quote in one would end the attribute early
    and hand the rest of the name to the slicer as markup. test/plate-files.js reads the
-   names back out of the model. */
-const XML_ENTITY = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' };
-const xmlAttr = (s) => String(s).replace(/[&<>"']/g, (c) => XML_ENTITY[c]);
+   names back out of the model.
+   Tab, newline and return go as character references too: written raw, a parser reads
+   each one in an attribute as a space. The other control characters, U+FFFE, U+FFFF and
+   half a surrogate pair are not characters XML has at all, raw or as a reference, and
+   one of them makes the whole file unreadable, so they are dropped first. */
+const XML_ENTITY = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;',
+                     '\t': '&#9;', '\n': '&#10;', '\r': '&#13;' };
+const xmlAttr = (s) => String(s)
+  .replace(/[^\t\n\r\x20-퟿-�\u{10000}-\u{10FFFF}]/gu, '')
+  .replace(/[&<>"'\t\n\r]/g, (c) => XML_ENTITY[c]);
 /* items: [{name, polys, tx, ty, tz, rot}] rot in {0,90}. Returns {model, contentTypes, rels} XML strings.
    Each part is turned about its own origin and then moved by (tx, ty, tz), so (tx, ty) is
    where the origin goes, not where the part's corner goes: a caller with a rectangle to
