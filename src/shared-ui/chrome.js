@@ -234,3 +234,32 @@
     document.addEventListener('scroll', onScroll, true);
   }
 })();
+
+/* The service worker (sw.js, built from src/sw.js), which caches the site so the tools
+   open with no connection and can be installed as an app.
+
+   Its own block rather than part of the one above, which returns early on a page with no
+   tip jar. Only over http(s): a page opened from a file has no origin to register a
+   worker on, and asking anyway only puts an error in the console of a page that already
+   works offline. The worker's address is taken from the manifest link, which sits beside
+   it at the root and which tools/generated.js writes with the right number of ../ for
+   each page, so this needs no idea of where the page is.
+
+   After load, because the worker's first job is to download every page and script the
+   site has, and that should not compete with the page the visitor is waiting for. And
+   wrapped so that any failure — a browser with workers switched off, a host that will
+   not serve sw.js, private browsing that refuses storage — changes nothing at all: the
+   page is the same page with or without it. */
+(function () {
+  if (!/^https?:$/.test(location.protocol) || !('serviceWorker' in navigator)) return;
+  var link = document.querySelector('link[rel="manifest"]');
+  if (!link) return;
+  var register = function () {
+    try {
+      navigator.serviceWorker.register(new URL('sw.js', link.href).href)
+        .catch(function () { /* working offline is a bonus, never a requirement */ });
+    } catch (e) { /* the same */ }
+  };
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register);
+})();
