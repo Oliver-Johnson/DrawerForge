@@ -4,8 +4,10 @@
  * review, and each failed on the code it was written against.
  */
 'use strict';
+const fs = require('fs');
 const { test, expect } = require('@playwright/test');
 const H = require('./helpers.js');
+const JSZip = require('../../vendor/jszip.min.js');
 
 const settle = (page, ms = 400) => page.waitForTimeout(ms);
 
@@ -385,6 +387,87 @@ test('without WebGL the map, the table, the export and saving all still work',
     } finally {
       await browser.close();
     }
+  });
+
+/* ---------- #24: downloads are deflated --------------------------------------- */
+
+/* Each file's compression method, from the ZIP's central directory: 8 is deflate,
+   0 is stored. Read from the bytes rather than through JSZip, which unzips either
+   without saying which it found. Folder entries (a 3MF has two) are empty and always
+   stored, so they are left out. */
+function zipMethods(buf) {
+  const out = {};
+  const end = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  let at = buf.readUInt32LE(end + 16);
+  for (let n = buf.readUInt16LE(end + 10); n > 0; n--) {
+    const len = buf.readUInt16LE(at + 28), name = buf.toString('utf8', at + 46, at + 46 + len);
+    if (!name.endsWith('/')) out[name] = buf.readUInt16LE(at + 10);
+    at += 46 + len + buf.readUInt16LE(at + 30) + buf.readUInt16LE(at + 32);
+  }
+  return out;
+}
+async function download(page, selector) {
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator(selector).click()]);
+  return { name: dl.suggestedFilename(), buf: fs.readFileSync(await dl.path()) };
+}
+
+/* The baseplates page deflated its 3MF and ZIP downloads and this one went on storing
+   them, several times the size for files that are mostly XML. Compressed, every entry
+   still has to come out byte for byte what the page made: the ZIP's files against the
+   same files downloaded one at a time, and the plates' 3MFs entry by entry. */
+test('the bin ZIP, the plate ZIP and every 3MF are deflated, and unzip to the same bytes',
+  async ({ page }) => {
+    /* Two 2x2 bins, one to a 100 mm bed, so the plates come as a ZIP; and a 1x1 with a
+       loose divider and a lid, so the bin ZIP carries every kind of part. */
+    const errors = await openAt(page, 'bw=100&bd=100&bl=0-0-2-2-3_2-0-2-2-3_' +
+                                      '4-0-1-1-3-1.2-1.2-1-0-0-1-1-1-1-0-0-0-0-1-1-15');
+    expect(await page.evaluate(() => [types().length, dividerParts().length, lidParts().length,
+                                      goodPlates().length > 1]),
+           'fixture: two bin types, a divider, a lid and more than one plate')
+      .toEqual([2, 1, 1, true]);
+    await page.locator('#openExport').click();
+
+    const zip = await download(page, '#exFiles [data-ex="zip"]');
+    const methods = zipMethods(zip.buf);
+    expect(Object.keys(methods)).toContain('README.txt');
+    expect(Object.keys(methods)).toHaveLength(5);
+    expect(methods, 'entries stored, not deflated').toEqual(
+      Object.fromEntries(Object.keys(methods).map((k) => [k, 8])));
+    const files = (await JSZip.loadAsync(zip.buf)).files;
+    for (const kind of ['stl', 'divider', 'lid']) {
+      const rows = page.locator(`#exFiles [data-ex="${kind}"]`);
+      for (let i = 0; i < await rows.count(); i++) {
+        const one = await download(page, `#exFiles [data-ex="${kind}"] >> nth=${i}`);
+        expect(files[one.name], `${one.name} is missing from the ZIP`).toBeTruthy();
+        expect(Buffer.compare(await files[one.name].async('nodebuffer'), one.buf),
+               `${one.name} unzipped is not the file downloaded on its own`).toBe(0);
+      }
+    }
+    expect(await files['README.txt'].async('string'))
+      .toBe(await page.evaluate(() => layoutReadme()));
+
+    const plates = await download(page, '#exFiles [data-ex="allplates"]');
+    const plateMethods = zipMethods(plates.buf);
+    expect(Object.values(plateMethods), 'plates stored in their ZIP').toEqual(
+      Object.keys(plateMethods).map(() => 8));
+    const inZip = (await JSZip.loadAsync(plates.buf)).files;
+    /* A 3MF is a ZIP of its own, stamped with the time it was made, so two of the same
+       plate differ in their headers; what is in them may not. */
+    const first = await download(page, '#exFiles [data-ex="plate"] >> nth=0');
+    const alone = (await JSZip.loadAsync(first.buf)).files;
+    for (const [name, entry] of Object.entries(inZip)) {
+      const bytes = await entry.async('nodebuffer');
+      expect(Object.values(zipMethods(bytes)), `${name}: its parts are stored`)
+        .toEqual([8, 8, 8]);
+      if (name !== first.name) continue;
+      const parts = (await JSZip.loadAsync(bytes)).files;
+      expect(Object.keys(parts).sort()).toEqual(Object.keys(alone).sort());
+      for (const part of Object.keys(alone).filter((k) => !alone[k].dir))
+        expect(await parts[part].async('string'), `${name}: ${part}`)
+          .toBe(await alone[part].async('string'));
+    }
+    expect(inZip[first.name], `${first.name} is missing from the plate ZIP`).toBeTruthy();
+    expect(errors).toEqual([]);
   });
 
 /* ---------- #30: the small ones ----------------------------------------------- */
