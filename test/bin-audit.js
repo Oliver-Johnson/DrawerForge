@@ -535,5 +535,57 @@ console.log('\nas many dividers as the fields allow');
   }
 }
 
+/* The label shelf's underside runs down at 45 degrees, so the deeper the shelf the
+   lower its foot, and one deeper than the bin is tall came out through the floor among
+   the feet. The limit that stopped it held the foot 0.2 above the floor, and that cut
+   shelves which had always built cleanly: a 14 mm label on a 1x1x3 came out 13.65, a
+   7 mm one on a 2x1x2 6.65. The foot may run into the floor slab, which is solid; it
+   must not leave it, and the slab ends at the top of the base. Measured off the mesh:
+   the shelf is whatever adding the label adds. */
+console.log('\nlabel shelves as deep as the bin\'s height allows');
+{
+  const key = (p) => p.verts.map((w) => w.map((x) => x.toFixed(4)).join(',')).join(' ');
+  const shelfOf = (cfg) => {
+    const without = new Set(buildBin(G, Object.assign({}, cfg, { label: 0 })).polys.map(key));
+    let ymin = Infinity, zmin = Infinity;
+    for (const p of buildBin(G, cfg).polys) if (!without.has(key(p)))
+      for (const w of p.verts) { ymin = Math.min(ymin, w[1]); zmin = Math.min(zmin, w[2]); }
+    if (!isFinite(zmin)) return { depth: 0, foot: NaN };          // no shelf built at all
+    const inner = (cfg.v - 1) * SPEC.pitch / 2 + SPEC.half - (cfg.wall || BIN_DEFAULTS.wall);
+    return { depth: inner - ymin, foot: zmin };
+  };
+  // [name, bin, what the shelf must be: its depth, or null for "as deep as the height allows"]
+  const SHELVES = [
+    ['1x1x3, 14 mm', { u: 1, v: 1, hUnits: 3, label: 14 }, 14],
+    ['2x1x2, 7 mm', { u: 2, v: 1, hUnits: 2, label: 7 }, 7],
+    ['2x1x3, 12 mm on a 3 mm floor', { u: 2, v: 1, hUnits: 3, floorT: 3, label: 12 }, 12],
+    // the deepest a whole-millimetre shelf on whole units reaches: its foot on the base
+    ['1x2x3, 15 mm', { u: 1, v: 2, hUnits: 3, label: 15 }, 15],
+    ['1x1x3, 16 mm', { u: 1, v: 1, hUnits: 3, label: 16 }, null],
+    ['1x1x1, 12 mm', { u: 1, v: 1, hUnits: 1, label: 12 }, null],
+    ['2x1x2, 20 mm on a 3 mm floor', { u: 2, v: 1, hUnits: 2, floorT: 3, label: 20 }, null],
+  ];
+  for (const [name, cfg, want] of SHELVES) {
+    const s = shelfOf(cfg);
+    const ok = want !== null ? Math.abs(s.depth - want) < 1e-6
+      : s.foot >= SPEC.footH && s.foot <= SPEC.footH + 0.1;
+    console.log(`  ${name.padEnd(30)} ${s.depth.toFixed(2).padStart(5)} mm deep, foot at ` +
+                `${s.foot.toFixed(2).padStart(4)}   ` + (ok ? 'ok'
+                  : want !== null ? `CUT SHORT of ${want} mm`
+                  : !s.depth ? 'NO SHELF where one fits'
+                  : s.foot < SPEC.footH ? 'BELOW THE BASE, among the feet' : 'HELD UP off the base'));
+    if (!ok) bad++;
+  }
+  for (const [name, base] of [['1x1x3 at its limit', { u: 1, v: 1, hUnits: 3 }],
+                              ['2x2x2 at its limit', { u: 2, v: 2, hUnits: 2 }]]) {
+    const rows = [], H = base.hUnits * SPEC.unitH;
+    // a wall of 1.148 puts the shelf's back corners on vertices of the foot's and wall's arcs
+    for (const floorT of [0, 0.6, 1.05, 1.1, 1.2, 3]) for (const wall of [0.4, 1.148, 1.2, 2])
+      for (const label of [H - 7, H - 6, H - 5, 42])
+        rows.push([`floor ${floorT} wall ${wall} label ${label}`, Object.assign({ floorT, wall, label }, base)]);
+    sweepReport(name, rows);
+  }
+}
+
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');
 process.exit(bad ? 1 : 0);

@@ -978,10 +978,15 @@ function buildBin(G, cfg) {
     }
     if (c.label > 0.05 && eB > 0.99) {
       /* Limited by height as well as depth. The shelf's underside runs down at 45
-         degrees, so a shelf deeper than the cavity is tall pokes its foot through the
-         floor and out among the feet: 4 open edges from 8 mm on a 1-unit bin. Kept
-         0.2 above the floor so the two never share a face. */
-      const d = Math.min(c.label, id * 0.8, H - floorZ - c.labelT - 0.2);
+         degrees, so a shelf deeper than the bin is tall pokes its foot through the
+         floor and out among the feet: 4 open edges from 8 mm on a 1-unit bin. Into
+         the floor is fine, it is solid, and overlap is how every shell here meets the
+         next; out of it is not. The slab starts a BLOAT below the body, so the foot
+         stops at the top of the feet, a BLOAT above it, whatever the floor — which is
+         where a whole-millimetre shelf on whole units bottoms out, so none of those
+         moves. Held 0.2 above the floor, it cut shelves that had always built
+         cleanly: a 14 mm label on a 1x1x3 came out 13.65. */
+      const d = Math.min(c.label, id * 0.8, H - c.labelT - (bodyBase + BLOAT));
       if (d > 0.05) polys.push(...labelPrism(G, iw, id, H, d, c.labelT));
     }
 
