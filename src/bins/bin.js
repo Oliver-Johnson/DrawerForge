@@ -144,20 +144,24 @@ const floorTop = (c) => SPEC.footH + Math.max(builtFloorT(c), 2 * BLOAT);
    buildBin builds that bin as one block, the same as one asked to be solid. */
 const builtSolid = (c) => c.solid || floorTop(c) >= c.hUnits * SPEC.unitH - 0.2;
 /* The tallest of the four walls, as the share of the height above the floor it stands
-   to; a solid block counts as all wall. */
-const tallestWall = (c) => (c.solid ? 1 : Math.max(...['f', 'b', 'l', 'r'].map((k) =>
+   to. A solid block counts as all wall, and so does a carved bin: its walls are built
+   cell by cell to the full height, and the edges never reach them. */
+const tallestWall = (c) => (c.solid || !isFullRect(c) ? 1 : Math.max(...['f', 'b', 'l', 'r'].map((k) =>
   (!c.edges || c.edges[k] === undefined) ? 1 : Math.max(0, Math.min(1, c.edges[k])))));
 /* How tall a bin really stands, lip aside. H stays the stacking pitch whatever the walls
    do, but a bin with every wall lowered stops at the tallest of them, and one with every
-   wall open is its floor slab and nothing more: a tray. buildBin reports this as the
-   bin's height, which is what its README and the plate files give, and the page quotes
-   it beside the height field; one function for both, like floorTop, so the two cannot
-   drift. It is buildBin's figure, not a measurement of the mesh: the share is taken
-   from the top of the slab while the wall ring runs from floorZ, so a part-height wall
-   stands up to BLOAT under it (0.025 mm at half height). */
+   wall open is its floor slab and nothing more: a tray. Dividers are not walls, though:
+   a fixed one, or the rails of a removable one, runs from the floor to H whatever the
+   walls do, so a bin with any stands at H. buildBin reports this as the bin's height,
+   which is what its README, the plate files and the bed's height check use, and the
+   page quotes it beside the height field; one function for all of them, like floorTop,
+   so they cannot drift. It is buildBin's figure, not a measurement of the mesh: the
+   share is taken from the top of the slab while the wall ring runs from floorZ, so a
+   part-height wall stands up to BLOAT under it (0.025 mm at half height). */
 const binTop = (c) => {
   const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
-  return builtSolid(c) ? H : floorZ + BLOAT + tallestWall(c) * (H - floorZ - BLOAT);
+  if (builtSolid(c) || c.divX > 0 || c.divY > 0) return H;
+  return floorZ + BLOAT + tallestWall(c) * (H - floorZ - BLOAT);
 };
 
 /* A bin's heights as the page quotes them, from the numbers buildBin builds it with

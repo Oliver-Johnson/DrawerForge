@@ -377,8 +377,10 @@ test.describe('the print time', () => {
     await page.waitForFunction(() => printPlan && printPlan.over.length > 0);
     const f = await platesFigures(page);
     expect(f.summary).toMatch(/^In all: .* of printing on a standard printer for the plates that fit \(a rough/);
-    expect(f.dialog).toMatch(/roughly .* of printing over \d plates on a standard printer for the plates that fit \(/);
-    expect(f.readme).toMatch(/Print time: roughly .* on a standard printer over \d plates for the plates that fit\./);
+    expect(f.dialog).toMatch(/roughly .* of printing on a standard printer for the plates that fit \(/);
+    expect(f.readme).toMatch(/Print time: roughly .* on a standard printer for the plates that fit\./);
+    // the plates are said once, not "over 3 plates for the plates that fit"
+    for (const t of [f.summary, f.dialog, f.readme]) expect(t).not.toMatch(/over \d plates? (on|for)/);
   });
 
   /* The kind of printer comes from the list, where tools/printers.js marks the fast ones,
@@ -480,7 +482,7 @@ test('the README in the bins ZIP carries the cost and the time', async ({ page }
 
 /* And in Bins, where the page already said it: the README weighs every bin, a 3 x 1 too
    long for a 120 mm bed among them, so its time says it is for the plates that fit. */
-test('the bins README says its time leaves out a bin too big for the bed', async ({ page }) => {
+test('the bins README and download dialog say their time leaves out a bin too big for the bed', async ({ page }) => {
   page.__errors = await H.openBins(page);
   await H.setField(page, 'bedPreset', 'custom');
   await H.setField(page, 'bedW', 120);
@@ -493,4 +495,7 @@ test('the bins README says its time leaves out a bin too big for the bed', async
   await expect(page.locator('#plateSummary')).toContainText('for the plates that fit');
   expect(await page.evaluate(() => layoutReadme()))
     .toMatch(/Print time: roughly .* printer for the plates that fit\./);
+  // and the download dialog, whose line above already says the bin is left off
+  const f = await binsFigures(page);
+  expect(f.dialog).toMatch(/roughly .* of printing on a standard printer for the plates that fit \(/);
 });

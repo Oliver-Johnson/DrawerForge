@@ -5490,20 +5490,24 @@ const floorTop = (c) => SPEC.footH + Math.max(builtFloorT(c), 2 * BLOAT);
    buildBin builds that bin as one block, the same as one asked to be solid. */
 const builtSolid = (c) => c.solid || floorTop(c) >= c.hUnits * SPEC.unitH - 0.2;
 /* The tallest of the four walls, as the share of the height above the floor it stands
-   to; a solid block counts as all wall. */
-const tallestWall = (c) => (c.solid ? 1 : Math.max(...['f', 'b', 'l', 'r'].map((k) =>
+   to. A solid block counts as all wall, and so does a carved bin: its walls are built
+   cell by cell to the full height, and the edges never reach them. */
+const tallestWall = (c) => (c.solid || !isFullRect(c) ? 1 : Math.max(...['f', 'b', 'l', 'r'].map((k) =>
   (!c.edges || c.edges[k] === undefined) ? 1 : Math.max(0, Math.min(1, c.edges[k])))));
 /* How tall a bin really stands, lip aside. H stays the stacking pitch whatever the walls
    do, but a bin with every wall lowered stops at the tallest of them, and one with every
-   wall open is its floor slab and nothing more: a tray. buildBin reports this as the
-   bin's height, which is what its README and the plate files give, and the page quotes
-   it beside the height field; one function for both, like floorTop, so the two cannot
-   drift. It is buildBin's figure, not a measurement of the mesh: the share is taken
-   from the top of the slab while the wall ring runs from floorZ, so a part-height wall
-   stands up to BLOAT under it (0.025 mm at half height). */
+   wall open is its floor slab and nothing more: a tray. Dividers are not walls, though:
+   a fixed one, or the rails of a removable one, runs from the floor to H whatever the
+   walls do, so a bin with any stands at H. buildBin reports this as the bin's height,
+   which is what its README, the plate files and the bed's height check use, and the
+   page quotes it beside the height field; one function for all of them, like floorTop,
+   so they cannot drift. It is buildBin's figure, not a measurement of the mesh: the
+   share is taken from the top of the slab while the wall ring runs from floorZ, so a
+   part-height wall stands up to BLOAT under it (0.025 mm at half height). */
 const binTop = (c) => {
   const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
-  return builtSolid(c) ? H : floorZ + BLOAT + tallestWall(c) * (H - floorZ - BLOAT);
+  if (builtSolid(c) || c.divX > 0 || c.divY > 0) return H;
+  return floorZ + BLOAT + tallestWall(c) * (H - floorZ - BLOAT);
 };
 
 /* A bin's heights as the page quotes them, from the numbers buildBin builds it with
@@ -7384,13 +7388,15 @@ function readmeCost(g) {
   const c = costOf(g);
   return c ? ` — about ${c} at ${ESTIMATE.perKg(est.get())}` : '';
 }
+/* The grams are every part's, but a part too big for the bed has no plate to time, so a
+   time that leaves one out says so. Where it does, "over 3 plates" is not said as well:
+   it would be the plates said twice. */
+const fitNote = () => (printPlan && printPlan.plates.some((p) => p.overflow) ? ' for the plates that fit' : '');
 function readmeTime(job) {
   if (!job.plates.length) return [];
-  // the grams are every part's, but a part too big for the bed has no plate to time
-  const over = printPlan && printPlan.plates.some((p) => p.overflow);
   return [`Print time: roughly ${ESTIMATE.duration(job.min)} on a ${speedName()}` +
-            (job.plates.length > 1 ? ` over ${job.plates.length} plates` : '') +
-            (over ? ' for the plates that fit.' : '.'),
+            (job.plates.length > 1 && !fitNote() ? ` over ${job.plates.length} plates` : '') +
+            `${fitNote()}.`,
           'That is a rough estimate from the filament and the layer count, not a slice:',
           'your slicer gives the real figure.'];
 }
@@ -10057,8 +10063,13 @@ const saveHMode = (m) => {
 // the bin the height field is describing: the one on its own, the selected one, or the next
 const heightSrc = () => scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
 /* everything about a bin its heights depend on, bar the units being worked out. Screws
-   are among them: their holes raise the floor. */
-const heightCfg = (b) => ({ floorT: b.floorT, screws: b.screws, solid: b.solid, edges: b.edges });
+   are among them, because their holes raise the floor; so are dividers, which stand to
+   the full height whatever the walls do, and the cells, because a carved bin's walls
+   are full height too. The new-bin settings have no size or cells of their own, and are
+   a whole rectangle. */
+const heightCfg = (b) => ({ floorT: b.floorT, screws: b.screws, solid: b.solid, edges: b.edges,
+                            divX: b.divX || 0, divY: b.divY || 0,
+                            u: b.u || 1, v: b.v || 1, cells: b.cells || null });
 const heightsOf = (b) => binHeights(Object.assign(heightCfg(b), { hUnits: b.hUnits }));
 /* Which length the field takes for this bin. Inside depth when that is the menu's choice
    and the bin has an inside; a solid block has none at any height, nor has a tray open
@@ -10067,8 +10078,14 @@ const heightsOf = (b) => binHeights(Object.assign(heightCfg(b), { hUnits: b.hUni
 const lengthMode = (b) => (hMode === 'inside' && !heightsOf(b).hollow ? 'overall' : hMode);
 /* Both ways round through the engine's own heights, so a bin with its walls lowered is
    given the units that stand it, or hold the depth, at the height it is built to. */
-const unitsFor = (mm, b) => fieldClamp('hUnits', lengthMode(b) === 'inside'
-  ? unitsForInside(mm, heightCfg(b)) : unitsForTop(mm, heightCfg(b)));
+const unitsFor = (mm, b) => {
+  if (lengthMode(b) === 'inside') return fieldClamp('hUnits', unitsForInside(mm, heightCfg(b)));
+  /* The height the field shows, typed back, is the bin it shows. A tray stands at its
+     slab whatever its units, and the nearest stacking height to the 6 mm a 6-unit tray
+     shows made it 1 unit: the same mesh, with another link and another place in a stack. */
+  if (FIELDS.show(mm, unit) === FIELDS.show(heightsOf(b).top, unit)) return b.hUnits;
+  return fieldClamp('hUnits', unitsForTop(mm, heightCfg(b)));
+};
 /* An inside depth as it is shown: to the hundredth of `per` millimetres — one for
    millimetres, 25.4 for inches — and rounded DOWN. To the nearest, it could be more than
    the bin holds: 2 units on a bare floor hold 9.1 mm, 0.358 in, shown as 0.36, and 0.36
@@ -10182,8 +10199,8 @@ function renderExport() {
     (costOf(job.grams) ? `, about ${costOf(job.grams)} at ${ESTIMATE.perKg(est.get())}` : '');
   const time = job.plates.length
     ? `\nroughly ${ESTIMATE.duration(job.min)} of printing` +
-      (job.plates.length > 1 ? ` over ${plural(job.plates.length, 'plate')}` : '') +
-      ` on a ${speedName()} (${ESTIMATE.ROUGH})`
+      (job.plates.length > 1 && !fitNote() ? ` over ${plural(job.plates.length, 'plate')}` : '') +
+      ` on a ${speedName()}${fitNote()} (${ESTIMATE.ROUGH})`
     : '';
   /* In focus the dialog is about one bin, and saying "7 × 9 cell grid" over a single
      STL is the same disagreement the README has to avoid. */

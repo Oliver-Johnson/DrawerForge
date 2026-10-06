@@ -1439,7 +1439,8 @@ function jobTime() {
   const plates = printPlan.plates.filter((pl) => !pl.overflow).map(plateEstimate);
   return { plates, min: plates.reduce((a, e) => a + e.min, 0) };
 }
-// what the time leaves out: the pieces too big for the bed, which have no plate to time
+/* What the time leaves out: the pieces too big for the bed, which have no plate to time.
+   Where it is said, "over 3 plates" is not as well: it would be the plates said twice. */
 const fitNote = () => (printPlan && printPlan.over.length ? ' for the plates that fit' : '');
 /* A new price or speed changes figures and nothing else, so it redraws the two places on
    the page that show them; the dialog follows, since both of these sync it. */
@@ -1574,7 +1575,7 @@ function readmeText() {
     });
     if (job.plates.length) {
       lines.push(`Print time: roughly ${ESTIMATE.duration(job.min)} on a ${speedName()}` +
-                 (job.plates.length > 1 ? ` over ${job.plates.length} plates` : '') + `${fitNote()}.`);
+                 (job.plates.length > 1 && !fitNote() ? ` over ${job.plates.length} plates` : '') + `${fitNote()}.`);
       lines.push('That is a rough estimate from the filament and the layer count, not a slice:');
       lines.push('your slicer gives the real figure.');
     }
@@ -1704,7 +1705,7 @@ function renderExportSummary() {
       (costOf(g) ? ` (about ${costOf(g)} at ${ESTIMATE.perKg(est.get())})` : '') + ` ${infillNote()}`) +
     (g === null || !job || !job.plates.length ? ''
       : `\nroughly ${ESTIMATE.duration(job.min)} of printing` +
-        (job.plates.length > 1 ? ` over ${plural(job.plates.length, 'plate')}` : '') +
+        (job.plates.length > 1 && !fitNote() ? ` over ${plural(job.plates.length, 'plate')}` : '') +
         ` on a ${speedName()}${fitNote()} (${ESTIMATE.ROUGH})`);
   const fit = bedFitText();
   $('exFit').className = 'exfit ' + fit.cls;

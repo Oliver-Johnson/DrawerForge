@@ -193,6 +193,9 @@ test('a lowered bin is quoted as tall as the engine builds it', async ({ page })
     return [
       { hUnits: 6 }, { hUnits: 6, edges: open }, { hUnits: 6, edges: half }, { hUnits: 2, edges: open },
       { hUnits: 4, edges: { f: 0, b: 0.25, l: 0.66, r: 0.5 } }, { hUnits: 3, floorT: 3, edges: half },
+      // dividers stand to H whatever the walls do, and a carved bin's walls are full height
+      { hUnits: 6, edges: open, divX: 1 }, { hUnits: 6, edges: half, divX: 1, divRemovable: true },
+      { u: 2, v: 2, cells: [[0, 0], [1, 0], [0, 1]], hUnits: 3, edges: half },
     ].map((c) => {
       const q = binHeights(c), built = buildBin(G, Object.assign({ u: 2, v: 1 }, c)), m = built.meta;
       let zmax = -Infinity;
@@ -209,6 +212,40 @@ test('a lowered bin is quoted as tall as the engine builds it', async ({ page })
   expect(rows[1].q.inside).toBe(0);
   expect(rows[2].q.top).toBeCloseTo(24, 9);      // 6 to the slab, then half of the 36 above it
   expect(rows[2].q.inside).toBeCloseTo(18, 9);
+  expect(rows[6].q.top).toBe(42);                // a tray with a divider stands as tall as it
+  expect(rows[7].q.top).toBe(42);                // and half walls with rails as tall as those
+  expect(rows[8].q.top).toBe(21);                // a carved L at half walls is walled full height
+});
+
+/* Dividers are not walls: a fixed one, and the rails of a removable one, run to the full
+   height whatever the walls do, and a carved bin's walls are built full height whatever
+   its edges say. Quoted from the walls alone, a tray with a divider read 6 mm tall for a
+   part 42 mm tall, half walls with rails 24 for 42, and a carved L at half walls 13.5
+   for 21 — and the README, the plate files and the bed's height check took the same
+   figure. And a tray stands at its slab whatever its units, so its height typed back
+   keeps the units it has: the nearest stacking height made a 6-unit tray 1 unit. */
+test('dividers and carving stand a bin full height, and a tray keeps its units', async ({ page }) => {
+  await oneBin(page);
+  await H.setField(page, 'hUnits', 6);
+  await page.locator('#presetTray').click();
+  await page.waitForTimeout(300);
+  expect(await result(page)).toBe('6 units · 6 mm tall · open on every side');
+
+  await page.selectOption('#hMode', 'overall');
+  await expect(page.locator('#hMm')).toHaveValue('6');
+  await typeHeight(page, 6);
+  await leave(page);
+  expect(await units(page)).toBe(6);
+
+  await H.setField(page, 'divX', 1);
+  await page.waitForTimeout(300);
+  expect(await result(page)).toBe('6 units · 42 mm overall · open on every side');
+  await expect(page.locator('#hMm')).toHaveValue('42');
+
+  // the page asks with the bin's cells, so a carved one is quoted as it is built
+  expect(await page.evaluate(() => heightsOf(Object.assign({}, B()[0], {
+    divX: 0, hUnits: 3, cells: [[0, 0], [1, 0], [0, 1]],
+    edges: { f: 0.5, b: 0.5, l: 0.5, r: 0.5 } })).top)).toBe(21);
 });
 
 /* A lowered wall stops short of H, and with every wall open the bin is its slab and
