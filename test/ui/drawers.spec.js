@@ -125,6 +125,38 @@ test('a reload started before the last save is still the drawer', async ({ page 
   expect(errors).toEqual([]);
 });
 
+/* The page saves 400 ms after a change, and a save still waiting as a page goes is
+   dropped. Going to the other tool is the page's own doing, so it saves first: a change
+   made just before was in the hand-over, but not in the address Back returns to, and the
+   page coming back wrote the old setting over it. The reload after Back is what a browser
+   without the back-forward cache does. */
+test('a change made just before going to the other tool is still there after Back',
+  async ({ page }) => {
+    const errors = await openPlates(page);
+    await saveAs(page, 'Kitchen');
+    await settle(page);
+    expect((await stored(page)).Kitchen.cn).toBe('dovetail');
+    // the change and the click in one go, so the save cannot run between them
+    await Promise.all([page.waitForURL(/\/bins\/#/), page.evaluate(() => {
+      const s = document.getElementById('connector');
+      s.value = 'snap';
+      s.dispatchEvent(new Event('change', { bubbles: true }));
+      document.getElementById('navBins').click();
+    })]);
+    await binsReady(page);
+    await settle(page);
+    expect((await stored(page)).Kitchen.cn, 'the hand-over has it').toBe('snap');
+    await page.goBack();
+    await platesReady(page);
+    await page.reload();
+    await platesReady(page);
+    await settle(page);
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    expect(await page.inputValue('#connector')).toBe('snap');
+    expect((await stored(page)).Kitchen.cn, 'and so does the drawer, after Back').toBe('snap');
+    expect(errors).toEqual([]);
+  });
+
 /* A link copied from the page is the design as it was then. Opened after a later change
    has been saved, it is an older design than the drawer's, and opening it as the drawer
    would save it over that change. */

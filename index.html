@@ -6203,15 +6203,17 @@ function rememberState() {
   if (!hashReady) return;
   clearTimeout(hashSaveT);
   addEventListener('beforeunload', dropSave);
-  hashSaveT = setTimeout(() => {
-    removeEventListener('beforeunload', dropSave);
-    const h = encodeDesc(descriptor());
-    try { history.replaceState(null, '', '#' + h); }
-    catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
-                     worth an exception that stops the rest of the page working */ }
-    saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
-    drawers.wrote(h);   // and into the saved drawer this is, if it is one
-  }, 400);
+  hashSaveT = setTimeout(saveNow, 400);
+}
+function saveNow() {
+  clearTimeout(hashSaveT);
+  removeEventListener('beforeunload', dropSave);
+  const h = encodeDesc(descriptor());
+  try { history.replaceState(null, '', '#' + h); }
+  catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
+                   worth an exception that stops the rest of the page working */ }
+  saveLocal(h);   // outside the try: a refused URL is no reason to lose the save too
+  drawers.wrote(h);   // and into the saved drawer this is, if it is one
 }
 /* A reload takes the address as it stands when it starts, and the page runs on until the
    new one arrives. A save still waiting would land in that gap and record in the saved
@@ -6219,7 +6221,9 @@ function rememberState() {
    So a save still waiting when the page starts to go is dropped: the change it held is in
    neither the address nor the drawer, and the page comes back as both have it. The
    listener is there only while a save waits, because some browsers keep no page that
-   listens for beforeunload in the back-forward cache. */
+   listens for beforeunload in the back-forward cache. The page's own links to the other
+   tool and the guide save first instead (leave, below), so a change made just before
+   one is kept for Back. */
 function dropSave() {
   clearTimeout(hashSaveT);
   removeEventListener('beforeunload', dropSave);
@@ -6255,20 +6259,20 @@ function binsHref() {
   return 'bins/#' + encodeDesc(Object.assign(descriptor(), { ph: (+H).toFixed(2) }));
 }
 /* Each hand-over is told to the saved drawer first, so the page at the other end
-   recognises the design it arrives with as that drawer — see attach in drawers.js. */
+   recognises the design it arrives with as that drawer — see attach in drawers.js. And a
+   change still waiting to be saved is saved now, not dropped as the page goes: Back
+   comes to this page's address, and that and the drawer must both have the change. */
+function leave(href) {
+  if (hashReady) saveNow();
+  drawers.handoff(href.slice(href.indexOf('#') + 1));
+  location.href = href;
+}
 for (const id of ['toBins', 'navBins'])
-  $(id).addEventListener('click', (e) => {
-    e.preventDefault();
-    const href = binsHref();
-    drawers.handoff(href.slice(href.indexOf('#') + 1));
-    location.href = href;
-  });
+  $(id).addEventListener('click', (e) => { e.preventDefault(); leave(binsHref()); });
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  const h = encodeDesc(descriptor());
-  drawers.handoff(h);
-  location.href = 'guide/#' + h;
+  leave('guide/#' + encodeDesc(descriptor()));
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
