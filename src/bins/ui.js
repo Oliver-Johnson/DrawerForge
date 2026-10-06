@@ -111,17 +111,19 @@ function platePitch() {
    plate whose margins left it six cells wide arrived here as a map seven wide, and the
    seventh column took bins with no sockets under them. At any other pitch the plate has
    no cell a spec bin fits, so the grid is the 42 mm cells the plate's margins leave room
-   for, and Checks says why none of them will seat. */
-function grid() {
+   for, and Checks says why none of them will seat. A W × D drawer, so the cell fields can
+   ask it of the largest drawer there is (see readControls). */
+function plateCells(W, D) {
   const pm = plateMargins();
   // each held to the drawer, as the plate's fields hold them
-  const W = state.drawerW, D = state.drawerD;
   const c = gridCells({ drawerW: W, drawerD: D, pitch: SPEC.pitch,
     marginMode: pm ? 'custom' : 'auto',
     mLeft: pm ? Math.min(pm.l, W) : 0, mRight: pm ? Math.min(pm.r, W) : 0,
     mFront: pm ? Math.min(pm.f, D) : 0, mBack: pm ? Math.min(pm.b, D) : 0 });
-  const nx = Math.max(1, Math.min(GRID_MAX, c.nx));
-  const ny = Math.max(1, Math.min(GRID_MAX, c.ny));
+  return { nx: Math.max(1, Math.min(GRID_MAX, c.nx)), ny: Math.max(1, Math.min(GRID_MAX, c.ny)) };
+}
+function grid() {
+  const { nx, ny } = plateCells(state.drawerW, state.drawerD);
   const avail = state.drawerH - state.plateH;
   return { nx, ny, avail, maxUnits: Math.max(1, Math.floor((avail - LIP_H) / SPEC.unitH)) };
 }
@@ -783,6 +785,12 @@ function readControls() {
   const g = grid();
   if (document.activeElement !== $('gridX')) $('gridX').value = g.nx;
   if (document.activeElement !== $('gridY')) $('gridY').value = g.ny;
+  /* And they stop where the drawer does: the most cells is what a drawer at the cap holds
+     once the plate's margins are off it, so the spinner stops where the written drawer
+     stops growing (see the fields' input handler). It was GRID_MAX whatever the margins,
+     which spun on past the room they leave. */
+  const top = plateCells(DRAWER_MAX, DRAWER_MAX);
+  $('gridX').max = top.nx; $('gridY').max = top.ny;
   /* Last, so it sees the selection this pass settled on — and so the one class that
      decides what focus hides is applied after every other visibility decision above,
      rather than being quietly undone by one of them. */
@@ -2843,14 +2851,19 @@ function saveBlobAsync(blob, name) {
    exactly n × 42 mm grids to n cells, which is what someone who owns an n-cell
    baseplate is telling us they have. Plus the margins that baseplate keeps, when the
    link carries custom ones: those come off the drawer before the cells are counted (see
-   grid), so n cells and nothing else would come back as fewer than were typed. */
+   grid), so n cells and nothing else would come back as fewer than were typed. No larger
+   than DRAWER_MAX, though: with the margins added, 47 cells wrote a drawer past the cap,
+   which readControls then cut down and Checks called an error nobody had made, and a
+   margin of 1e9 put a ten-digit drawer in the field. At the cap the grid is the most
+   cells there is room for, which is where the field's max stops the spinner. */
 for (const [id, field] of [['gridX', 'drawerW'], ['gridY', 'drawerD']])
   $(id).addEventListener('input', () => {
     const n = parseInt($(id).value, 10);
     if (!isFinite(n) || n < 1) return;      // mid-edit: an empty box is not a request
     const pm = plateMargins();
     const keep = !pm ? 0 : field === 'drawerW' ? pm.l + pm.r : pm.f + pm.b;
-    FIELDS.setLength($(field), n * SPEC.pitch + keep, unit);   // in whatever unit it is showing
+    // in whatever unit it is showing
+    FIELDS.setLength($(field), Math.min(DRAWER_MAX, n * SPEC.pitch + keep), unit);
     schedule();
   });
 $('bedPreset').addEventListener('change', () => {

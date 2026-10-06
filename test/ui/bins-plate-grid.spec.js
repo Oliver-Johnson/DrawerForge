@@ -172,3 +172,36 @@ test('a pitch a hair off 42 is standard, and any other is named as itself', asyn
   }
   expect(errors).toEqual([]);
 });
+
+/* The cell fields write a drawer, and a drawer stops at DRAWER_MAX. With the plate's
+   margins added back, 47 cells in a 2000 mm drawer with 100 mm a side wrote a 2174 mm
+   drawer, which the page then cut down and reported as an error nobody had made; a
+   margin of 1e9 put 1000000210 in the width field. The written drawer stops at the cap,
+   and the spinner stops at the cells a drawer at the cap holds. */
+test('the cell fields stop where the drawer does, margins and all', async ({ page }) => {
+  const errors = watch(page);
+  const maxes = () => page.evaluate(() => [$('gridX').max, $('gridY').max]);
+  await page.goto(site.base + 'bins/#w=2000&d=380&mm=custom&ml=100&mr=100');
+  await binsReady(page);
+  // 1800 mm across is 42 cells; nothing comes off the depth, so 2000 mm of it is 47
+  expect(await maxes()).toEqual(['42', '47']);
+  await H.setField(page, 'gridX', 47);
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => [state.drawerW, $('drawerW').value, grid().nx]))
+    .toEqual([2000, '2000', 42]);
+  expect(await checksText(page)).not.toMatch(/bigger than/);
+  await H.setField(page, 'gridX', 40);
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => [state.drawerW, grid().nx])).toEqual([40 * 42 + 200, 40]);
+
+  // a margin no drawer has room for: one cell is all there is, and nothing runs away
+  await page.goto('about:blank');
+  await page.goto(site.base + 'bins/#w=306&d=380&mm=custom&ml=1e9');
+  await binsReady(page);
+  expect(await maxes()).toEqual(['1', '47']);
+  await H.setField(page, 'gridX', 5);
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => [state.drawerW, $('drawerW').value])).toEqual([2000, '2000']);
+  expect(await checksText(page)).not.toMatch(/bigger than/);
+  expect(errors).toEqual([]);
+});
