@@ -56,6 +56,7 @@ That covers:
 | `test/fit-check.js` | a spec bin fits the socket the baseplate ships |
 | `test/stack-check.js` | a bin seats in the one below it with the spec's 0.25 mm at **every** height up the lip, not merely somewhere positive — the foot comes from the published spec and the lip from an inset of the bin outline, so the two are maintained in different places and can drift apart while both still look right |
 | `test/hash-roundtrip.js` | a layout survives the URL round trip byte for byte |
+| `test/plate-files.js` | a 3MF stays well-formed whatever characters a part's name holds, and the name comes back out as it went in, less the control characters XML has no way to carry; and the 3MF transform turns a part about its origin before moving it, the convention the print plates are placed by |
 | `test/drawers-file.js` | a saved drawer survives the design file round trip byte for byte, and a malformed or hostile file is refused with a reason rather than half-read |
 | `test/seo-check.js` | structured data parses and matches the visible prose; the link-preview image and icons exist at the size and path every page's tags claim |
 | `test/guide-facts.js` | the numbers the guides quote, recomputed from `core.js` and the bin spec — every row of the drawer-size and printer tables, and each worked example in the prose — and that the split guide and both tools list the same printers on the same beds as `tools/printers.js` |

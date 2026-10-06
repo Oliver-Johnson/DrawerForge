@@ -2200,9 +2200,14 @@ function pieceColumn(s) {
     out = String.fromCharCode(65 + (n - 1) % 26) + out;
   return out;
 }
-/* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
-   splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
-function computeLayout(p) {
+/* How many cells the drawer holds, and the margins left around them: the first thing a
+   layout decides, and the one thing the Bins page has to decide the same way. That page
+   counted its own cells as the drawer over 42 and nothing else, so a plate with custom
+   margins six cells wide arrived there as a map seven wide, and the seventh column took
+   bins with no sockets under them. Both pages ask here now. Needs drawerW, drawerD,
+   pitch, marginMode, and the four margins when it is 'custom' or the alignment when it
+   is not. */
+function gridCells(p) {
   const pitch = p.pitch;
   let nx, ny, mL, mR, mF, mB;
   if (p.marginMode === 'custom') {
@@ -2220,6 +2225,13 @@ function computeLayout(p) {
     mF = p.alignY === 'start' ? remY : p.alignY === 'end' ? 0 : remY/2;
     mB = remY - mF;
   }
+  return { nx, ny, mL, mR, mF, mB };
+}
+/* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
+   splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
+function computeLayout(p) {
+  const pitch = p.pitch;
+  const { nx, ny, mL, mR, mF, mB } = gridCells(p);
   const maxCellsX = Math.max(1, Math.floor(p.bedW / pitch));
   const maxCellsY = Math.max(1, Math.floor(p.bedD / pitch));
 
@@ -3720,7 +3732,24 @@ function buildFitSample(cfg, H, joint) {
 }
 
 // ---------- 3MF export ----------
-/* items: [{name, polys, tx, ty, tz, rot}] rot in {0,90}. Returns {model, contentTypes, rels} XML strings. */
+/* A part's name goes into an attribute, so every character XML reads as markup is written
+   as its entity. The names today are piece ids and type keys with none of these in them,
+   but typed text may reach them later, and a quote in one would end the attribute early
+   and hand the rest of the name to the slicer as markup. test/plate-files.js reads the
+   names back out of the model.
+   Tab, newline and return go as character references too: written raw, a parser reads
+   each one in an attribute as a space. The other control characters, U+FFFE, U+FFFF and
+   half a surrogate pair are not characters XML has at all, raw or as a reference, and
+   one of them makes the whole file unreadable, so they are dropped first. */
+const XML_ENTITY = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;',
+                     '\t': '&#9;', '\n': '&#10;', '\r': '&#13;' };
+const xmlAttr = (s) => String(s)
+  .replace(/[^\t\n\r\x20-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '')
+  .replace(/[&<>"'\t\n\r]/g, (c) => XML_ENTITY[c]);
+/* items: [{name, polys, tx, ty, tz, rot}] rot in {0,90}. Returns {model, contentTypes, rels} XML strings.
+   Each part is turned about its own origin and then moved by (tx, ty, tz), so (tx, ty) is
+   where the origin goes, not where the part's corner goes: a caller with a rectangle to
+   fill works out the offset from the part's box, as platePolysAndItems in src/ui.js does. */
 function build3mfXML(items) {
   let objs = '', builds = '';
   items.forEach((it, idx) => {
@@ -3736,7 +3765,7 @@ function build3mfXML(items) {
     for (const p of it.polys)
       for (let i = 2; i < p.verts.length; i++)
         tris.push([vidx(p.verts[0]), vidx(p.verts[i-1]), vidx(p.verts[i])]);
-    objs += `<object id="${id}" type="model" name="${it.name}"><mesh><vertices>` +
+    objs += `<object id="${id}" type="model" name="${xmlAttr(it.name)}"><mesh><vertices>` +
       verts.map(v => `<vertex x="${v[0].toFixed(3)}" y="${v[1].toFixed(3)}" z="${v[2].toFixed(3)}"/>`).join('') +
       `</vertices><triangles>` +
       tris.map(t => `<triangle v1="${t[0]}" v2="${t[1]}" v3="${t[2]}"/>`).join('') +
@@ -3962,7 +3991,7 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, gridCells, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
@@ -6575,20 +6604,55 @@ function renderPrintPlan() {
       `on a ${speedName()}${fitNote()} (${ESTIMATE.ROUGH}).`
     : '';
 }
+/* Each part is placed by its own box, turned, so the box lands on the rectangle the plan
+   drew for it.
+
+   packPlates hands back a rectangle — the corner, and the width and depth after any
+   quarter turn — and build3mfXML turns a part about its origin before moving it. The
+   two only agree when the origin IS the corner the part's box grows from, and they were
+   treated as if it always was. It is for an unturned piece moved by its tabs. Turned a
+   quarter, (x, y) goes to (-y, x): the piece swings into the space to the left of its
+   origin, and on a 250 × 210 bed piece B2 printed on top of B1, while with stacking on
+   a turned piece left the bed altogether. The keys and clips are modelled centred on
+   the origin, so every one of them sat half a key to the left of and in front of where
+   the plan drew it, and the front row hung off the bed. The plan on the page was right
+   throughout; only the file was wrong, which is the one you print.
+
+   So the offset comes from the mesh: where the low corner of its box ends up after the
+   turn, taken off the planned corner. That is right for any part however it was
+   modelled, which is why the piece no longer needs moving by its tabs first — the copy
+   transformPolys made of every piece was only ever there to put that corner on the
+   origin. test/ui/plate-files.spec.js reads the downloaded files back and holds every
+   part to its planned rectangle. */
 function platePolysAndItems(idx) {
   const pl = printPlan.plates[idx];
   const objs = [];
   // built once: every key unit on the plate is the same part, and buildKey runs CSG
-  let part = null;
+  let part = null, partBox = null;
+  const boxOf = (polys) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of polys) for (const v of q.verts) {
+      if (v[0] < x0) x0 = v[0];
+      if (v[0] > x1) x1 = v[0];
+      if (v[1] < y0) y0 = v[1];
+      if (v[1] > y1) y1 = v[1];
+    }
+    return { x0, y0, x1, y1 };
+  };
   for (const p of pl.placed) {
-    let polys;
-    if (p.id === 'key') { part = part || connectorPart(); polys = part.polys; }
-    else {
+    let polys, box;
+    if (p.id === 'key') {
+      if (!part) { part = connectorPart(); partBox = boxOf(part.polys); }
+      polys = part.polys; box = partBox;
+    } else {
       const b = builds[p.id];
       if (!b) continue;
-      polys = transformPolys(b.polys, b.meta.protrusion.l, b.meta.protrusion.f, 0, 0);
+      polys = b.polys; box = boxOf(polys);
     }
-    objs.push({ name: p.id + (p.z > 0.01 ? `@${p.z.toFixed(2)}` : ''), polys, tx: p.x, ty: p.y, tz: p.z, rot: p.rot });
+    // where the box's low corner goes under build3mfXML's turn: (x, y) -> (-y, x)
+    const [lx, ly] = p.rot === 90 ? [-box.y1, box.x0] : [box.x0, box.y0];
+    objs.push({ name: p.id + (p.z > 0.01 ? `@${p.z.toFixed(2)}` : ''), polys,
+                tx: p.x - lx, ty: p.y - ly, tz: p.z, rot: p.rot });
   }
   return objs;
 }
