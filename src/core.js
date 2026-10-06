@@ -1196,16 +1196,17 @@ function keyHalf(type, edge, e, s, prm, grow) {
      * regions meet — and both regions cut this same cutter, so both carry the apex and
      * the vertical edge either side of it: one edge used four times per site, 14 per
      * plate on every floor-mounted puzzle key and 7 on a wall-mounted one. It is the
-     * defect ENGINE.md quarantines for the puzzle NOTCH at arcSegs 6, and the rule stated
-     * there applies here too — a cutter straddling a region boundary must cross it with a
-     * face, not a vertex.
+     * defect ENGINE.md records for the puzzle NOTCH, and the rule stated there applies
+     * here too — a cutter straddling a region boundary must cross it with a face, not a
+     * vertex.
      *
-     * There it is quarantined because every fix costs joint geometry. Here it costs
-     * nothing, because the arc is inflated to put the missing depth back (below). 19
-     * segments rather than the smallest odd number that would do: the count decides where
-     * this cutter's facets cross the socket's, and 17 leaves 56 sliver folds in the
-     * top-inserted wall cup at the shipped smoothness where 19 leaves none. Measured over
-     * 17/19/21/25/33 at arcSegs 6 and 12, on all four mount-and-insert combinations.
+     * The notch keeps its pole, because it mates with a printed tab and reshaping it costs
+     * joint geometry; buildPiece starts the region past the pole beyond it instead. Here
+     * reshaping costs nothing, because the arc is inflated to put the missing depth back
+     * (below). 19 segments rather than the smallest odd number that would do: the count
+     * decides where this cutter's facets cross the socket's, and 17 leaves 56 sliver folds
+     * in the top-inserted wall cup at the shipped smoothness where 19 leaves none. Measured
+     * over 17/19/21/25/33 at arcSegs 6 and 12, on all four mount-and-insert combinations.
      *
      * Nothing measured any of this before, because the audit's puzzlekey cases were
      * building a bowtie: keyType and connector are separate fields and only the page ever
@@ -2354,8 +2355,25 @@ function buildPiece(cfg, layout, piece, onStatus) {
   let done = 0;
   for (let ix = 0; ix < xs.length-1; ix++) {
     for (let iy = 0; iy < ys.length-1; iy++) {
-      const x0 = Math.max(0, xs[ix] - BLOAT), x1 = Math.min(W, xs[ix+1] + BLOAT);
-      const y0 = Math.max(0, ys[iy] - BLOAT), y1 = Math.min(D, ys[iy+1] + BLOAT);
+      let x0 = Math.max(0, xs[ix] - BLOAT), x1 = Math.min(W, xs[ix+1] + BLOAT);
+      let y0 = Math.max(0, ys[iy] - BLOAT), y1 = Math.min(D, ys[iy+1] + BLOAT);
+      /* A puzzle notch's lobe points straight in from a cell junction, so its far pole is
+         a vertex on the line between two cells, inside the band where their regions
+         overlap. Both regions cut the notch, so both carried the pole and the edge up
+         through it: one edge used four times per notch, or two edges twice each wherever
+         the two cuts happened to split it at different heights, which is the same defect
+         reading clean. Any change to either region's outline could turn one into the
+         other. So the region past the pole starts half a BLOAT beyond it rather than a
+         BLOAT short, and the pole is in one region only. The overlap is still there, from
+         the region's new edge to its neighbour's, and the notch is the same notch. */
+      for (const pn of pnotches) {
+        const reach = cfg.puzzle.neckL + cfg.puzzle.lobeR * 1.6 + 1;
+        if (pn.edge === '-y' || pn.edge === '+y') {
+          if (ix > 0 && Math.abs(pn.s - xs[ix]) < 1e-6 &&
+              (pn.edge === '-y' ? y0 < reach : y1 > D - reach)) x0 = xs[ix] + BLOAT/2;
+        } else if (iy > 0 && Math.abs(pn.s - ys[iy]) < 1e-6 &&
+                   (pn.edge === '-x' ? x0 < reach : x1 > W - reach)) y0 = ys[iy] + BLOAT/2;
+      }
       const clipped = clipToRect(outline, x0, y0, x1, y1);
       if (!clipped) continue;
       const ci = ix - cellXi, cj = iy - cellYi;

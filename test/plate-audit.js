@@ -177,35 +177,35 @@ const CASES = [
   { name: 'half magnets above', ...HALF_SMALL, magnets: true, magnetSide: 'top' },
   { name: 'half extra floor', ...HALF_SMALL, bottomPad: 2 },
 
+  /* Quarantined until now. The lobe's far pole points along the seam, the boundary
+     between two cell regions runs down that same line, and both regions cut the same
+     notch — so both carried the apex vertex and the vertical edge either side of it: one
+     edge per notch used 4 times, two closed shells sharing an edge. It was left because
+     every fix tried cost joint geometry: sliding the joint 0.09 mm along the seam landed
+     the lobe on the socket's flat wall and opened five real edges, and reshaping the lobe
+     moved the notch's reach, which the fit section at the foot of this file holds to 1e-9.
+
+     Nothing about the notch has to move: the region does. The one past the pole now
+     starts half a BLOAT beyond it rather than a BLOAT short, so the pole is in one region
+     only (buildPiece). The notch, its reach and the plate's shape are what they were.
+
+     It mattered beyond these cases because the count was luck. Where the two regions
+     happened to split their copies of the apex edge at different heights the four uses
+     landed on two edges and read clean, so anything that changed a region's outline —
+     a margin's cut moving, a floor cap triangulated another way — turned a clean piece
+     into a leaking one and back. Both smoothnesses, and half cells. */
+  { name: '9x9 puzzle', drawerW: 400, drawerD: 400, connector: 'puzzle' },
+  { name: '9x9 puzzle @6', drawerW: 400, drawerD: 400, connector: 'puzzle', arcSegs: 6 },
+  { name: 'half split puzzle', ...HALF_SPLIT, connector: 'puzzle' },
+  /* And with margins of four widths by a rounded corner, at the page's arc smoothness:
+     the margins' cuts touching shells on main, and once they moved, a pole edge on two
+     pieces where main's luck had held on one. */
+  { name: 'puzzle, four margins', pitch: 20, drawerW: 80.25, drawerD: 60.55, mLeft: 0.05,
+    mRight: 0.2, mFront: 0.4, mBack: 0.15, connector: 'puzzle', outerRadius: 4,
+    bedW: 50, bedD: 50, arcSegs: 6 },
+
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 
-  /* The lobe's far pole points along the seam, the boundary between two cell regions runs
-     down that same line, and both regions cut the same notch — so both carry the apex
-     vertex and the vertical edge either side of it. One edge per notch, always used 4,
-     never once: two closed shells sharing an edge, exactly like the bosses below.
-
-     It is here rather than fixed because every fix costs joint geometry. Sliding the joint
-     0.09 mm along the seam to get the apex out of the overlap band does clear it — and
-     lands the lobe on the socket's flat wall at x = 2.15 instead, which opens five REAL
-     boundary edges. Reshaping the lobe so no vertex sits at the pole moves the notch's
-     reach, and the fit section at the foot of this file asserts that reach to 1e-9. (The
-     puzzle KEY has the same defect from the same cause and is fixed rather than
-     quarantined, because its housing is a pocket and a pocket can be inflated back to size
-     — see keyHalf. A notch that mates with a printed tab cannot.)
-
-     BOTH smoothnesses are listed, and the second one is a correction. The note here used
-     to say the count was deterministic — one per notch at arcSegs 6 and 8, none at 12 and
-     24 — and the first half is right while the second was luck. At 12 the two regions
-     happened to subdivide their copies of the apex edge at different heights, so the four
-     uses landed on two different edges and the count read clean. Changing the floor cap
-     of a padded cell from an ear clip to a centre fan, which has nothing to do with the
-     joint, made the two subdivisions agree and the defect appeared at its true size. An
-     edge count that depends on two shells disagreeing about where to put a vertex was
-     never evidence of anything. */
-  { name: '9x9 puzzle', drawerW: 400, drawerD: 400, connector: 'puzzle',
-    quarantine: 'lobe apex sits on a region boundary' },
-  { name: '9x9 puzzle @6', drawerW: 400, drawerD: 400, connector: 'puzzle', arcSegs: 6,
-    quarantine: 'lobe apex sits on a region boundary' },
   /* Benign, but it has to be named rather than waved through: corner bosses of adjacent
      cells ABUT face to face on the cell boundary instead of overlapping by BLOAT, so
      every shared face is counted twice. All counts are 4 and 6, never 1 — no boundary
@@ -228,12 +228,9 @@ const CASES = [
      would have read "known" over every one of them. */
   { name: '1x1 magnets', drawerW: 42, drawerD: 42, magnets: true,
     quarantine: 'bottom-face sliver at the pocket rim', worst: 6 },
-  /* The two classes above with half cells, which add nothing to either: the loop builds
-     each one again as solid margin and requires the same edges used the same number of
-     times. The lobes sit on whole-cell junctions and the bosses on whole cells, so the
-     strips meet neither. */
-  { name: 'half split puzzle', ...HALF_SPLIT, connector: 'puzzle',
-    quarantine: 'lobe apex sits on a region boundary' },
+  /* The bosses with half cells, which add nothing: the loop builds the case again as
+     solid margin and requires the same edges used the same number of times. The bosses
+     sit on whole cells, so the strips do not meet them. */
   { name: 'half bosses+magnets', ...HALF_SMALL, magnets: true, baseMode: 'bosses',
     quarantine: 'bosses abut, not overlap' },
 ];
@@ -1447,9 +1444,6 @@ console.log('\nthe smallest pitch the page allows:');
     'columns one cell wide': (p) => ({ drawerW: 3 * p, drawerD: 3 * p, splitMode: 'manual',
                                        rowCuts: [], colCuts: [[1, 2]] }),
   });
-  // the puzzle's own quarantine above, at this pitch too: the same edge, used 4 times
-  const QUARANTINE = { 'puzzle @ 2x2 pieces': 'lobe apex sits on a region boundary',
-                       'puzzle @ rows one cell deep': 'lobe apex sits on a region boundary' };
   const refused = [];
   for (const [ln, lay] of Object.entries(LAYOUTS)) {
     const leaks = [];
@@ -1457,12 +1451,7 @@ console.log('\nthe smallest pitch the page allows:');
       const r = buildAll(Object.assign({ pitch: P }, lay(P), conf));
       const meet = G.keysMeet(r.cfg, r.L);
       if (meet.length) { refused.push({ cn, ln, r, meet }); continue; }
-      const q = QUARANTINE[`${cn} @ ${ln}`];
-      if (q) {
-        console.log(`  ${cn} @ ${ln}: ${leakText(r)}` +
-                    (r.bad ? `  known: ${q}` : '  NOW PASSES — take it out of quarantine'));
-        if (!r.bad || r.open) bad++;
-      } else if (r.bad) leaks.push(`${cn} ${leakText(r)}`);
+      if (r.bad) leaks.push(`${cn} ${leakText(r)}`);
     }
     const no = refused.filter((f) => f.ln === ln).length;
     console.log(`  ${P} mm, ${ln}: ${Object.keys(CONFIGS).length} configurations` +
@@ -1570,8 +1559,7 @@ console.log('\nthe other limits, built at their ends:');
  * on both piece layouts, at the bottom of each pitch band the ceiling changes at, where it
  * has least room — 13.5; 13.6, where the puzzle reaches 0.3; and 20 — and at a few
  * pitches between. Each has to come back closed and inside its own width: nothing past
- * its footprint but the tabs and lobes buildPiece declares. The puzzle's shells touching
- * at its lobe apex is the quarantine at the top of this file.
+ * its footprint but the tabs and lobes buildPiece declares.
  *
  * Then the step past each ceiling that set it, which has to be open or across the seam
  * still: if the engine closes one, this says that ceiling can go up. It has to be past the
@@ -1614,11 +1602,11 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
     }
     return [...new Set([...at, 16, C.smallPitch - 0.5, 30, 42])].sort((a, b) => a - b);
   };
-  /* Shells touching rather than a hole, each at one clearance, each pinned at what it
-     is: the puzzle's is the quarantine at the top of this file, and the dovetail's notch
-     at 0.3 puts its top back edge, 2.2 mm in and 2.4 up, on an edge of the region next
-     to it on the 1-cell layout's narrow pieces — 0.295 is clear of it, and it is no
-     hole. */
+  /* Shells touching rather than a hole, at one clearance, pinned at what it is: the
+     dovetail's notch at 0.3 puts its top back edge, 2.2 mm in and 2.4 up, on an edge of
+     the region next to it on the 1-cell layout's narrow pieces — 0.295 is clear of it,
+     and it is no hole. The puzzle's lobe apex was let through here as well, at any count,
+     until the region past it stopped carrying it (see the cases at the top). */
   const KNOWN = { 'dovetail @ 42 mm 1-cell pieces': 3 };
   const OVER = 1e-6;
   /* How near a snap-from-above housing comes to the seam face it opens onto: every vertex
@@ -1663,8 +1651,8 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
           if (!found) fails.push(`${P} mm ${ln}: NO SNAP HOUSING FOUND TO MEASURE`);
         }
         const pinned = KNOWN[`${vn} @ ${P} mm ${ln}`];
-        const touching = r.bad && !r.open && (vn === 'puzzle' || r.bad <= pinned);
-        if (touching && vn !== 'puzzle') known.push(`${P} mm ${ln}: ${leakText(r)}`);
+        const touching = r.bad && !r.open && r.bad <= pinned;
+        if (touching) known.push(`${P} mm ${ln}: ${leakText(r)}`);
         if (pinned !== undefined && !r.bad) fails.push(`${P} mm ${ln}: NOW CLEAN — unpin it`);
         if ((r.bad && !touching) || r.beyond > OVER)
           fails.push(`${P} mm ${ln} at ${most}: ${leakText(r)}` +
