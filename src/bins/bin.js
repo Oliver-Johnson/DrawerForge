@@ -134,6 +134,25 @@ const lipHeight = (lipMin) => 2.6 + (1.90 - lipMin);   // 3.95 at the default
    height field is measured from here, and a second copy of this sum in the UI would be
    a number that drifts from the bin the day the floor changes. */
 const floorTop = (c) => SPEC.footH + Math.max(c.floorT, 2 * BLOAT);
+/* A floor that reaches within 0.2 mm of the top leaves no cavity worth the name, so
+   buildBin builds that bin as one block, the same as one asked to be solid. */
+const builtSolid = (c) => c.solid || floorTop(c) >= c.hUnits * SPEC.unitH - 0.2;
+/* The tallest of the four walls, as the share of the height above the floor it stands
+   to; a solid block counts as all wall. */
+const tallestWall = (c) => (c.solid ? 1 : Math.max(...['f', 'b', 'l', 'r'].map((k) =>
+  (!c.edges || c.edges[k] === undefined) ? 1 : Math.max(0, Math.min(1, c.edges[k])))));
+/* How tall a bin really stands, lip aside. H stays the stacking pitch whatever the walls
+   do, but a bin with every wall lowered stops at the tallest of them, and one with every
+   wall open is its floor slab and nothing more: a tray. buildBin reports this as the
+   bin's height, which is what its README and the plate files give, and the page quotes
+   it beside the height field; one function for both, like floorTop, so the two cannot
+   drift. It is buildBin's figure, not a measurement of the mesh: the share is taken
+   from the top of the slab while the wall ring runs from floorZ, so a part-height wall
+   stands up to BLOAT under it (0.025 mm at half height). */
+const binTop = (c) => {
+  const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
+  return builtSolid(c) ? H : floorZ + BLOAT + tallestWall(c) * (H - floorZ - BLOAT);
+};
 
 /* A bin's heights as the page quotes them, from the numbers buildBin builds it with
    rather than from constants kept beside them. H is the stacking height, units x 7 —
@@ -148,19 +167,47 @@ const floorTop = (c) => SPEC.footH + Math.max(c.floorT, 2 * BLOAT);
    from floorZ, every inside depth was quoted 0.05 mm deeper than the bin is. */
 function binHeights(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
-  const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
+  const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c), top = binTop(c);
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
   const lipH = c.lip && allFull && !c.solid ? lipHeight(c.lipMin) : 0;
-  return { H, floorZ, lipH, inside: c.solid ? 0 : Math.max(0, H - (floorZ + BLOAT)) };
+  /* `top` is H unless a wall is lowered all round, and the inside runs up to it: a part
+     standing taller than every wall is not in the bin. `hollow` says whether the bin has
+     an inside at any height. A solid block never does, and nor does a tray open on every
+     side, whose top is its floor whatever its units. */
+  return { H, floorZ, top, lipH, hollow: !c.solid && tallestWall(c) > 0,
+           inside: builtSolid(c) ? 0 : Math.max(0, top - (floorZ + BLOAT)) };
 }
 /* The fewest whole units that give at least `depth` mm inside. Rounded up, not to the
    nearest: someone typing the inside depth is sizing a bin for a part, and a bin a
-   millimetre short of the part is a bin the part does not fit. Measured from the top of
-   the slab, as binHeights is. The epsilon keeps an exact fit exact — 36 mm on a 1.2 mm
-   floor is 6 units, not 7 because the division came out at 6.000000000000001. */
-const unitsForInside = (depth, cfg) => Math.max(1, Math.ceil(
-  (depth + floorTop(Object.assign({}, BIN_DEFAULTS, cfg || {})) + BLOAT) / SPEC.unitH - 1e-9));
+   millimetre short of the part is a bin the part does not fit. Counted up through
+   binHeights rather than solved for, so it is that function run backwards whatever the
+   bin: a lowered wall adds only its share of each unit to the inside, and a floor that
+   reaches the top makes the first units solid. The epsilon keeps an exact fit exact —
+   36 mm on a 1.2 mm floor is 6 units, not 7 because a sum came out at 35.99999999999999.
+   No units at all, 0, for a bin with no inside at any height; past the tallest bin a
+   link carries, the tallest. */
+function unitsForInside(depth, cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  if (!binHeights(c).hollow) return 0;
+  let n = 1;
+  while (n < LINK_MAX.hUnits && binHeights(Object.assign(c, { hUnits: n })).inside < depth - 1e-9) n++;
+  return n;
+}
+/* The whole units whose top comes nearest `mm`: an overall height is a target, and the
+   nearest bin is the honest answer to it. Halves go up, as Math.round's do. A tray open
+   on every side stands the same at any height, so for one it is the units whose
+   stacking height comes nearest: they still say how much room it keeps in a stack. */
+function unitsForTop(mm, cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  let best = 1, off = Infinity, offH = Infinity;
+  for (let n = 1; n <= LINK_MAX.hUnits; n++) {
+    const h = binHeights(Object.assign(c, { hUnits: n }));
+    const d = Math.abs(h.top - mm), dH = Math.abs(h.H - mm);
+    if (d < off - 1e-9 || (d < off + 1e-9 && dH <= offH)) { best = n; off = d; offH = dH; }
+  }
+  return best;
+}
 
 /* There is one base: the spec foot, 4.75 mm, under the spec lip. Truncated feet
  * were offered for a while and are gone. They bought 1.70 mm of usable depth, and
@@ -977,7 +1024,7 @@ function buildBin(G, cfg) {
     const carvedFloor = c.solid ? H - 0.01 : Math.min(floorZ, H - 0.25);
     polys.push(...carvedBody(G, c, mask, H, carvedFloor, zTop,
                              c.solid ? null : lipSteps));
-  } else if (c.solid || floorZ >= H - 0.2) {
+  } else if (builtSolid(c)) {
     polys.push(...G.extrudePoly(outer, bodyBase - BLOAT, H));
   } else {
     // solid slab from the top of the feet to the cavity floor
@@ -1084,11 +1131,8 @@ function buildBin(G, cfg) {
   if (hasLip && full) polys.push(...lipRing(G, c, hwO, hdO, H, n));
 
   // H stays the stacking pitch whatever the walls do; topZ is how tall it really is,
-  // which for an all-open tray is just the floor.
-  const maxFrac = c.solid ? 1 : Math.max(...['f', 'b', 'l', 'r'].map((k) =>
-    (!c.edges || c.edges[k] === undefined) ? 1 : Math.max(0, Math.min(1, c.edges[k]))));
-  const topZ = (c.solid || floorZ >= H - 0.2) ? H
-    : floorZ + BLOAT + maxFrac * (H - floorZ - BLOAT);
+  // which for an all-open tray is just the floor. See binTop, which the page quotes too.
+  const topZ = binTop(c);
 
   const meta = {
     u: c.u, v: c.v, hUnits: c.hUnits, H, hasLip, openEdges: !allFull,
@@ -1235,7 +1279,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
 
 if (typeof module !== 'undefined') {
   module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
-    lipHeight, binHeights, unitsForInside, REQUIRED_CORE,
+    lipHeight, binHeights, unitsForInside, unitsForTop, REQUIRED_CORE,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers, LINK_MAX };
 }

@@ -2983,8 +2983,8 @@ $('unitIn').addEventListener('click', () => chooseUnit('in'));
    and the nearest bin is the honest answer to it. Inside depth rounds UP, because it is
    a requirement: a bin a millimetre too shallow for the part is a bin the part does not
    go in. Both are worked out from the bin engine's own numbers (binHeights,
-   unitsForInside in bin.js), so the floor and the lip quoted here are the floor and the
-   lip that get built.
+   unitsForTop and unitsForInside in bin.js), so the floor, the lip and the top quoted
+   here are the floor, the lip and the top that get built.
 
    Which way you type is a habit of the person, not a property of the bin, so it is
    remembered on this device the way the mm/inch switch is, and never put in the link. */
@@ -3001,32 +3001,42 @@ const saveHMode = (m) => {
 };
 // the bin the height field is describing: the one on its own, the selected one, or the next
 const heightSrc = () => scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
-const heightsOf = (b) => binHeights({ hUnits: b.hUnits, floorT: b.floorT, solid: b.solid,
-                                      edges: b.edges });
-const unitsFor = (mm, b) => fieldClamp('hUnits', hMode === 'inside'
-  ? unitsForInside(mm, { floorT: b.floorT })
-  : Math.max(1, Math.round(mm / SPEC.unitH)));
+// everything about a bin its heights depend on, bar the units being worked out
+const heightCfg = (b) => ({ floorT: b.floorT, solid: b.solid, edges: b.edges });
+const heightsOf = (b) => binHeights(Object.assign(heightCfg(b), { hUnits: b.hUnits }));
+/* Which length the field takes for this bin. Inside depth when that is the menu's choice
+   and the bin has an inside; a solid block has none at any height, nor has a tray open
+   on every side, and the field used to show 0 for one and work a typed depth out as if
+   it were hollow. Those take their height overall instead, and the label says so. */
+const lengthMode = (b) => (hMode === 'inside' && !heightsOf(b).hollow ? 'overall' : hMode);
+/* Both ways round through the engine's own heights, so a bin with its walls lowered is
+   given the units that stand it, or hold the depth, at the height it is built to. */
+const unitsFor = (mm, b) => fieldClamp('hUnits', lengthMode(b) === 'inside'
+  ? unitsForInside(mm, heightCfg(b)) : unitsForTop(mm, heightCfg(b)));
 /* What the typing came to, said beside the field. Millimetres to the hundredth because
    the inside depth is genuinely fractional — 35.95 on a 1.25 mm floor — and rounding
-   it to 36 would quote a bin deeper than the one you get. */
+   it to 36 would quote a bin deeper than the one you get. A bin with every wall lowered
+   is quoted at the height it stands, not at H: the Tray preset at 6 units read "42 mm
+   overall" for a part 6 mm tall. */
 function heightText(b) {
   const h = heightsOf(b);
   const mm = (x) => `${Math.round(x * 100) / 100} mm` + (unit === 'in' ? ` / ${FIELDS.inchText(x)} in` : '');
-  return `${plural(b.hUnits, 'unit')} · ${mm(h.H)} overall` +
+  return `${plural(b.hUnits, 'unit')} · ` +
+    (h.top < h.H - 1e-6 ? `${mm(h.top)} tall` : `${mm(h.H)} overall`) +
     (h.lipH ? ` + ${h.lipH.toFixed(2)} mm lip` : '') +
-    (b.solid ? ' · solid, nothing inside' : ` · ${mm(h.inside)} inside`);
+    (b.solid ? ' · solid, nothing inside' : !h.hollow ? ' · open on every side' : ` · ${mm(h.inside)} inside`);
 }
 /* Called from refresh(), so it follows every change of bin, floor or unit. The length
    field is rewritten with the height actually built — 43 after typing 40 inside —
    but never under the caret, where it would turn "4" into "43" before the 0 lands. */
 function drawHeight() {
-  const b = heightSrc(), inMm = hMode !== 'units';
+  const b = heightSrc(), inMm = hMode !== 'units', mode = lengthMode(b);
   $('hUnitsRow').style.display = inMm ? 'none' : '';
   $('hMmRow').style.display = inMm ? '' : 'none';
-  $('hMmLabel').textContent = `${hMode === 'inside' ? 'Inside depth' : 'Height overall'} (${unit})`;
+  $('hMmLabel').textContent = `${mode === 'inside' ? 'Inside depth' : 'Height overall'} (${unit})`;
   if (inMm && document.activeElement !== $('hMm')) {
     const h = heightsOf(b);
-    FIELDS.setLength($('hMm'), hMode === 'inside' ? h.inside : h.H, unit);
+    FIELDS.setLength($('hMm'), mode === 'inside' ? h.inside : h.top, unit);
   }
   $('hResult').textContent = heightText(b);
 }

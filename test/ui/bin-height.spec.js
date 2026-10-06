@@ -124,17 +124,124 @@ test('the heights it quotes are the ones the engine builds', async ({ page }) =>
     if (c.solid) { expect(q.inside).toBe(0); continue; }
     expect(q.inside, JSON.stringify(c)).toBeCloseTo(m.H - m.slab, 9);
   }
-  // and the inverse agrees with it: the units it picks hold the depth, one fewer does not
+  /* And the inverse agrees with it: the units it picks hold the depth, one fewer does
+     not — with the walls standing, and lowered, where each unit adds only a share of its
+     7 mm to the inside. A bin with no inside at any height is given no units at all. */
   const ok = await page.evaluate(() => {
-    for (const floorT of [0.6, 1.2, 2, 3.5])
-      for (let d = 0.5; d < 120; d += 0.37) {
-        const n = unitsForInside(d, { floorT });
-        if (binHeights({ hUnits: n, floorT }).inside < d - 1e-9) return `${d} on ${floorT}: ${n} too shallow`;
-        if (n > 1 && binHeights({ hUnits: n - 1, floorT }).inside >= d) return `${d} on ${floorT}: ${n} not the fewest`;
-      }
+    for (const edges of [null, { f: 0.5 }, { f: 0.5, b: 0.5, l: 0.5, r: 0.5 }, { f: 0.25, b: 0, l: 0, r: 0 }])
+      for (const floorT of [0.6, 1.2, 2, 3.5])
+        for (let d = 0.5; d < 120; d += 0.37) {
+          const cfg = { floorT, edges }, n = unitsForInside(d, cfg);
+          const at = (k) => binHeights(Object.assign({ hUnits: k }, cfg)).inside;
+          if (at(n) < d - 1e-9) return `${d} on ${JSON.stringify(cfg)}: ${n} too shallow`;
+          if (n > 1 && at(n - 1) >= d) return `${d} on ${JSON.stringify(cfg)}: ${n} not the fewest`;
+        }
+    if (unitsForInside(5, { solid: true }) !== 0) return 'a solid block was given units for a depth';
+    if (unitsForInside(5, { edges: { f: 0, b: 0, l: 0, r: 0 } }) !== 0) return 'an open tray was given units for a depth';
     return 'ok';
   });
   expect(ok).toBe('ok');
+});
+
+/* How tall a bin stands is buildBin's own figure — the one its README and plate files
+   give — worked out in one function both of them call, so the quote cannot drift from
+   it. Against the mesh too: a tray open on every side is its slab, 6 mm at any height,
+   and a part-height wall stands within BLOAT of the figure. (buildBin takes the share
+   from the top of the slab while the wall ring runs from floorZ, which leaves a
+   half-height wall 0.025 mm under it.) */
+test('a lowered bin is quoted as tall as the engine builds it', async ({ page }) => {
+  page.__errors = await H.openBins(page);
+  const rows = await page.evaluate(() => {
+    const half = { f: 0.5, b: 0.5, l: 0.5, r: 0.5 }, open = { f: 0, b: 0, l: 0, r: 0 };
+    return [
+      { hUnits: 6 }, { hUnits: 6, edges: open }, { hUnits: 6, edges: half }, { hUnits: 2, edges: open },
+      { hUnits: 4, edges: { f: 0, b: 0.25, l: 0.66, r: 0.5 } }, { hUnits: 3, floorT: 3, edges: half },
+    ].map((c) => {
+      const q = binHeights(c), built = buildBin(G, Object.assign({ u: 2, v: 1 }, c)), m = built.meta;
+      let zmax = -Infinity;
+      for (const p of built.polys) for (const v of p.verts) zmax = Math.max(zmax, v[2]);
+      return { c, q, top: m.totalH - m.lipH, zmax: zmax - m.lipH };
+    });
+  });
+  for (const { c, q, top, zmax } of rows) {
+    expect(q.top, JSON.stringify(c)).toBe(top);
+    expect(zmax, JSON.stringify(c)).toBeCloseTo(q.top, 1);
+  }
+  expect(rows[0].q.top).toBe(42);
+  expect(rows[1].q.top).toBeCloseTo(6, 9);       // the tray: the slab, and nothing inside
+  expect(rows[1].q.inside).toBe(0);
+  expect(rows[2].q.top).toBeCloseTo(24, 9);      // 6 to the slab, then half of the 36 above it
+  expect(rows[2].q.inside).toBeCloseTo(18, 9);
+});
+
+/* A lowered wall stops short of H, and with every wall open the bin is its slab and
+   nothing more. Quoted at full height, the Tray preset at 6 units read "42 mm overall"
+   for a part that stands 6 mm, and four half walls the same for one that stands 24. */
+test('a tray, or walls lowered all round, is quoted at the height it is built', async ({ page }) => {
+  await oneBin(page);
+  await H.setField(page, 'hUnits', 6);
+  for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) await page.selectOption(`#${id}`, '0.5');
+  await page.waitForTimeout(300);
+  // 6 mm of foot and floor, half of the 36 above it, and no lip over a lowered wall
+  expect(await result(page)).toBe('6 units · 24 mm tall · 18 mm inside');
+
+  // the field says the same, and typing runs the same sum backwards
+  await page.selectOption('#hMode', 'overall');
+  await expect(page.locator('#hMm')).toHaveValue('24');
+  await typeHeight(page, 31);             // 7 units stand 27.5, 8 stand 31
+  expect(await units(page)).toBe(8);
+  await leave(page);
+  await expect(page.locator('#hMm')).toHaveValue('31');
+  await page.selectOption('#hMode', 'inside');
+  await expect(page.locator('#hMm')).toHaveValue('25');
+  await typeHeight(page, 18);             // the fewest units that hold 18 at half height
+  expect(await units(page)).toBe(6);
+  await typeHeight(page, 18.01);
+  expect(await units(page)).toBe(7);
+  await leave(page);
+  await expect(page.locator('#hMm')).toHaveValue('21.5');
+
+  // the preset opens every wall, and a tray is its slab: 6 mm, whatever its units
+  await page.locator('#presetTray').click();
+  await page.waitForTimeout(300);
+  expect(await result(page)).toBe('7 units · 6 mm tall · open on every side');
+});
+
+/* A solid block has no inside at any height, and nor has a tray open on every side. The
+   field showed 0 for one, and a depth typed into it was worked out as if the bin were
+   hollow. With inside depth chosen, either takes its height overall instead, and the
+   label says so. */
+test('a bin with no inside takes its height overall, even with inside depth chosen', async ({ page }) => {
+  await oneBin(page);
+  await page.selectOption('#hMode', 'inside');
+  await page.locator('#solid').check();
+  await page.waitForTimeout(300);
+  await expect(page.locator('#hMmLabel')).toHaveText('Height overall (mm)');
+  await expect(page.locator('#hMm')).toHaveValue('21');
+  await typeHeight(page, 45);             // to the nearest unit, not the 8 a 45 mm cavity would take
+  expect(await units(page)).toBe(6);
+  expect(await result(page)).toBe('6 units · 42 mm overall · solid, nothing inside');
+  await leave(page);
+  await expect(page.locator('#hMm')).toHaveValue('42');
+
+  await page.locator('#solid').uncheck();
+  await page.waitForTimeout(300);
+  await page.locator('#presetTray').click();
+  await page.waitForTimeout(300);
+  await expect(page.locator('#hMmLabel')).toHaveText('Height overall (mm)');
+  await expect(page.locator('#hMm')).toHaveValue('6');
+  /* A tray stands 6 mm at any height, but its units still say how much room it keeps in
+     a stack, so a height typed for it still sets them, to the nearest unit. */
+  await typeHeight(page, 30);
+  expect(await units(page)).toBe(4);
+  await leave(page);
+  await expect(page.locator('#hMm')).toHaveValue('6');
+
+  // one wall back up, and there is an inside to type again
+  await page.selectOption('#edgeF', '1');
+  await page.waitForTimeout(300);
+  await expect(page.locator('#hMmLabel')).toHaveText('Inside depth (mm)');
+  await expect(page.locator('#hMm')).toHaveValue('22');
 });
 
 test('a bin with a lowered wall has no lip to quote, and a solid one no inside', async ({ page }) => {
