@@ -297,7 +297,8 @@ const tallestWall = (c) => (c.solid || !isFullRect(c) ? 1 : Math.max(...['f', 'b
    do, but a bin with every wall lowered stops at the tallest of them, and one with every
    wall open is its floor slab and nothing more: a tray. Dividers are not walls, though:
    a fixed one, or the rails of a removable one, runs from the floor to H whatever the
-   walls do, so a bin with any stands at H. buildBin reports this as the bin's height,
+   walls do, so a bin built with any stands at H: removable ones past the most that fit
+   are not built (dividersBuilt). buildBin reports this as the bin's height,
    which is what its README, the plate files and the bed's height check use, and the
    page quotes it beside the height field; one function for all of them, like floorTop,
    so they cannot drift. It is buildBin's figure, not a measurement of the mesh: the
@@ -305,7 +306,8 @@ const tallestWall = (c) => (c.solid || !isFullRect(c) ? 1 : Math.max(...['f', 'b
    part-height wall stands up to BLOAT under it (0.025 mm at half height). */
 const binTop = (c) => {
   const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
-  if (builtSolid(c) || c.divX > 0 || c.divY > 0) return H;
+  const d = dividersBuilt(c);
+  if (builtSolid(c) || d.divX > 0 || d.divY > 0) return H;
   return floorZ + BLOAT + tallestWall(c) * (H - floorZ - BLOAT);
 };
 
@@ -1277,6 +1279,33 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
 
 /* ---------- the bin ------------------------------------------------------- */
 
+/* The most removable dividers that fit along one direction of a bin: `axis` is 'x' for
+ * divX, the ones standing at a fixed x, and 'y' for divY.
+ *
+ * Each is a slot between two rails RAIL_T thick, so neighbours closer together than a
+ * slot and a rail put one's rail across the other's slot, and its plate cannot go in.
+ * The divider fields count one wall per divider, as fixed ones are, and allowed 31 on a
+ * 1x1 where past 10 no slot took its plate at the usual 1.6 mm plate and 0.25 mm
+ * clearance. Exactly that far apart, two neighbours' rails are one rail between their
+ * slots, and both plates go in.
+ */
+function railedMost(cfg, axis) {
+  const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg));
+  const cells = axis === 'x' ? c.u : c.v;
+  const inner = (cells - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
+  const pitch = c.divT + 2 * c.divClr + RAIL_T;
+  return Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0;
+}
+/* The dividers a bin is built with: as many as it asks for, bar removable ones past the
+   most that fit. What a bin asks for is left as it is, in the link and everywhere it is
+   kept, so a design from before this held them there opens unchanged; the page says in
+   Checks that it is built with fewer, and the plates it lists are the ones built. */
+function dividersBuilt(cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg);
+  const n = (key, axis) => Math.min(c[key] || 0, c.divRemovable ? railedMost(c, axis) : Infinity);
+  return { divX: n('divX', 'x'), divY: n('divY', 'y') };
+}
+
 /* The loose divider plate, for a bin built with removable dividers.
  *
  * Sized from the SAME numbers the rails are built from, so the two cannot drift: the
@@ -1707,10 +1736,12 @@ function buildBin(G, cfg) {
     const shelfFoot = plan && plan.screws ? FOOT_HOLES.screwTop + BLOAT : bodyBase + BLOAT;
     const shelfD = Math.min(c.label, id * 0.8, H - c.labelT - shelfFoot);
     const shelf = !c.divRemovable && c.label > 0.05 && eB > 0.99 && shelfD > 0.05 ? id - shelfD : NaN;
-    for (const [a, b] of spans(c.divX, iw))
+    // removable ones no more than fit, however many are asked for: see railedMost
+    const built = dividersBuilt(c);
+    for (const [a, b] of spans(built.divX, iw))
       for (const [lo, hi] of reach(id))
         polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
-    for (const [a, b] of spans(c.divY, id, shelf))
+    for (const [a, b] of spans(built.divY, id, shelf))
       for (const [lo, hi] of reach(iw))
         polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT, Math.abs(a - shelf) < WELD));
   }
@@ -1900,7 +1931,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, dividerPart, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, dividerPart, railedMost, dividersBuilt, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, binHeights, unitsForInside, unitsForTop, REQUIRED_CORE,
     FOOT_HOLES, SCREW_FLOOR, holeSites, holePlan, builtFloorT, feetBits, feetFrom,
     isHalfSize, binFeet, feetHolesOff,

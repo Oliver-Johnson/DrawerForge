@@ -8,7 +8,7 @@ const path = require('path');
 const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
-        unpackBin } = require('../src/bins/bin.js');
+        unpackBin, dividersBuilt } = require('../src/bins/bin.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
 // the browser hand-assembles its own G; make sure core still exports everything
@@ -1177,6 +1177,132 @@ console.log('\nthe outline at other smoothnesses and with extra clearance');
                      { u, v, hUnits: 3, wall, arcSegs, shrink, divX, divY, divRemovable, scoop: 8, label: 10 }]);
         }
   sweepReport('packed, scoop and label', rows);
+}
+
+console.log('\nremovable dividers: every plate goes into its slot');
+/* A removable divider is a slot between two rails on each wall it runs between, and the
+   plate dividerPart makes, dropped into it. It goes in only if nothing stands where it
+   stands. Spaced closer than a slot and a rail apart, a neighbour's rail ran across the
+   slot: the fields allowed 31 on a 1x1, and past 10 no slot would take its plate. So
+   each plate a bin is built for is set in its slot, as wide, thick and tall as
+   dividerPart makes it and standing on the floor, and the bin's triangles must keep out
+   of it, to a micron either way; and on both faces at both ends a rail must stand from
+   the floor to the rim along at least half a rail's depth of the plate's edge, or there
+   is nothing to hold it. Asked for as many as the fields allow, a bin is built with as
+   many as fit, and one more would not: set out the same way against the same bin with
+   no dividers, the plates of one more must crowd a neighbour's slot or meet the wall.
+   The lip is left off. Its chamfer stands over the top of every plate's ends, which is
+   a matter of the lip and not of where the dividers stand. */
+{
+  const triBox = (c, h, t) => {
+    const v = t.map((p) => [p[0] - c[0], p[1] - c[1], p[2] - c[2]]);
+    for (let a = 0; a < 3; a++)
+      if (Math.min(v[0][a], v[1][a], v[2][a]) > h[a] || Math.max(v[0][a], v[1][a], v[2][a]) < -h[a]) return false;
+    const sub = (p, q) => [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+    const cross = (p, q) => [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
+    const apart = (ax) => {
+      if (!ax[0] && !ax[1] && !ax[2]) return false;
+      const p = v.map((q) => q[0] * ax[0] + q[1] * ax[1] + q[2] * ax[2]);
+      const r = h[0] * Math.abs(ax[0]) + h[1] * Math.abs(ax[1]) + h[2] * Math.abs(ax[2]);
+      return Math.min(...p) > r || Math.max(...p) < -r;
+    };
+    const e = [sub(v[1], v[0]), sub(v[2], v[1]), sub(v[0], v[2])];
+    for (const ed of e) for (const u of [[1, 0, 0], [0, 1, 0], [0, 0, 1]]) if (apart(cross(u, ed))) return false;
+    return !apart(cross(e[0], e[1]));
+  };
+  const trisOf = (polys) => G.polysToTriangles(polys).map((t) => ({ t,
+    lo: [0, 1, 2].map((a) => Math.min(t[0][a], t[1][a], t[2][a])),
+    hi: [0, 1, 2].map((a) => Math.max(t[0][a], t[1][a], t[2][a])) }));
+  // whether any triangle reaches into the box lo..hi
+  const blocked = (tris, lo, hi) => {
+    const c = [0, 1, 2].map((a) => (lo[a] + hi[a]) / 2), h = [0, 1, 2].map((a) => (hi[a] - lo[a]) / 2);
+    return tris.some(({ t, lo: a, hi: b }) =>
+      a[0] <= hi[0] && b[0] >= lo[0] && a[1] <= hi[1] && b[1] >= lo[1] && a[2] <= hi[2] && b[2] >= lo[2] &&
+      triBox(c, h, t));
+  };
+  const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
+  const RAIL_T = 1.2, RAIL_D = 1.2, E = 1e-6;
+  const bare = new Map();
+  /* The plates of n dividers along axis ax (0: the ones across, at a fixed x), as boxes
+     each with where its slot's faces are. A plate may touch the floor it stands on and,
+     with no clearance, the walls at its ends, so it is a micron short of both; through
+     its thickness it is grown by `grow`, a micron either way. */
+  const platesOf = (c, r, n, ax, grow) => {
+    const wall = Math.max(0.4, c.wall);
+    const inner = (ax ? (c.v - 1) * 21 + 20.75 : (c.u - 1) * 21 + 20.75) - wall;
+    const d = dividerPart(G, c, ax ? 'x' : 'y').meta, floor = r.meta.floorZ + 0.05;
+    const out = [];
+    for (let k = 1; k <= n; k++) {
+      const p = -inner + (2 * inner) * k / (n + 1);
+      const lo = [0, 0, floor + E], hi = [0, 0, floor + d.tall - E];
+      lo[ax] = p - d.t / 2 - grow; hi[ax] = p + d.t / 2 + grow;
+      lo[1 - ax] = -d.span / 2 + E; hi[1 - ax] = d.span / 2 - E;
+      out.push({ k, p, lo, hi, end: d.span / 2, faces: [p - d.slot / 2, p + d.slot / 2] });
+    }
+    return out;
+  };
+  const faults = (cfg) => {
+    const c = Object.assign({}, BIN_DEFAULTS, cfg), H = c.hUnits * SPEC.unitH;
+    const r = buildBin(G, cfg), tris = trisOf(r.polys), built = dividersBuilt(cfg), out = [];
+    const bareKey = JSON.stringify(Object.assign({}, cfg, { divX: 0, divY: 0, divRemovable: false }));
+    if (!bare.has(bareKey)) bare.set(bareKey, trisOf(buildBin(G, JSON.parse(bareKey)).polys));
+    let plates = 0;
+    for (const [key, ax] of [['divX', 0], ['divY', 1]]) {
+      const n = built[key];
+      if (n > (c[key] || 0)) out.push(`${n} ${key} built of ${c[key]} asked`);
+      // rail faces standing on the plane ax = x, as [x, from, to] along the other axis
+      const faces = [];
+      for (const p of r.polys) {
+        const w = p.verts, x = w[0][ax];
+        if (!w.every((q) => Math.abs(q[ax] - x) < 1e-9)) continue;
+        const zs = w.map((q) => q[2]), as = w.map((q) => q[1 - ax]);
+        if (Math.min(...zs) <= r.meta.floorZ + 0.05 + E && Math.max(...zs) >= H - E)
+          faces.push([x, Math.min(...as), Math.max(...as)]);
+      }
+      for (const pl of platesOf(c, r, n, ax, -E)) {
+        plates++;
+        if (blocked(tris, pl.lo, pl.hi)) { out.push(`${key} plate ${pl.k} of ${n} blocked`); continue; }
+        for (const x of pl.faces) for (const s of [-1, 1]) {
+          const hold = Math.max(0, ...faces.filter((f) => Math.abs(f[0] - x) < 1e-7)
+            .map(([, a, b]) => (s > 0 ? Math.min(b, pl.end) - a : b - Math.max(a, -pl.end))));
+          if (hold < RAIL_D / 2) { out.push(`${key} plate ${pl.k} of ${n} held ${hold.toFixed(2)} mm`); break; }
+        }
+      }
+      // one more: crowded by a neighbour, or into the wall of the bare bin
+      if (n < (c[key] || 0)) {
+        const inner = (ax ? (c.v - 1) * 21 + 20.75 : (c.u - 1) * 21 + 20.75) - Math.max(0.4, c.wall);
+        const crowded = 2 * inner / (n + 2) < c.divT + 2 * c.divClr + RAIL_T - 1e-9;
+        if (!crowded && !platesOf(c, r, n + 1, ax, E).some((pl) => blocked(bare.get(bareKey), pl.lo, pl.hi)))
+          out.push(`${key}: ${n + 1} would have fit, ${n} built`);
+      }
+    }
+    return { out, plates };
+  };
+  const rows = [];
+  for (const [divT, divClr] of [[1.6, 0.25]])
+    for (const arcSegs of [12])
+      for (const [a, b] of [[0.5, 1], [1, 1], [1.5, 1], [2, 1], [3, 1]])
+        for (const wall of [0.4, 0.8, 1.2, 2, 3.5, 5])
+          for (const key of ['divX', 'divY']) {
+            const top = most((a - 1) * 42 + 41.5 - 2 * wall, wall);
+            const [u, v] = key === 'divX' ? [a, b] : [b, a];
+            for (const n of new Set([top, Math.ceil(top / 2)])) if (n)
+              rows.push([`${u}x${v} wall ${wall}, ${n} ${key === 'divX' ? 'across' : 'along'}` +
+                         `${divT === 1.6 && divClr === 0.25 ? '' : `, ${divT} mm plate ${divClr} clear`}` +
+                         `${arcSegs === 12 ? '' : ` at ${arcSegs}`}`,
+                         { u, v, hUnits: 3, wall, divRemovable: true, lip: false, divT, divClr, arcSegs, [key]: n }]);
+          }
+  let plates = 0;
+  const fails = [];
+  for (const [name, cfg] of rows) {
+    const f = faults(cfg);
+    plates += f.plates;
+    if (f.out.length) fails.push(`${name}: ${f.out[0]}${f.out.length > 1 ? ` and ${f.out.length - 1} more` : ''}`);
+  }
+  console.log(`  ${rows.length} bins, ${plates} plates: ` + (fails.length
+    ? `${fails.length} FAILED, ${fails.slice(0, 4).join('; ')}${fails.length > 4 ? ` and ${fails.length - 4} more` : ''}`
+    : 'every one in its slot'));
+  if (fails.length) bad++;
 }
 
 /* The label shelf's underside runs down at 45 degrees, so the deeper the shelf the
