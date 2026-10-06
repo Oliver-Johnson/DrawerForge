@@ -720,6 +720,41 @@ test('Back, then the header link, brings the other page up as the drawer has it'
   expect(errors).toEqual([]);
 });
 
+/* With the browser's storage full, a change reaches the drawer nowhere: the page's
+   address holds it, and the header link carries it to the other page and back. Coming
+   back, the page took its half from the drawer instead, and the change was gone. The
+   junk fills storage to the last byte, so a save that grows the drawer is refused. */
+const fillStorage = (page) => page.evaluate(() => {
+  let i = 0;
+  for (let size = 1 << 20; size >= 1; size >>= 1) {
+    const s = 'x'.repeat(size);
+    for (;;) { try { localStorage.setItem('junk' + i++, s); } catch (err) { break; } }
+  }
+});
+for (const tool of ['bins', 'plates']) {
+  test(`with storage full, a change on ${tool} is still there after the trip to the other page`,
+    async ({ page }) => {
+      const errors = await openPlates(page);
+      if (tool === 'bins') { await toBins(page); await H.dragCells(page, [0, 0], [1, 1]); }
+      await settle(page);
+      await saveAs(page, 'Kitchen');
+      await settle(page);
+      await fillStorage(page);
+      // longer than what is saved, so the drawer would grow
+      if (tool === 'bins') await H.dragCells(page, [2, 0], [3, 1]);
+      else await page.selectOption('#connector', 'puzzlekey');
+      await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+      if (tool === 'bins') { await toPlates(page); await toBins(page); }
+      else { await toBins(page); await toPlates(page); }
+      // the first save after the page lands, past any reload: refused, since the change is back
+      await expect(page.locator('#drawerName'), 'the change, still too big for the storage')
+        .toHaveText('not saving · Kitchen');
+      if (tool === 'bins') expect(await binCount(page)).toBe(2);
+      else expect(await page.inputValue('#connector')).toBe('puzzlekey');
+      expect(errors).toEqual([]);
+    });
+}
+
 test('export, clear the browser, import: the same design comes back', async ({ page }) => {
   const errors = await openPlates(page);
   await H.setField(page, 'drawerW', '412');

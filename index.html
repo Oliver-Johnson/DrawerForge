@@ -4943,6 +4943,11 @@ const DRAWERS = (function () {
     let attached = null;     // the drawer this page saves into, or null for an unsaved design
     let base = null;         // its shared keys as this page arrived with or last saved them
     let failing = false;     // the browser refused the last save into it
+    /* The other tool's mark in the drawer when the other tool's settings this page carries
+       along were current: undefined when that is not known. Handed on with them, so the
+       other page can tell whether the drawer's half has moved on since (see restore). */
+    let theirs;
+    const otherTool = o.tool === 'plates' ? 'bins' : 'plates';
     let fresh = false;       // arrived with nothing to restore
     let bootDesign = '';
     let armed = '';          // 'open:id' or 'del:id' — the first press of a two-press action
@@ -4962,12 +4967,15 @@ const DRAWERS = (function () {
        fingerprint of the design that page will arrive with. `link` lists the drawer, bed
        and infill settings in it that are still someone's link's, not yours (the tool's
        ui.js works that out); `open` says a drawer was opened from the list, or caught up,
-       rather than handed over. Read once, by the page's boot (see arrival). False if the
-       browser would not keep it. */
+       rather than handed over. `marks` gives, for each tool, its mark in the drawer when
+       its settings in `h` were current, where that is known (see restore): by tool, since
+       by way of the guide the next page can be either. Read once, by the page's boot (see
+       arrival). False if the browser would not keep it. */
     function handOver(id, h, caughtUp, more) {
       const n = readNote('sessionStorage', TAB);
       n.next = { id, fp: fingerprint(h), caughtUp: !!caughtUp,
-                 link: (more && more.link) || [], open: !!(more && more.open) };
+                 link: (more && more.link) || [], open: !!(more && more.open),
+                 marks: (more && more.marks) || {} };
       return writeNote('sessionStorage', TAB, n);
     }
     function takeHandOver() {
@@ -5000,7 +5008,9 @@ const DRAWERS = (function () {
     /* The mark for the address the page writes `h` to; `link` when that is someone's
        link, untouched since it arrived. */
     const stamp = (h, link) => ({ drawerforge: { tool: o.tool, fp: fingerprint(h), id: attached || '',
-                                                 link: !!link } });
+                                                 link: !!link, theirs } });
+    // the marks for a note: this tool's `mine`, and the other's as this page has it
+    const marksFor = (mine) => ({ [o.tool]: mine, [otherTool]: theirs });
     /* Replaces the page with design `h`. replaceState and a reload rather than a
        navigation: the design being replaced is not a page you went back from, and the
        back button should not offer it. */
@@ -5023,7 +5033,7 @@ const DRAWERS = (function () {
       const merged = encodePairs(pairs.map(([k, v]) => [k, moved.includes(k) ? stored.get(k) : v])
         .concat(moved.filter((k) => !pairs.some((p) => p[0] === k)).map((k) => [k, stored.get(k)])));
       // without the note the reloaded page could not tell it is this drawer, so stay put
-      if (!handOver(d.id, merged, true, { open: true })) return false;
+      if (!handOver(d.id, merged, true, { open: true, marks: marksFor() })) return false;
       go(merged);
       return true;
     }
@@ -5035,7 +5045,7 @@ const DRAWERS = (function () {
        way opening it does, and the note makes that reload the drawer, caught up. True if
        the page is reloading. */
     function reopen(d) {
-      if (!handOver(d.id, d.hash, true, { open: true })) return false;
+      if (!handOver(d.id, d.hash, true, { open: true, marks: d.marks })) return false;
       go(d.hash);
       return true;
     }
@@ -5045,15 +5055,21 @@ const DRAWERS = (function () {
        them, and the defaults standing in for it were saved over the drawer's bins. Nothing
        on the other page changes this tool's half, so the drawer's is the one to show. The
        page reloads with it, keeping what the other page does set: the drawer, bed and
-       printer, and the keys it hands over (o.given). True if the page is reloading. */
+       printer, and the keys it hands over (o.given).
+       Only when the drawer has moved on, though. The note says which save of this tool's
+       half the other page's copy was current with (`seen`), and while the drawer still
+       holds that save, the copy is as new as the drawer or newer: with the browser's
+       storage full, a bin placed before going across was saved nowhere else, and taking
+       the drawer's half lost it. True if the page is reloading. */
     const half = (k) => o.owns(k) && !SHARED.has(k) && !(o.given || []).includes(k);
-    function restore(h, d, link) {
+    function restore(h, d, link, seen) {
+      if (seen === d.marks[o.tool]) return false;
       const mine = (s) => (parsePairs(s) || []).filter(([k]) => half(k))
         .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
       const stored = mine(d.hash);
       if (encodePairs(stored) === encodePairs(mine(h))) return false;
       const merged = encodePairs((parsePairs(h) || []).filter(([k]) => !half(k)).concat(stored));
-      if (!handOver(d.id, merged, false, { link })) return false;
+      if (!handOver(d.id, merged, false, { link, marks: marksFor(d.marks[o.tool]) })) return false;
       go(merged);
       return true;
     }
@@ -5207,6 +5223,7 @@ const DRAWERS = (function () {
       }
       attached = d.id; armed = ''; renaming = '';
       base = sharedOf(h); failing = false;
+      theirs = undefined;   // the other tool has no mark in a new drawer
       savedInto(d.id);
       /* The address was marked as no drawer's when it was written. It is this one's now,
          so a reload comes back to it. A save still waiting marks its own address. */
@@ -5231,7 +5248,7 @@ const DRAWERS = (function () {
       }
       /* The note is how the reloaded page knows the design it finds in its address bar is
          this drawer, and not another drawer holding the same design — see attach. */
-      handOver(d.id, d.hash, false, { open: true });
+      handOver(d.id, d.hash, false, { open: true, marks: d.marks });
       go(d.hash);
     }
 
@@ -5445,6 +5462,7 @@ const DRAWERS = (function () {
         fresh = !arrivedWith;
         bootDesign = o.design();
         attached = null;
+        theirs = undefined;
         const next = takeOnce();          // read every time, so a stale note never lingers
         if (arrivedWith) {
           const s = loadAll();
@@ -5466,11 +5484,16 @@ const DRAWERS = (function () {
           if (d) {
             attached = d.id;
             base = sharedOf(arrivedWith);
+            // the marks the design's halves came with, from the note or this tab's own mark
+            const came = noted ? (isPlain(next.marks) ? next.marks : {})
+              : mine && mine.id === d.id ? { [otherTool]: mine.theirs } : {};
+            const str = (v) => (typeof v === 'string' ? v : undefined);
+            theirs = str(came[otherTool]);
             if (!noted && d.marks[o.tool] !== fp && reopen(d)) return;
             // a hand-over, onto a drawer this tool has saved into, with none of a link's settings
             if (noted && next.open !== true && typeof d.marks[o.tool] === 'string' &&
                 !(Array.isArray(next.link) && next.link.length) &&
-                restore(arrivedWith, d, next.link)) return;
+                restore(arrivedWith, d, next.link, str(came[o.tool]))) return;
             if (!(noted && next.caughtUp) && catchUp(arrivedWith, d)) return;
             /* A hand-over is written down now rather than at the page's first save, which
                is 400 ms off: a reload before it found no record of this tool in the
@@ -5505,7 +5528,9 @@ const DRAWERS = (function () {
       /* Before the page navigates to the other tool or the guide with `h` in the address.
          Also saves: the debounced save may not have run yet, and this is the last chance.
          And leaves the note that tells the page at the other end it is a hand-over, which
-         drawer it is if any, and which settings in it are still someone's link's. */
+         drawer it is if any, which settings in it are still someone's link's, and which
+         saves of each half they were current with. This page's half is newer than or as
+         new as the drawer's this tool's mark stands for, even when that save failed. */
       handoff(h, link) {
         const s = attached && loadAll();
         const d = s && find(s, attached);
@@ -5514,7 +5539,7 @@ const DRAWERS = (function () {
           d.saved = Date.now();
           if (saveAll(s)) base = sharedOf(h);
         }
-        handOver(d ? d.id : '', h, false, { link });
+        handOver(d ? d.id : '', h, false, { link, marks: d ? marksFor(d.marks[o.tool]) : {} });
       },
     };
   }
