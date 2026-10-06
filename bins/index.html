@@ -4075,19 +4075,23 @@ const DF = {
      pressed (chrome.js toggles it; style.css draws it). The plate style hint is the case —
      it describes whichever style is picked, so its words change after load. The parts are
      made once and only their text is rewritten after that, so a hint someone has opened
-     stays open while they change the setting it describes. */
+     stays open while they change the setting it describes. The first sentence is a span of
+     its own, which describes the button, as chrome.js does for the hints in the markup. */
   hint(el, lead, rest) {
     let btn = el.querySelector(':scope>button.more');
     if (!btn) {
       el.textContent = '';
+      const first = document.createElement('span');
+      first.id = el.id + 'Lead';
       btn = document.createElement('button');
       btn.type = 'button'; btn.className = 'more'; btn.textContent = 'more';
       btn.setAttribute('aria-expanded', 'false');
+      btn.setAttribute('aria-describedby', first.id);
       const more = document.createElement('span');
       more.className = 'moretext'; more.hidden = true;
-      el.append(document.createTextNode(''), btn, more);
+      el.append(first, btn, more);
     }
-    el.firstChild.nodeValue = lead + ' ';
+    btn.previousElementSibling.textContent = lead + ' ';
     btn.nextElementSibling.textContent = rest;
   },
   /* An STL is an 84-byte header plus 50 bytes a triangle, and a polygon fans into
@@ -10395,6 +10399,22 @@ addEventListener('resize', closeMenu);
     b.textContent = open ? 'less' : 'more';
     rest.hidden = !open;
   });
+  /* Every one of them says "more", so a screen reader listing the page's buttons, which is
+     a common way through a page, read the same word a dozen times and more with nothing to
+     tell which hint each would open. The name stays the word on screen; each is described
+     by the sentence it continues, the hint's first, wrapped here as the page opens in a
+     span for the button to point at. Wrapped and nothing else: the words, and the hint's
+     text, are as they were. A button that already has a description is left alone — DF.hint
+     gives the hints the page writes their own as it makes them. */
+  let leads = 0;
+  for (const b of document.querySelectorAll('.hint button.more:not([aria-describedby])')) {
+    const lead = document.createElement('span');
+    do leads++; while (document.getElementById('morelead' + leads));
+    lead.id = 'morelead' + leads;
+    while (b.parentNode.firstChild !== b) lead.appendChild(b.parentNode.firstChild);
+    b.before(lead);
+    b.setAttribute('aria-describedby', lead.id);
+  }
 
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
      described controls that do not exist there. Rewritten rather than removed: the
