@@ -10403,11 +10403,50 @@ function typeName(t) {
   return `bin-${t.b.u}x${t.b.v}x${t.b.hUnits}${t.b.solid ? '-solid' : ''}` +
          `${t.b.divX || t.b.divY ? `-${t.b.divX}x${t.b.divY}div` : ''}${holeTag(t.b)}-qty${t.qty}`;
 }
+/* typeName leaves out the walls and floor, lowered walls, a carved shape, the scoop and
+   the label shelf, so two kinds of bin could share a name: a scooped 1x1x3 and a plain
+   one were both "bin-1x1x3-qty1.stl". The ZIP keeps the last file of a name, so one of
+   them was simply not in it. A name two kinds share is now told apart by what differs
+   between them, "bin-1x1x3-scoop8-qty1.stl" beside "bin-1x1x3-qty1.stl", and a number
+   when that is not enough (two different walls lowered). A name nothing shares stays
+   exactly as it was. */
+const VARIANT_TAGS = [
+  (b) => (b.solid ? '' : `wall${b.wall}`),
+  (b) => (b.solid ? '' : `floor${builtFloorT(b)}`),
+  (b) => (b.solid || allFullEdges(b) ? '' : 'low-walls'),
+  (b) => (b.cells ? 'shaped' : ''),
+  (b) => (b.scoop ? `scoop${b.scoop}` : ''),
+  (b) => (b.label ? `label${b.label}` : ''),
+  (b) => (!b.solid && b.divRemovable && (b.divX || b.divY) ? 'loose-dividers' : ''),
+];
+function typeNames() {
+  const groups = new Map();
+  for (const t of types()) {
+    const n = typeName(t);
+    if (!groups.has(n)) groups.set(n, []);
+    groups.get(n).push(t);
+  }
+  const names = new Map(), used = new Set();
+  for (const [n, group] of groups) {
+    const differ = group.length < 2 ? []
+      : VARIANT_TAGS.filter((tag) => new Set(group.map((t) => tag(t.b))).size > 1);
+    for (const t of group) {
+      const stem = n.slice(0, n.lastIndexOf('-qty')) +
+        differ.map((tag) => tag(t.b)).filter(Boolean).map((s) => '-' + s).join('');
+      let name = `${stem}-qty${t.qty}`;
+      for (let i = 2; used.has(name); i++) name = `${stem}-${i}-qty${t.qty}`;
+      used.add(name);
+      names.set(t.key, name);
+    }
+  }
+  return names;
+}
 /* One bin type as an STL. Two places offer this — the row in "Bins to print" and the
    row in the download dialog — and they are the one pair that could give you two
-   differently named files for the same click. */
+   differently named files for the same click. Both, and the ZIP, name it here. */
+const fileName = (t) => typeNames().get(t.key) || typeName(t);
 function downloadType(t) {
-  saveBlob(G.stlBinary(geomFor(t.b).polys, 'bin'), typeName(t) + '.stl');
+  saveBlob(G.stlBinary(geomFor(t.b).polys, 'bin'), fileName(t) + '.stl');
 }
 /* What to buy for the feet, and how many: the drawer's totals, with what each hole is
    for. Counted off the same holeSites the engine builds from. */
@@ -10568,9 +10607,9 @@ async function downloadAllPlates() {
 }
 async function downloadBinZip() {
   if (!scoped().length) return;
-  const zip = new JSZip();
+  const zip = new JSZip(), names = typeNames();
   for (const t of types())
-    zip.file(typeName(t) + '.stl', G.stlBinary(geomFor(t.b).polys, 'bin'));
+    zip.file(names.get(t.key) + '.stl', G.stlBinary(geomFor(t.b).polys, 'bin'));
   /* The dividers go in the same ZIP. A bin with rails and no plate is not a divided
      bin, and the ZIP is what someone downloads when they want the whole job. */
   for (const d of dividerParts())

@@ -502,6 +502,45 @@ test('the bin ZIP, the plate ZIP and every 3MF are deflated, and unzip to the sa
 /* A bin too big for the bed is said, and leaves out only itself. The bins that fitted
    were packed onto its plate, which no file carries, so they were in no download and
    the plan said "0 bins packed". */
+/* A scooped 1x1x3 and a plain one were both "bin-1x1x3-qty1.stl": the file name leaves
+   out the scoop, the label shelf and lowered walls. A ZIP keeps the last file of a name,
+   so one of the two bins was not in it, and nothing said so. */
+test('bins the file name used to call alike each get their own file in the ZIP',
+  async ({ page }) => {
+    const bin = (x, y, rest) => `${x}-${y}-1-1-3-1.2-1-0-0-0-${rest}`;
+    const errors = await openAt(page, 'bl=' + [
+      bin(0, 0, '1-1-1-1'),          // plain
+      bin(1, 0, '1-1-1-1-8'),        // a scoop
+      bin(2, 0, '1-1-1-1-0-12'),     // a label shelf
+      bin(0, 1, '0.5-1-1-1'),        // the front wall lowered
+      bin(1, 1, '1-0.5-1-1'),        // the back wall lowered instead
+      '2-1-2-1-3',                   // a 2x1, which shares its name with nothing
+    ].join('_'));
+    expect(await page.evaluate(() => types().length), 'fixture: six kinds of bin').toBe(6);
+    await page.locator('#openExport').click();
+
+    const zip = await download(page, '#exFiles [data-ex="zip"]');
+    const files = (await JSZip.loadAsync(zip.buf)).files;
+    expect(Object.keys(files).filter((n) => n.endsWith('.stl')).sort()).toEqual([
+      'bin-1x1x3-label12-qty1.stl',
+      'bin-1x1x3-low-walls-2-qty1.stl',
+      'bin-1x1x3-low-walls-qty1.stl',
+      'bin-1x1x3-qty1.stl',            // the plain one keeps the name it always had
+      'bin-1x1x3-scoop8-qty1.stl',
+      'bin-2x1x3-qty1.stl',
+    ]);
+    // and each row's own download is that file, under the same name
+    const rows = page.locator('#exFiles [data-ex="stl"]');
+    expect(await rows.count()).toBe(6);
+    for (let i = 0; i < 6; i++) {
+      const one = await download(page, `#exFiles [data-ex="stl"] >> nth=${i}`);
+      expect(files[one.name], `${one.name} is missing from the ZIP`).toBeTruthy();
+      expect(Buffer.compare(await files[one.name].async('nodebuffer'), one.buf),
+             `${one.name} in the ZIP is another bin`).toBe(0);
+    }
+    expect(errors).toEqual([]);
+  });
+
 test('a bin too big for the bed takes none of the others with it', async ({ page }) => {
   const errors = await openAt(page, 'bw=180&bd=180&bl=0-0-5-1-3_0-1-1-1-3_1-1-1-1-3_2-1-1-1-3');
   await expect(page.locator('#plateSummary')).toContainText('3 bins packed');
