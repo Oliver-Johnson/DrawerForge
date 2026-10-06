@@ -2394,7 +2394,10 @@ function buildFitSample(cfg, H, joint) {
 }
 
 // ---------- 3MF export ----------
-/* items: [{name, polys, tx, ty, tz, rot}] rot in {0,90}. Returns {model, contentTypes, rels} XML strings. */
+/* items: [{name, polys, tx, ty, tz, rot}] rot in {0,90}. Returns {model, contentTypes, rels} XML strings.
+   Each part is turned about its own origin and then moved by (tx, ty, tz), so (tx, ty) is
+   where the origin goes, not where the part's corner goes: a caller with a rectangle to
+   fill works out the offset from the part's box, as platePolysAndItems in src/ui.js does. */
 function build3mfXML(items) {
   let objs = '', builds = '';
   items.forEach((it, idx) => {

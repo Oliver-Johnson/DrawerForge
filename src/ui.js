@@ -1117,20 +1117,55 @@ function renderPrintPlan() {
     return `<div style="display:grid;gap:4px;justify-items:center">${svg}<div class="hint">plate ${i+1}</div></div>`;
   }).join('');
 }
+/* Each part is placed by its own box, turned, so the box lands on the rectangle the plan
+   drew for it.
+
+   packPlates hands back a rectangle — the corner, and the width and depth after any
+   quarter turn — and build3mfXML turns a part about its origin before moving it. The
+   two only agree when the origin IS the corner the part's box grows from, and they were
+   treated as if it always was. It is for an unturned piece moved by its tabs. Turned a
+   quarter, (x, y) goes to (-y, x): the piece swings into the space to the left of its
+   origin, and on a 250 × 210 bed piece B2 printed on top of B1, while with stacking on
+   a turned piece left the bed altogether. The keys and clips are modelled centred on
+   the origin, so every one of them sat half a key to the left of and in front of where
+   the plan drew it, and the front row hung off the bed. The plan on the page was right
+   throughout; only the file was wrong, which is the one you print.
+
+   So the offset comes from the mesh: where the low corner of its box ends up after the
+   turn, taken off the planned corner. That is right for any part however it was
+   modelled, which is why the piece no longer needs moving by its tabs first — the copy
+   transformPolys made of every piece was only ever there to put that corner on the
+   origin. test/ui/plate-files.spec.js reads the downloaded files back and holds every
+   part to its planned rectangle. */
 function platePolysAndItems(idx) {
   const pl = printPlan.plates[idx];
   const objs = [];
   // built once: every key unit on the plate is the same part, and buildKey runs CSG
-  let part = null;
+  let part = null, partBox = null;
+  const boxOf = (polys) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of polys) for (const v of q.verts) {
+      if (v[0] < x0) x0 = v[0];
+      if (v[0] > x1) x1 = v[0];
+      if (v[1] < y0) y0 = v[1];
+      if (v[1] > y1) y1 = v[1];
+    }
+    return { x0, y0, x1, y1 };
+  };
   for (const p of pl.placed) {
-    let polys;
-    if (p.id === 'key') { part = part || connectorPart(); polys = part.polys; }
-    else {
+    let polys, box;
+    if (p.id === 'key') {
+      if (!part) { part = connectorPart(); partBox = boxOf(part.polys); }
+      polys = part.polys; box = partBox;
+    } else {
       const b = builds[p.id];
       if (!b) continue;
-      polys = transformPolys(b.polys, b.meta.protrusion.l, b.meta.protrusion.f, 0, 0);
+      polys = b.polys; box = boxOf(polys);
     }
-    objs.push({ name: p.id + (p.z > 0.01 ? `@${p.z.toFixed(2)}` : ''), polys, tx: p.x, ty: p.y, tz: p.z, rot: p.rot });
+    // where the box's low corner goes under build3mfXML's turn: (x, y) -> (-y, x)
+    const [lx, ly] = p.rot === 90 ? [-box.y1, box.x0] : [box.x0, box.y0];
+    objs.push({ name: p.id + (p.z > 0.01 ? `@${p.z.toFixed(2)}` : ''), polys,
+                tx: p.x - lx, ty: p.y - ly, tz: p.z, rot: p.rot });
   }
   return objs;
 }
