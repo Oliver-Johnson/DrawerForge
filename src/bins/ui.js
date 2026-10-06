@@ -999,6 +999,9 @@ function readControls() {
      until the next edit, Undo or selection, whatever that touched: it was about the
      size the fields held then. */
   let sizeNote = '';
+  // a size the last pass refused under the caret, if it did (sizeHeld)
+  const held = sizeHeld;
+  sizeHeld = null;
   /* The footprint is settled first: the floor, the label shelf and the dividers are
      limited by the bin's real size, so they wait for it. A loose bin has no drawer to
      collide with, so its footprint is held only by the fields' own 50 cells — with no
@@ -1025,9 +1028,18 @@ function readControls() {
       if (why) {
         t.u = b.u; t.v = b.v;
         if (!sizeTyping()) { $('u').value = b.u; $('v').value = b.v; }
+        else sizeHeld = { u: b.u, v: b.v };
       }
       if (why === WHOLE_ON_WHOLE) sizeNote = why;
     }
+  } else if (!scratch && held) {
+    /* With no bin selected the fields are the size of the next one drawn, and what they
+       hold here is a size the bin selected a moment ago refused, left under the caret.
+       It goes back to that bin's, as it would have on leaving the field had the bin
+       still been selected: Fill the rest takes the selection away first, and a 2 typed
+       for the 1.5 × 1 on a half step filled the drawer with 2 × 1 bins. */
+    Object.assign(t, held);
+    $('u').value = held.u; $('v').value = held.v;
   }
   /* Several bins take the same settings, so the smallest of them sets the limit: the
      dividers that fit a 1x1 are the most any of them can be given. */
@@ -1336,6 +1348,10 @@ const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
    arrows, which give a whole value at once rather than a number on its way. */
 let sizeDraft = null;          // the field being typed into, if either is
 const sizeTyping = () => !!sizeDraft && document.activeElement === $(sizeDraft);
+/* The size of the bin that refused what is under the caret, from the last pass that
+   refused it: if that bin is no longer selected by the next pass, the fields go back to
+   it rather than handing the refused size to the next bin drawn (readControls). */
+let sizeHeld = null;
 // the one bin the fields are sizing, where it stands: a loose or a new bin stands nowhere
 const sizedBin = () => (!scratch && selected >= 0 && selAll().length === 1 && B()[selected]) || null;
 /* A step of Width or Depth from `from` to the next half cell up or down, and over a whole

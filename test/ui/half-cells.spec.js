@@ -648,3 +648,35 @@ test('more layers than two do not take any more of the preview\'s width', async 
   await openAt(page, 'bl=' + Array(6).fill(one).join('~'));
   expect((await look()).inCard, 'six layers\' tabs on a phone').toBe(true);
 });
+
+/* A size the selected bin refuses is left in the field while it is being typed, and put
+   back once the field is left (sizeDraft). Left by pressing Fill the rest, the selection
+   was gone before the bin had put it back, and with no bin selected the fields are the
+   size of the next bin: a 2 typed for the 1.5 x 1 on a half step, refused, filled the
+   drawer with 2 x 1 bins. Before half steps a refused size was written back at once. */
+test('a size the selected bin refused does not become the size of new bins', async ({ page }) => {
+  await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1));
+  await select(page, 0);
+  await page.focus('#u');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('2', { delay: 250 });
+  await settle(page);
+  expect(await page.evaluate(() => [B()[0].u, $('u').value]), 'refused, and left as typed').toEqual([1.5, '2']);
+  await page.click('#fillRest');
+  await settle(page);
+  const r = await page.evaluate(() => ({ u: state.u, field: $('u').value,
+    twoWide: B().filter((b) => b.u === 2 && b.v === 1).length }));
+  expect(r).toEqual({ u: 1.5, field: '1.5', twoWide: 0 });
+
+  // and when a press on the map takes the selection, which it does before the field is left
+  await page.keyboard.press('Control+z');
+  await settle(page);
+  expect(await binsNow(page), 'the fill undone').toEqual([[0.5, 0, 1.5, 1]]);
+  await select(page, 0);
+  await page.focus('#u');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('2', { delay: 250 });
+  await settle(page);
+  await H.clickCell(page, 4, 4);
+  expect(await page.evaluate(() => [state.u, $('fillSize').textContent])).toEqual([1.5, '1.5×1']);
+});
