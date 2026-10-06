@@ -123,8 +123,8 @@ const LIMITS = {
 const CLR_JOINT = { puzzle: 'puzzle tab', bowtie: 'bowtie key', puzzlekey: 'puzzle key' };
 const clrWhy = (by) => ({
   dovetail: '— any looser and a dovetail pocket breaks through into the socket beside it',
-  snaptop: '— any looser and the housing of a snap clip dropped in from above crosses the ' +
-    'seam into the next piece',
+  snaptop: '— any looser and the housing of a snap clip dropped in from above runs up to ' +
+    'the seam and on into the next piece',
   pitch: `${atPitch()} — on cells under ${RANGES.connClr.smallPitch} mm a ` +
     `looser ${CLR_JOINT[state.connector]} opens holes in the plate`,
   joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess opens holes in the plate`,
@@ -1063,8 +1063,11 @@ function connectorPart() {
  * field's headroom added to the joint's clearance, which is the same thing only while
  * the key's 0.1 floor is not in play, and it read a ceiling that knew the connector and
  * nothing else — a snap clip dropped in from above got pairs to 0.95, whose housings
- * met across the coupon's seam. A slim wall key's clearance is its own and the field
- * does not move it, so it has no ceiling to keep to. */
+ * met across the coupon's seam. Its slackest pair now stops at the key's 0.25, which
+ * holds the slot's seam-side wall one BLOAT inside its tile, off the tile's seam face,
+ * as the ceiling holds it on the plate; test/plate-audit.js measures both. A slim wall
+ * key's clearance is its own and the field does not move it, so it has no ceiling to
+ * keep to. */
 function activeJoint() {
   const pad = builtH() - state.plateHeight;
   const top = fitClearances(connClrCeiling(state).max);
