@@ -642,8 +642,10 @@ test.describe('half cells from a link', () => {
       if (opt) opt.remove();
       loadFromHash('w=400&d=330&mm=half');
       recomputeLayout();
+      /* `|| 0` for the same page: its layout has no hX or hY at all, and a strip it never
+         heard of is no strip. Read straight, the test failed there on undefined. */
       return { menu: document.getElementById('marginMode').value, mode: state.marginMode,
-               strips: [layout.hX, layout.hY], link: descriptor().mm,
+               strips: [layout.hX || 0, layout.hY || 0], link: descriptor().mm,
                margins: [layout.mL, layout.mR, layout.mF, layout.mB] };
     });
     expect(s.menu).toBe('auto');
