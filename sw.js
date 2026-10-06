@@ -44,7 +44,7 @@
    load from this site, and the app's icons and manifest, as paths from the root. VERSION
    is a hash of all of those files, names and bytes, and of this script as it stands in
    src/sw.js. */
-const VERSION = "ea625e9824ab";
+const VERSION = "2d96f8f87d26";
 const FILES = [
   "./",
   "bins/",

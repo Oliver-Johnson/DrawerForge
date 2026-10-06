@@ -42,6 +42,15 @@
 "featureList":["Whole-drawer bin layout","Multi-layer stacking","Non-rectangular L and U shaped bins","Dividers, scoops and label shelves","Per-edge wall heights","Translucent drawer preview around the bins","Split a bin to fit the print bed","Filament estimate","Pre-arranged 3MF print plates","STL export"],
 "isAccessibleForFree":true}
 </script>
+<!-- Whether this browser has been here before, decided before anything is drawn: the full
+     header for a first visit, a one-line bar after it. The baseplates template explains it;
+     the two copies are the same lines. -->
+<script>
+try {
+  if (['used', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
+    document.documentElement.classList.add('returning');
+} catch (e) { /* storage blocked: the full header */ }
+</script>
 <style>
 /* SPDX-License-Identifier: AGPL-3.0-or-later
  * Drawerforge — https://drawerforge.co.uk — Copyright (C) 2026 Oliver Johnson
@@ -194,7 +203,37 @@ header h1{font-size:21px;letter-spacing:.16em;font-weight:700}
 header h1 .tm{color:var(--cyan)}
 header p{color:var(--dim);margin-top:5px;max-width:640px}
 header .privacy{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:7px}
-header .privacy::before{content:"● ";color:var(--cyan)}
+header .privacy::before,footer .privacy::before{content:"● ";color:var(--cyan)}
+/* After the first visit: one line.
+   The title, a two-line pitch and the privacy line took 202 px of a 1080 px window on
+   Baseplates and 245 on Bins, and on a phone 304 and 287 of 844 — every visit, to say
+   what the visitor already knew. The inline script in each tool's <head> puts
+   `returning` on <html> once this browser has changed a design on either tool or saved
+   a drawer, before the header is laid out, so a returning visit is drawn short from the
+   first frame rather than drawn long and then collapsed. The pitch and the privacy line
+   go (the privacy line is in the footer, word for word); the name, the pages, the drawer
+   and the bins page's way in to a single bin stay, on one row wherever the window is
+   wide enough for them. Only the tools carry the script, so the guide pages keep their
+   header. */
+html.returning header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;
+  padding:10px 26px}
+html.returning header>p,html.returning header>.privacy{display:none}
+html.returning header nav,html.returning header .drawerbar,
+html.returning header .quickstart{margin-top:0}
+/* the drawer and the way in to one bin sit at the far end, away from the page tabs */
+html.returning header .drawerbar{margin-left:auto}
+html.returning header .quickstart span{display:none}
+/* Narrower, the name and the tabs give up a little width so the row still holds them:
+   at 844 × 390, a phone on its side, that is the difference between one row and two, and
+   the window there is 390 px tall. Upright at 390 px they cannot share a row whatever is
+   done to them, so the bar wraps instead: the name, then the tabs with the drawer beside
+   them, and on the bins page the way in to a single bin under those. */
+@media(max-width:980px){
+  html.returning header{padding:8px 16px;gap:8px 12px}
+  html.returning header h1{font-size:17px;letter-spacing:.12em}
+  html.returning header nav a{padding:0 12px}
+  html.returning header .drawerbar{margin-right:0}
+}
 /* The working area is exactly the window below the header.
    It was `calc(100vh - 96px)` on .app, the rail and the stage, and 96 was nobody's
    header: the real one is 164 px on Baseplates, 207 px on Bins (the quickstart row),
@@ -274,6 +313,10 @@ section.p>h2 .caret{margin-left:auto;transition:transform .15s;color:var(--dim)}
 section.p.closed .caret{transform:rotate(-90deg)}
 section.p .body{padding:2px 13px 13px;display:grid;gap:9px}
 section.p.closed .body{display:none}
+/* Baseplates on a phone: panels 02 to 05 folded from the first frame, before ui.js has
+   run to fold them for real (it explains, and takes html.fold away once it has). */
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag)>.body{display:none}
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag) .caret{transform:rotate(-90deg)}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 /* Type sizes.
@@ -315,6 +358,18 @@ select{font-family:var(--sans)}
 .tog input:disabled{opacity:.45;cursor:not-allowed}
 .hint{font-size:12.5px;color:var(--dim);line-height:1.55}
 .hint.amber{color:var(--amber)}
+/* "more" in a long hint: the first sentence stays, the rest opens underneath it in place
+   (chrome.js does the toggling). Drawn as a link in the hint's own type rather than as
+   one of the page's buttons, because it is a footnote to the sentence and not something
+   to do; a button for all that, so it takes the keyboard and says whether it is open.
+   [hidden] is restated because the display that opens the rest would otherwise beat the
+   browser's own rule for it, the trap the tip jar's comment below describes. */
+.hint button.more{all:unset;display:inline-block;color:var(--cyan);cursor:pointer;
+  text-decoration:underline dotted;text-underline-offset:3px;border-radius:3px}
+.hint button.more:hover{text-decoration-style:solid}
+.hint button.more:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+.hint .moretext{display:block;margin-top:4px}
+.hint .moretext[hidden]{display:none}
 button.act{background:var(--cyan);color:#0c1116;border:none;border-radius:6px;padding:9px 12px;
   font-weight:600;cursor:pointer;font-size:13px}
 button.act:disabled{opacity:.45;cursor:default}
@@ -660,6 +715,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .stagecard h3 .tail{font-size:12px}
   label.f{font-size:12px}
   .hint{font-size:12px}
+  /* A 40 px target without a 40 px line: the padding makes the box a finger can hit and the
+     equal negative margin takes it back out of the layout, so the sentence it ends does
+     not open a gap above and below itself. */
+  .hint button.more{padding:11px 8px;margin:-11px -8px}
   .tog{font-size:13px;min-height:40px}
   /* every control a finger has to hit */
   input,select,button{min-height:40px}
@@ -707,6 +766,92 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input{min-height:20px}
 }
 
+/* ---- the phone's section bar ----------------------------------------------
+   Stacked, the page is one long column, and the bar keeps Settings, Map, Preview and
+   Export a tap away at the top of the screen (chrome.js does the jumping). Not shown
+   side by side, where everything it jumps to is already in view.
+   It is fixed, not sticky, and only comes down once the header has scrolled away
+   (chrome.js watches the header and sets .on). A sticky bar sits in the flow, and its
+   44 px came straight off the first screen: on a first visit the bins page then showed
+   about 94 px of the drawer map, under the 120 the first-screen test asks for. While the
+   header is in view there is nothing to jump past anyway. It is moved off the top rather
+   than hidden, so it stays in the Tab order, and focus inside it brings it down.
+   The scroll padding is the bar's height, so nothing the page scrolls to — a jump, a
+   skip link, a field Tab lands on — ends up underneath it. */
+.jumpbar{display:none}
+@media(max-width:980px){
+  .jumpbar{display:flex;gap:6px;position:fixed;top:0;left:0;right:0;z-index:40;
+    padding:6px 10px;background:var(--bg);border-bottom:1px solid var(--line);
+    transform:translateY(-100%);transition:transform .15s}
+  .jumpbar.on,.jumpbar:focus-within{transform:none}
+  .jumpbar button{flex:1 1 0;min-width:0;background:var(--panel2);color:var(--ink);
+    border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px;cursor:pointer}
+  .jumpbar button:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+  /* only where there is a bar: the guide pages share this stylesheet and have none, and
+     there it stopped the skip link, and whatever Tab scrolled to, 60 px short of the top
+     of the window to clear a bar that is not on the page */
+  html:has(#jumpbar){scroll-padding-top:60px}
+  /* in single-bin mode there is no drawer map, and a carve grid only while carving */
+  body.binfocus:not(.focuscarve) #jumpMap{display:none}
+}
+
+/* ---- the bin sheet (bins page, phone) ---------------------------------------
+   Selecting a bin opens panel 03, and stacked, panel 03 is about 1,500 px of settings
+   ABOVE the map: every edit was a scroll up to change it and a scroll down to see what it
+   did. So on a phone, with a bin selected, the panel leaves the column and becomes a
+   sheet over the foot of the screen, with the map above it still in reach — drag, tap,
+   resize, carve — and the sheet's own contents scrolling inside it. Its header still
+   folds it down to a bar; the X lets go of the selection, which is what puts it away.
+   bins/ui.js sets body.binsheet whenever a bin is selected outside single-bin mode,
+   at every width; only these rules make anything of it, so the desktop is unchanged.
+   The page gets the sheet's height as padding at its foot, or the last of it (the
+   footer, the download) could never be scrolled clear. */
+#binSheetClose{display:none}
+@media(max-width:980px){
+  body.binsheet{padding-bottom:min(50dvh,520px)}
+  body.binsheet:has(#s-bin.closed){padding-bottom:64px}
+  /* And the same height kept clear of whatever the browser scrolls to. Tab brings what it
+     lands on only just inside the window, and with the sheet up the foot of the window is
+     the sheet: measured in the October 2026 review, every one of the 25 stops after it —
+     Checks, the layer tabs, Fill and Clear, the downloads, the footer — was focused out of
+     sight underneath. On the root, because the page is what scrolls; the 8 px is room for
+     the focus ring. */
+  html:has(body.binsheet){scroll-padding-bottom:calc(min(50dvh,520px) + 8px)}
+  html:has(body.binsheet #s-bin.closed){scroll-padding-bottom:72px}
+  /* The tip jar is fixed to the same corner, a layer under the sheet (60 to its 66), so it
+     was there for Tab to reach and not there to be seen; lifted above the sheet it would sit
+     on the map, which is what the sheet keeps clear. It waits while the sheet is up, and
+     comes back when the sheet goes. */
+  body.binsheet .kofi{display:none}
+  body.binsheet #s-bin{position:fixed;left:0;right:0;bottom:0;z-index:66;margin:0;
+    display:flex;flex-direction:column;max-height:min(50dvh,520px);
+    border-radius:14px 14px 0 0;border-bottom:0;box-shadow:0 -12px 32px rgba(0,0,0,.55);
+    animation:sheetup .16s ease-out}
+  /* the handle: says "this came up from below" without being a control of its own */
+  body.binsheet #s-bin::before{content:"";position:absolute;top:5px;left:50%;width:36px;
+    height:4px;margin-left:-18px;border-radius:2px;background:var(--line);pointer-events:none}
+  body.binsheet #s-bin>h2{flex:none}
+  body.binsheet #s-bin>h2>button{padding-right:56px}
+  body.binsheet #s-bin>.body{overflow-y:auto;overscroll-behavior:contain;min-height:0;
+    padding-bottom:max(13px,env(safe-area-inset-bottom))}
+  body.binsheet #binSheetClose{display:flex;align-items:center;justify-content:center;
+    position:absolute;top:2px;right:6px;min-width:44px;min-height:44px;
+    background:none;border:1px solid transparent;border-radius:6px;color:var(--dim);
+    font-size:22px;line-height:1;cursor:pointer}
+  body.binsheet #binSheetClose:hover{color:var(--ink);border-color:var(--line)}
+  body.binsheet #binSheetClose:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+}
+@keyframes sheetup{from{transform:translateY(100%)}}
+/* On paper. A page printed is narrower than 980 px, so it gets the phone's layout, and a
+   box fixed to the window is printed on every page, over whatever that page has there: the
+   bar, once the header had scrolled away, and the sheet with its bin's settings. Both are
+   ways round a screen, with nothing to read on paper, so neither is printed, nor the room
+   the sheet keeps at the page's foot. Printed wider the panel is the rail's, and stays. */
+@media print and (max-width:980px){
+  .jumpbar,body.binsheet #s-bin{display:none}
+  body.binsheet,body.binsheet:has(#s-bin.closed){padding-bottom:0}
+}
+
 /* ---- reduced motion -------------------------------------------------------
    Every transition on the site, in one place, at the end of the file. It has to be
    the end: a media query adds no specificity, so a block sitting above the rules it
@@ -722,8 +867,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input,
   .tog input::after,
   .skip,
-  .kofi{transition:none}
+  .kofi,
+  .jumpbar{transition:none}
   .kofi:hover{transform:none}
+  body.binsheet #s-bin{animation:none}
 }
 
 /* ---- single-bin focus (bins page) ---------------------------------------
@@ -841,6 +988,20 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
      it opens, because half its entries depend on the bin under the cursor — which layer
      it can move to, and whether it is already marked printed. -->
 <div id="ctxmenu" class="ctxmenu" role="menu" hidden></div>
+<!-- On a phone the page is one long column: the panels, then the map, the preview, the
+     tables and the download, and getting from the settings to the map and back was a long
+     scroll each way. This bar comes down at the top of the screen there once the header
+     has scrolled away, and jumps to each part.
+     It scrolls and moves focus (chrome.js), and it is buttons rather than #links because
+     the address's fragment holds the layout and changing it reloads the tool. Wide enough
+     for the side-by-side layout there is nothing to jump between, and it is not shown.
+     data-jump lists where each goes; the first of them on screen wins. -->
+<nav class="jumpbar" id="jumpbar" aria-label="Jump to a part of the page">
+  <button type="button" data-jump="s-drawer s-bin">Settings</button>
+  <button type="button" id="jumpMap" data-jump="s-layout s-focuscarve">Map</button>
+  <button type="button" data-jump="c-preview">Preview</button>
+  <button type="button" data-jump="c-export">Export</button>
+</nav>
 <main class="app">
 <!-- Shown only while one bin is being edited on its own. It carries the way back,
      and it has to: focus hides the map, the layer tabs and panel 01, so every other
@@ -908,16 +1069,20 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       <label class="f"><b>or grid width (cells)</b><input id="gridX" type="number" step="1" min="1" value="7"></label>
       <label class="f"><b>or grid depth (cells)</b><input id="gridY" type="number" step="1" min="1" value="9"></label>
     </div>
-    <div class="hint">Count the cells of the baseplate you already have and these fill the drawer size in — 4 × 6 cells is a 168 × 252 mm drawer. Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</div>
+    <!-- A hint past four lines or so shows its first sentence; "more" opens the rest in
+         place (chrome.js), inside the hint, where the tests read it. The two hints that
+         hold controls of their own keep them in view: the lid's sides below, and the
+         removable dividers' thickness and clearance, which stay whole. -->
+    <div class="hint">Count the cells of the baseplate you already have and these fill the drawer size in — 4 × 6 cells is a 168 × 252 mm drawer. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Measure the real drawer where you can: the leftover millimetres are what tell you whether the last bin fits.</span></div>
     <div class="row">
       <label class="f"><b>Usable height (<span data-unit>mm</span>)</b><input id="drawerH" type="number" step="0.5" min="1" max="2000" value="84"></label>
       <label class="f"><b>Baseplate height (mm)</b><input id="plateH" type="number" step="0.05" value="4.25"></label>
     </div>
     <div class="hint">Usable height is drawer floor to the lowest thing above. Baseplate height is 4.25 mm unless your joint forced a solid floor — the baseplate tool passes the real figure across.</div>
     <label class="f" id="drawerFrontRow" style="display:none"><b>Drawer front height (<span data-unit>mm</span>)</b><input id="drawerFrontH" type="number" step="0.5" min="0" value="0"></label>
-    <div class="hint" id="drawerViewHint" style="display:none">Draws the real drawer in the preview — floor and four walls, translucent so the bins still show through. The sides stand at the usable height you gave above, because that is the number the fit check already uses and a second side measurement could only disagree with it. The front panel is often taller or lower than the sides, so it gets its own figure; leave it at 0 to match them. The walls sit at the drawer's inside dimensions, so the gap between them and the baseplate is the space the grid cannot reach. It is a view only — nothing you download changes.</div>
+    <div class="hint" id="drawerViewHint" style="display:none">Draws the real drawer in the preview — floor and four walls, translucent so the bins still show through. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>The sides stand at the usable height you gave above, because that is the number the fit check already uses and a second side measurement could only disagree with it. The front panel is often taller or lower than the sides, so it gets its own figure; leave it at 0 to match them. The walls sit at the drawer's inside dimensions, so the gap between them and the baseplate is the space the grid cannot reach. It is a view only — nothing you download changes.</span></div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
-    <div class="hint">Only affects the material estimate, not the geometry. Thin parts — walls, floor, dividers, lip — print solid whatever you set; the feet are thick enough to be infilled, and they dominate. Assumes 2 perimeters and 4 solid top/bottom layers.</div>
+    <div class="hint">Only affects the material estimate, not the geometry. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Thin parts — walls, floor, dividers, lip — print solid whatever you set; the feet are thick enough to be infilled, and they dominate. Assumes 2 perimeters and 4 solid top/bottom layers.</span></div>
     <div class="mono" id="gridSummary">—</div>
     <div style="margin-top:8px"><a id="toPlates" class="ghost" href="../">← back to baseplates</a></div>
   </div>
@@ -960,6 +1125,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
      something real. -->
 <section class="p closed" id="s-bin">
   <h2 class="ph"><button type="button" aria-expanded="false" aria-controls="b-bin"><span class="n">03</span> <span id="binPanelTitle">New bins</span> <span class="caret">▾</span></button></h2>
+  <!-- On a phone, with a bin selected, this panel is a sheet over the foot of the screen
+       rather than 1,500 px of settings above the map (style.css, "the bin sheet"). This is
+       its way out: it lets go of the selection, which is what puts the sheet away. Shown
+       only as the sheet; beside a desktop map the panel is part of the rail, and an X on it
+       would read as closing the panel. A sibling of the h2 rather than inside it, because
+       every button in a panel header toggles its panel. -->
+  <button type="button" class="sheetx" id="binSheetClose" title="Close — lets go of the selected bin" aria-label="Close the bin settings">×</button>
   <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
       <label class="f"><b>Width (cells)</b><input id="u" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint"></label>
@@ -982,14 +1154,14 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       <label class="f"><b>Dividers across</b><input id="divX" type="number" step="1" min="0" value="0"></label>
       <label class="f"><b>Dividers along</b><input id="divY" type="number" step="1" min="0" value="0"></label>
     </div>
-    <div class="hint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments.</div>
+    <div class="hint" id="divHint">Dividers are counts of walls, not compartments — 1 divider makes 2 compartments.</div>
     <!-- Only shown with a bin selected: it describes that bin, not the next one you
          draw. Half a drawer is often already printed, and a plate arranged around
          parts already sitting in the drawer wastes the plate. -->
     <div class="row" id="doneRow" style="display:none">
       <label class="tog"><input id="done" type="checkbox"> Already printed — leave off the plates</label>
     </div>
-    <div class="hint" id="doneHint">A bin marked printed stays in the drawer and in the layout, and drops out of the print plates, the STL downloads and the filament estimate. It is what you want when you are filling a drawer a few prints at a time.</div>
+    <div class="hint" id="doneHint">A bin marked printed stays in the drawer and in the layout, and drops out of the print plates, the STL downloads and the filament estimate. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>It is what you want when you are filling a drawer a few prints at a time.</span></div>
     <div class="row" id="edgeRowA">
       <label class="f"><b>Front wall</b><select id="edgeF">
         <option value="1">Full height</option><option value="0.66">Two thirds</option>
@@ -1043,13 +1215,13 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
       <label class="f"><b>Slot clearance (mm)</b><input id="divClr" type="number" step="0.05" min="0" max="1" value="0.25"></label>
     </div>
     Clearance is per side. 0.25 slides; tighten it to 0.15 if your dividers rattle, loosen it if they bind.</div>
-    <div class="hint" id="featureHint">A scoop fills the front inside corner with a curve so you can sweep contents out — try 8 mm. The label shelf juts in from the top of the back wall with a 45° underside, so it prints without support; 12 mm suits a printed label. Both need their wall to exist.</div>
+    <div class="hint" id="featureHint">A scoop fills the front inside corner with a curve so you can sweep contents out — try 8 mm. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>The label shelf juts in from the top of the back wall with a 45° underside, so it prints without support; 12 mm suits a printed label. Both need their wall to exist.</span></div>
     <!-- A lid grips the bin's stacking lip, so it is only offered on a bin that still
          has one — lowering any wall drops the lip from all four. -->
     <div class="row" id="lidRow">
       <label class="tog"><input id="lid" type="checkbox"> Lid for this bin</label>
     </div>
-    <div class="hint" id="lidHint" style="display:none">A flat plate with a skirt that seats inside the bin&rsquo;s lip. Prints upside down, so the plate is the first layer and there are no feet to print — a fraction of the filament a bin costs. Untick a side to leave its skirt off, for an edge you want to reach past.
+    <div class="hint" id="lidHint" style="display:none">A flat plate with a skirt that seats inside the bin&rsquo;s lip. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Prints upside down, so the plate is the first layer and there are no feet to print — a fraction of the filament a bin costs. Untick a side to leave its skirt off, for an edge you want to reach past.</span>
       <div class="row" style="margin-top:6px">
         <label class="tog"><input id="lidF" type="checkbox" checked> Front</label>
         <label class="tog"><input id="lidB" type="checkbox" checked> Back</label>
@@ -1059,7 +1231,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     </div>
     <div class="hint" id="lidNoLip" style="display:none;color:var(--red)">This bin has a lowered wall, so it has no stacking lip for a lid to grip. Set every wall to full height to give it one.</div>
     <div class="hint" id="lidCarved" style="display:none;color:var(--red)">A lid is a plain rectangle, so on a carved bin it would hang out over the cells you cut away. It is left off the downloads; lids are made for rectangular bins.</div>
-    <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. Corner posts stay full height and a lowered wall ramps up to meet them, so the side walls keep their ends — a wall that stopped square against the post snapped off there. The ramp is 8.5 mm at each end whatever the bin&rsquo;s footprint, so a wider bin keeps the same corner and gains a longer flat opening. Lowering any wall removes the stacking lip — nothing can sit on it.</div>
+    <div class="hint" id="edgeHint">Front is the front of the drawer, matching the map. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Corner posts stay full height and a lowered wall ramps up to meet them, so the side walls keep their ends — a wall that stopped square against the post snapped off there. The ramp is 8.5 mm at each end whatever the bin&rsquo;s footprint, so a wider bin keeps the same corner and gains a longer flat opening. Lowering any wall removes the stacking lip — nothing can sit on it.</span></div>
     <button class="ghost" id="presetTray" style="margin-top:8px">Make this a flat tray</button>
     <label class="f"><b>Corner smoothness</b>
       <select id="arcSegs">
@@ -1068,19 +1240,19 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
         <option value="24">Smooth — 24 segments</option>
       </select></label>
     <button class="act" id="splitFit" style="display:none">Split this bin to fit the bed</button>
-    <div class="hint" id="splitHint" style="display:none">Splits it into the fewest pieces that each fit, covering the same cells. They sit side by side on the baseplate, so nothing is lost but the wall between them — and if you want one continuous compartment, set the facing walls of the new bins to Open.</div>
+    <div class="hint" id="splitHint" style="display:none">Splits it into the fewest pieces that each fit, covering the same cells. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>They sit side by side on the baseplate, so nothing is lost but the wall between them — and if you want one continuous compartment, set the facing walls of the new bins to Open.</span></div>
     <!-- The same slot as the focus button, which is only offered with a bin selected.
          With nothing selected this panel is called "New bins" and holds the size you
          have just typed, so it is the honest place to say "make that, and nothing
          else". -->
     <button class="act" id="scratchBin" style="display:none">Design one bin on its own</button>
-    <div class="hint" id="scratchBinHint" style="display:none">For when you want a single bin and not a drawer of them. Opens the same uncluttered page, with no grid to place it on and no drawer measurements to fill in — just the bin, its preview and its download. You can drop it into the drawer at the end, or never.</div>
+    <div class="hint" id="scratchBinHint" style="display:none">For when you want a single bin and not a drawer of them. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Opens the same uncluttered page, with no grid to place it on and no drawer measurements to fill in — just the bin, its preview and its download. You can drop it into the drawer at the end, or never.</span></div>
     <button class="act" id="focusBin" style="display:none">Edit this bin on its own</button>
     <div class="hint" id="focusBinHint" style="display:none">Hides the drawer, the layers and the map, and gives this one bin the whole page. Everything here still works and the bin stays exactly where it is — this only changes what you are shown.</div>
     <button class="act" id="carveMode" style="display:none">Carve this bin into a shape</button>
-    <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. <span class="haskeys">Alt-click does the same thing without turning the mode on. </span>Press <span class="haskeys">Escape or </span>the button again when you are done.</div>
+    <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden><span class="haskeys">Alt-click does the same thing without turning the mode on. </span>Press <span class="haskeys">Escape or </span>the button again when you are done.</span></div>
     <button class="act" id="mergeBins" style="display:none">Merge into one bin</button>
-    <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</div>
+    <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</span></div>
     <div class="hint" id="shapeOff" style="display:none"></div>
     <div class="row" id="selActions" style="display:none">
       <button class="ghost" id="applyAll">Apply to all bins</button>
@@ -1143,7 +1315,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <!-- Carving was taught as Alt-click only, and a touch screen has no Alt key, so on a
          phone the one sentence about L and U shapes described something impossible.
          The Carve button in panel 03 is the route there, and the touch wording names it. -->
-    <div class="hint">Drag across empty cells to place a bin. Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <span class="haskeys"><b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</span><span class="hastouch">To make an L or a U, tap a bin, press <b>Carve this bin into a shape</b> in panel 03, then tap the cells to cut out — tap a gap to put one back.</span></div>
+    <div class="hint">Drag across empty cells to place a bin. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Click one to select it, drag it to move it, or pull a corner grip to resize. A ⚠ marks a bin that will not sit properly where it is — <span class="haskeys">hover it</span><span class="hastouch">tap it</span> for the reason. It stays put either way, in case you are about to place the thing that fixes it. <span class="haskeys"><b>Alt-click</b> a cell inside the selected bin to carve it out, or alt-click a gap to put it back — that is how you make an L or a U.</span><span class="hastouch">To make an L or a U, tap a bin, press <b>Carve this bin into a shape</b> in panel 03, then tap the cells to cut out — tap a gap to put one back.</span></span></div>
     <div class="row3">
       <button class="ghost" id="fillRest">Fill the rest with <span id="fillSize">1×1</span></button>
       <button class="ghost" id="clearAll">Clear all</button>
@@ -1182,7 +1354,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   </div>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-preview">
   <!-- The toggle lives here, not in panel 01. It changes what this box shows, and up
        there it was three scrolls away behind the first panel you ever fill in — easy
        to forget you had it, and easy not to know it existed. A control belongs beside
@@ -1216,7 +1388,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
   </div>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-export">
   <h3>Export <span class="tail" id="exportTail"></span></h3>
   <div class="exportbar">
     <div class="exportrow">
@@ -1232,7 +1404,9 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
 <footer>
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these bins follow the published spec, so they fit any spec baseplate.</div>
   <div style="margin-top:10px">Free software under the <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/LICENSE" rel="noopener">AGPL</a>, and the models you make with it <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/NOTICE" rel="noopener">are yours</a>. <a href="https://github.com/Oliver-Johnson/DrawerForge" rel="noopener">Source code</a>, <a href="https://github.com/Oliver-Johnson/DrawerForge/issues" rel="noopener">issues and feature requests</a> on GitHub. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
-  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL output is mm scale.</div>
+  <!-- The header's privacy line, word for word: after the first visit the header leaves it
+       out, so this is where it stays said. -->
+  <div class="mono privacy" style="margin-top:8px">Runs entirely in your browser — nothing is uploaded, no account, no tracking. Your layout is kept on this device so you can come back to it. All geometry is computed locally; STL output is mm scale.</div>
 </footer>
 
 <!-- The download dialog. It sits before the UI script because that script wires it up
@@ -3961,6 +4135,30 @@ const DF = {
      pass their own plural; everything so far takes an s. */
   plural(n, one, many) {
     return `${n} ${n === 1 ? one : many || one + 's'}`;
+  },
+  /* A long hint the page writes itself, given the same "more" as the long hints written
+     into the markup: the first sentence, the button, and the rest hidden until it is
+     pressed (chrome.js toggles it; style.css draws it). The plate style hint is the case —
+     it describes whichever style is picked, so its words change after load. The parts are
+     made once and only their text is rewritten after that, so a hint someone has opened
+     stays open while they change the setting it describes. The first sentence is a span of
+     its own, which describes the button, as chrome.js does for the hints in the markup. */
+  hint(el, lead, rest) {
+    let btn = el.querySelector(':scope>button.more');
+    if (!btn) {
+      el.textContent = '';
+      const first = document.createElement('span');
+      first.id = el.id + 'Lead';
+      btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'more'; btn.textContent = 'more';
+      btn.setAttribute('aria-expanded', 'false');
+      btn.setAttribute('aria-describedby', first.id);
+      const more = document.createElement('span');
+      more.className = 'moretext'; more.hidden = true;
+      el.append(first, btn, more);
+    }
+    btn.previousElementSibling.textContent = lead + ' ';
+    btn.nextElementSibling.textContent = rest;
   },
   /* An STL is an 84-byte header plus 50 bytes a triangle, and a polygon fans into
      verts-2 of them, so the exact file size follows from polygons already in memory. */
@@ -7159,6 +7357,100 @@ function setPanel(id, open) {
 let hadSelection = false;
 let hadErrors = false;
 
+/* ---------- the bin sheet (phone) -----------------------------------------
+   On a phone the selected bin's settings are a sheet over the foot of the screen with
+   the map above it, instead of panel 03 opening 1,500 px of settings above the map (the
+   rules, and the reason, are in style.css). This keeps the class that makes it a sheet
+   in step with the selection, and does the three things the stylesheet cannot. */
+const PHONE = matchMedia('(max-width: 980px)');
+let sheetWas = false, sheetReveal = false;
+function applySheet() {
+  /* A new bin drawn on the map above the sheet starts by letting go of the selection
+     (pointerdown), and with nothing selected the sheet would go — mid-drag. Put away,
+     panel 03 drops back into the column above the map and moves the map down under a
+     finger that is still on it, so a drag from row 3 to row 5 made a bin four or five rows
+     deep. So a sheet that was up stays up while a bin is being drawn; the release selects
+     the new bin, which keeps it up, or places nothing, which puts it away then. */
+  const on = !focused && (selAll().length > 0 ||
+    (!!drag && drag.mode === 'create' && sheetWas));
+  /* Put away, the panel's header goes back into the column above the map and pushes the
+     map down by its height, under whatever you were looking at, or under the finger that
+     has just let go of a drag. So the map is held where it is: measured before, and the
+     page scrolled by however far it moved. Not on the way into single-bin mode, which
+     hides the map. Done here, at once, because scroll anchoring will not: the padding the
+     sheet gives the page's foot comes off in the same change, and a change of padding on
+     an element round the anchor is one the browser declines to correct for. */
+  const map = $('fillmap');
+  const held = PHONE.matches && sheetWas && !on && !focused && map.getClientRects().length
+    ? map.getBoundingClientRect().top : null;
+  document.body.classList.toggle('binsheet', on);
+  if (PHONE.matches && on !== sheetWas) {
+    /* Opening, the sheet comes up over the bottom half of the screen, which is where the
+       bin you just tapped may well be. Not while a finger is still dragging it: the page
+       moving under a drag would move the bin. The release redraws, and comes back here. */
+    if (on) sheetReveal = true;
+    /* Put away, the panel goes back into the column above the map, and open it would be
+       the 1,500 px the sheet exists to keep out of the way — so it goes back folded, as
+       the page first showed it. Not on the way into single-bin mode, which is about
+       nothing but this panel. */
+    else if (!focused) setPanel('s-bin', false);
+  }
+  sheetWas = on;
+  if (held !== null) scrollBy(0, map.getBoundingClientRect().top - held);
+  /* Two frames on, not one. The panel leaving the column (it was in it in single-bin
+     mode, all 1,500 px of it, above the map) moves everything under it, and the browser's
+     scroll anchoring corrects for that in the frame's own update, after a callback in the
+     first frame has already measured the page as it was. */
+  if (sheetReveal && !drag) {
+    sheetReveal = false;
+    requestAnimationFrame(() => requestAnimationFrame(revealSelected));
+  }
+}
+/* Scroll the selected bin clear of the sheet, without pushing the top of it under the
+   section bar. The bin's box comes from the map's own transform (see cellFromEvent). */
+function revealSelected() {
+  const b = selected >= 0 ? B()[selected] : null;
+  if (!b || !document.body.classList.contains('binsheet')) return;
+  const svg = $('fillmap'), m = svg.getScreenCTM && svg.getScreenCTM();
+  if (!m || !svg.getClientRects().length) return;
+  const g = grid(), p = svg.createSVGPoint();
+  p.x = 0; p.y = (g.ny - b.y - b.v) * S; const top = p.matrixTransform(m).y;
+  p.y = (g.ny - b.y) * S; const bottom = p.matrixTransform(m).y;
+  /* Where the sheet's top will be, not where it is: it is still sliding up at this point,
+     and a transform moves the box getBoundingClientRect reports. It sits on the bottom of
+     the window, so its height is enough. */
+  const sheetTop = innerHeight - $('s-bin').offsetHeight - 12;
+  /* the bar's height, not where it is now: it comes down once the header has scrolled away,
+     which the scroll below may well be what does */
+  const bar = $('jumpbar').offsetHeight + 8;
+  if (bottom > sheetTop) scrollBy(0, Math.min(bottom - sheetTop, top - bar));
+  // or scrolled past it — leaving single-bin mode brings the map back above the fold
+  else if (top < bar) scrollBy(0, top - bar);
+}
+/* Size, height and dividers are what a bin gets changed for, and a sheet has room for a
+   few rows before it scrolls, so on a phone the dividers come up under the height. Moved
+   in the document rather than reordered with CSS, so that Tab goes the way the eye does;
+   and moved back on a wider window, where the panel is the rail's and does not change. */
+function placeDividers() {
+  const after = PHONE.matches ? $('binSizeHint') : $('thickRow');
+  if (after.nextElementSibling !== $('divRow')) after.after($('divRow'), $('divHint'));
+}
+PHONE.addEventListener('change', placeDividers);
+placeDividers();
+function closeSheet() {
+  const inside = $('s-bin').contains(document.activeElement);
+  /* What was typed a moment ago is still waiting for its redraw (schedule, below), and
+     landing after the selection has gone it would go to the next bin drawn instead of
+     this one: so it lands now, while the bin is still the selected one. Escape straight
+     after typing a note was the case that lost it. */
+  clearTimeout(timer); readControls();
+  clearSel(); readControls(); drawMap(); refresh();
+  /* The X has gone with the sheet, and focus with it unless it is put somewhere: on the
+     panel's own header, folded back into the column, which is where the sheet went. */
+  if (inside) $('s-bin').querySelector(':scope>h2>button').focus({ preventScroll: true });
+}
+$('binSheetClose').addEventListener('click', closeSheet);
+
 /* ---------- single-bin focus ----------------------------------------------
    The one place that says what focus mode looks like. It sets a class and lets the
    stylesheet do the hiding, for the reason written above that CSS block: this
@@ -7622,6 +7914,8 @@ function readControls() {
      decides what focus hides is applied after every other visibility decision above,
      rather than being quietly undone by one of them. */
   applyFocus();
+  // and whether this is a sheet on a phone follows from the selection and the mode
+  applySheet();
 }
 function writeControls(src) {
   sizeSay('');              // a refusal was about the size the fields held before
@@ -8271,7 +8565,9 @@ function initMap() {
     drag = null;
     readControls(); drawLayerTabs(); drawMap(); refresh();
   });
-  svg.addEventListener('pointercancel', () => { drag = null; drawMap(); refresh(); });
+  /* and a sheet kept up for a drag that never finished goes the way a release over
+     nothing would put it */
+  svg.addEventListener('pointercancel', () => { drag = null; applySheet(); drawMap(); refresh(); });
 }
 
 /* ---------- actions ------------------------------------------------------- */
@@ -10222,6 +10518,12 @@ const writeKey = (k, v) => {
   catch (err) { /* private mode: the guard and the backup go, the page does not */ }
 };
 let stalled = '';   // the layout the boot declined to load, for "Try it anyway"
+/* Set the first time anyone changes a design on either tool, and never cleared. The
+   template's <head> reads it, with the saved drawers, to draw the one-line header for a
+   browser that has used the tools rather than only opened them: the save above is written
+   within moments of any visit, so its being there said nothing, and a first visit that went
+   from one tool to the other arrived at the second with its header already shortened. */
+const USED_KEY = 'drawerforge:used:v1';
 /* What an untouched page saves, and what this one held when the boot finished — null
    from the first change on. Until that change a stalled page saves nothing: saving the
    defaults it stands in with put them over the layout it declined, and one more reload
@@ -10290,6 +10592,7 @@ function saveNow() {
       bootDesc = null; $('setAside').style.display = 'none';
       // what a stalled page goes on from is its defaults, not the link it declined
       if (stalled) writeKey(LINKED_KEY, '');
+      writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
   try { history.replaceState(null, '', '#' + h); }
@@ -10497,7 +10800,16 @@ function duplicateSelected() {
    just as invisibly. */
 document.addEventListener('keydown', (e) => {
   const t = e.target;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+  /* A key typed into a field is the field's, and goes no further — except Escape in a field
+     of the phone's bin sheet. The sheet is in the way of the map the way a dialog is, and
+     its fields are where focus mostly is while it is up, so the key that puts it away has
+     to work from them. Nothing in it means anything else there: a number or a checkbox
+     does nothing with Escape, an open menu's list takes the key for itself and closes, and
+     the note's text is not touched. An IME still composing keeps it. */
+  const sheetField = e.key === 'Escape' && !e.isComposing && PHONE.matches &&
+    document.body.classList.contains('binsheet') && $('s-bin').contains(t);
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA') &&
+      !sheetField) return;
   if (document.querySelector('dialog[open]')) return;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -10507,6 +10819,14 @@ document.addEventListener('keydown', (e) => {
   /* Carving first, focus second — so Escape backs out one layer at a time rather than
      dropping you all the way to the drawer from inside the carve grid. */
   if (e.key === 'Escape' && focused) { e.preventDefault(); leaveFocus(); return; }
+  /* And the phone's bin sheet, which is in the way of the map the way a dialog is. Not
+     when the Escape was for something else: the right-click menu marks its own, and the
+     expanded preview is closed by chrome.js on the same key. */
+  if (e.key === 'Escape' && !e.defaultPrevented && PHONE.matches &&
+      document.body.classList.contains('binsheet') &&
+      !document.body.classList.contains('previewlock')) {
+    e.preventDefault(); closeSheet(); return;
+  }
   if (selected < 0) return;
   const b = B()[selected];
   if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -10893,6 +11213,81 @@ addEventListener('resize', closeMenu);
       e.preventDefault();
       t.focus();
     });
+
+  /* The phone's section bar (its markup says why it is there). It does what the skip link
+     does — scroll, and move focus so the next Tab carries on from where you landed — and
+     for the same reason never touches location.hash. Each button lists the places it can
+     go and takes the first one on screen: in the bins page's single-bin mode panel 01 and
+     the drawer map are hidden, and Settings is then the bin's own panel. A panel takes
+     focus on its header button, which is a real control. A card is given tabindex="-1"
+     only while it holds focus: carried in the markup, every click inside the card would
+     focus the card and draw a ring round it. The bar does not cover what it jumps to,
+     because the page's scroll-padding-top on a phone (style.css) is its height. */
+  var jumpbar = document.getElementById('jumpbar');
+  if (jumpbar) jumpbar.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-jump]');
+    if (!b) return;
+    var t = b.getAttribute('data-jump').split(' ')
+      .map(function (id) { return document.getElementById(id); })
+      .filter(function (el) { return el && el.getClientRects().length; })[0];
+    if (!t) return;
+    t.scrollIntoView({ block: 'start' });
+    var f = t.querySelector(':scope>h2>button');
+    if (!f) {
+      f = t;
+      if (!t.hasAttribute('tabindex')) {
+        t.setAttribute('tabindex', '-1');
+        t.addEventListener('blur', function () { t.removeAttribute('tabindex'); }, { once: true });
+      }
+    }
+    f.focus({ preventScroll: true });
+  });
+
+  /* The bar comes down once the header has gone off the top, and goes back up when it
+     returns (style.css says why it waits). An observer rather than a scroll listener:
+     it costs nothing while the page scrolls, and it also catches the header leaving by
+     any other route, a jump or a focused field pulling the page down. Without one (an old
+     browser) the bar simply never comes down, and the page is as it was before the bar. */
+  var head = document.querySelector('header');
+  if (jumpbar && head && window.IntersectionObserver)
+    new IntersectionObserver(function (es) {
+      jumpbar.classList.toggle('on', !es[es.length - 1].isIntersecting);
+    }).observe(head);
+
+  /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
+     read before you reached its controls, and on a phone it pushed the working surface
+     further down. Each long one shows its first sentence and then this button, and the
+     rest opens in place under it. The words never leave the hint: the build's audits and
+     the tests read them there, and a hint the page shows or hides by joint type still
+     holds its whole text either way. Delegated rather than wired per button, because the
+     page writes some hints itself after load (DF.hint in widgets.js) and theirs is the
+     same button. The label says which way it goes; aria-expanded says it to a screen
+     reader. */
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.hint button.more') : null;
+    var rest = b && b.nextElementSibling;
+    if (!rest || !rest.classList.contains('moretext')) return;
+    var open = b.getAttribute('aria-expanded') !== 'true';
+    b.setAttribute('aria-expanded', String(open));
+    b.textContent = open ? 'less' : 'more';
+    rest.hidden = !open;
+  });
+  /* Every one of them says "more", so a screen reader listing the page's buttons, which is
+     a common way through a page, read the same word a dozen times and more with nothing to
+     tell which hint each would open. The name stays the word on screen; each is described
+     by the sentence it continues, the hint's first, wrapped here as the page opens in a
+     span for the button to point at. Wrapped and nothing else: the words, and the hint's
+     text, are as they were. A button that already has a description is left alone — DF.hint
+     gives the hints the page writes their own as it makes them. */
+  let leads = 0;
+  for (const b of document.querySelectorAll('.hint button.more:not([aria-describedby])')) {
+    const lead = document.createElement('span');
+    do leads++; while (document.getElementById('morelead' + leads));
+    lead.id = 'morelead' + leads;
+    while (b.parentNode.firstChild !== b) lead.appendChild(b.parentNode.firstChild);
+    b.before(lead);
+    b.setAttribute('aria-describedby', lead.id);
+  }
 
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
      described controls that do not exist there. Rewritten rather than removed: the
