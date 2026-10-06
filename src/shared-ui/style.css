@@ -150,7 +150,36 @@ header h1{font-size:21px;letter-spacing:.16em;font-weight:700}
 header h1 .tm{color:var(--cyan)}
 header p{color:var(--dim);margin-top:5px;max-width:640px}
 header .privacy{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:7px}
-header .privacy::before{content:"● ";color:var(--cyan)}
+header .privacy::before,footer .privacy::before{content:"● ";color:var(--cyan)}
+/* After the first visit: one line.
+   The title, a two-line pitch and the privacy line took 202 px of a 1080 px window on
+   Baseplates and 245 on Bins, and on a phone 304 and 287 of 844 — every visit, to say
+   what the visitor already knew. The inline script in each tool's <head> puts
+   `returning` on <html> once this browser holds a saved layout or drawer, before the
+   header is laid out, so a returning visit is drawn short from the first frame rather
+   than drawn long and then collapsed. The pitch and the privacy line go (the privacy
+   line is in the footer, word for word); the name, the pages, the drawer and the bins
+   page's way in to a single bin stay, on one row wherever the window is wide enough
+   for them. Only the tools carry the script, so the guide pages keep their header. */
+html.returning header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;
+  padding:10px 26px}
+html.returning header>p,html.returning header>.privacy{display:none}
+html.returning header nav,html.returning header .drawerbar,
+html.returning header .quickstart{margin-top:0}
+/* the drawer and the way in to one bin sit at the far end, away from the page tabs */
+html.returning header .drawerbar{margin-left:auto}
+html.returning header .quickstart span{display:none}
+/* Narrower, the name and the tabs give up a little width so the row still holds them:
+   at 844 × 390, a phone on its side, that is the difference between one row and two, and
+   the window there is 390 px tall. Upright at 390 px they cannot share a row whatever is
+   done to them, so the bar wraps instead: the name, then the tabs with the drawer beside
+   them, and on the bins page the way in to a single bin under those. */
+@media(max-width:980px){
+  html.returning header{padding:8px 16px;gap:8px 12px}
+  html.returning header h1{font-size:17px;letter-spacing:.12em}
+  html.returning header nav a{padding:0 12px}
+  html.returning header .drawerbar{margin-right:0}
+}
 /* The working area is exactly the window below the header.
    It was `calc(100vh - 96px)` on .app, the rail and the stage, and 96 was nobody's
    header: the real one is 164 px on Baseplates, 207 px on Bins (the quickstart row),

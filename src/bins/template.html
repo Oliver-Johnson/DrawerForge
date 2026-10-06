@@ -31,6 +31,15 @@
 "featureList":["Whole-drawer bin layout","Multi-layer stacking","Non-rectangular L and U shaped bins","Dividers, scoops and label shelves","Per-edge wall heights","Translucent drawer preview around the bins","Split a bin to fit the print bed","Filament estimate","Pre-arranged 3MF print plates","STL export"],
 "isAccessibleForFree":true}
 </script>
+<!-- Whether this browser has been here before, decided before anything is drawn: the full
+     header for a first visit, a one-line bar after it. The baseplates template explains it;
+     the two copies are the same lines. -->
+<script>
+try {
+  if (['plates', 'bins', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
+    document.documentElement.classList.add('returning');
+} catch (e) { /* storage blocked: the full header */ }
+</script>
 <style>
 /*__CSS__*/
 </style>
@@ -424,7 +433,9 @@
 <footer>
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — these bins follow the published spec, so they fit any spec baseplate.</div>
   <div style="margin-top:10px">Free software under the <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/LICENSE" rel="noopener">AGPL</a>, and the models you make with it <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/NOTICE" rel="noopener">are yours</a>. <a href="https://github.com/Oliver-Johnson/DrawerForge" rel="noopener">Source code</a>, <a href="https://github.com/Oliver-Johnson/DrawerForge/issues" rel="noopener">issues and feature requests</a> on GitHub. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
-  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL output is mm scale.</div>
+  <!-- The header's privacy line, word for word: after the first visit the header leaves it
+       out, so this is where it stays said. -->
+  <div class="mono privacy" style="margin-top:8px">Runs entirely in your browser — nothing is uploaded, no account, no tracking. Your layout is kept on this device so you can come back to it. All geometry is computed locally; STL output is mm scale.</div>
 </footer>
 
 <!-- The download dialog. It sits before the UI script because that script wires it up

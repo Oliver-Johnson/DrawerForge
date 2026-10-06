@@ -30,6 +30,20 @@
 "featureList":["Gridfinity baseplate generator","Splits plates to fit a print bed","Seven printable connector types","Gridfinity bin designer","Whole-drawer bin layout","Multi-layer stacking","STL and 3MF export"],
 "isAccessibleForFree":true}
 </script>
+<!-- Whether this browser has been here before, decided before anything is drawn. A first
+     visit gets the whole header: what the tool is and that nothing leaves the browser. After
+     that it is a one-line bar, because the pitch is read once and then costs the top of every
+     screen. Any saved layout or drawer means someone has used the tools — and either tool
+     saves its layout within moments of opening. In the head, so the class is on <html> before
+     the header is laid out and the page never paints the long header and then jumps.
+     localStorage throws outright when storage is blocked; that counts as a first visit,
+     which shows more rather than less. The bins page carries the same lines. -->
+<script>
+try {
+  if (['plates', 'bins', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
+    document.documentElement.classList.add('returning');
+} catch (e) { /* storage blocked: the full header */ }
+</script>
 <style>
 /*__CSS__*/
 </style>
@@ -329,7 +343,9 @@
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — this tool implements the published baseplate profile and adds drawer-first workflow, split control, and printable connectors.</div>
   <div style="margin-top:10px">Got your grid sorted? <a id="toBins" href="bins/">Design the bins that go in it →</a> Your drawer dimensions carry across.</div>
   <div style="margin-top:10px">Free software under the <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/LICENSE" rel="noopener">AGPL</a>, and the models you make with it <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/NOTICE" rel="noopener">are yours</a>. <a href="https://github.com/Oliver-Johnson/DrawerForge" rel="noopener">Source code</a>, <a href="https://github.com/Oliver-Johnson/DrawerForge/issues" rel="noopener">issues and feature requests</a> on GitHub. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
-  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL/3MF output is mm scale. v1.2</div>
+  <!-- The header's privacy line, word for word. After the first visit the header is one line
+       and leaves it out, so this is where it stays said. -->
+  <div class="mono privacy" style="margin-top:8px">Runs entirely in your browser — nothing is uploaded, no account, no tracking. Your layout is kept on this device so you can come back to it. All geometry is computed locally; STL/3MF output is mm scale. v1.2</div>
 </footer>
 
 <!-- The download dialog. It sits before the UI script because that script wires it up
