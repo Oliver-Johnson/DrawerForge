@@ -30,8 +30,14 @@
  * the browser keeps in memory cannot go round this worker either (see marked()).
  * Then a page the server could not give comes from this cache, and so do the scripts
  * that page loads, even if the connection comes back while it loads. A page the server
- * did give gets its scripts from the server alone: one the server cannot give fails, as
- * it would with no worker, rather than come from a cache that may be another deploy.
+ * did give gets its scripts and stylesheets from the server alone: one the server cannot
+ * give fails, as it would with no worker, rather than come from a cache that may be
+ * another deploy. Unless the page is the deploy this cache holds, as its ETag says (see
+ * sameDeploy()): then the cache has the very scripts the server would send, and one the
+ * server cannot give comes from the cache, as anything else does. And only scripts and
+ * stylesheets, which are what a page runs and is drawn with: the favicon the browser asks
+ * for once the page has loaded comes from the server and then the cache whatever the
+ * page, because an icon from another deploy breaks nothing.
  *
  * A request to another site, or for anything this site did not cache, is never answered
  * here at all. The browser handles it as it would without a worker, and nothing from
@@ -46,7 +52,7 @@
    load from this site, and the app's icons and manifest, as paths from the root. VERSION
    is a hash of all of those files, names and bytes, and of this script as it is served,
    FILES filled in and everything else but VERSION itself. */
-const VERSION = "d574885b54bd";
+const VERSION = "e2ec7f2f813f";
 const FILES = [
   "./",
   "bins/",
@@ -150,8 +156,38 @@ function cachedAs(req) {
    within moments of arriving, and the browser stops a worker soon after it goes idle, so
    the record stays small. A page this has no record of — a browser that gives no id, a
    worker started since — gets what every other request gets: the server, then the
-   cache. */
+   cache.
+
+   A page from the server that is the deploy this cache holds is not recorded either (see
+   sameDeploy()). Its scripts are the cache's, byte for byte, so the cache can stand in
+   for the server for them as it does for everything else, and a connection that drops
+   while three.js is coming does not break a page the cache could have finished. 'server'
+   is a page that is another deploy, or one that cannot be told. */
 const cameFrom = new Map();
+
+/* Whether a page the server sent is the deploy this cache holds, told by its ETag: the
+   tag a server gives a file so that a browser can ask whether it has changed. GitHub
+   Pages makes it from the deploy's time and the file's size, so every deploy gives every
+   page a new one, and two pages with the same ETag are one deploy.
+
+   The cache has the page's ETag too. cache.put() keeps the headers a file came with,
+   plain() hands them on when it takes a redirect off, and a file the install is told has
+   not changed (a 304) comes back as the browser's own copy with its headers, the ETag
+   among them. So the cached page carries the ETag it had when this worker installed, and
+   nothing else needs keeping to compare it with.
+
+   A weak ETag (W/"…") is the same tag for this. A host marks it weak when it compresses
+   the file, and whether it compresses can differ from one request to the next. A host
+   whose ETag is a hash of the file rather than the deploy's time gives two equal ones
+   only for the same page, and the same page with the cache's scripts is what opening it
+   offline would give, so that is no mismatch either.
+
+   With no ETag on either side there is nothing to tell by, and the answer is no: two
+   missing tags are not two equal ones. A host that sends none keeps the server alone. */
+function sameDeploy(fromServer, fromCache) {
+  const tag = (r) => ((r && r.headers.get('etag')) || '').replace(/^W\//, '');
+  return tag(fromServer) !== '' && tag(fromServer) === tag(fromCache);
+}
 
 /* What a page loads is marked to be asked for again before it is used again
    (Cache-Control: no-cache). A browser keeps the scripts a page loaded in memory and
@@ -189,14 +225,33 @@ self.addEventListener('fetch', (e) => {
      it came. The cache only when the server gave nothing, and if the browser has evicted
      that too, its own offline page.
 
-     But never the cache for a script whose page came from the server. The page is the
-     deploy the server has now, and the cache can be another, so a failure is answered as
-     a failure: the page breaks as it would with no worker, and opened again with no
-     connection it comes from the cache, its scripts and all. */
+     But never the cache for a script or a stylesheet whose page came from the server as
+     another deploy than this cache's, or one that cannot be told. The page is the deploy
+     the server has now, and the cache can be another, so a failure is answered as a
+     failure: the page breaks as it would with no worker, and opened again with no
+     connection it comes from the cache, its scripts and all.
+
+     Only those two, by what the browser says a request is for (request.destination). A
+     page runs its scripts and is drawn by its stylesheets, so another deploy's would be
+     the mismatch this guards against. Anything else it asks for is the server's and then
+     the cache's, as any other request is. The pages fetch nothing of their own, so that
+     is the icons and the manifest the browser asks for on a page's behalf — the favicon
+     lazily, once the page has loaded, and so perhaps once the connection has gone. Another
+     deploy's icon is at worst a little out of date, and failing it only put an error in
+     the console for nothing.
+
+     Which deploy a page is gets settled before the page is handed over, so it is recorded
+     before the page can ask for anything. The cached page is looked up while the server
+     is asked, so that costs the page nothing it would notice, and a cache that cannot be
+     read gives no ETag, which keeps the server alone. */
   let ask = req;
   try { ask = new Request(req, { cache: 'no-cache' }); } catch (err) { /* as it came */ }
-  const fromServer = fetch(ask).then((r) => { note('server'); return r; });
-  const answer = pageFrom === 'server' ? fromServer : fromServer.catch(() => cached().then((hit) => {
+  const ours = page ? cached().catch(() => null) : null;
+  const fromServer = fetch(ask).then((r) => (page
+    ? ours.then((hit) => { if (!sameDeploy(r, hit)) note('server'); return r; })
+    : r));
+  const serverAlone = pageFrom === 'server' && (req.destination === 'script' || req.destination === 'style');
+  const answer = serverAlone ? fromServer : fromServer.catch(() => cached().then((hit) => {
     if (!hit) return Response.error();
     note('cache');
     return hit;
