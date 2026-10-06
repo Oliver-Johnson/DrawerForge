@@ -595,6 +595,37 @@ test("your own drawer on someone's link is not recorded as theirs", async ({ pag
   expect(await stored(page, BINS + ':prev')).toBe(mine);
 });
 
+/* And that link, with your drawer in it, is still the link's untouched layout: compared
+   on everything, the drawer left out of its record made it "changed", and a second link
+   set it aside over your own layout, which Put back no longer offered. */
+for (const reload of [false, true]) {
+  test('a second link after one with your own drawer keeps yours' +
+    (reload ? ', after a reload' : ''), async ({ page }) => {
+    await H.openPlates(page);
+    await H.setField(page, 'drawerW', '600');
+    await H.setField(page, 'drawerD', '400');
+    await H.setField(page, 'bedW', '220');
+    await page.selectOption('#connector', 'snap');
+    await settle(page);
+    const mine = await stored(page, PLATES);
+
+    await arrive(page, H.BINS_URL + '#w=333&d=333&bw=250&bd=250&bl=0-0-1-1-3');
+    await H.setField(page, 'drawerW', '520');         // your drawer, their bed
+    await H.setField(page, 'drawerD', '410');
+    await settle(page);
+    await viaButton(page, '#navPlates', H.PLATES_URL);
+    expect(await stored(page, PLATES + ':prev')).toBe(mine);
+
+    if (reload) await arrive(page, H.PLATES_URL);
+    await arrive(page, H.PLATES_URL + '#w=444');
+    await expect(page.locator('#putBack')).toBeVisible();
+    expect(await stored(page, PLATES + ':prev')).toBe(mine);
+    await clickAndLoad(page, '#putBack');
+    expect(await page.inputValue('#drawerW')).toBe('600');
+    expect(await page.inputValue('#connector')).toBe('snap');
+  });
+}
+
 test('a page that declined a link goes on from its defaults, not the link', async ({ page }) => {
   await arrive(page, H.BINS_URL + '#w=333&bl=0-0-1-1-3');
   expect(await stored(page, BINS + ':linked')).not.toBeNull();

@@ -8156,6 +8156,7 @@ function sameDesign(a, b, skip = []) {
    means a shared drawer is never quietly replaced by the recipient's own. */
 const incomingHash = (location.hash || '').replace(/^#/, '');
 let linkedNow = false;   // this page holds a link's layout, not yet changed by anyone
+let linkNew = false;     // ...one that arrived on this visit, so is recorded afresh
 let linkKept = '';       // the link this page last opened, unless a hand-over came since
 let notLinked = [];      // settings a link arrived with that were yours on the other page
 {
@@ -8178,7 +8179,11 @@ let notLinked = [];      // settings a link arrived with that were yours on the 
   const replaces = fromLink && (saved.length <= 2 || !sameDesign(saved, src, yours));
   const linked = readKey(LINKED_KEY);
   linkKept = handedOver ? '' : linked;
-  const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked);
+  /* Compared on what the record holds: one made without the settings that came with
+     the link as yours does not count those, or your own drawer made it "changed", and a
+     second link set it aside over the layout the first had. */
+  const savedLinked = saved.length > 2 && !!linked && sameDesign(saved, linked,
+    [...SHARED_KEYS].filter((k) => !(k in parseHash(linked))));
   /* Set aside whatever is about to be replaced: by a different layout, or by the defaults
      standing in for one that would not load. Not a link's own layout, untouched: what that
      link replaced is already set aside, and it is the one you would want back. */
@@ -8203,6 +8208,7 @@ let notLinked = [];      // settings a link arrived with that were yours on the 
     linkedNow = handedOver ? false
       : fromLink ? replaces || (savedLinked && sameDesign(saved, src))
       : savedLinked;
+    linkNew = fromLink && replaces && !handedOver;
   }
   syncBedPreset();
 }
@@ -8252,14 +8258,16 @@ bootDesc = descString();
    reloading the same link must be declined again, not tried again. */
 if (!stalled) {
   writeKey(LOADING_KEY, '');
-  /* An untouched link is kept as it is, less any drawer, bed or infill settings that came
-     with it as yours: kept, they were the link's from then on, and a later trip that
-     changed them on the other page was a link replacing your layout there. A changed one
-     is kept while the page still uses any of its values, so a reload does not turn those
-     into yours. */
-  const keep = linkedNow ? bootDesc.split('&').filter((kv) =>
-    !notLinked.includes(kv.slice(0, kv.indexOf('=')))).join('&')
-    : linkKeys(bootDesc, linkKept).length ? linkKept : '';
+  /* A link that arrived on this visit is recorded as it is, less any drawer, bed or infill
+     settings that came with it as yours: kept, they were the link's from then on, and a
+     later trip that changed them on the other page was a link replacing your layout
+     there. The same link reloaded or reopened keeps its record, which writing it afresh
+     filled back in. A changed one is kept while the page still uses any of its values,
+     so a reload does not turn those into yours. */
+  const keep = !linkedNow ? (linkKeys(bootDesc, linkKept).length ? linkKept : '')
+    : !linkNew ? linkKept
+    : bootDesc.split('&').filter((kv) =>
+      !notLinked.includes(kv.slice(0, kv.indexOf('=')))).join('&');
   writeKey(LINKED_KEY, keep);
   heldLink = keep;
 }
