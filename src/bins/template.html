@@ -339,18 +339,20 @@
 
 <div class="stagecard" id="s-layout">
   <h3>Drawer layout</h3>
-  <div style="padding:10px 14px 0"><div class="seg" id="layerTabs"></div></div>
   <!-- Whole cells or half cells: what the map draws, drags and resizes in. Kept in this
        browser, never in the link, and turned on by itself when the layout holds a
-       half-size bin. stepWhy says why the map refused a place when the map cannot show
-       it: a whole-size bin dropped on a half step looks like free cells. -->
-  <div class="steps" style="padding:8px 14px 0">
-    <span class="hint" id="stepsLabel">Steps</span>
-    <div class="seg" role="group" aria-labelledby="stepsLabel">
-      <button type="button" id="stepWhole" class="on" aria-pressed="true">Whole cells</button>
-      <button type="button" id="stepHalf" aria-pressed="false">Half cells</button>
+       half-size bin. On the layer tabs' row, beside them while one or two layers leave
+       room, so the map does not move down the page: on a phone it has about 150 px
+       above the fold to spare, and a row of its own took 50 of them. -->
+  <div class="maptools" style="padding:10px 14px 0">
+    <div class="seg" id="layerTabs"></div>
+    <div class="steps">
+      <span class="hint" id="stepsLabel">Steps</span>
+      <div class="seg" role="group" aria-labelledby="stepsLabel">
+        <button type="button" id="stepWhole" class="on" aria-pressed="true">Whole cells</button>
+        <button type="button" id="stepHalf" aria-pressed="false">Half cells</button>
+      </div>
     </div>
-    <span class="hint" id="stepWhy" role="status"></span>
   </div>
   <!-- The map and the preview both start with a label describing an empty drawer;
        drawMap and showScene rewrite it from the real state on every draw, so it says
@@ -361,6 +363,10 @@
        marker from the start; the two maps share the convention, so they share the
        label. It is static because it is always true. -->
   <div class="hint" style="text-align:center;padding:2px 14px 0">▾ front of drawer</div>
+  <!-- Why the map refused a place, when the map cannot show it: a whole-size bin dropped
+       on a half step looks like free cells. Under the map rather than above it, so a
+       reason appearing mid-drag never moves the map out from under the pointer. -->
+  <div class="hint" id="stepWhy" role="status" style="text-align:center;padding:0 14px"></div>
   <div class="covbar"><i id="covfill" style="width:0%"></i></div>
   <div class="body">
     <!-- Errors, under the map, where the baseplates page puts them. The Checks panel
