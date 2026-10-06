@@ -100,6 +100,22 @@
     b.textContent = open ? 'less' : 'more';
     rest.hidden = !open;
   });
+  /* Every one of them says "more", so a screen reader listing the page's buttons, which is
+     a common way through a page, read the same word a dozen times and more with nothing to
+     tell which hint each would open. The name stays the word on screen; each is described
+     by the sentence it continues, the hint's first, wrapped here as the page opens in a
+     span for the button to point at. Wrapped and nothing else: the words, and the hint's
+     text, are as they were. A button that already has a description is left alone — DF.hint
+     gives the hints the page writes their own as it makes them. */
+  let leads = 0;
+  for (const b of document.querySelectorAll('.hint button.more:not([aria-describedby])')) {
+    const lead = document.createElement('span');
+    do leads++; while (document.getElementById('morelead' + leads));
+    lead.id = 'morelead' + leads;
+    while (b.parentNode.firstChild !== b) lead.appendChild(b.parentNode.firstChild);
+    b.before(lead);
+    b.setAttribute('aria-describedby', lead.id);
+  }
 
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
      described controls that do not exist there. Rewritten rather than removed: the

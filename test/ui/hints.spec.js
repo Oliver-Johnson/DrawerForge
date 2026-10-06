@@ -69,6 +69,41 @@ for (const tool of TOOLS) {
       expect((await hint.textContent()).replace('less', 'more')).toBe(before);
       expect(errors).toEqual([]);
     });
+
+  /* Every one says "more", and a list of the page's buttons read that one word over and
+     over with nothing to tell them apart. Each keeps "more" (and "less") as its name and
+     is described by the sentence it continues, so no two are described alike. */
+  test(`${tool.name}: each "more" is described by the sentence it continues`, async ({ page }) => {
+    const errors = await tool.open(page);
+    const m = await page.evaluate(() => [...document.querySelectorAll('.hint button.more')]
+      .map((b) => {
+        const ids = (b.getAttribute('aria-describedby') || '').split(' ').filter(Boolean);
+        const d = ids.map((id) => document.getElementById(id));
+        // the words before the button, in its hint, whatever wraps them
+        const r = document.createRange();
+        r.setStart(b.parentNode, 0); r.setEndBefore(b);
+        return { described: d.length > 0 && d.every(Boolean),
+                 desc: d.map((e) => e && e.textContent).join(' ').trim(),
+                 before: r.toString().trim() };
+      }));
+    expect(m.length, 'fixture: the page has long hints').toBeGreaterThan(3);
+    for (const x of m) {
+      expect(x.described, `"more" after "${x.before.slice(0, 40)}" points at its description`).toBe(true);
+      expect(x.desc).toBe(x.before);
+    }
+    expect(new Set(m.map((x) => x.desc)).size, 'no two alike').toBe(m.length);
+
+    // what assistive technology is given: the word on screen, and the sentence
+    const b = page.locator('.hint button.more').filter({ visible: true }).first();
+    const sentence = (await b.evaluate((e) => document.getElementById(
+      e.getAttribute('aria-describedby')).textContent)).trim();
+    await expect(b).toHaveAccessibleName('more');
+    await expect(b).toHaveAccessibleDescription(sentence);
+    await b.click();
+    await expect(b).toHaveAccessibleName('less');
+    await expect(b).toHaveAccessibleDescription(sentence);
+    expect(errors).toEqual([]);
+  });
 }
 
 /* The keyboard reaches it in reading order and opens it with either key. */
@@ -108,7 +143,7 @@ test('the plate style hint has the same "more", and keeps it open across a chang
     await expect(b).toHaveCount(1);
     await expect(b).toHaveAttribute('aria-expanded', 'false');
     // the gloss is in the sentence that stays in view
-    expect(await hint.evaluate((h) => h.firstChild.nodeValue)).toMatch(/recess a bin's foot drops into/);
+    expect(await hint.evaluate((h) => h.firstChild.textContent)).toMatch(/recess a bin's foot drops into/);
     await expect(hint.locator('.moretext')).toBeHidden();
 
     await b.click();
