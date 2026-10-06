@@ -5,7 +5,7 @@
  * covered by this licence. The models you make with it are yours. */
 /* Drawerforge — a bin's note, as raised letters on its label shelf.
  *
- * Four steps, each a function here: which characters of the note can print
+ * Three steps, each a function here: which characters of the note can print
  * (notePrintable), how big and on how many lines they fit the shelf (noteFit), and the
  * letters as closed shells (noteShells). bin.js decides where the shelf is and calls them.
  * The font is Hershey Simplex (font.js), a single-stroke font: every letter is a few
@@ -32,8 +32,8 @@ const NOTE_SPEC = {
   capMax: 8,
   capMin: 3,
   /* A shelf shallower than this takes no letters: under it a single line of capitals
-     comes out under 3 mm on a 1.2 mm wall, and a 1-unit bin's shelf, which can be no
-     deeper than about a millimetre, has no room for any at all. */
+     comes out under 3 mm on a 1.2 mm wall. A 1-unit bin has no room under its rim for
+     a lowered shelf at all, and a 2-unit one with screw holes only 5.75 mm. */
   shelfMin: 6,
   stroke: 0.8,        // two lines from a 0.4 mm nozzle
   relief: 0.6,        // how far the letters stand up: three 0.2 mm layers
