@@ -414,21 +414,46 @@ footer .mono{font-family:var(--mono);font-size:11px}
 /* Half steps: a dashed line through the middle of every cell, under the bins, faint
    enough that the cells still read as cells. */
 #fillmap .midline{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 4;opacity:.5;pointer-events:none}
-/* The layer tabs and the Steps switch share a row above the map; the switch drops to a
-   row of its own only when the tabs need the room. Beside the preview the map's card is
-   kept wide enough for the row (drawMap), so there that is only with many layers.
-   #stepWhy, under the map, is the reason a place was refused. */
+/* On a phone the layer tabs and the Steps switch share a row above the map; the switch
+   drops to a row of its own only when the tabs need the room. On a wider window the
+   switch is in the card's heading instead (placeSteps), and the tabs have the row.
+   #stepWhy, under the map, is the reason a place was refused.
+   On a row of their own the tabs may shrink, and their labels wrap, as they did before
+   the switch: held at the width of every label in a line, they ran off the card, and
+   off the screen, on a phone from four layers at 320 px wide and six at 390. */
 .maptools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
-.maptools #layerTabs{flex:1 0 auto}
+.maptools #layerTabs{flex:1 1 auto}
 .steps{display:flex;align-items:center;gap:8px}
 .steps .seg button{flex:none;padding:7px 12px}
+/* In the heading it is out of the flow at the right-hand end, centred on the row the
+   title sets, so the heading is no taller than it was: a 31 px switch in the flow made
+   it 52 px where it is 35, and at 1366 × 768 the map has no height to give. Its buttons
+   are a little shorter for it, still a comfortable target for a mouse; a phone, which
+   needs 40 px, keeps the switch on the tabs' row. drawMap keeps the card wide enough
+   for the title and the switch.
+   The word "Steps" is for screen readers only up here, where it still names the pair
+   of buttons. Shown, it ran on from the title as if one heading ("Drawer layout
+   Steps"), and it was the 41 px that made the card wider than the map at 1366 × 768,
+   out of the preview at every number of layers; the buttons say what they switch. */
+#s-layout > h3{position:relative}
+#s-layout > h3 .steps{position:absolute;top:0;bottom:0;right:14px;white-space:nowrap}
+#s-layout > h3 .steps .seg button{padding:4px 10px}
+#s-layout > h3 #stepsLabel{position:absolute;width:1px;height:1px;overflow:hidden;
+  clip-path:inset(50%)}
 /* #stepWhy says its reason on the front marker's line, covering the marker until the
    next press on the map: drawMap counts one line under the map, so a reason arriving
    neither pushes the coverage bar below the window nor makes the map change size under
-   the pointer. Empty, it is transparent and the marker shows through. */
+   the pointer. Empty, it is transparent and the marker shows through.
+   One line and no more, whatever it is given. Above the bar and out of the flow, a
+   reason that wrapped did not push anything down but grew over the bar instead, and
+   off the bottom of a 1366 × 768 window: the carved-shape sentence did both before it
+   was given a line of its own length (SHAPE_DROPPED_MAP). The reasons said here fit a
+   320 px phone; one that ever does not is cut short, with an ellipsis, rather than let
+   loose over the bar, and a screen reader still hears all of it. */
 .mapfoot{position:relative}
 #stepWhy{position:absolute;left:0;right:0;top:0;min-height:100%;padding:2px 14px 0;
-  text-align:center;color:var(--red);background:var(--panel)}
+  text-align:center;color:var(--red);background:var(--panel);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #stepWhy:empty{background:none}
 #sizeWhy{color:var(--red)}
 #sizeWhy:not(:empty){margin-top:6px}

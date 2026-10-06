@@ -841,6 +841,23 @@ function placeDividers() {
 }
 PHONE.addEventListener('change', placeDividers);
 placeDividers();
+/* The Steps switch goes in the drawer map's heading on a wider window, and beside the
+   layer tabs on a phone, moved the same way and for the same reason. Beside the tabs,
+   the map's card had to be as wide as two layers' tabs and the switch, which came out of
+   the preview, and from a third layer the switch took a row of its own: at 1366 × 768
+   that put the coverage bar 21 px under the window, with the map already at its 40 px
+   cells and nothing left to give. The heading row is there anyway, so in it the switch
+   costs the map no height and the tabs have their row to themselves, as they did before
+   it. A phone's heading has no room for it beside the title, and a 40 px button is
+   taller than the heading, so there it stays on the tabs' row. drawMap is run again on
+   the change, which comes after the resize that already drew it. */
+function placeSteps() {
+  const card = $('s-layout'), steps = card.querySelector('.steps');
+  const home = card.querySelector(PHONE.matches ? '.maptools' : 'h3');
+  if (steps.parentNode !== home) home.appendChild(steps);
+}
+PHONE.addEventListener('change', () => { placeSteps(); drawMap(); });
+placeSteps();
 function closeSheet() {
   const inside = $('s-bin').contains(document.activeElement);
   /* What was typed a moment ago is still waiting for its redraw (schedule, below), and
@@ -1181,6 +1198,9 @@ function readControls() {
      until the next edit, Undo or selection, whatever that touched: it was about the
      size the fields held then. */
   let sizeNote = '';
+  // a size the last pass refused under the caret, if it did (sizeHeld)
+  const held = sizeHeld;
+  sizeHeld = null;
   /* The footprint is settled first: the floor, the label shelf and the dividers are
      limited by the bin's real size, so they wait for it. A loose bin has no drawer to
      collide with, so its footprint is held only by the fields' own 50 cells — with no
@@ -1207,9 +1227,18 @@ function readControls() {
       if (why) {
         t.u = b.u; t.v = b.v;
         if (!sizeTyping()) { $('u').value = b.u; $('v').value = b.v; }
+        else sizeHeld = { u: b.u, v: b.v };
       }
       if (why === WHOLE_ON_WHOLE) sizeNote = why;
     }
+  } else if (!scratch && held) {
+    /* With no bin selected the fields are the size of the next one drawn, and what they
+       hold here is a size the bin selected a moment ago refused, left under the caret.
+       It goes back to that bin's, as it would have on leaving the field had the bin
+       still been selected: Fill the rest takes the selection away first, and a 2 typed
+       for the 1.5 × 1 on a half step filled the drawer with 2 × 1 bins. */
+    Object.assign(t, held);
+    $('u').value = held.u; $('v').value = held.v;
   }
   /* Several bins take the same settings, so the smallest of them sets the limit: the
      dividers that fit a 1x1 are the most any of them can be given. */
@@ -1544,8 +1573,14 @@ function sizeSay(t) {
 }
 /* A carve is counted in whole cells, so a carved bin made half-size is the plain
    rectangle its box is (setFootprint). That happened without a word: the L simply went.
-   Said where the size was changed, under the fields or under the map. */
+   Said where the size was changed, under the fields or under the map.
+   Under the map it is said in a line, the one it has there (#stepWhy in style.css): the
+   sentence took three on a 1366 × 768 window, from the front marker to 23 px under the
+   window, over the coverage bar, and a block of up to 58 px over it on a phone. The map
+   has just shown the shape go, so the line need only say why; it fits a 320 px phone
+   with room to spare, as WHOLE_ON_WHOLE does. */
 const SHAPE_DROPPED = 'A half-size bin cannot keep a carved shape, so this one is a plain rectangle now. Undo brings the shape back.';
+const SHAPE_DROPPED_MAP = 'A half-size bin cannot be carved.';
 const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
 
 /* Width and Depth while they are being typed into. A size refused under the caret was
@@ -1556,6 +1591,10 @@ const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
    arrows, which give a whole value at once rather than a number on its way. */
 let sizeDraft = null;          // the field being typed into, if either is
 const sizeTyping = () => !!sizeDraft && document.activeElement === $(sizeDraft);
+/* The size of the bin that refused what is under the caret, from the last pass that
+   refused it: if that bin is no longer selected by the next pass, the fields go back to
+   it rather than handing the refused size to the next bin drawn (readControls). */
+let sizeHeld = null;
 // the one bin the fields are sizing, where it stands: a loose or a new bin stands nowhere
 const sizedBin = () => (!scratch && selected >= 0 && selAll().length === 1 && B()[selected]) || null;
 /* A step of Width or Depth from `from` to the next half cell up or down, and over a whole
@@ -1803,23 +1842,29 @@ function drawMap() {
      The 52 px cell and 720 px caps are for a 1080-line window and grow with a taller
      one (row.big): at 1440 a cell may be 69 px rather than staying 52 while the screen
      round it got a third bigger. The labels scale with the cells, so they stay legible.
-     Paired, the card is the map's width, and no narrower than the row above the map
-     needs to stay on one line: the layer tabs and the Steps switch. "Above" is measured
-     with the columns taken away (stageRow), where the card is as wide as that row asks;
-     paired at the map's width alone, a 1366 × 768 window had no room for the switch
-     beside two layers' tabs, it dropped to a row of its own after the height was
-     settled, and the map, its front marker and the coverage bar went 38 px under the
-     window. Measuring the extra row would not have saved them: there the map is within
-     about 20 px of its 40 px cells. So the preview gives up the difference instead.
-     And the map is sized again once paired, as the baseplates page's cut map is, should
-     anything above it wrap all the same: with more layers than the row can hold. */
-  let toolsW = 0;
-  if (twoCol) {
-    const tools = $('s-layout').querySelector('.maptools');
-    tools.style.width = 'max-content';
-    // up to the next pixel, which a rounded offsetWidth was not: 385.4 px in 385 wraps
-    toolsW = Math.ceil(tools.getBoundingClientRect().width) + 2;   // and the card's border
-    tools.style.width = '';
+     Paired, the card is the map's width, and no narrower than its heading needs for the
+     title and the Steps switch, which is in the heading on any window wide enough to
+     pair (placeSteps). The switch was first beside the layer tabs, and the card kept as
+     wide as that row: paired at the map's width alone, a 1366 × 768 window had no room
+     for the switch beside two layers' tabs, it dropped to a row of its own after the
+     height was settled, and the map, its front marker and the coverage bar went 38 px
+     under the window. Kept that wide, each layer took a tab's width, about 70 px, out of
+     the preview, in a drawer of whole bins as much as in one of half; held at two
+     layers' width, the switch's own row from a third layer still put the bar 21 px under
+     the window, the map there being within a pixel of its 40 px cells. In the heading it
+     costs no height, the tabs have their row to themselves as they did before it, and
+     the heading asks about as much width as the map's card has anyway.
+     "Above" is measured with the columns taken away (stageRow), and the map is sized
+     again once paired, as the baseplates page's cut map is, should anything above it
+     wrap all the same: the tabs' labels do, with five layers or more. */
+  let headW = 0;
+  const steps = twoCol && $('s-layout').querySelector('h3 .steps');
+  if (steps) {
+    const title = $('s-layout').querySelector('h3 > span');
+    // the heading's padding, the title, a gap, the switch and the card's border, up to
+    // the next pixel, which a rounded offsetWidth was not: 385.4 px in 385 overlaps
+    headW = Math.ceil(14 + title.getBoundingClientRect().width + 12 +
+                      steps.getBoundingClientRect().width + 14) + 2;
   }
   const chrome = () => svg.getBoundingClientRect().top - top.getBoundingClientRect().top + 41;
   const size = (fixed) => {
@@ -1827,7 +1872,7 @@ function drawMap() {
     const sc = Math.min(availW / W, availH / H, Math.round(CELL_PX * row.big) / S);
     svg.setAttribute('width', Math.round(W * sc));
     svg.setAttribute('height', Math.round(H * sc));
-    if (twoCol) DF.pairColumns(top, Math.min(availW + 30, Math.max(Math.round(W * sc) + 30, toolsW)), PREVIEW_MIN);
+    if (twoCol) DF.pairColumns(top, Math.min(availW + 30, Math.max(Math.round(W * sc) + 30, headW)), PREVIEW_MIN);
   };
   const fixed = chrome();
   size(fixed);
@@ -2091,7 +2136,7 @@ function initMap() {
     /* A refusal the map cannot show is said (mapSay); any other outcome clears it, so
        it describes where the pointer is now rather than somewhere it passed. Except that
        a carved shape a resize made half-size has gone for good, so that stays said. */
-    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why : drag.dropped ? SHAPE_DROPPED : '');
+    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why : drag.dropped ? SHAPE_DROPPED_MAP : '');
     /* A move or a resize files its undo step with the layout as the press found it, at
        its first real change. Filed at the press, a click that only selected a bin was a
        step of its own: the next Undo spent itself on a layout that had not changed, and
@@ -5036,7 +5081,7 @@ document.addEventListener('keydown', (e) => {
       why = placeWhy(b.x + dx * move, b.y + dy * move, b.u, b.v, selected);
       if (!why) { pushUndo(); b.x += dx * move; b.y += dy * move; }
     }
-    mapSay(why === WHOLE_ON_WHOLE ? why : dropped ? SHAPE_DROPPED : '');
+    mapSay(why === WHOLE_ON_WHOLE ? why : dropped ? SHAPE_DROPPED_MAP : '');
     writeControls(b); readControls(); drawMap(); refresh();
   }
 });

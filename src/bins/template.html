@@ -462,12 +462,14 @@ try {
 <div class="stagetop">
 
 <div class="stagecard" id="s-layout">
-  <h3>Drawer layout</h3>
+  <h3><span>Drawer layout</span></h3>
   <!-- Whole cells or half cells: what the map draws, drags and resizes in. Kept in this
        browser, never in the link, and turned on by itself when the layout holds a
-       half-size bin. On the layer tabs' row, beside them while one or two layers leave
-       room, so the map does not move down the page: on a phone it has about 150 px
-       above the fold to spare, and a row of its own took 50 of them. -->
+       half-size bin. On a wider window it moves up into the heading above (placeSteps),
+       where it costs the map no height. On a phone it stays here, on the layer tabs' row,
+       beside them while the tabs leave room, so the map does not move down the page:
+       there it has about 150 px above the fold to spare, and a row of its own took 50 of
+       them. -->
   <div class="maptools" style="padding:10px 14px 0">
     <div class="seg" id="layerTabs"></div>
     <div class="steps">
