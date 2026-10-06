@@ -167,15 +167,108 @@ test('a whole-size bin is refused a half step, and the page says why', async ({ 
   await expect(page.locator('#sizeWhy')).toBeHidden();
 });
 
+/* A half-size bin on a half step has whole sizes on either side of it in Width and
+   Depth: 1.5 at column 1.5 steps to 2 or 1, and neither may stand there. The field
+   refused each and wrote 1.5 back under the caret, 180 ms later, so the arrows and the
+   spinner never got past 2, typing "2.5" at a human pace became "1.55", and emptying
+   the field to type a new number filled it straight back in. A step now goes over a
+   whole size it may not take to the next half size; typing is left alone until you
+   leave the field, and only then is a refused size put back, with the reason. */
+test('width and depth can change a half-size bin on a half step', async ({ page }) => {
+  await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1) + '&w=600&d=500');
+  await select(page, 0);
+  const now = () => page.evaluate(() => [B()[0].u, B()[0].v, $('u').value, $('v').value]);
+  const why = page.locator('#sizeWhy');
+
+  // the arrow keys, in the field
+  await page.focus('#u');
+  await page.keyboard.press('ArrowUp');
+  await settle(page);
+  expect(await now(), 'up, over 2').toEqual([2.5, 1, '2.5', '1']);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await settle(page);
+  expect(await now(), 'down, over 2 and then over 1').toEqual([0.5, 1, '0.5', '1']);
+  await page.keyboard.press('ArrowUp');
+  await settle(page);
+  expect(await now()).toEqual([1.5, 1, '1.5', '1']);
+  // Depth steps by halves as ever: 1.5 x 2 is a half size, so 2 is no step over
+  await page.focus('#v');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  await settle(page);
+  expect(await now()).toEqual([1.5, 2, '1.5', '2']);
+  await expect(why).toBeHidden();
+
+  // the spinner's up arrow, inside the field's right-hand padding
+  const box = await page.locator('#u').boundingBox();
+  await page.mouse.click(box.x + box.width - 14, box.y + box.height / 4);
+  await settle(page);
+  expect(await now(), 'the spinner, over 2').toEqual([2.5, 2, '2.5', '2']);
+
+  // typed at a human pace, the 2 on the way to 2.5 is not put back under the caret
+  await page.focus('#u');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('3.5', { delay: 250 });
+  await settle(page);
+  expect(await now()).toEqual([3.5, 2, '3.5', '2']);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('1.5', { delay: 250 });
+  await settle(page);
+  expect(await now()).toEqual([1.5, 2, '1.5', '2']);
+
+  // emptied to type another number, it stays empty, and the bin keeps its size meanwhile
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(500);
+  expect(await now(), 'not refilled under the caret').toEqual([1.5, 2, '', '2']);
+  await expect(why).toBeHidden();
+  // and left empty, the field shows the size the bin still has
+  await page.keyboard.press('Tab');
+  await settle(page);
+  expect(await now()).toEqual([1.5, 2, '1.5', '2']);
+  await expect(why).toBeHidden();
+
+  // a whole size typed and left is refused when it is left, and the page says why
+  await page.focus('#u');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('3', { delay: 250 });
+  await settle(page);
+  expect(await now(), 'still being typed, so left as typed').toEqual([1.5, 2, '3', '2']);
+  await expect(why).toHaveText('A whole-size bin sits on whole cells.');
+  await page.keyboard.press('Tab');
+  await settle(page);
+  expect(await now(), 'put back once left').toEqual([1.5, 2, '1.5', '2']);
+  await expect(why).toHaveText('A whole-size bin sits on whole cells.');
+
+  // and an edit of anything else says nothing more about it
+  await H.setField(page, 'hUnits', 4);
+  await expect(why).toBeHidden();
+
+  // Shift and the arrows on the map step over a whole size in the same way
+  await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('Shift+ArrowRight');
+  expect(await binsNow(page)).toEqual([[0.5, 0, 2.5, 2]]);
+  await page.keyboard.press('Shift+ArrowLeft');
+  await page.keyboard.press('Shift+ArrowLeft');
+  expect(await binsNow(page), 'over 2 and over 1').toEqual([[0.5, 0, 0.5, 2]]);
+});
+
 test('the arrow keys move a half-size bin half a cell only with half steps on', async ({ page }) => {
   await openAt(page, 'bl=' + bin(0, 0, 1.5, 1));
   await select(page, 0);
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('ArrowRight');
   expect(await binsNow(page)).toEqual([[0.5, 0.5, 1.5, 1]]);
-  // shift resizes in halves too — never into a whole size at a half step — and stops at half a cell
+  /* shift resizes in halves too, and steps over a whole size the bin may not take where
+     it stands: 1 x 1 at column 1.5 is not one, so 1.5 goes to 0.5 and back to 1.5. It
+     used to stop there, refused, and a bin on a half step could not be resized at all. */
   await page.keyboard.press('Shift+ArrowLeft');
-  expect(await binsNow(page), '1 x 1 at column 1.5 is refused').toEqual([[0.5, 0.5, 1.5, 1]]);
+  expect(await binsNow(page), 'over 1 x 1 to half a cell').toEqual([[0.5, 0.5, 0.5, 1]]);
+  await page.keyboard.press('Shift+ArrowRight');
+  expect(await binsNow(page), 'and back over it').toEqual([[0.5, 0.5, 1.5, 1]]);
+  await expect(page.locator('#stepWhy'), 'nothing was refused').toHaveText('');
+  // 1 x 1.5 is a half size, so it is no step over; and the smallest is half a cell
   await page.keyboard.press('Shift+ArrowUp');
   for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowLeft');
   expect(await binsNow(page)).toEqual([[0.5, 0.5, 0.5, 1.5]]);
@@ -186,6 +279,39 @@ test('the arrow keys move a half-size bin half a cell only with half steps on', 
   await page.keyboard.press('Shift+ArrowRight');
   expect(await binsNow(page), 'whole steps move and grow it a whole cell')
     .toEqual([[1.5, 0.5, 1.5, 1.5]]);
+});
+
+/* A carve counts whole cells, so a carved bin made half-size is the plain rectangle its
+   box is. That is still so; what is new is that the page says it, where the size was
+   changed, and that Undo, which brings the shape back, takes the sentence away too. */
+test('a carved bin made half-size says its shape has gone, and Undo brings it back', async ({ page }) => {
+  const L = [0, 0, 2, 2, 3, 1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, '1110', 0, 0, 0, 15].join('-');
+  const note = 'A half-size bin cannot keep a carved shape, so this one is a plain rectangle now. ' +
+    'Undo brings the shape back.';
+  const now = () => page.evaluate(() => [B()[0].u, B()[0].v, isCarved(B()[0])]);
+  await openAt(page, 'bl=' + L);
+  await select(page, 0);
+  expect(await now(), 'fixture: a carved 2 x 2').toEqual([2, 2, true]);
+
+  // typed into Width
+  await H.setField(page, 'u', 1.5);
+  expect(await now()).toEqual([1.5, 2, false]);
+  await expect(page.locator('#sizeWhy')).toHaveText(note);
+  await page.keyboard.press('Control+z');
+  await settle(page);
+  expect(await now()).toEqual([2, 2, true]);
+  await expect(page.locator('#sizeWhy'), 'gone with what it was about').toHaveText('');
+
+  // and with shift and an arrow on the map, in half steps, said under the map
+  expect((await steps(page)).half, 'still on from the half-size bin a moment ago').toBe(true);
+  await select(page, 0);
+  await page.keyboard.press('Shift+ArrowLeft');
+  expect(await now()).toEqual([1.5, 2, false]);
+  await expect(page.locator('#stepWhy')).toHaveText(note);
+  await page.keyboard.press('Control+z');
+  await settle(page);
+  expect(await now()).toEqual([2, 2, true]);
+  await expect(page.locator('#stepWhy'), 'and Undo takes this one away too').toHaveText('');
 });
 
 test('carve and merge are greyed for a half-size bin, with the reason', async ({ page }) => {

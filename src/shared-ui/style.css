@@ -430,6 +430,8 @@ footer .mono{font-family:var(--mono);font-size:11px}
 #stepWhy{position:absolute;left:0;right:0;top:0;min-height:100%;padding:2px 14px 0;
   text-align:center;color:var(--red);background:var(--panel)}
 #stepWhy:empty{background:none}
+#sizeWhy{color:var(--red)}
+#sizeWhy:not(:empty){margin-top:6px}
 
 /* ---- cross-tool navigation ---- */
 header nav{display:flex;gap:6px;margin-top:14px}

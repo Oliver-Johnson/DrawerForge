@@ -250,14 +250,19 @@ try {
   <button type="button" class="sheetx" id="binSheetClose" title="Close — lets go of the selected bin" aria-label="Close the bin settings">×</button>
   <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
-      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint"></label>
-      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint"></label>
+      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint sizeWhy"></label>
+      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint sizeWhy"></label>
     </div>
     <!-- Half sizes need no special baseplate: a quarter foot seats in the corner of an
          ordinary socket, two to a side. sizeWhy says why a size typed here was put back
-         when the map cannot show it — a whole size for a bin standing on a half step. -->
-    <div class="hint" id="sizeHalfHint">A half cell is 21 mm. Half-size bins have small feet that fit any Gridfinity baseplate, two to a socket.</div>
-    <div class="hint" id="sizeWhy" role="status" style="display:none;color:var(--red)"></div>
+         when the map cannot show it — a whole size for a bin standing on a half step. It
+         is always there, empty when there is nothing to say, so that a screen reader
+         hears what comes into it; the two share one grid item, or the empty one would
+         still open a gap of the panel's spacing under the hint. -->
+    <div>
+      <div class="hint" id="sizeHalfHint">A half cell is 21 mm. Half-size bins have small feet that fit any Gridfinity baseplate, two to a socket.</div>
+      <div class="hint" id="sizeWhy" role="status"></div>
+    </div>
     <!-- Height three ways. Someone sizing a bin for a part knows the part in millimetres,
          not in 7 mm units, so the height can be typed as units, as millimetres overall,
          or as the depth wanted inside. Whichever way it is typed, the bin is still a

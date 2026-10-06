@@ -992,6 +992,10 @@ function readControls() {
      on exactly that pair of changes. */
   const sel = selAll();
   const b = !scratch && sel.length ? B()[selected] : null;
+  /* What #sizeWhy says after this pass. Each pass says it afresh, so a reason stays only
+     until the next edit, Undo or selection, whatever that touched: it was about the
+     size the fields held then. */
+  let sizeNote = '';
   /* The footprint is settled first: the floor, the label shelf and the dividers are
      limited by the bin's real size, so they wait for it. A loose bin has no drawer to
      collide with, so its footprint is held only by the fields' own 50 cells — with no
@@ -1003,13 +1007,24 @@ function readControls() {
        which quietly destroyed their shapes. */
     delete t.u; delete t.v;
     $('u').value = b.u; $('v').value = b.v;
-  } else if (b && (t.u !== b.u || t.v !== b.v)) {
-    /* A size that would clash is put back, as ever. So is a whole size for a bin on a
-       half step, and that one says why under the fields, because nothing on the map
-       shows it: 2 wide at column 1.5 is free cells, just not whole ones. */
-    const why = placeWhy(b.x, b.y, t.u, t.v, selected);
-    if (why) { t.u = b.u; t.v = b.v; $('u').value = b.u; $('v').value = b.v; }
-    sizeSay(why === WHOLE_ON_WHOLE ? why : '');
+  } else if (b) {
+    /* An emptied field is a number about to be typed, not the default 1: the bin keeps
+       its size meanwhile, and the field shows it again if it is left empty. */
+    if (!$('u').value.trim()) t.u = b.u;
+    if (!$('v').value.trim()) t.v = b.v;
+    if (t.u !== b.u || t.v !== b.v) {
+      /* A size that would clash is put back, as ever. So is a whole size for a bin on a
+         half step, and that one says why under the fields, because nothing on the map
+         shows it: 2 wide at column 1.5 is free cells, just not whole ones. Never under
+         the caret (sizeDraft): there it may be the 2 of a 2.5 still being typed, and
+         the bin simply waits. It is put back once the field is left. */
+      const why = placeWhy(b.x, b.y, t.u, t.v, selected);
+      if (why) {
+        t.u = b.u; t.v = b.v;
+        if (!sizeTyping()) { $('u').value = b.u; $('v').value = b.v; }
+      }
+      if (why === WHOLE_ON_WHOLE) sizeNote = why;
+    }
   }
   /* Several bins take the same settings, so the smallest of them sets the limit: the
      dividers that fit a 1x1 are the most any of them can be given. */
@@ -1037,19 +1052,28 @@ function readControls() {
     const nu = t.u, nv = t.v; delete t.u; delete t.v;
     noteSettingsEdit([scratch], t, nu, nv);
     Object.assign(scratch, t, { edges: Object.assign({}, t.edges) });
-    if (nu !== undefined && (nu !== scratch.u || nv !== scratch.v))
+    if (nu !== undefined && (nu !== scratch.u || nv !== scratch.v)) {
+      if (dropsShape(scratch, nu, nv)) sizeNote = SHAPE_DROPPED;
       setFootprint(scratch, nu, nv);
+    }
   } else if (sel.length) {
     /* u and v never ride the bulk assign — a footprint change has to reconcile the
        carve mask, so it goes through setFootprint. */
     const nu = t.u, nv = t.v; delete t.u; delete t.v;
     noteSettingsEdit(sel.map((i) => B()[i]), t, nu, nv);
     for (const i of sel) Object.assign(B()[i], t, { edges: Object.assign({}, t.edges) });
-    if (sel.length === 1 && nu !== undefined && (nu !== b.u || nv !== b.v))
+    if (sel.length === 1 && nu !== undefined && (nu !== b.u || nv !== b.v)) {
+      if (dropsShape(b, nu, nv)) sizeNote = SHAPE_DROPPED;
       setFootprint(b, nu, nv);
+    }
   } else {
     Object.assign(state, t);
   }
+  sizeSay(sizeNote);
+  /* The map's reason lasts as long as the action that said it (mapSay): any pass after
+     that is another edit, an Undo or a selection, which it is not about. */
+  if (!stepSaid) mapSay('');
+  stepSaid = false;
   /* A lid needs a lip to grip, and a lowered wall takes the lip away. Say which it is
      rather than hiding the control, or ticking it and getting nothing looks like a bug.
      A carved bin keeps its lip, but the lid is a rectangle: it would hang over the cells
@@ -1274,14 +1298,78 @@ function stepsFollowLayout() {
 }
 /* Says why the map refused a place, when the reason is not one the map can show: a
    clash is a red outline, the edge of the drawer is the edge of the map, but a whole
-   bin on a half step looks like free cells. Cleared by the next press on the map. */
+   bin on a half step looks like free cells. Cleared by the next press on the map, and by
+   the readControls pass after the one that ends the action that said it: an Undo or an
+   edit of anything else left it there, about a place nobody was trying any more. */
+let stepSaid = false;
 function mapSay(t) {
   if ($('stepWhy').textContent !== t) $('stepWhy').textContent = t;
+  stepSaid = !!t;
 }
-// the same, under the Width and Depth fields, for a size typed there
+/* The same, under the Width and Depth fields, for a size typed there. Present but empty
+   when there is nothing to say, never display:none: a status region only announces what
+   changes inside it while it is there, and one shown at the moment it got its text was
+   one a screen reader might not read out. Empty, it takes no room. */
 function sizeSay(t) {
   if ($('sizeWhy').textContent !== t) $('sizeWhy').textContent = t;
-  $('sizeWhy').style.display = t ? '' : 'none';
+}
+/* A carve is counted in whole cells, so a carved bin made half-size is the plain
+   rectangle its box is (setFootprint). That happened without a word: the L simply went.
+   Said where the size was changed, under the fields or under the map. */
+const SHAPE_DROPPED = 'A half-size bin cannot keep a carved shape, so this one is a plain rectangle now. Undo brings the shape back.';
+const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
+
+/* Width and Depth while they are being typed into. A size refused under the caret was
+   written back there when the debounce ran out, 180 ms later, so "2.5" typed at a human
+   pace was refused at its "2" and came out "1.55", and a field emptied to type a new
+   number filled straight back in. A refused size now leaves the field as it is typed,
+   and is put back with the reason when the field is committed: left, or stepped by its
+   arrows, which give a whole value at once rather than a number on its way. */
+let sizeDraft = null;          // the field being typed into, if either is
+const sizeTyping = () => !!sizeDraft && document.activeElement === $(sizeDraft);
+// the one bin the fields are sizing, where it stands: a loose or a new bin stands nowhere
+const sizedBin = () => (!scratch && selected >= 0 && selAll().length === 1 && B()[selected]) || null;
+/* A step of Width or Depth from `from` to the next half cell up or down, and over a whole
+   size the bin may not take where it stands to the half size beyond it: 1.5 wide at
+   column 1.5 steps to 2.5 and to 0.5, since 2 and 1 there would be whole bins on a half
+   step. The field's own step stopped on them, refused, and never got past. */
+function sizeStep(id, from, dir) {
+  const lo = parseFloat($(id).min), hi = parseFloat($(id).max), b = sizedBin();
+  const held = (n) => Math.min(hi, Math.max(lo, n));
+  const whole = (n) => !!b && placeWhy(b.x, b.y, id === 'u' ? n : b.u, id === 'v' ? n : b.v,
+                                       selected) === WHOLE_ON_WHOLE;
+  let n = held(dir > 0 ? Math.floor(from * 2) / 2 + 0.5 : Math.ceil(from * 2) / 2 - 0.5);
+  if (whole(n) && held(n + dir * 0.5) !== n) n += dir * 0.5;
+  return n;
+}
+for (const id of ['u', 'v']) {
+  // the arrow keys step here rather than in the browser, so that they can step over
+  $(id).addEventListener('keydown', (e) => {
+    if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || e.altKey || e.ctrlKey || e.metaKey) return;
+    const b = sizedBin();
+    if (!b) return;
+    e.preventDefault();
+    const x = parseFloat($(id).value);
+    $(id).value = sizeStep(id, isFinite(x) ? x : b[id], e.key === 'ArrowUp' ? 1 : -1);
+    sizeDraft = null;
+    schedule();
+  });
+  /* The spinner steps in the browser, and Chromium says so with an input event that is
+     not an InputEvent, which typing always is. A step onto a refused whole size goes on
+     to the half size past it, the way the keys do; where a browser does not tell the
+     two apart, the spinner's step is refused when it lands, as typing is when left. */
+  let before = NaN;
+  $(id).addEventListener('beforeinput', () => { before = parseFloat($(id).value); });
+  $(id).addEventListener('input', (e) => {
+    if (!e.isTrusted || e instanceof InputEvent) { sizeDraft = id; return; }
+    sizeDraft = null;
+    const b = sizedBin(), x = parseFloat($(id).value);
+    if (!b || !isFinite(x)) return;
+    const from = isFinite(before) && before !== x ? before : b[id];
+    if (x !== from) $(id).value = sizeStep(id, from, Math.sign(x - from));
+  });
+  $(id).addEventListener('change', () => { sizeDraft = null; });
+  $(id).addEventListener('blur', () => { sizeDraft = null; });
 }
 /* The focus map's cell size. Bigger than the drawer map's because it is showing one
    bin instead of sixty-three cells, and the reason carving on the drawer map is
@@ -1772,8 +1860,9 @@ function initMap() {
     const c = cellFromEvent(e);
 
     /* A refusal the map cannot show is said (mapSay); any other outcome clears it, so
-       it describes where the pointer is now rather than somewhere it passed. */
-    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why : '');
+       it describes where the pointer is now rather than somewhere it passed. Except that
+       a carved shape a resize made half-size has gone for good, so that stays said. */
+    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why : drag.dropped ? SHAPE_DROPPED : '');
     /* A move or a resize files its undo step with the layout as the press found it, at
        its first real change. Filed at the press, a click that only selected a bin was a
        step of its own: the next Undo spent itself on a layout that had not changed, and
@@ -1809,6 +1898,7 @@ function initMap() {
     say(why);
     if (why) return;
     banked();
+    if (dropsShape(b, nu, nv)) { drag.dropped = true; say(''); }
     b.x = nx; b.y = ny; setFootprint(b, nu, nv);
     drag.moved = true;
     writeControls(b); drawMap();
@@ -4438,16 +4528,24 @@ document.addEventListener('keydown', (e) => {
     const st = stepOf(), move = halfSteps && isHalfSize(b) ? 0.5 : 1;
     const [dx, dy] = nudge;
     let why = '';
+    let dropped = false;
     if (e.shiftKey) {                       // shift-arrow grows or shrinks instead
-      const nu = Math.max(Math.min(st, b.u), b.u + dx * st);
-      const nv = Math.max(Math.min(st, b.v), b.v + dy * st);
+      /* And over a whole size the bin may not take where it stands, to the half size
+         beyond it, as Width and Depth step (sizeStep): 1.5 wide at column 1.5 goes to
+         2.5 and to 0.5. Stopping on 2 or 1, refused, it could not be resized at all. */
+      const by = (n, d) => Math.max(Math.min(st, n), n + d * st);
+      let nu = by(b.u, dx), nv = by(b.v, dy);
       why = placeWhy(b.x, b.y, nu, nv, selected);
-      if (!why) { pushUndo(); setFootprint(b, nu, nv); }
+      if (why === WHOLE_ON_WHOLE && (by(nu, dx) !== nu || by(nv, dy) !== nv)) {
+        nu = by(nu, dx); nv = by(nv, dy);
+        why = placeWhy(b.x, b.y, nu, nv, selected);
+      }
+      if (!why) { pushUndo(); dropped = dropsShape(b, nu, nv); setFootprint(b, nu, nv); }
     } else {
       why = placeWhy(b.x + dx * move, b.y + dy * move, b.u, b.v, selected);
       if (!why) { pushUndo(); b.x += dx * move; b.y += dy * move; }
     }
-    mapSay(why === WHOLE_ON_WHOLE ? why : '');
+    mapSay(why === WHOLE_ON_WHOLE ? why : dropped ? SHAPE_DROPPED : '');
     writeControls(b); readControls(); drawMap(); refresh();
   }
 });
