@@ -143,6 +143,27 @@ for (const p of pages) {
         `not cached: ${absent.join(', ')}`);
 }
 
+/* What a page loads is read from the page, so an image added to one some day is cached
+   without anyone remembering to list it. No page has an image or a CSS url() yet, so the
+   reading is checked on a page made up for it: each way an image can be loaded, and each
+   thing that looks like one but loads nothing from this site. */
+const madeUp = [
+  '<style>.a{background:url(../../img/bg.png)} .b{src:url( "fonts/f.woff2" )} .c{mask:url(#m)}',
+  '  .d{background:url(data:image/png;base64,AAAA)} .e{background:url(https://cdn.example/x.png)}</style>',
+  '<div style="background:url(\'../../tile.svg\')"></div>',
+  '<img src="../../photo.jpg" alt="">',
+  '<img alt="" srcset="../../a-1x.png 1x, ../../a-2x.png 2x" src="../../a-1x.png">',
+  '<picture><source srcset="../../wide.webp 800w,../../narrow.webp 400w"><img src="../../narrow.webp"></picture>',
+  '<img srcset="data:image/png;base64,iVBOR, ../../c.png 2x" src="data:image/gif;base64,R0lGOD">',
+  '<img data-src="../../not-yet.png" src="../../shown.png">',
+  '<script>const s = \'<img src="../../in-a-string.png">\' + "url(../../also-a-string.png)";</script>',
+].join('\n');
+const madeUpWants = ['a-1x.png', 'a-2x.png', 'c.png', 'guide/x/fonts/f.woff2', 'img/bg.png', 'narrow.webp',
+                     'photo.jpg', 'shown.png', 'tile.svg', 'wide.webp'];
+const madeUpGot = [...new Set(app.subresources(madeUp, 'guide/x/index.html'))].sort();
+check('it finds the images a page loads: img src and srcset, CSS url()',
+      JSON.stringify(madeUpGot) === JSON.stringify(madeUpWants), `found ${JSON.stringify(madeUpGot)}`);
+
 /* The cache name is a hash of the cached files and of the worker's own code, so a deploy
    that changes any of them replaces the old cache rather than serving it. Recomputed here
    from the files on disk, and then again with one byte of one page different, which must
