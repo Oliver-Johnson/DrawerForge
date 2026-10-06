@@ -30,6 +30,26 @@
 "featureList":["Gridfinity baseplate generator","Splits plates to fit a print bed","Seven printable connector types","Gridfinity bin designer","Whole-drawer bin layout","Multi-layer stacking","STL and 3MF export"],
 "isAccessibleForFree":true}
 </script>
+<!-- Whether this browser has been here before, decided before anything is drawn. A first
+     visit gets the whole header: what the tool is and that nothing leaves the browser. After
+     that it is a one-line bar, because the pitch is read once and then costs the top of every
+     screen. Someone has used the tools once either tool has seen a design changed (ui.js sets
+     drawerforge:used:v1 on the first change, and says why a saved layout does not count: one
+     is written within moments of any visit) or once a drawer has been saved. In the head, so
+     the class is on <html> before the header is laid out and the page never paints the long
+     header and then jumps.
+     localStorage throws outright when storage is blocked; that counts as a first visit,
+     which shows more rather than less. The bins page carries the same lines.
+     `fold` is this page's alone: on a phone, panels 02 to 05 arrive folded (ui.js says why),
+     and deciding it here is what stops the first frame drawing them open. -->
+<script>
+try {
+  if (['used', 'drawers'].some(function (k) { return localStorage.getItem('drawerforge:' + k + ':v1'); }))
+    document.documentElement.classList.add('returning');
+} catch (e) { /* storage blocked: the full header */ }
+if (window.matchMedia && matchMedia('(max-width: 980px)').matches)
+  document.documentElement.classList.add('fold');
+</script>
 <style>
 /*__CSS__*/
 </style>
@@ -71,6 +91,20 @@
   <button type="button" id="putBack" style="display:none">Put my layout back</button>
   <button type="button" id="tryAnyway" style="display:none">Try it anyway</button>
 </div>
+<!-- On a phone the page is one long column: the panels, then the map, the preview, the
+     tables and the download, and getting from the settings to the map and back was a long
+     scroll each way. This bar comes down at the top of the screen there once the header
+     has scrolled away, and jumps to each part.
+     It scrolls and moves focus (chrome.js), and it is buttons rather than #links because
+     the address's fragment holds the layout and changing it reloads the tool. Wide enough
+     for the side-by-side layout there is nothing to jump between, and it is not shown.
+     data-jump lists where each goes; the first of them on screen wins. -->
+<nav class="jumpbar" id="jumpbar" aria-label="Jump to a part of the page">
+  <button type="button" data-jump="s-drawer">Settings</button>
+  <button type="button" id="jumpMap" data-jump="c-map">Map</button>
+  <button type="button" data-jump="c-preview">Preview</button>
+  <button type="button" data-jump="c-export">Export</button>
+</nav>
 <main class="app">
 <div class="rail">
 
@@ -145,7 +179,10 @@
     </div>
     <div class="hint">Not listed? Pick the size nearest below your bed, or Custom and type it in. Beds are always in millimetres — every maker quotes them that way.</div>
     <label class="f"><b>Slicer infill (%)</b><input id="infill" type="number" step="5" min="0" max="100" value="15"></label>
-    <div class="hint">Only affects the material estimate, not the geometry. A baseplate is nearly all shell — the socket walls are a couple of perimeters wide and print solid whatever you set — so this moves the figure much less than it does for bins. It is the slab under a solid plate that the infill actually reaches.</div>
+    <!-- A hint past four lines or so shows its first sentence; "more" opens the rest in
+         place (chrome.js). The rest stays inside the hint, where the tests read it, and a
+         hint shown or hidden by the joint picked carries all of its text either way. -->
+    <div class="hint">Only affects the material estimate, not the geometry. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>A baseplate is nearly all shell — the socket walls are a couple of perimeters wide and print solid whatever you set — so this moves the figure much less than it does for bins. It is the slab under a solid plate that the infill actually reaches.</span></div>
     <!-- Cost and print time. Both describe your filament and your printer rather than the
          design, so they are kept on this device — one setting the bins page shares — and
          never put in the link. src/shared-ui/estimate.js fills these in and saves them.
@@ -163,7 +200,7 @@
       <option value="fast">Fast — CoreXY or input shaping</option>
       <option value="standard">Standard — a classic bed-slinger</option>
     </select></label>
-    <div class="hint">With a price set, a cost goes beside every gram figure; leave it empty and none is shown. Both settings stay on this device, are shared with the bins page and never go in the link. The speed only steers the print time, which is a rough estimate from the filament and the layer count — only your slicer can give the real one.</div>
+    <div class="hint">With a price set, a cost goes beside every gram figure; leave it empty and none is shown. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Both settings stay on this device, are shared with the bins page and never go in the link. The speed only steers the print time, which is a rough estimate from the filament and the layer count — only your slicer can give the real one.</span></div>
     <span class="hint" id="errBedW" style="color:var(--red)" hidden></span>
     <span class="hint" id="errBedD" style="color:var(--red)" hidden></span>
     <span class="hint" id="errBedH" style="color:var(--red)" hidden></span>
@@ -179,7 +216,7 @@
       <button data-v="plates">Fewest plates</button>
       <button data-v="manual">Manual</button>
     </div>
-    <div class="hint">Staggered offsets joints between rows like brickwork so seams never line up. Fewest plates searches split patterns and picks the one needing the fewest print beds — often pairing two narrow pieces on one plate. For full control click grid lines on the cut map; that switches to Manual.</div>
+    <div class="hint">Staggered offsets joints between rows like brickwork so seams never line up. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Fewest plates searches split patterns and picks the one needing the fewest print beds — often pairing two narrow pieces on one plate. For full control click grid lines on the cut map; that switches to Manual.</span></div>
   </div>
 </section>
 
@@ -203,8 +240,8 @@
     <!--__JOINTFIGS__-->
     <div id="connHintDove" class="hint">Tabs on one piece drop into open-bottomed pockets on its neighbour. Assemble on a flat surface, then lower the whole plate into the drawer. Placed at every wall junction along each seam.</div>
     <div id="connHintPuzzle" class="hint" style="display:none">Jigsaw lobes printed on one piece lock into matching cavities on its neighbour — the strongest in-plane joint. Adds a ~2.6&nbsp;mm solid floor that the lobes live in; assembles by lowering pieces together.</div>
-    <div id="connHintBow" class="hint" style="display:none">Bowtie-shaped recesses are cut into the underside of both pieces; printed keys bridge each seam. The waisted middle is what stops the seam pulling apart. The simplest of the loose-key joints and the easiest to press home — pick it unless a seam is long enough to creep sideways. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</div>
-    <div id="connHintPkey" class="hint" style="display:none">The same idea with a jigsaw profile: the lobes grip along the seam as well as across it, so a long run cannot slide lengthways the way a row of bowties can. Stiffer to press in, and worth that on seams past three or four cells. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</div>
+    <div id="connHintBow" class="hint" style="display:none">Bowtie-shaped recesses are cut into the underside of both pieces; printed keys bridge each seam. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>The waisted middle is what stops the seam pulling apart. The simplest of the loose-key joints and the easiest to press home — pick it unless a seam is long enough to creep sideways. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</span></div>
+    <div id="connHintPkey" class="hint" style="display:none">The same idea with a jigsaw profile: the lobes grip along the seam as well as across it, so a long run cannot slide lengthways the way a row of bowties can. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Stiffer to press in, and worth that on seams past three or four cells. Adds a solid floor to house the keys; the keys STL is in Export and in the ZIP.</span></div>
     <div id="connHintSnap" class="hint" style="display:none">Dog-bone recesses under both pieces take a sprung key: the slot through its middle lets it compress, so it clicks in and holds. Adds a solid floor. Keys STL in Export.</div>
     <div id="connHintHclip" class="hint" style="display:none">Tiny H-shaped keys (≈3.6 × 3.8 mm) sink into pockets in the grid walls at each junction, pressed in from beneath during face-down assembly. No floor, almost no filament, invisible from above. Keys STL in Export.</div>
     <label class="f" id="keyInsertRow" style="display:none"><b>Key insertion</b>
@@ -212,13 +249,13 @@
         <option value="bottom">From beneath — assemble face-down, then flip into the drawer</option>
         <option value="top">From above — join the pieces inside the drawer, drop keys in</option>
       </select></label>
-    <div class="hint" id="keyInsertHint" style="display:none">From above suits drawers you can't lower an assembled plate into: lay the pieces in place, then drop a key into each junction from the top. Keys sit just below flush; the rim gets a small opening at each junction, hidden under the bins' rounded corners.</div>
+    <div class="hint" id="keyInsertHint" style="display:none">From above suits drawers you can't lower an assembled plate into: lay the pieces in place, then drop a key into each junction from the top. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Keys sit just below flush; the rim gets a small opening at each junction, hidden under the bins' rounded corners.</span></div>
     <label class="f" id="keyMountRow" style="display:none"><b>Key housing</b>
       <select id="keyMount">
         <option value="floor">Solid floor — full-size keys, strongest</option>
         <option value="wall">Inside the walls — slim keys, no extra filament</option>
       </select></label>
-    <div class="hint" id="keyMountHint" style="display:none">Wall housing sinks slim keys into the grid walls at each junction — the plate stays open-bottomed and uses no extra filament. Keys are smaller, so the hold is lighter; solid floor gives the strongest joint.</div>
+    <div class="hint" id="keyMountHint" style="display:none">Wall housing sinks slim keys into the grid walls at each junction — the plate stays open-bottomed and uses no extra filament. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Keys are smaller, so the hold is lighter; solid floor gives the strongest joint.</span></div>
     <label class="f"><b>Fit clearance (mm per side)</b><input id="connClr" type="number" step="0.05" min="0" max="0.3" value="0.2" aria-describedby="errConnClr"></label>
     <span class="hint" id="errConnClr" style="color:var(--red)" hidden></span>
     <div class="hint">0.2 suits most printers. Print the test tile pair first; tighten to 0.15 or loosen to 0.25 from there.</div>
@@ -247,7 +284,7 @@
         <option value="solid">Solid floor — at least 2.8 mm base under everything</option>
         <option value="bosses">Corner pockets only — bosses at each position, saves filament</option>
       </select></label>
-    <div class="hint">A solid floor puts at least 2.8&nbsp;mm of plastic under the whole plate, and more when a magnet or screw head is deeper than 2.6&nbsp;mm, so a pocket always keeps a layer under it. Corner pockets put a small rounded boss under each magnet or screw position instead, leaving the rest open underneath: much less filament and a much shorter print, at some cost in stiffness. Gravity-fit drawers need neither magnets nor screws.</div>
+    <div class="hint">A solid floor puts at least 2.8&nbsp;mm of plastic under the whole plate, and more when a magnet or screw head is deeper than 2.6&nbsp;mm, so a pocket always keeps a layer under it. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>Corner pockets put a small rounded boss under each magnet or screw position instead, leaving the rest open underneath: much less filament and a much shorter print, at some cost in stiffness. Gravity-fit drawers need neither magnets nor screws.</span></div>
   </div>
 </section>
 
@@ -290,7 +327,7 @@
      drawMap decides, through the same DF.stageRow as the bins map. -->
 <div class="stagetop">
 
-<div class="stagecard">
+<div class="stagecard" id="c-map">
   <h3>Cut map — click grid lines to split <span class="tail" id="mapTail"></span></h3>
   <div id="mapwrap"><svg id="cutmap" role="img" aria-label="Cut map, loading"></svg></div>
   <!-- Under the map because the map is where the stray click happens: one click on a grid
@@ -303,7 +340,7 @@
   <div id="warnings"></div>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-preview">
   <h3>Preview <span class="tail"><label class="tog"><input type="checkbox" id="explode"> exploded</label></span></h3>
   <div id="threewrap"><canvas id="three" role="img" aria-label="3D preview of the baseplate, loading"></canvas><div id="status"></div><div id="threehint">drag rotate · middle-drag or shift-drag pan · wheel zoom</div><div id="noGl" class="hint" role="status" style="display:none;position:absolute;inset:0;place-items:center;padding:24px;text-align:center">3D preview unavailable — this browser could not start WebGL. Everything else still works: the pieces, the print plan and every download.</div></div>
 </div>
@@ -331,7 +368,7 @@
   </tr></thead><tbody id="pieceRows"></tbody></table>
 </div>
 
-<div class="stagecard">
+<div class="stagecard" id="c-export">
   <h3>Export <span class="tail" id="exportTail"></span></h3>
   <div class="exportbar">
     <div class="exportrow">
@@ -348,7 +385,9 @@
   <div><b>Drawerforge</b> is free and open. Gridfinity was created by <a href="https://www.youtube.com/c/ZackFreedman" rel="noopener">Zack Freedman</a> (Voidstar Lab) as an open standard — this tool implements the published baseplate profile and adds drawer-first workflow, split control, and printable connectors.</div>
   <div style="margin-top:10px">Got your grid sorted? <a id="toBins" href="bins/">Design the bins that go in it →</a> Your drawer dimensions carry across.</div>
   <div style="margin-top:10px">Free software under the <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/LICENSE" rel="noopener">AGPL</a>, and the models you make with it <a href="https://github.com/Oliver-Johnson/DrawerForge/blob/main/NOTICE" rel="noopener">are yours</a>. <a href="https://github.com/Oliver-Johnson/DrawerForge" rel="noopener">Source code</a>, <a href="https://github.com/Oliver-Johnson/DrawerForge/issues" rel="noopener">issues and feature requests</a> on GitHub. If it saved you time you can <a href="https://ko-fi.com/oliver_johnson" rel="noopener">buy me a coffee</a>.</div>
-  <div class="mono" style="margin-top:8px">All geometry is computed locally in your browser — nothing is uploaded. STL/3MF output is mm scale. v1.2</div>
+  <!-- The header's privacy line, word for word. After the first visit the header is one line
+       and leaves it out, so this is where it stays said. -->
+  <div class="mono privacy" style="margin-top:8px">Runs entirely in your browser — nothing is uploaded, no account, no tracking. Your layout is kept on this device so you can come back to it. All geometry is computed locally; STL/3MF output is mm scale. v1.2</div>
 </footer>
 
 <!-- The download dialog. It sits before the UI script because that script wires it up

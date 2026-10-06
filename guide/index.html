@@ -184,7 +184,37 @@ header h1{font-size:21px;letter-spacing:.16em;font-weight:700}
 header h1 .tm{color:var(--cyan)}
 header p{color:var(--dim);margin-top:5px;max-width:640px}
 header .privacy{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:7px}
-header .privacy::before{content:"● ";color:var(--cyan)}
+header .privacy::before,footer .privacy::before{content:"● ";color:var(--cyan)}
+/* After the first visit: one line.
+   The title, a two-line pitch and the privacy line took 202 px of a 1080 px window on
+   Baseplates and 245 on Bins, and on a phone 304 and 287 of 844 — every visit, to say
+   what the visitor already knew. The inline script in each tool's <head> puts
+   `returning` on <html> once this browser has changed a design on either tool or saved
+   a drawer, before the header is laid out, so a returning visit is drawn short from the
+   first frame rather than drawn long and then collapsed. The pitch and the privacy line
+   go (the privacy line is in the footer, word for word); the name, the pages, the drawer
+   and the bins page's way in to a single bin stay, on one row wherever the window is
+   wide enough for them. Only the tools carry the script, so the guide pages keep their
+   header. */
+html.returning header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;
+  padding:10px 26px}
+html.returning header>p,html.returning header>.privacy{display:none}
+html.returning header nav,html.returning header .drawerbar,
+html.returning header .quickstart{margin-top:0}
+/* the drawer and the way in to one bin sit at the far end, away from the page tabs */
+html.returning header .drawerbar{margin-left:auto}
+html.returning header .quickstart span{display:none}
+/* Narrower, the name and the tabs give up a little width so the row still holds them:
+   at 844 × 390, a phone on its side, that is the difference between one row and two, and
+   the window there is 390 px tall. Upright at 390 px they cannot share a row whatever is
+   done to them, so the bar wraps instead: the name, then the tabs with the drawer beside
+   them, and on the bins page the way in to a single bin under those. */
+@media(max-width:980px){
+  html.returning header{padding:8px 16px;gap:8px 12px}
+  html.returning header h1{font-size:17px;letter-spacing:.12em}
+  html.returning header nav a{padding:0 12px}
+  html.returning header .drawerbar{margin-right:0}
+}
 /* The working area is exactly the window below the header.
    It was `calc(100vh - 96px)` on .app, the rail and the stage, and 96 was nobody's
    header: the real one is 164 px on Baseplates, 207 px on Bins (the quickstart row),
@@ -264,6 +294,10 @@ section.p>h2 .caret{margin-left:auto;transition:transform .15s;color:var(--dim)}
 section.p.closed .caret{transform:rotate(-90deg)}
 section.p .body{padding:2px 13px 13px;display:grid;gap:9px}
 section.p.closed .body{display:none}
+/* Baseplates on a phone: panels 02 to 05 folded from the first frame, before ui.js has
+   run to fold them for real (it explains, and takes html.fold away once it has). */
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag)>.body{display:none}
+html.fold :is(#s-printer,#s-split,#s-conn,#s-mag) .caret{transform:rotate(-90deg)}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 /* Type sizes.
@@ -303,6 +337,18 @@ select{font-family:var(--sans)}
 .tog input:focus-visible{outline:1px solid var(--cyan)}
 .hint{font-size:12.5px;color:var(--dim);line-height:1.55}
 .hint.amber{color:var(--amber)}
+/* "more" in a long hint: the first sentence stays, the rest opens underneath it in place
+   (chrome.js does the toggling). Drawn as a link in the hint's own type rather than as
+   one of the page's buttons, because it is a footnote to the sentence and not something
+   to do; a button for all that, so it takes the keyboard and says whether it is open.
+   [hidden] is restated because the display that opens the rest would otherwise beat the
+   browser's own rule for it, the trap the tip jar's comment below describes. */
+.hint button.more{all:unset;display:inline-block;color:var(--cyan);cursor:pointer;
+  text-decoration:underline dotted;text-underline-offset:3px;border-radius:3px}
+.hint button.more:hover{text-decoration-style:solid}
+.hint button.more:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+.hint .moretext{display:block;margin-top:4px}
+.hint .moretext[hidden]{display:none}
 button.act{background:var(--cyan);color:#0c1116;border:none;border-radius:6px;padding:9px 12px;
   font-weight:600;cursor:pointer;font-size:13px}
 button.act:disabled{opacity:.45;cursor:default}
@@ -635,6 +681,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .stagecard h3 .tail{font-size:12px}
   label.f{font-size:12px}
   .hint{font-size:12px}
+  /* A 40 px target without a 40 px line: the padding makes the box a finger can hit and the
+     equal negative margin takes it back out of the layout, so the sentence it ends does
+     not open a gap above and below itself. */
+  .hint button.more{padding:11px 8px;margin:-11px -8px}
   .tog{font-size:13px;min-height:40px}
   /* every control a finger has to hit */
   input,select,button{min-height:40px}
@@ -682,6 +732,92 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input{min-height:20px}
 }
 
+/* ---- the phone's section bar ----------------------------------------------
+   Stacked, the page is one long column, and the bar keeps Settings, Map, Preview and
+   Export a tap away at the top of the screen (chrome.js does the jumping). Not shown
+   side by side, where everything it jumps to is already in view.
+   It is fixed, not sticky, and only comes down once the header has scrolled away
+   (chrome.js watches the header and sets .on). A sticky bar sits in the flow, and its
+   44 px came straight off the first screen: on a first visit the bins page then showed
+   about 94 px of the drawer map, under the 120 the first-screen test asks for. While the
+   header is in view there is nothing to jump past anyway. It is moved off the top rather
+   than hidden, so it stays in the Tab order, and focus inside it brings it down.
+   The scroll padding is the bar's height, so nothing the page scrolls to — a jump, a
+   skip link, a field Tab lands on — ends up underneath it. */
+.jumpbar{display:none}
+@media(max-width:980px){
+  .jumpbar{display:flex;gap:6px;position:fixed;top:0;left:0;right:0;z-index:40;
+    padding:6px 10px;background:var(--bg);border-bottom:1px solid var(--line);
+    transform:translateY(-100%);transition:transform .15s}
+  .jumpbar.on,.jumpbar:focus-within{transform:none}
+  .jumpbar button{flex:1 1 0;min-width:0;background:var(--panel2);color:var(--ink);
+    border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px;cursor:pointer}
+  .jumpbar button:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+  /* only where there is a bar: the guide pages share this stylesheet and have none, and
+     there it stopped the skip link, and whatever Tab scrolled to, 60 px short of the top
+     of the window to clear a bar that is not on the page */
+  html:has(#jumpbar){scroll-padding-top:60px}
+  /* in single-bin mode there is no drawer map, and a carve grid only while carving */
+  body.binfocus:not(.focuscarve) #jumpMap{display:none}
+}
+
+/* ---- the bin sheet (bins page, phone) ---------------------------------------
+   Selecting a bin opens panel 03, and stacked, panel 03 is about 1,500 px of settings
+   ABOVE the map: every edit was a scroll up to change it and a scroll down to see what it
+   did. So on a phone, with a bin selected, the panel leaves the column and becomes a
+   sheet over the foot of the screen, with the map above it still in reach — drag, tap,
+   resize, carve — and the sheet's own contents scrolling inside it. Its header still
+   folds it down to a bar; the X lets go of the selection, which is what puts it away.
+   bins/ui.js sets body.binsheet whenever a bin is selected outside single-bin mode,
+   at every width; only these rules make anything of it, so the desktop is unchanged.
+   The page gets the sheet's height as padding at its foot, or the last of it (the
+   footer, the download) could never be scrolled clear. */
+#binSheetClose{display:none}
+@media(max-width:980px){
+  body.binsheet{padding-bottom:min(50dvh,520px)}
+  body.binsheet:has(#s-bin.closed){padding-bottom:64px}
+  /* And the same height kept clear of whatever the browser scrolls to. Tab brings what it
+     lands on only just inside the window, and with the sheet up the foot of the window is
+     the sheet: measured in the October 2026 review, every one of the 25 stops after it —
+     Checks, the layer tabs, Fill and Clear, the downloads, the footer — was focused out of
+     sight underneath. On the root, because the page is what scrolls; the 8 px is room for
+     the focus ring. */
+  html:has(body.binsheet){scroll-padding-bottom:calc(min(50dvh,520px) + 8px)}
+  html:has(body.binsheet #s-bin.closed){scroll-padding-bottom:72px}
+  /* The tip jar is fixed to the same corner, a layer under the sheet (60 to its 66), so it
+     was there for Tab to reach and not there to be seen; lifted above the sheet it would sit
+     on the map, which is what the sheet keeps clear. It waits while the sheet is up, and
+     comes back when the sheet goes. */
+  body.binsheet .kofi{display:none}
+  body.binsheet #s-bin{position:fixed;left:0;right:0;bottom:0;z-index:66;margin:0;
+    display:flex;flex-direction:column;max-height:min(50dvh,520px);
+    border-radius:14px 14px 0 0;border-bottom:0;box-shadow:0 -12px 32px rgba(0,0,0,.55);
+    animation:sheetup .16s ease-out}
+  /* the handle: says "this came up from below" without being a control of its own */
+  body.binsheet #s-bin::before{content:"";position:absolute;top:5px;left:50%;width:36px;
+    height:4px;margin-left:-18px;border-radius:2px;background:var(--line);pointer-events:none}
+  body.binsheet #s-bin>h2{flex:none}
+  body.binsheet #s-bin>h2>button{padding-right:56px}
+  body.binsheet #s-bin>.body{overflow-y:auto;overscroll-behavior:contain;min-height:0;
+    padding-bottom:max(13px,env(safe-area-inset-bottom))}
+  body.binsheet #binSheetClose{display:flex;align-items:center;justify-content:center;
+    position:absolute;top:2px;right:6px;min-width:44px;min-height:44px;
+    background:none;border:1px solid transparent;border-radius:6px;color:var(--dim);
+    font-size:22px;line-height:1;cursor:pointer}
+  body.binsheet #binSheetClose:hover{color:var(--ink);border-color:var(--line)}
+  body.binsheet #binSheetClose:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+}
+@keyframes sheetup{from{transform:translateY(100%)}}
+/* On paper. A page printed is narrower than 980 px, so it gets the phone's layout, and a
+   box fixed to the window is printed on every page, over whatever that page has there: the
+   bar, once the header had scrolled away, and the sheet with its bin's settings. Both are
+   ways round a screen, with nothing to read on paper, so neither is printed, nor the room
+   the sheet keeps at the page's foot. Printed wider the panel is the rail's, and stays. */
+@media print and (max-width:980px){
+  .jumpbar,body.binsheet #s-bin{display:none}
+  body.binsheet,body.binsheet:has(#s-bin.closed){padding-bottom:0}
+}
+
 /* ---- reduced motion -------------------------------------------------------
    Every transition on the site, in one place, at the end of the file. It has to be
    the end: a media query adds no specificity, so a block sitting above the rules it
@@ -697,8 +833,10 @@ dialog.sheet::backdrop{background:rgba(8,11,15,.72)}
   .tog input,
   .tog input::after,
   .skip,
-  .kofi{transition:none}
+  .kofi,
+  .jumpbar{transition:none}
   .kofi:hover{transform:none}
+  body.binsheet #s-bin{animation:none}
 }
 
 /* ---- single-bin focus (bins page) ---------------------------------------
@@ -1043,6 +1181,81 @@ can come back to it later.</p>
       e.preventDefault();
       t.focus();
     });
+
+  /* The phone's section bar (its markup says why it is there). It does what the skip link
+     does — scroll, and move focus so the next Tab carries on from where you landed — and
+     for the same reason never touches location.hash. Each button lists the places it can
+     go and takes the first one on screen: in the bins page's single-bin mode panel 01 and
+     the drawer map are hidden, and Settings is then the bin's own panel. A panel takes
+     focus on its header button, which is a real control. A card is given tabindex="-1"
+     only while it holds focus: carried in the markup, every click inside the card would
+     focus the card and draw a ring round it. The bar does not cover what it jumps to,
+     because the page's scroll-padding-top on a phone (style.css) is its height. */
+  var jumpbar = document.getElementById('jumpbar');
+  if (jumpbar) jumpbar.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-jump]');
+    if (!b) return;
+    var t = b.getAttribute('data-jump').split(' ')
+      .map(function (id) { return document.getElementById(id); })
+      .filter(function (el) { return el && el.getClientRects().length; })[0];
+    if (!t) return;
+    t.scrollIntoView({ block: 'start' });
+    var f = t.querySelector(':scope>h2>button');
+    if (!f) {
+      f = t;
+      if (!t.hasAttribute('tabindex')) {
+        t.setAttribute('tabindex', '-1');
+        t.addEventListener('blur', function () { t.removeAttribute('tabindex'); }, { once: true });
+      }
+    }
+    f.focus({ preventScroll: true });
+  });
+
+  /* The bar comes down once the header has gone off the top, and goes back up when it
+     returns (style.css says why it waits). An observer rather than a scroll listener:
+     it costs nothing while the page scrolls, and it also catches the header leaving by
+     any other route, a jump or a focused field pulling the page down. Without one (an old
+     browser) the bar simply never comes down, and the page is as it was before the bar. */
+  var head = document.querySelector('header');
+  if (jumpbar && head && window.IntersectionObserver)
+    new IntersectionObserver(function (es) {
+      jumpbar.classList.toggle('on', !es[es.length - 1].isIntersecting);
+    }).observe(head);
+
+  /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
+     read before you reached its controls, and on a phone it pushed the working surface
+     further down. Each long one shows its first sentence and then this button, and the
+     rest opens in place under it. The words never leave the hint: the build's audits and
+     the tests read them there, and a hint the page shows or hides by joint type still
+     holds its whole text either way. Delegated rather than wired per button, because the
+     page writes some hints itself after load (DF.hint in widgets.js) and theirs is the
+     same button. The label says which way it goes; aria-expanded says it to a screen
+     reader. */
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.hint button.more') : null;
+    var rest = b && b.nextElementSibling;
+    if (!rest || !rest.classList.contains('moretext')) return;
+    var open = b.getAttribute('aria-expanded') !== 'true';
+    b.setAttribute('aria-expanded', String(open));
+    b.textContent = open ? 'less' : 'more';
+    rest.hidden = !open;
+  });
+  /* Every one of them says "more", so a screen reader listing the page's buttons, which is
+     a common way through a page, read the same word a dozen times and more with nothing to
+     tell which hint each would open. The name stays the word on screen; each is described
+     by the sentence it continues, the hint's first, wrapped here as the page opens in a
+     span for the button to point at. Wrapped and nothing else: the words, and the hint's
+     text, are as they were. A button that already has a description is left alone — DF.hint
+     gives the hints the page writes their own as it makes them. */
+  let leads = 0;
+  for (const b of document.querySelectorAll('.hint button.more:not([aria-describedby])')) {
+    const lead = document.createElement('span');
+    do leads++; while (document.getElementById('morelead' + leads));
+    lead.id = 'morelead' + leads;
+    while (b.parentNode.firstChild !== b) lead.appendChild(b.parentNode.firstChild);
+    b.before(lead);
+    b.setAttribute('aria-describedby', lead.id);
+  }
 
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
      described controls that do not exist there. Rewritten rather than removed: the
