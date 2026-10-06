@@ -42,6 +42,25 @@
       t.focus();
     });
 
+  /* "more" in a long hint. Several hints ran to six or eight lines, so the rail was a long
+     read before you reached its controls, and on a phone it pushed the working surface
+     further down. Each long one shows its first sentence and then this button, and the
+     rest opens in place under it. The words never leave the hint: the build's audits and
+     the tests read them there, and a hint the page shows or hides by joint type still
+     holds its whole text either way. Delegated rather than wired per button, because the
+     page writes some hints itself after load (DF.hint in widgets.js) and theirs is the
+     same button. The label says which way it goes; aria-expanded says it to a screen
+     reader. */
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.hint button.more') : null;
+    var rest = b && b.nextElementSibling;
+    if (!rest || !rest.classList.contains('moretext')) return;
+    var open = b.getAttribute('aria-expanded') !== 'true';
+    b.setAttribute('aria-expanded', String(open));
+    b.textContent = open ? 'less' : 'more';
+    rest.hidden = !open;
+  });
+
   /* A touch screen has no wheel and no shift key, so "wheel zoom · shift-drag pan"
      described controls that do not exist there. Rewritten rather than removed: the
      gestures are still worth naming, they are just different ones. Matching on

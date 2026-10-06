@@ -298,7 +298,7 @@ function readControls() {
   $('baseModeRow').style.display = (state.magnets || state.screws) ? '' : 'none';
   $('cornerRow').style.display = $('perCorner').checked ? '' : 'none';
   $('cornerHint').style.display = $('perCorner').checked ? '' : 'none';
-  $('plateStyleHint').textContent = plateStyleHint();
+  DF.hint($('plateStyleHint'), ...plateStyleHint());
   showFieldErrors();
 }
 
@@ -307,17 +307,20 @@ function readControls() {
    sits on the first screen and is the first use of four terms nothing has defined:
    skeleton, socket, rim, wall band. The socket is the one you cannot guess from the
    word, so it is glossed here, once, in whichever hint is showing. The pitch is read
-   from the state rather than written as 42, because panel 06 can move it. */
+   from the state rather than written as 42, because panel 06 can move it.
+   Two parts: the first sentence, which stays in view and carries the gloss, and the rest,
+   behind the hint's "more" (DF.hint). */
 function plateStyleHint() {
   const socket = `the socket, the ${state.pitch} mm recess a bin's foot drops into`;
   return state.plateStyle === 'skeleton'
-    ? `Skeleton keeps ${socket}, along with the rim round the outside of the plate and ` +
-      'the band of wall between neighbouring cells, and leaves out the bulk underneath — ' +
-      'lighter, and quicker to print. Cells carrying a joint stay solid, ' +
-      'and it turns off entirely with magnets or screws, which need that material.'
-    : `Solid backs ${socket} with material all the way down to the drawer floor. ` +
-      'The sturdy default: the heaviest and slowest to print, and the only style that ' +
-      'works with magnets, screws, or a joint that needs a floor to house its keys.';
+    ? [`Skeleton keeps ${socket}, along with the rim round the outside of the plate and ` +
+       'the band of wall between neighbouring cells, and leaves out the bulk underneath — ' +
+       'lighter, and quicker to print.',
+       'Cells carrying a joint stay solid, ' +
+       'and it turns off entirely with magnets or screws, which need that material.']
+    : [`Solid backs ${socket} with material all the way down to the drawer floor.`,
+       'The sturdy default: the heaviest and slowest to print, and the only style that ' +
+       'works with magnets, screws, or a joint that needs a floor to house its keys.'];
 }
 
 // ---------- layout & validation ----------
