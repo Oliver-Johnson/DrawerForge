@@ -301,6 +301,8 @@ select{font-family:var(--sans)}
 .tog input:checked{background:rgba(79,195,232,.25);border-color:var(--cyan)}
 .tog input:checked::after{transform:translateX(16px);background:var(--cyan)}
 .tog input:focus-visible{outline:1px solid var(--cyan)}
+/* a box the bin cannot use: the feet of a half-size bin take no holes yet */
+.tog input:disabled{opacity:.45;cursor:not-allowed}
 .hint{font-size:12.5px;color:var(--dim);line-height:1.55}
 .hint.amber{color:var(--amber)}
 button.act{background:var(--cyan);color:#0c1116;border:none;border-radius:6px;padding:9px 12px;
@@ -391,10 +393,19 @@ footer .mono{font-family:var(--mono);font-size:11px}
 #fillmap text{font-family:var(--mono);pointer-events:none}
 #fillmap .blabel{fill:var(--ink);font-size:12px;font-weight:600}
 #fillmap .bsub{fill:var(--dim);font-size:9.5px}
+/* a half-size bin's size, when it does not fit across in the usual type */
+#fillmap .bsize{fill:var(--ink);font-size:9.5px;font-weight:600}
 .covbar{height:7px;border-radius:4px;background:var(--panel2);overflow:hidden;margin:8px 14px 0}
 .covbar i{display:block;height:100%;background:var(--cyan)}
 #fillmap .cell.dead{fill:#171d24;stroke:#222a33}
 #fillmap .ghostbin{fill:none;stroke:var(--dim);stroke-width:1.5;stroke-dasharray:4 4;opacity:.7}
+/* Half steps: a dashed line through the middle of every cell, under the bins, faint
+   enough that the cells still read as cells. */
+#fillmap .midline{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 4;opacity:.5;pointer-events:none}
+/* The Steps switch above the map, and the reason beside it when a place is refused. */
+.steps{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.steps .seg button{flex:none;padding:7px 12px}
+#stepWhy{color:var(--red)}
 
 /* ---- cross-tool navigation ---- */
 header nav{display:flex;gap:6px;margin-top:14px}
