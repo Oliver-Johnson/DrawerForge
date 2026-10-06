@@ -470,7 +470,7 @@ footer .mono{font-family:var(--mono);font-size:11px}
 #fillmap .midline{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 4;opacity:.5;pointer-events:none}
 /* On a phone the layer tabs and the Steps switch share a row above the map; the switch
    drops to a row of its own only when the tabs need the room. On a wider window the
-   switch is in the card's heading instead (placeSteps), and the tabs have the row.
+   switch is on the card's heading row instead (placeSteps), and the tabs have the row.
    #stepWhy, under the map, is the reason a place was refused.
    On a row of their own the tabs may shrink, and their labels wrap, as they did before
    the switch: held at the width of every label in a line, they ran off the card, and
@@ -479,20 +479,26 @@ footer .mono{font-family:var(--mono);font-size:11px}
 .maptools #layerTabs{flex:1 1 auto}
 .steps{display:flex;align-items:center;gap:8px}
 .steps .seg button{flex:none;padding:7px 12px}
-/* In the heading it is out of the flow at the right-hand end, centred on the row the
-   title sets, so the heading is no taller than it was: a 31 px switch in the flow made
-   it 52 px where it is 35, and at 1366 × 768 the map has no height to give. Its buttons
-   are a little shorter for it, still a comfortable target for a mouse; a phone, which
-   needs 40 px, keeps the switch on the tabs' row. drawMap keeps the card wide enough
-   for the title and the switch.
+/* The map card's heading row: the heading, and on a wider window the switch beside it,
+   not in it (placeSteps). The row carries the line under the heading, so that it runs
+   under both. The switch is shorter than the heading, so the row is no taller than it
+   was: a full-size switch made it 52 px where it is 35, and at 1366 × 768 the map has
+   no height to give. Its buttons are 24 px, a comfortable target for a mouse; a phone,
+   which needs 40 px, keeps the switch on the tabs' row.
+   The row never sets the card's width beyond the map's own (drawMap): the title gives
+   way, cut short with an ellipsis, rather than take it out of the preview, down to
+   about its first word, which with the switch is as narrow as the card goes. With this
+   machine's font, or the wider DejaVu Sans, it is whole beside the switch at 1366 × 768;
+   given the room it took there, the card was 16 px wider than the map in DejaVu Sans.
    The word "Steps" is for screen readers only up here, where it still names the pair
    of buttons. Shown, it ran on from the title as if one heading ("Drawer layout
-   Steps"), and it was the 41 px that made the card wider than the map at 1366 × 768,
-   out of the preview at every number of layers; the buttons say what they switch. */
-#s-layout > h3{position:relative}
-#s-layout > h3 .steps{position:absolute;top:0;bottom:0;right:14px;white-space:nowrap}
-#s-layout > h3 .steps .seg button{padding:4px 10px}
-#s-layout > h3 #stepsLabel{position:absolute;width:1px;height:1px;overflow:hidden;
+   Steps"), and it needed 41 px more; the buttons say what they switch. */
+#s-layout > .layouthead{display:flex;align-items:center;border-bottom:1px solid var(--line)}
+#s-layout > .layouthead > h3{display:block;flex:1 1 auto;min-width:calc(24px + 5em);
+  padding-right:10px;border-bottom:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#s-layout > .layouthead > .steps{flex:none;margin-right:14px;white-space:nowrap}
+#s-layout > .layouthead .seg button{padding:4px 6px;min-height:24px;font-size:11px}
+#s-layout > .layouthead #stepsLabel{position:absolute;width:1px;height:1px;overflow:hidden;
   clip-path:inset(50%)}
 /* #stepWhy says its reason on the front marker's line, covering the marker until the
    next press on the map: drawMap counts one line under the map, so a reason arriving
@@ -1356,10 +1362,14 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
 <div class="stagetop">
 
 <div class="stagecard" id="s-layout">
-  <h3><span>Drawer layout</span></h3>
+  <!-- The heading's row. On a wider window the Steps switch below moves up into it,
+       beside the heading and not in it (placeSteps): inside the <h3> its label and its
+       group's name were read as part of the heading, "Drawer layout Steps Steps", and its
+       buttons were in a heading. -->
+  <div class="layouthead"><h3>Drawer layout</h3></div>
   <!-- Whole cells or half cells: what the map draws, drags and resizes in. Kept in this
        browser, never in the link, and turned on by itself when the layout holds a
-       half-size bin. On a wider window it moves up into the heading above (placeSteps),
+       half-size bin. On a wider window it moves up onto the heading's row (placeSteps),
        where it costs the map no height. On a phone it stays here, on the layer tabs' row,
        beside them while the tabs leave room, so the map does not move down the page:
        there it has about 150 px above the fold to spare, and a row of its own took 50 of
@@ -8301,7 +8311,7 @@ function placeDividers() {
 }
 PHONE.addEventListener('change', placeDividers);
 placeDividers();
-/* The Steps switch goes in the drawer map's heading on a wider window, and beside the
+/* The Steps switch goes on the drawer map's heading row on a wider window, and beside the
    layer tabs on a phone, moved the same way and for the same reason. Beside the tabs,
    the map's card had to be as wide as two layers' tabs and the switch, which came out of
    the preview, and from a third layer the switch took a row of its own: at 1366 × 768
@@ -8310,11 +8320,18 @@ placeDividers();
    costs the map no height and the tabs have their row to themselves, as they did before
    it. A phone's heading has no room for it beside the title, and a 40 px button is
    taller than the heading, so there it stays on the tabs' row. drawMap is run again on
-   the change, which comes after the resize that already drew it. */
+   the change, which comes after the resize that already drew it.
+   On the row, beside the <h3> and never in it: inside it, the heading was read out as
+   "Drawer layout Steps Steps". And a button that had the focus keeps it: moving an
+   element in the document takes the focus off it, and a window narrowed past 980 px, or
+   zoomed, with the keyboard on Half cells left it on the page's body. */
 function placeSteps() {
   const card = $('s-layout'), steps = card.querySelector('.steps');
-  const home = card.querySelector(PHONE.matches ? '.maptools' : 'h3');
-  if (steps.parentNode !== home) home.appendChild(steps);
+  const home = card.querySelector(PHONE.matches ? '.maptools' : '.layouthead');
+  if (steps.parentNode === home) return;
+  const had = steps.contains(document.activeElement) ? document.activeElement : null;
+  home.appendChild(steps);
+  if (had) had.focus({ preventScroll: true });
 }
 PHONE.addEventListener('change', () => { placeSteps(); drawMap(); });
 placeSteps();
@@ -9245,28 +9262,32 @@ function drawMap() {
      The 52 px cell and 720 px caps are for a 1080-line window and grow with a taller
      one (row.big): at 1440 a cell may be 69 px rather than staying 52 while the screen
      round it got a third bigger. The labels scale with the cells, so they stay legible.
-     Paired, the card is the map's width, and no narrower than its heading needs for the
-     title and the Steps switch, which is in the heading on any window wide enough to
-     pair (placeSteps). The switch was first beside the layer tabs, and the card kept as
-     wide as that row: paired at the map's width alone, a 1366 × 768 window had no room
+     Paired, the card is the map's width. The Steps switch is on its heading's row on any
+     window wide enough to pair (placeSteps), and the title gives way to it rather than
+     widen the card (style.css): asked for the whole title beside the switch, the card
+     was 16 px wider than the map at 1366 × 768 in DejaVu Sans, out of the preview on
+     every layout. Only a map too narrow for the switch and the title's first word makes
+     the card wider than the map.
+     The switch was first beside the layer tabs, and the card kept as wide as that row:
+     paired at the map's width alone, a 1366 × 768 window had no room
      for the switch beside two layers' tabs, it dropped to a row of its own after the
      height was settled, and the map, its front marker and the coverage bar went 38 px
      under the window. Kept that wide, each layer took a tab's width, about 70 px, out of
      the preview, in a drawer of whole bins as much as in one of half; held at two
      layers' width, the switch's own row from a third layer still put the bar 21 px under
-     the window, the map there being within a pixel of its 40 px cells. In the heading it
-     costs no height, the tabs have their row to themselves as they did before it, and
-     the heading asks about as much width as the map's card has anyway.
+     the window, the map there being within a pixel of its 40 px cells. On the heading's
+     row it costs no height, and the tabs have their row to themselves as before it.
      "Above" is measured with the columns taken away (stageRow), and the map is sized
      again once paired, as the baseplates page's cut map is, should anything above it
      wrap all the same: the tabs' labels do, with five layers or more. */
   let headW = 0;
-  const steps = twoCol && $('s-layout').querySelector('h3 .steps');
+  const steps = twoCol && $('s-layout').querySelector('.layouthead > .steps');
   if (steps) {
-    const title = $('s-layout').querySelector('h3 > span');
-    // the heading's padding, the title, a gap, the switch and the card's border, up to
-    // the next pixel, which a rounded offsetWidth was not: 385.4 px in 385 overlaps
-    headW = Math.ceil(14 + title.getBoundingClientRect().width + 12 +
+    /* the heading at its narrowest (its min-width: padding and about a word), the switch
+       and its margin, and the card's border, up to the next pixel, which a rounded
+       offsetWidth was not: 385.4 px in 385 overlaps */
+    const h3 = $('s-layout').querySelector('.layouthead > h3');
+    headW = Math.ceil(parseFloat(getComputedStyle(h3).minWidth) +
                       steps.getBoundingClientRect().width + 14) + 2;
   }
   const chrome = () => svg.getBoundingClientRect().top - top.getBoundingClientRect().top + 41;
@@ -9462,6 +9483,7 @@ function initMap() {
   svg.addEventListener('pointerdown', (e) => {
     const c = cellFromEvent(e);
     const handle = e.target && e.target.dataset ? e.target.dataset.handle : null;
+    landEdit();                     // before the field is left, which comes after this
     mapSay('');
 
     /* Grips sit on the bin's corners, which is exactly where you click to carve an
@@ -9538,8 +9560,11 @@ function initMap() {
 
     /* A refusal the map cannot show is said (mapSay); any other outcome clears it, so
        it describes where the pointer is now rather than somewhere it passed. Except that
-       a carved shape a resize made half-size has gone for good, so that stays said. */
-    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why : drag.dropped ? SHAPE_DROPPED_MAP : '');
+       a carved shape a resize made half-size has gone for good, so that stays said while
+       the bin is half-size: pulled back to a whole size in the same drag it is a plain
+       rectangle, which may be carved, and the line went on saying it could not be. */
+    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why
+      : drag.dropped && isHalfSize(B()[drag.idx]) ? SHAPE_DROPPED_MAP : '');
     /* A move or a resize files its undo step with the layout as the press found it, at
        its first real change. Filed at the press, a click that only selected a bin was a
        step of its own: the next Undo spent itself on a layout that had not changed, and
@@ -9572,11 +9597,11 @@ function initMap() {
     const nu = Math.abs(c.x - drag.ax) + drag.st, nv = Math.abs(c.y - drag.ay) + drag.st;
     if (nx === b.x && ny === b.y && nu === b.u && nv === b.v) return;
     const why = placeWhy(nx, ny, nu, nv, drag.idx);
-    say(why);
-    if (why) return;
+    if (why) { say(why); return; }
     banked();
-    if (dropsShape(b, nu, nv)) { drag.dropped = true; say(''); }
+    if (dropsShape(b, nu, nv)) drag.dropped = true;
     b.x = nx; b.y = ny; setFootprint(b, nu, nv);
+    say('');                                             // about the size it is now
     drag.moved = true;
     writeControls(b); drawMap();
   });
@@ -9616,6 +9641,7 @@ function initMap() {
    no whole bin fits: it takes those half strips and quarters, largest first. A layout of
    whole bins comes out of it exactly as it always did. */
 $('fillRest').addEventListener('click', () => {
+  landEdit();
   pushUndo();
   const g = grid();
   clearSel(); readControls();
@@ -12102,8 +12128,19 @@ let timer = null;
    reads, so an edit that changes a bin misses the cache by itself, and refresh() lets go
    of the builds nothing uses. Clearing on every input rebuilt every type in the drawer
    because a note was typed, and leaked the old buffers each time. */
-const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
+const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { timer = null;
   readControls(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
+/* An edit still waiting for its pass lands now, before something takes the selection
+   away, so it goes to the bin it was typed for and not to the next one drawn. Fill the
+   rest and a press on the map both clear the selection first thing: a 2 typed for the
+   1.5 × 1 on a half step and pressed on either inside the 180 ms became the new bins'
+   size, the refusal never having run. The rest of the pass is theirs to do, as the
+   phone sheet's Escape does it (closeSheet). */
+function landEdit() {
+  if (timer === null) return;
+  clearTimeout(timer); timer = null;
+  readControls();
+}
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
