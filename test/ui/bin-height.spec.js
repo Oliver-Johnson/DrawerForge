@@ -370,3 +370,14 @@ test('on a second layer it names what fits on the bins underneath', async ({ pag
   // 55.75 - 28 leaves 27.75: 3 units and a lip
   await expect(page.locator('#warnings')).toContainText('3 units is the tallest that fits on the bins under it');
 });
+
+/* The summary above the map and Checks both name the tallest bin that fits. The summary
+   made the sum without Checks' allowance for rounding, and 69.1 mm less a 2.15 mm plate
+   came to 8.999… units in it, so it said 8 where Checks said 9. */
+test('the grid summary and Checks name the same tallest bin', async ({ page }) => {
+  await oneBin(page);
+  await H.setField(page, 'drawerH', 69.1);
+  await H.setField(page, 'plateH', 2.15);
+  await expect(page.locator('#warnings')).toContainText('The tallest that fits is 9 units');
+  await expect(page.locator('#gridSummary')).toContainText('tallest single bin 9 units');
+});

@@ -95,7 +95,10 @@ function grid() {
   const nx = Math.max(1, Math.min(GRID_MAX, Math.floor(state.drawerW / SPEC.pitch)));
   const ny = Math.max(1, Math.min(GRID_MAX, Math.floor(state.drawerD / SPEC.pitch)));
   const avail = state.drawerH - state.plateH;
-  return { nx, ny, avail, maxUnits: Math.max(1, Math.floor((avail - LIP_H) / SPEC.unitH)) };
+  /* By the drawer-height check's own sum, rounding allowance and all: without it 69.1 mm
+     less a 2.15 mm plate came to 8.999… units here, and the summary said 8 where Checks
+     said 9. */
+  return { nx, ny, avail, maxUnits: Math.max(1, unitsUnder(avail)) };
 }
 const EDGES = ['f', 'b', 'l', 'r'];
 const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
