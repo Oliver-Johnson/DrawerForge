@@ -2292,11 +2292,12 @@ function binIssues(b, k, claims) {
   /* A foot only touches the socket walls on its outer sides, so a bin half a cell across
      has nothing holding it that way on a standard baseplate: alone in a socket it was
      measured sliding 21 mm. The bins beside it hold it, so this is a note, not a fault —
-     but it is worth knowing before a drawer goes in with a gap beside one. */
+     but it is worth knowing before a drawer goes in with a gap beside one. Marked `thin`,
+     because Checks says it once for every such bin in the drawer (warnings). */
   const thin = [b.u === 0.5 ? 'wide' : '', b.v === 0.5 ? 'deep' : ''].filter(Boolean).join(' and ');
   if (thin)
-    out.push({ note: true, t: `is only half a cell ${thin}. On a standard baseplate the bins beside it ` +
-      'hold it in place; on its own it can slide about 21 mm in its socket' });
+    out.push({ note: true, thin: true, t: `is only half a cell ${thin}. On a standard baseplate the bins ` +
+      'beside it hold it in place; on its own it can slide about 21 mm in its socket' });
 
   const fw = (b.u - 1) * SPEC.pitch + 2 * SPEC.half, fd = (b.v - 1) * SPEC.pitch + 2 * SPEC.half;
   if (!((fw <= state.bedW && fd <= state.bedD) || (fd <= state.bedW && fw <= state.bedD)))
@@ -2410,13 +2411,27 @@ function warnings() {
     out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${(g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip). ${fitText}` });
 
   const claims = layers.map((_, k) => layerClaims(k));
+  const where = (b, k) => `Layer ${k + 1}, the ${b.u}×${b.v} bin at column ${b.x + 1} row ${b.y + 1}`;
+  /* The note about a bin half a cell across is said once for all of them. Said for each,
+     "Fill the rest" with a half-cell-wide bin gave 126 copies of the same two sentences,
+     some 23,000 characters, between the faults that matter. One such bin keeps its own. */
+  const thin = [];
   layers.forEach((L, k) => L.bins.forEach((b) => {
     for (const it of binIssues(b, k, claims)) {
+      if (it.thin) { thin.push({ b, k, t: it.t }); continue; }
       const x = typeof it === 'string' ? { err: true, t: it } : it;
-      out.push({ err: !x.note, note: x.note,
-                 t: `Layer ${k + 1}, the ${b.u}×${b.v} bin at column ${b.x + 1} row ${b.y + 1}: ${x.t}.` });
+      out.push({ err: !x.note, note: x.note, t: `${where(b, k)}: ${x.t}.` });
     }
   }));
+  if (thin.length === 1) out.push({ note: true, t: `${where(thin[0].b, thin[0].k)}: ${thin[0].t}.` });
+  else if (thin.length) {
+    const named = thin.slice(0, 3).map(({ b, k }) =>
+      `the ${b.u}×${b.v} on layer ${k + 1} at column ${b.x + 1} row ${b.y + 1}`);
+    if (thin.length > 3) named.push(`${thin.length - 3} more`);
+    out.push({ note: true, t: `${thin.length} bins are only half a cell wide or deep: ` +
+      `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}. On a standard ` +
+      'baseplate the bins beside each one hold it in place; on its own one can slide about 21 mm in its socket.' });
+  }
 
   if (!allBins().length)
     out.push({ t: 'No bins yet. Drag across the map to place one, or use "Fill the rest".' });

@@ -239,14 +239,31 @@ test('a half-size bin has no holes in its feet yet, and its file says so', async
 });
 
 test('checks notes a bin only half a cell across, and why the bins beside it matter', async ({ page }) => {
-  await openAt(page, 'bl=' + bin(0, 0, 0.5, 2) + '_' + bin(1, 0, 2, 0.5) + '_' + bin(3, 0, 1.5, 1));
-  const w = await page.locator('#warnings').innerText();
-  expect(w).toContain('the 0.5×2 bin at column 1 row 1: is only half a cell wide. On a standard ' +
+  await openAt(page, 'bl=' + bin(0, 0, 0.5, 2) + '_' + bin(3, 0, 1.5, 1));
+  let w = await page.locator('#warnings').innerText();
+  expect(w).toContain('Layer 1, the 0.5×2 bin at column 1 row 1: is only half a cell wide. On a standard ' +
     'baseplate the bins beside it hold it in place; on its own it can slide about 21 mm in its socket.');
-  expect(w).toContain('the 2×0.5 bin at column 2 row 1: is only half a cell deep.');
   expect(w, 'a bin a cell and a half across is held by its own feet').not.toContain('1.5×1 bin');
   // a note, not a fault
   expect(await page.locator('#warnings .w.err').count()).toBe(0);
+
+  /* Two or more are one note between them, not the same two sentences a bin: filling a
+     drawer with half-cell-wide bins said them 126 times. */
+  await openAt(page, 'bl=' + bin(0, 0, 0.5, 2) + '_' + bin(1, 0, 2, 0.5) + '_' + bin(3, 0, 1.5, 1) +
+    '~' + bin(0, 0, 0.5, 1, 2));
+  const notes = await page.locator('#warnings .w').allInnerTexts();
+  expect(notes.filter((t) => /half a cell/.test(t))).toEqual(['3 bins are only half a cell wide or deep: ' +
+    'the 0.5×2 on layer 1 at column 1 row 1, the 2×0.5 on layer 1 at column 2 row 1 and the 0.5×1 on ' +
+    'layer 2 at column 1 row 1. On a standard baseplate the bins beside each one hold it in place; on ' +
+    'its own one can slide about 21 mm in its socket.']);
+  // and filled with half-cell-wide bins, still one
+  await page.click('#layerTabs button >> nth=0');
+  await H.setField(page, 'u', 0.5);
+  await page.click('#fillRest');
+  await settle(page);
+  const many = (await page.locator('#warnings .w').allInnerTexts()).filter((t) => /half a cell/.test(t));
+  expect(many).toHaveLength(1);
+  expect(many[0]).toMatch(/^\d+ bins are only half a cell wide or deep: the 0\.5×2 on layer 1 at column 1 row 1, .* and \d+ more\. /);
 });
 
 test('fill the rest packs half-size bins edge to edge and leaves nothing uncovered', async ({ page }) => {
