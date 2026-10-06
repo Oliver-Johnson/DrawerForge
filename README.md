@@ -89,10 +89,11 @@ not use either, and works offline as it always has.
 
 The tab icon (`favicon.svg`, `apple-touch-icon.png`), the installed app's icons
 (`icon-192.png`, `icon-512.png`, `icon-maskable-512.png`) and the picture a shared link is
-shown with (`og-image.png`) sit at the root beside the pages. The icons are linked relatively and
-follow a fork anywhere; the link-preview image is an absolute `drawerforge.co.uk` URL, as the
-canonical links are, because a crawler has no page to resolve a relative one against. Both
-are set in one place, `tools/seo.js`.
+shown with (`og-image.png`) sit at the root beside the pages. The icons are linked
+relatively and follow a fork anywhere; the link-preview image is an absolute
+`drawerforge.co.uk` URL, as the canonical links are, because a crawler has no page to
+resolve a relative one against. The tab icon and the link preview are set in
+`tools/seo.js`, the app's icons and manifest in `tools/app.js`.
 
 ## Building
 
