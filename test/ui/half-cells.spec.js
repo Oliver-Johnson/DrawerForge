@@ -767,3 +767,25 @@ test('a size typed a moment before a press elsewhere still goes to the bin it wa
       .toEqual({ u: 1.5, fill: '1.5×1', twoWide: 0 });
   }
 });
+
+/* The line under the map about a carved shape made half-size is about a bin that is
+   half-size. Pulled back to a whole size in the same drag, the bin is a plain 2 x 2 and
+   the line went on saying a half-size bin cannot be carved. */
+test('the carved-shape line goes once the bin is whole-size again', async ({ page }) => {
+  const L = [3, 3, 2, 2, 3, 1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, '1110', 0, 0, 0, 15].join('-');
+  await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1) + '_' + L);
+  await select(page, 1);
+  await H.mapInView(page);
+  const g = await page.locator('#fillmap .grip[data-handle="rb"]').boundingBox();
+  const half = await slotHere(page, 8, 9), whole = await slotHere(page, 9, 9);
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(half.x, half.y, { steps: 4 });
+  expect(await page.evaluate(() => [B()[1].u, $('stepWhy').textContent]))
+    .toEqual([1.5, 'A half-size bin cannot be carved.']);
+  await page.mouse.move(whole.x, whole.y, { steps: 4 });
+  await page.mouse.up();
+  await settle(page);
+  expect(await page.evaluate(() => [B()[1].u, B()[1].v, isCarved(B()[1]), $('stepWhy').textContent]))
+    .toEqual([2, 2, false, '']);
+});

@@ -1926,8 +1926,11 @@ function initMap() {
 
     /* A refusal the map cannot show is said (mapSay); any other outcome clears it, so
        it describes where the pointer is now rather than somewhere it passed. Except that
-       a carved shape a resize made half-size has gone for good, so that stays said. */
-    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why : drag.dropped ? SHAPE_DROPPED_MAP : '');
+       a carved shape a resize made half-size has gone for good, so that stays said while
+       the bin is half-size: pulled back to a whole size in the same drag it is a plain
+       rectangle, which may be carved, and the line went on saying it could not be. */
+    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why
+      : drag.dropped && isHalfSize(B()[drag.idx]) ? SHAPE_DROPPED_MAP : '');
     /* A move or a resize files its undo step with the layout as the press found it, at
        its first real change. Filed at the press, a click that only selected a bin was a
        step of its own: the next Undo spent itself on a layout that had not changed, and
@@ -1960,11 +1963,11 @@ function initMap() {
     const nu = Math.abs(c.x - drag.ax) + drag.st, nv = Math.abs(c.y - drag.ay) + drag.st;
     if (nx === b.x && ny === b.y && nu === b.u && nv === b.v) return;
     const why = placeWhy(nx, ny, nu, nv, drag.idx);
-    say(why);
-    if (why) return;
+    if (why) { say(why); return; }
     banked();
-    if (dropsShape(b, nu, nv)) { drag.dropped = true; say(''); }
+    if (dropsShape(b, nu, nv)) drag.dropped = true;
     b.x = nx; b.y = ny; setFootprint(b, nu, nv);
+    say('');                                             // about the size it is now
     drag.moved = true;
     writeControls(b); drawMap();
   });
