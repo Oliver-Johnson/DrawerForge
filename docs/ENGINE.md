@@ -231,9 +231,26 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
 
 - Features that look like subtractions can be **added** instead. A scoop is an added
   prism, not a curved cutter. A label tab is an added prism, not a cut.
-- If magnet or screw pockets are ever added, they are the proven box-minus-box class —
-  but **no cutter's z-range may reach below the top of the feet**, or it will cross the
-  foot's chamfer cones.
+- Magnet pockets and screw holes in the feet are **built, not cut**, which keeps the rule
+  above without needing an exception to it. A holed foot is the plain foot made of pieces
+  that leave the holes empty (`holedCell`): left and right bands, the foot's own rings
+  clipped by a vertical line inside the 17.00 arc centre and swept up the spec profile
+  exactly as a plain foot is, so they carry the cone faces triangle for triangle; front
+  and back bands clipped the same way across y and held 2 BLOAT past the side bands' line
+  so the two never share an arc face; two boxes crossing the middle; and one column per
+  site, a stack of tubes from `wallRing` whose outer square and inner hole are sampled on
+  the same rays from the site's centre, so they pair index for index and never reach
+  `earTriangulate`'s keyhole path. A site with no hole is a plain box. Every hole sits
+  inside the narrowest part of the foot, so no piece touches a cone, and the audit slices
+  a holed foot against a plain one to four decimals to prove the outside did not move.
+  A screw over a magnet is three openings stacked, each inside the one below — the pocket,
+  a slot across its flats, a square across the slot, then the round hole — so where two
+  tubes overlap by BLOAT the opening left is the smaller one and nothing fills. The screw
+  runs up past the foot, so with screws the slab from 4.70 to 6.05 is split per cell the
+  same way in all three bodies (rectangle, solid, carved) and the floor grows to 1.85.
+  The audit probes every site of every holed build from the bed: the hole's roof has to be
+  where it was asked for, and an unholed site has to be solid, because a foot with its
+  holes left solid is just as watertight as one with them open.
 - Every rounded square in a bin shares the corner-arc centre **17.00 mm**
   (`41.5/2 − 3.75`). That constant is what makes clearance uniform around the perimeter
   instead of binding at the corners. See [socket-clearance.md](socket-clearance.md) for

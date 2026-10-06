@@ -78,16 +78,20 @@ console.log('\nseparators cannot appear inside a value');
     console.log(`  ${name.padEnd(38)} ${why ? 'FAILED — ' + why : 'packs'}`);
     if (why) bad++;
   }
-  /* 21 since a bin can carry a lid and the sides its skirt sits on: position IS the format, so this
-     number is deliberate and changing it changes what every link means. Update it on
-     purpose or not at all.
+  /* 21 for a bin with nothing in its feet, and 22 for one with holes: position IS the
+     format, so these numbers are deliberate and changing them changes what every link
+     means. Update them on purpose or not at all. A plain bin stays at 21 so that every
+     link made before holes existed packs back to exactly the same text: written as a 0
+     on every bin, the 22nd field rewrote old links the first time they were opened.
      It went 17 -> 18 by APPENDING, which is the only safe direction — see the
      older-link case below, which is what makes appending safe rather than merely
      conventional. */
   const packed = packBin(bin({}));
   const fieldCount = packed.split('-').length;
-  console.log(`  field count is stable                  ${fieldCount === 21 ? '21, correct' : fieldCount + ' — WRONG'}`);
-  if (fieldCount !== 21) bad++;
+  const holedCount = packBin(bin({ magnets: true })).split('-').length;
+  const countsOk = fieldCount === 21 && holedCount === 22;
+  console.log(`  field count is stable                  ${countsOk ? '21, and 22 with holes, correct' : fieldCount + ' and ' + holedCount + ' — WRONG'}`);
+  if (!countsOk) bad++;
 
   /* A link written before the field existed. Nobody has one yet, but the reason to
      handle it is the same reason to append rather than insert: the day the format grows
@@ -120,6 +124,57 @@ console.log('\nseparators cannot appear inside a value');
                   lid.lidSides.b && lid.lidSides.l && lid.lidSides.r;
   console.log(`  a lid and its chosen sides survive    ${sidesOk ? 'intact' : 'LOST: ' + JSON.stringify(lid.lidSides)}`);
   if (!sidesOk) bad++;
+}
+
+/* Holes in the feet ride in field 22, a bitmask: 1 magnets, 2 screws, 4 every cell
+   rather than the corners. 8 to 64 are kept for finger slots. Every link and saved
+   drawer from before the field has 21, and has to come back as the bin it always was:
+   no holes. So does anything in the field that is not a whole number it could hold,
+   since a link is typed into as often as it is copied. */
+console.log('\nholes in the feet');
+{
+  const holes = (x) => ['magnets', 'screws', 'holesEvery'].filter((k) => x[k]).join('+') || 'none';
+  const packed = packBin(bin({}));
+  const old = unpackBin(packed.split('-').slice(0, 21).join('-'));
+  const oldOk = old.magnets === false && old.screws === false && old.holesEvery === false &&
+                old.lid === false && old.lidSides.f === true;
+  console.log(`  a 21-field link reads as no holes      ${oldOk ? 'intact' : 'WRONG: ' + holes(old)}`);
+  if (!oldOk) bad++;
+  /* And packs back to the same text. A link opened is written straight back to the
+     address, the local save and any saved drawer, so one that came back a field longer
+     was a changed layout: the next load said the link had replaced it. */
+  const before = [packBin(bin({})), packBin(bin({ lid: true, scoop: 10, edges: { f: 0.5, b: 1, l: 1, r: 1 } }))];
+  const rewritten = before.filter((p) => packBin(unpackBin(p)) !== p || p.split('-').length !== 21);
+  console.log(`  a link from before holes packs as it was ${rewritten.length ? 'REWRITTEN: ' + rewritten.join(', ') : 'byte for byte'}`);
+  if (rewritten.length) bad++;
+
+  // every combination the three boxes can make, each on its own and each with the rest
+  const fails = [];
+  for (let n = 0; n < 8; n++) {
+    const want = { magnets: !!(n & 1), screws: !!(n & 2), holesEvery: !!(n & 4) };
+    const p = packBin(bin(want)), back = unpackBin(p);
+    const f = p.split('-');
+    if ((n ? f.length !== 22 || f[21] !== String(n) : f.length !== 21) ||
+        ['magnets', 'screws', 'holesEvery'].some((k) => back[k] !== want[k]))
+      fails.push(`${holes(want)} came back ${holes(back)} from ${p.split('-')[21]}`);
+  }
+  console.log(`  each hole setting survives the trip    ${fails.length ? 'LOST: ' + fails.join('; ') : '8 combinations, intact'}`);
+  if (fails.length) bad++;
+
+  // finger slots will set the higher bits; until then they are read past, not misread
+  const slot = unpackBin(packed.split('-').slice(0, 21).concat(['9']).join('-'));
+  const slotOk = slot.magnets === true && slot.screws === false && slot.holesEvery === false;
+  console.log(`  a slot bit is read past, not misread   ${slotOk ? 'intact' : 'WRONG: ' + holes(slot)}`);
+  if (!slotOk) bad++;
+
+  const junk = ['NaN', '3.5', '-1', '1e9', '128', 'abc', '', 'Infinity', '7e0.5'];
+  const misread = junk.filter((j) => {
+    const b = unpackBin(packed.split('-').slice(0, 21).concat([j]).join('-'));
+    return b.magnets || b.screws || b.holesEvery;
+  });
+  console.log(`  junk in the field reads as no holes    ` +
+              (misread.length ? 'MISREAD: ' + misread.join(', ') : `${junk.length} values, none read as holes`));
+  if (misread.length) bad++;
 }
 
 /* A number that is not one. Nothing on the page is known to make a NaN, but one used to
