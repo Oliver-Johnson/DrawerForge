@@ -435,11 +435,17 @@ try {
        paragraph of help below it. The cut map on the baseplates page has carried this
        marker from the start; the two maps share the convention, so they share the
        label. It is static because it is always true. -->
-  <div class="hint" style="text-align:center;padding:2px 14px 0">▾ front of drawer</div>
   <!-- Why the map refused a place, when the map cannot show it: a whole-size bin dropped
        on a half step looks like free cells. Under the map rather than above it, so a
-       reason appearing mid-drag never moves the map out from under the pointer. -->
-  <div class="hint" id="stepWhy" role="status" style="text-align:center;padding:0 14px"></div>
+       reason appearing mid-drag never moves the map out from under the pointer, and on
+       the marker's line, over it while there is a reason: a line of its own pushed the
+       coverage bar under a 1366 × 768 window, and the map has no room to give there
+       (drawMap). Always there, empty when there is nothing to say, so that a screen
+       reader hears what comes into it. -->
+  <div class="mapfoot">
+    <div class="hint" style="text-align:center;padding:2px 14px 0">▾ front of drawer</div>
+    <div class="hint" id="stepWhy" role="status"></div>
+  </div>
   <div class="covbar"><i id="covfill" style="width:0%"></i></div>
   <div class="body">
     <!-- Errors, under the map, where the baseplates page puts them. The Checks panel

@@ -336,3 +336,46 @@ test('an upper layer stands on half-size bins the way it stands on whole ones', 
   await page.evaluate(() => { layers[0].bins.splice(1, 1); readControls(); drawMap(); refresh(); });
   expect(await page.evaluate(() => binIssues(layers[1].bins[0], 1)[0])).toMatch(/^overhangs its support/);
 });
+
+/* The Steps switch shares the layer tabs' row while there is room, and drawMap fixed the
+   map's height from the room above it. It measured before the map's own column was set,
+   while the card was still the width the last draw left it; narrowed to the map, the card
+   had no room for the switch beside two layers' tabs, the switch took a row of its own,
+   and at 1366 x 768 the map, its front marker and the coverage bar went 38 px down, past
+   the bottom of the window. The reason a place was refused, under the map, then pushed
+   the bar 20 px further, even with one layer. Measured where it lands, with nothing
+   scrolled: a drag through slotPoint would scroll the map to the middle first. */
+test('at 1366 x 768 the map, its front, the reason under it and the coverage bar all fit', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1) + '_' + bin(3, 3, 1, 1) + '~' + bin(3, 3, 1, 1, 2));
+  const at = () => page.evaluate(() => {
+    const r = (el) => el.getBoundingClientRect().bottom;
+    const why = $('stepWhy');
+    return { said: why.textContent, map: r($('fillmap')), front: r(why.previousElementSibling),
+             why: r(why), bar: r(document.querySelector('#s-layout .covbar')), fold: innerHeight };
+  });
+  const inView = (m) => {
+    for (const k of ['map', 'front', 'why', 'bar'])
+      expect(m[k], `${k} ends at ${m[k]}, inside the ${m.fold} px window`).toBeLessThanOrEqual(m.fold);
+  };
+  inView(await at());
+
+  // a whole cell drawn half a cell in from the left, which the map refuses and says so
+  const slot = (sx, sy) => page.evaluate(({ sx, sy, CELL }) => {
+    const svg = $('fillmap'), ny = svg.getAttribute('viewBox').split(' ').map(Number)[3] / CELL;
+    const p = svg.createSVGPoint();
+    p.x = (sx + 0.5) * CELL / 2; p.y = (2 * ny - 1 - sy + 0.5) * CELL / 2;
+    const q = p.matrixTransform(svg.getScreenCTM());
+    return { x: q.x, y: q.y };
+  }, { sx, sy, CELL: H.CELL });
+  const a = await slot(1, 4), b = await slot(2, 5);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 6 });
+  await page.mouse.up();
+  await settle(page);
+  const m = await at();
+  expect(m.said).toBe('A whole-size bin sits on whole cells.');
+  inView(m);
+  expect(await page.evaluate(() => document.querySelector('.stage').scrollTop), 'nothing scrolled').toBe(0);
+});

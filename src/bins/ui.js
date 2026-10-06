@@ -1475,7 +1475,9 @@ function drawMap() {
      coverage bar now fit together with the stage scrolled to the top.
      Above the map is measured rather than assumed, because the layer tabs wrap as
      layers are added: the card's heading and tabs (row.room has already lost the
-     stage's top padding). Below it the marker and the bar are a fixed 41 px. Stacked,
+     stage's top padding). Below it the marker and the bar are a fixed 41 px: #stepWhy,
+     the reason the map refused a place, says it on the marker's own line (style.css),
+     because a line of its own put the bar 20 px under a 1366 × 768 window. Stacked,
      the stage is as tall as its content and it is the window that scrolls, so there
      the window is the room — see DF.stageRow.
      Fitting the height never takes a cell under 40 px, the size the phone pass set as
@@ -1483,13 +1485,36 @@ function drawMap() {
      layout" banner showing, a map that scrolls a little beats one too fine to use.
      The 52 px cell and 720 px caps are for a 1080-line window and grow with a taller
      one (row.big): at 1440 a cell may be 69 px rather than staying 52 while the screen
-     round it got a third bigger. The labels scale with the cells, so they stay legible. */
-  const above = svg.getBoundingClientRect().top - top.getBoundingClientRect().top;
-  const availH = Math.max(H * 40 / S, Math.min(720 * row.big, row.room - above - 41));
-  const sc = Math.min(availW / W, availH / H, Math.round(CELL_PX * row.big) / S);
-  svg.setAttribute('width', Math.round(W * sc));
-  svg.setAttribute('height', Math.round(H * sc));
-  if (twoCol) DF.pairColumns(top, Math.round(W * sc) + 30, PREVIEW_MIN);
+     round it got a third bigger. The labels scale with the cells, so they stay legible.
+     Paired, the card is the map's width, and no narrower than the row above the map
+     needs to stay on one line: the layer tabs and the Steps switch. "Above" is measured
+     with the columns taken away (stageRow), where the card is as wide as that row asks;
+     paired at the map's width alone, a 1366 × 768 window had no room for the switch
+     beside two layers' tabs, it dropped to a row of its own after the height was
+     settled, and the map, its front marker and the coverage bar went 38 px under the
+     window. Measuring the extra row would not have saved them: there the map is within
+     about 20 px of its 40 px cells. So the preview gives up the difference instead.
+     And the map is sized again once paired, as the baseplates page's cut map is, should
+     anything above it wrap all the same: with more layers than the row can hold. */
+  let toolsW = 0;
+  if (twoCol) {
+    const tools = $('s-layout').querySelector('.maptools');
+    tools.style.width = 'max-content';
+    // up to the next pixel, which a rounded offsetWidth was not: 385.4 px in 385 wraps
+    toolsW = Math.ceil(tools.getBoundingClientRect().width) + 2;   // and the card's border
+    tools.style.width = '';
+  }
+  const chrome = () => svg.getBoundingClientRect().top - top.getBoundingClientRect().top + 41;
+  const size = (fixed) => {
+    const availH = Math.max(H * 40 / S, Math.min(720 * row.big, row.room - fixed));
+    const sc = Math.min(availW / W, availH / H, Math.round(CELL_PX * row.big) / S);
+    svg.setAttribute('width', Math.round(W * sc));
+    svg.setAttribute('height', Math.round(H * sc));
+    if (twoCol) DF.pairColumns(top, Math.min(availW + 30, Math.max(Math.round(W * sc) + 30, toolsW)), PREVIEW_MIN);
+  };
+  const fixed = chrome();
+  size(fixed);
+  if (twoCol) { const paired = chrome(); if (paired > fixed) size(paired); }
 
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const el = (n, a) => { const e = document.createElementNS(SVGNS, n);
