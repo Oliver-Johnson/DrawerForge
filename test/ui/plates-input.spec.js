@@ -475,7 +475,9 @@ test('half cells: the strips are laid, drawn and described, and the margins are 
         return xs[1] - xs[0];
       })(),
       cells: [...document.querySelectorAll('#pieceRows tr')].map((r) => r.cells[1].textContent),
-      label: document.getElementById('cutmap').getAttribute('aria-label'),
+      label: document.getElementById('three').getAttribute('aria-label') + ' | ' +
+        document.getElementById('cutmap').getAttribute('aria-label'),
+      tail: document.getElementById('mapTail').textContent,
     }));
     expect(s.mode, 'readControls folded half into auto').toBe('half');
     expect(s.strips).toEqual([1, 1]);
@@ -495,6 +497,9 @@ test('half cells: the strips are laid, drawn and described, and the margins are 
     expect(s.boxes.filter(([w, h]) => near(w, s.cell / 2) && near(h, s.cell / 2))).toHaveLength(1);
     expect(s.cells.some((c) => c.includes('½')), 'no piece says it carries half cells').toBe(true);
     expect(s.label).toContain('plus a half column on the right and a half row at the back');
+    // the size is the whole cells', so it comes before the strips rather than after them
+    expect(s.label).toContain('378 by 294 millimetres, plus a half column on the right');
+    expect(s.tail).toBe('9½ × 7½ cells · 4 pieces');
 
     const w = page.locator('#warnings .w');
     await expect(w.filter({ hasText: 'Leftover space is large' }),
@@ -507,7 +512,17 @@ test('half cells: the strips are laid, drawn and described, and the margins are 
     await page.locator('#openExport').click();
     await page.waitForTimeout(300);
     const dlg = await page.locator('#exDesign').textContent();
+    /* The download rows name a piece's cells as the piece table and the cut map do. They
+       said "B1 4 × 4" for a piece of 4½ × 4. */
+    const rows = await page.evaluate(() => [...document.querySelectorAll('#exFiles .exrow')]
+      .filter((r) => r.querySelector('[data-ex="piece"]'))
+      .map((r) => `${r.querySelector('.nm').textContent} ${r.querySelector('.meta').textContent}`
+        .replace(/ · [^·]* · STL$| · not built yet$/, '')));
+    const table = await page.evaluate(() => [...document.querySelectorAll('#pieceRows tr')]
+      .map((r) => `Piece ${r.cells[0].textContent.trim()} ${r.cells[1].textContent} cells`));
     await page.locator('#exportClose').click();
+    expect(rows).toEqual(table);
+    expect(rows.filter((r) => r.includes('½'))).toHaveLength(3);
     expect(dlg).toContain(
       'plus a half column on the right and a half row at the back, in a 400 × 330 mm drawer');
     expect(dlg).toContain('margins L 0.5 / R 0.5 / F 7.5 / B 7.5 mm');

@@ -584,6 +584,26 @@ test.describe('half cells from a link', () => {
       .toHaveText('No room for half cells: 10 mm is left across and 10 mm deep, and a half cell needs 15 mm.');
   });
 
+  /* What is left is rounded down. Rounded to the nearest, 20.996 mm read as the 21 mm a
+     half cell needs, in the line saying there was no room for one. */
+  test('the room left is never rounded up to a half cell', async ({ page }) => {
+    await openAt(page, '#w=398.996&d=314.996&mm=half');
+    await expect(page.locator('#warnings .w').filter({ hasText: 'No room for half cells' }))
+      .toHaveText('No room for half cells: 20.99 mm is left across and 20.99 mm deep, and a half cell needs 21 mm.');
+  });
+
+  /* A piece of 1½ × 1½ cells is not a single cell, and the note suggesting a cut be moved
+     for a sturdier layout said it was. A whole single cell still gets it. */
+  test('a piece with half cells on it is not a single cell', async ({ page }) => {
+    const note = (p) => p.locator('#warnings .w').filter({ hasText: 'A piece is a single cell' });
+    await openAt(page, '#w=63&d=63&mm=half');
+    expect(await page.evaluate(() => layout.pieces.map((pc) => [pc.nx, pc.ny, !!pc.hR, !!pc.hB])))
+      .toEqual([[1, 1, true, true]]);
+    await expect(note(page)).toHaveCount(0);
+    await openAt(page, '#w=63&d=63');
+    await expect(note(page)).toHaveCount(1);
+  });
+
   /* A link made here, opened in a page from before half cells: a stale tab, or a saved
      copy. That page's menu has no 'half', and set() in loadFromHash takes only a value its
      menu offers, so the menu stays where it was and the plate gets a solid margin rather
@@ -592,15 +612,18 @@ test.describe('half cells from a link', () => {
   test('a page without the option reads a half-cell link as a solid margin', async ({ page }) => {
     const errors = await openAt(page, '');
     const s = await page.evaluate(() => {
-      document.querySelector('#marginMode option[value="half"]').remove();
+      // optional, so that main's page, which has no such option, runs this test as well
+      const opt = document.querySelector('#marginMode option[value="half"]');
+      if (opt) opt.remove();
       loadFromHash('w=400&d=330&mm=half');
       recomputeLayout();
       return { menu: document.getElementById('marginMode').value, mode: state.marginMode,
-               strips: [layout.hX, layout.hY],
+               strips: [layout.hX, layout.hY], link: descriptor().mm,
                margins: [layout.mL, layout.mR, layout.mF, layout.mB] };
     });
     expect(s.menu).toBe('auto');
     expect(s.mode).toBe('auto');
+    expect(s.link, 'the link it writes back says what it built').toBe('auto');
     expect(s.strips).toEqual([0, 0]);
     expect(s.margins).toEqual([11, 11, 18, 18]);
     expect(errors).toEqual([]);

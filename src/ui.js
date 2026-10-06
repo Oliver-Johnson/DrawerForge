@@ -473,7 +473,7 @@ function warningsList() {
   if (!heightFits())
     out.push({ err: true, t: `The plate is ${roundMm(plateHeightMm())} mm tall, more than ` +
       `your printer's ${state.bedH} mm build height — lower the extra floor, or check the bed height.` });
-  if (layout.pieces.some(pc => pc.nx*pc.ny === 1))
+  if (layout.pieces.some(pc => pc.nx*pc.ny === 1 && !pc.hR && !pc.hB))
     out.push({ t: 'A piece is a single cell — printable, but consider moving a cut for a sturdier layout.' });
   /* One axis at a time. It fired on either and then printed both, so a drawer narrower
      than a single cell reported "Leftover space is large (-92 × 40 mm)" — the -92 being
@@ -497,10 +497,10 @@ function warningsList() {
      whole-size bin does not fit one, and buildPiece cuts no mounting holes in them. */
   if (state.marginMode === 'half' && !tooSmall &&
       !fieldErrors.has('drawerW') && !fieldErrors.has('drawerD')) {
-    const half = roundMm(state.pitch / 2);
+    const half = roundMm(state.pitch / 2), down = (n) => Math.floor(n * 100 + 1e-6) / 100;
     if (!layout.hX && !layout.hY)
-      out.push({ t: `No room for half cells: ${roundMm(remX)} mm is left across and ` +
-        `${roundMm(remY)} mm deep, and a half cell needs ${half} mm.` });
+      out.push({ t: `No room for half cells: ${down(remX)} mm is left across and ` +
+        `${down(remY)} mm deep, and a half cell needs ${half} mm.` });
     else
       out.push({ t: 'Half cells take half-size bins only, and have no magnet or screw holes.' });
   }
@@ -544,7 +544,8 @@ function drawMap() {
   const pitch = state.pitch;
   const Wmm = state.drawerW, Dmm = state.drawerD;
   // first, because it is in the heading the map's height is measured against
-  $('mapTail').textContent = `${layout.nx} × ${layout.ny} cells · ${plural(layout.pieces.length, 'piece')}`;
+  $('mapTail').textContent = `${cellsOf({ nx: layout.nx, ny: layout.ny, hR: layout.hX, hB: layout.hY })} ` +
+    `cells · ${plural(layout.pieces.length, 'piece')}`;
   /* Beside the preview or above it, by the bins map's rules and through the same
      helper (see DF.stageRow in widgets.js for the two traps it exists to avoid). A
      drawer more than 1.15 times as wide as it is deep keeps the whole stage width, as
@@ -844,10 +845,10 @@ function updatePreviewLabel(blocked) {
     : buildFailed ? `3D preview: the build failed at piece ${buildFailed}.`
     : built < n
       ? `3D preview: building, ${built} of ${plural(n, 'piece')} so far.`
-      : `3D preview: a ${layout.nx} by ${layout.ny} cell baseplate` +
-        `${halfStripText() ? `, plus ${halfStripText()}` : ''}, ` +
+      : `3D preview: a ${layout.nx} by ${layout.ny} cell baseplate, ` +
         `${(layout.nx * state.pitch).toFixed(0)} by ` +
-        `${(layout.ny * state.pitch).toFixed(0)} millimetres, split into ` +
+        `${(layout.ny * state.pitch).toFixed(0)} millimetres` +
+        `${halfStripText() ? `, plus ${halfStripText()}` : ''}, split into ` +
         `${plural(n, 'piece')} and joined with ` +
         `${CONNECTOR_NAMES[state.connector] || state.connector}.`);
 }
@@ -1882,7 +1883,7 @@ function renderExportFiles() {
   for (const pc of layout.pieces) {
     const b = builds[pc.id];
     const btn = exRow(`Piece ${pc.id}`,
-          `${pc.nx} × ${pc.ny} cells · ` + (b ? `${DF.bytes(DF.stlBytes(b.polys))} · STL` : 'not built yet'),
+          `${cellsOf(pc)} cells · ` + (b ? `${DF.bytes(DF.stlBytes(b.polys))} · STL` : 'not built yet'),
           'STL', () => downloadPiece(pc.id),
           { 'data-ex': 'piece', 'aria-label': `Download piece ${pc.id} (STL)` });
     btn.disabled = !b;   // downloadPiece would otherwise fail silently
