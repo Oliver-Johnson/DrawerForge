@@ -1628,12 +1628,14 @@ function drawMap() {
      The 52 px cell and 720 px caps are for a 1080-line window and grow with a taller
      one (row.big): at 1440 a cell may be 69 px rather than staying 52 while the screen
      round it got a third bigger. The labels scale with the cells, so they stay legible.
-     Paired, the card is the map's width. The Steps switch is on its heading's row on any
-     window wide enough to pair (placeSteps), and the title gives way to it rather than
-     widen the card (style.css): asked for the whole title beside the switch, the card
-     was 16 px wider than the map at 1366 × 768 in DejaVu Sans, out of the preview on
-     every layout. Only a map too narrow for the switch and the title's first word makes
-     the card wider than the map.
+     Paired, the card is the map's width, and no narrower than its heading's row needs
+     for the whole title and the Steps switch, which is on that row on any window wide
+     enough to pair (placeSteps). That is 290 to 310 px in the fonts tried, less than a
+     7-column map at 1366 × 768 and no more than one at its 40 px cells, so it takes
+     nothing from the preview there; a narrower drawer's card is held at it, its preview
+     no narrower than a 7-column drawer's. Counted at the title's first word only, the
+     row cut the title to "DRAWER LAYO…" for every drawer under 7 columns, and for a
+     7-column one on a shorter window.
      The switch was first beside the layer tabs, and the card kept as wide as that row:
      paired at the map's width alone, a 1366 × 768 window had no room
      for the switch beside two layers' tabs, it dropped to a row of its own after the
@@ -1649,12 +1651,16 @@ function drawMap() {
   let headW = 0;
   const steps = twoCol && $('s-layout').querySelector('.layouthead > .steps');
   if (steps) {
-    /* the heading at its narrowest (its min-width: padding and about a word), the switch
-       and its margin, and the card's border, up to the next pixel, which a rounded
-       offsetWidth was not: 385.4 px in 385 overlaps */
-    const h3 = $('s-layout').querySelector('.layouthead > h3');
-    headW = Math.ceil(parseFloat(getComputedStyle(h3).minWidth) +
-                      steps.getBoundingClientRect().width + 14) + 2;
+    /* the title on one line and the heading's padding round it, the switch and its
+       margin, and the card's border, up to the next pixel, which a rounded offsetWidth
+       was not: 385.4 px in 385 overlaps. The title's text, not the <h3>, whose box is
+       the room it was given last time and may have cut it. */
+    const h3 = $('s-layout').querySelector('.layouthead > h3'), cs = getComputedStyle(h3);
+    const title = document.createRange();
+    title.selectNodeContents(h3);
+    headW = Math.ceil(parseFloat(cs.paddingLeft) + title.getBoundingClientRect().width +
+                      parseFloat(cs.paddingRight) + steps.getBoundingClientRect().width +
+                      parseFloat(getComputedStyle(steps).marginRight)) + 2;
   }
   const chrome = () => svg.getBoundingClientRect().top - top.getBoundingClientRect().top + 41;
   const size = (fixed) => {

@@ -718,9 +718,10 @@ test('a size the selected bin refused does not become the size of new bins', asy
    now stands beside the heading on the same row. Moved in the document across 980 px, it
    also took the focus with it: on Half cells at 1366 and narrowed to 900, the focus was
    on the page's body. And it set the card's width: in a wider font than this machine's,
-   its heading needed 16 px more than the map, out of the preview on every layout. The
-   title gives way now, and the card is the map's width whatever the font; DejaVu Sans is
-   the wider font that showed it. */
+   its heading needed 16 px more than the map at 1366 x 768, out of the preview on every
+   layout. With the switch's smaller buttons the whole title and the switch fit in the
+   map's own width there, in this machine's font and in DejaVu Sans, the wider font that
+   showed it, so the card is the map's. */
 test('the Steps switch is on the heading row, not in the heading, and keeps the card to the map', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await openAt(page, 'bl=' + bin(0, 0, 1, 1));
@@ -838,3 +839,51 @@ for (const [size, field, value, cell, cells, key, next] of [
     expect(await binsNow(page), 'the next press').toEqual([[0, 0, 1, 1], [...next, 1, 1]]);
   });
 }
+
+/* The map card's title is never cut. It was let give way to the Steps switch so that the
+   heading never made the card wider than the map, which cut it to "DRAWER LAYO…" in every
+   drawer under 7 columns, and in a 7-column one wherever the window brings the map to its
+   40 px cells. Now the card is as wide as the whole title and the switch need. Checked
+   at the window sizes it was cut at, from a first visit's drawer, a deep 7-column one and
+   a narrow one, in this machine's font and in the wider DejaVu Sans. */
+test('the map card\'s title is whole beside the Steps switch, whatever the drawer and window', async ({ page }) => {
+  test.setTimeout(120000);
+  const sizes = [[1281, 680], [1366, 600], [1366, 657], [1366, 700], [1366, 768], [1536, 730], [1920, 1080]];
+  for (const [drawer, hash, barInView] of [['the first visit\'s drawer', '', true],
+                                          ['a deep 7-column drawer', 'w=306&d=600', false],
+                                          ['a 150 mm drawer', 'w=150&d=380', true]]) {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await openAt(page, hash);
+    for (const font of [null, 'DejaVu Sans']) {
+      if (font) await page.evaluate((f) => { document.documentElement.style.setProperty('--sans', `'${f}'`); }, font);
+      for (const [w, h] of sizes) {
+        await page.setViewportSize({ width: w, height: h });
+        await settle(page);
+        await page.evaluate(() => drawMap());
+        await page.waitForTimeout(100);
+        const m = await page.evaluate(() => {
+          const r = (el) => el.getBoundingClientRect();
+          const h3 = document.querySelector('#s-layout h3'), cs = getComputedStyle(h3);
+          const text = document.createRange();
+          text.selectNodeContents(h3);
+          const title = text.getBoundingClientRect(), steps = document.querySelector('#s-layout .steps');
+          const need = parseFloat(cs.paddingLeft) + title.width + parseFloat(cs.paddingRight);
+          return { onRow: steps.parentElement.matches('.layouthead'),
+                   cut: h3.scrollWidth > h3.clientWidth || need > r(h3).width + 0.5,
+                   clear: title.right <= r(steps).left + 0.5,
+                   card: r($('s-layout')).width, map: r($('fillmap')).width,
+                   row: need + r(steps).width + parseFloat(getComputedStyle(steps).marginRight) + 2,
+                   bar: r(document.querySelector('#s-layout .covbar')).bottom, fold: innerHeight };
+        });
+        const at = `${drawer}, ${font || 'this machine\'s font'}, ${w} x ${h}`;
+        expect(m.onRow, `${at}: the switch on the heading's row`).toBe(true);
+        expect(m.cut, `${at}: the title cut`).toBe(false);
+        expect(m.clear, `${at}: the title clear of the switch`).toBe(true);
+        expect(m.card, `${at}: the card no wider than the map or its heading needs`)
+          .toBeLessThanOrEqual(Math.max(m.map + 30, m.row) + 1);
+        if (barInView && w === 1366 && h === 768)
+          expect(m.bar, `${at}: the coverage bar in view`).toBeLessThanOrEqual(m.fold);
+      }
+    }
+  }
+});
