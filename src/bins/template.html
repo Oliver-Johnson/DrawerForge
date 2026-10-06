@@ -250,14 +250,20 @@ try {
   <button type="button" class="sheetx" id="binSheetClose" title="Close — lets go of the selected bin" aria-label="Close the bin settings">×</button>
   <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
-      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint"></label>
-      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint"></label>
+      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint sizeWhy"></label>
+      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint sizeWhy"></label>
     </div>
     <!-- Half sizes need no special baseplate: a quarter foot seats in the corner of an
          ordinary socket, two to a side. sizeWhy says why a size typed here was put back
-         when the map cannot show it — a whole size for a bin standing on a half step. -->
-    <div class="hint" id="sizeHalfHint">A half cell is 21 mm. Half-size bins have small feet that fit any Gridfinity baseplate, two to a socket.</div>
-    <div class="hint" id="sizeWhy" role="status" style="display:none;color:var(--red)"></div>
+         when the map cannot show it — a whole size for a bin standing on a half step. It
+         is always there, empty when there is nothing to say, so that a screen reader
+         hears what comes into it; the two share one grid item, or the empty one would
+         still open a gap of the panel's spacing under the hint. The half cell's length
+         is written in the drawer's unit by refresh(). -->
+    <div>
+      <div class="hint" id="sizeHalfHint">A half cell is <span id="halfCellLen">21 mm</span>. Half-size bins have small feet that fit any Gridfinity baseplate, two to a socket.</div>
+      <div class="hint" id="sizeWhy" role="status"></div>
+    </div>
     <!-- Height three ways. Someone sizing a bin for a part knows the part in millimetres,
          not in 7 mm units, so the height can be typed as units, as millimetres overall,
          or as the depth wanted inside. Whichever way it is typed, the bin is still a
@@ -445,11 +451,17 @@ try {
        paragraph of help below it. The cut map on the baseplates page has carried this
        marker from the start; the two maps share the convention, so they share the
        label. It is static because it is always true. -->
-  <div class="hint" style="text-align:center;padding:2px 14px 0">▾ front of drawer</div>
   <!-- Why the map refused a place, when the map cannot show it: a whole-size bin dropped
        on a half step looks like free cells. Under the map rather than above it, so a
-       reason appearing mid-drag never moves the map out from under the pointer. -->
-  <div class="hint" id="stepWhy" role="status" style="text-align:center;padding:0 14px"></div>
+       reason appearing mid-drag never moves the map out from under the pointer, and on
+       the marker's line, over it while there is a reason: a line of its own pushed the
+       coverage bar under a 1366 × 768 window, and the map has no room to give there
+       (drawMap). Always there, empty when there is nothing to say, so that a screen
+       reader hears what comes into it. -->
+  <div class="mapfoot">
+    <div class="hint" style="text-align:center;padding:2px 14px 0">▾ front of drawer</div>
+    <div class="hint" id="stepWhy" role="status"></div>
+  </div>
   <div class="covbar"><i id="covfill" style="width:0%"></i></div>
   <div class="body">
     <!-- Errors, under the map, where the baseplates page puts them. The Checks panel

@@ -411,7 +411,10 @@ test('half-size bins download under their own sizes, with no holes they cannot h
    Each digest is the first 16 hex digits of the SHA-256, recorded from the page as it
    was before half-size bins reached the bins page (the README since it gained print
    cost and time). A change that MEANS to alter these will fail here: check that it
-   should, then put in the digests this prints. */
+   should, then put in the digests this prints. One did: the plain 2x1x3 and the one with
+   lowered walls shared the name "bin-2x1x3-qty1.stl", so the ZIP held only the second.
+   Each now has its own file, and the page before half sizes, with that change, gives
+   these same digests. */
 test('a link from before half sizes downloads the same files, byte for byte', async ({ page }) => {
   const crypto = require('crypto');
   const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);

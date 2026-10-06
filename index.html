@@ -478,13 +478,23 @@ footer .mono{font-family:var(--mono);font-size:11px}
    enough that the cells still read as cells. */
 #fillmap .midline{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 4;opacity:.5;pointer-events:none}
 /* The layer tabs and the Steps switch share a row above the map; the switch drops to a
-   row of its own only when the tabs need the room. #stepWhy, under the map, is the
-   reason a place was refused. */
+   row of its own only when the tabs need the room. Beside the preview the map's card is
+   kept wide enough for the row (drawMap), so there that is only with many layers.
+   #stepWhy, under the map, is the reason a place was refused. */
 .maptools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 .maptools #layerTabs{flex:1 0 auto}
 .steps{display:flex;align-items:center;gap:8px}
 .steps .seg button{flex:none;padding:7px 12px}
-#stepWhy{color:var(--red)}
+/* #stepWhy says its reason on the front marker's line, covering the marker until the
+   next press on the map: drawMap counts one line under the map, so a reason arriving
+   neither pushes the coverage bar below the window nor makes the map change size under
+   the pointer. Empty, it is transparent and the marker shows through. */
+.mapfoot{position:relative}
+#stepWhy{position:absolute;left:0;right:0;top:0;min-height:100%;padding:2px 14px 0;
+  text-align:center;color:var(--red);background:var(--panel)}
+#stepWhy:empty{background:none}
+#sizeWhy{color:var(--red)}
+#sizeWhy:not(:empty){margin-top:6px}
 
 /* ---- cross-tool navigation ---- */
 header nav{display:flex;gap:6px;margin-top:14px}
