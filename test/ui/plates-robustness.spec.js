@@ -592,6 +592,31 @@ test.describe('half cells from a link', () => {
       .toHaveText('No room for half cells: 20.99 mm is left across and 20.99 mm deep, and a half cell needs 21 mm.');
   });
 
+  /* And the half cell is rounded up. Rounded to the nearest, a pitch with a third decimal
+     in its half — 42.01, 13.51, 13.53 — quoted the same figure as the room left: "21 mm
+     is left across … and a half cell needs 21 mm". The menu and the README quote that
+     size too, so all three say the same number. */
+  test('the size a half cell needs is never rounded down to the room left', async ({ page }) => {
+    const note = () => page.locator('#warnings .w').filter({ hasText: 'No room for half cells' });
+    const menu = () => page.evaluate(() =>
+      document.querySelector('#marginMode option[value="half"]').textContent);
+    const readme = () => page.evaluate(() => readmeText());
+    await openAt(page, '#pi=42.01&w=399.09&d=300&mm=half');
+    await expect(note()).toHaveText(
+      'No room for half cells: 21 mm is left across and 5.93 mm deep, and a half cell needs 21.01 mm.');
+    expect(await menu()).toBe('Fill with half cells where they fit (21.01 mm)');
+    for (const [pi, w, left, size] of [[13.51, 141.85, 6.75, 6.76], [13.53, 142.06, 6.76, 6.77]]) {
+      await openAt(page, `#pi=${pi}&w=${w}&d=${w}&mm=half`);
+      await expect(note()).toHaveText(`No room for half cells: ${left} mm is left across and ` +
+        `${left} mm deep, and a half cell needs ${size} mm.`);
+      expect(await menu()).toBe(`Fill with half cells where they fit (${size} mm)`);
+      // one more hundredth across, and the column fits; the README quotes it at the same size
+      await openAt(page, `#pi=${pi}&w=${(w + 0.01).toFixed(2)}&d=${w}&mm=half`);
+      expect(await page.evaluate(() => [layout.hX, layout.hY])).toEqual([1, 0]);
+      expect(await readme()).toContain(`Half cells: a half column on the right (${size} mm)`);
+    }
+  });
+
   /* A piece of 1½ × 1½ cells is not a single cell, and the note suggesting a cut be moved
      for a sturdier layout said it was. A whole single cell still gets it. */
   test('a piece with half cells on it is not a single cell', async ({ page }) => {
