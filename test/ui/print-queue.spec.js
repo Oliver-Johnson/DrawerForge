@@ -286,6 +286,9 @@ test('a railed bin and a fixed-divider bin do not share an STL', async ({ page }
 
   const keys = await page.evaluate(() => types().map((t) => t.key));
   expect(new Set(keys).size, `two distinct parts, got ${JSON.stringify(keys)}`).toBe(2);
+  // and two files: both were "bin-2x2x3-1x0div-qty1.stl", so the ZIP held only one
+  expect(await page.evaluate(() => [...typeNames().values()].sort()))
+    .toEqual(['bin-2x2x3-1x0div-loose-dividers-qty1', 'bin-2x2x3-1x0div-qty1']);
 });
 
 test('the removable flag survives a reload', async ({ page }) => {
