@@ -9371,6 +9371,21 @@ const fingerText = (b) => {
   const p = fingerPlan(b);
   return p && p.n ? `${plural(p.n, 'finger slot')}, ${wallList(p.built)}` : '';
 };
+/* The scoop and the label shelf a bin is built with, for its key and its name, which go
+   by what it is built with: two bins built alike are one part. A front slot holds the
+   scoop under it, so 15 and 25 mm asked for are both built at what it is held to; a back
+   slot leaves the shelf off, so a shelf asked for is no shelf, unless the holes across
+   the floor kept clear of it all the same (holesGaveWay): then how deep it would have
+   been is where they are. A bin with no slots is keyed and named by what it asks for, as
+   it always was. */
+const scoopBuilt = (b) => {
+  const p = fingerPlan(b);
+  return p && p.scoop !== null ? +p.scoopNow.toFixed(3) : b.scoop;
+};
+const labelBuilt = (b) => {
+  const p = fingerPlan(b);
+  return p && p.shelfOff && !(p.holesGaveWay && holesIn(b)) ? 0 : b.label;
+};
 /* What finger slots take off a bin's volume, for the filament estimate (volumeMm3): the
    dips' area in the plane of the wall times the `wall` they are cut from, and the
    stacking lip `lipV` the bin would have had, which goes with them as with a lowered
@@ -9659,8 +9674,9 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
    divKey(b) +
    (allFullEdges(b) ? '' : `-e${edgeSig(b)}`) +
    /* A solid block has no cavity for a scoop or a shelf (buildBin builds neither), so
-      a solid with one is the same part as a solid without. */
-   (b.scoop && !holesIn(b) ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '')) +
+      a solid with one is the same part as a solid without. Both as built: a finger slot
+      can hold the one and take the other away. */
+   (scoopBuilt(b) && !holesIn(b) ? `-s${scoopBuilt(b)}` : '') + (labelBuilt(b) ? `-L${labelBuilt(b)}` : '')) +
   // a mask covering every cell (a hand-written link can say so) is no shape at all
   (maskBits(b) ? `-c${maskBits(b)}` : '') +
   /* A holed bin is a different part from the plain one, and from one holed for another
@@ -13590,8 +13606,12 @@ const VARIANT_TAGS = [
   // the cells it keeps, as hex: the same shape is the same name wherever it is drawn
   (b) => (maskBits(b) ? `shaped-${BigInt('0b' + maskBits(b)).toString(16)}` : ''),
   // a bin with holes across its floor is built without its scoop and dividers (holesIn)
-  (b) => (!b.solid && b.scoop && !holesIn(b) ? `scoop${b.scoop}` : ''),
-  (b) => (!b.solid && b.label ? `label${b.label}` : ''),
+  // the scoop and the shelf as built: a finger slot can hold the one and take the other
+  (b) => {
+    const s = scoopBuilt(b);
+    return !b.solid && s && !holesIn(b) ? `scoop${s === b.scoop ? s : +s.toFixed(2)}` : '';
+  },
+  (b) => (!b.solid && labelBuilt(b) ? `label${labelBuilt(b)}` : ''),
   (b) => (!b.solid && b.divRemovable && (builtDivs(b).divX || builtDivs(b).divY) ? 'loose-dividers' : ''),
   // two bins holed for the same thing to different depths
   (b) => { const h = holesIn(b); return h ? `depth${+h.depth.toFixed(1)}` : ''; },

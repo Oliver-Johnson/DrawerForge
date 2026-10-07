@@ -293,3 +293,20 @@ test('a back slot gives the holes the label shelf’s room, or says they kept cl
     'to leave room for the finger slot in the back wall, and in front of it there is no room for even one hole for AAA batteries.');
   expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
 });
+
+test('bins built alike are one part, whatever shelf or scoop their slots took away', async ({ page }) => {
+  // as many parts as different STLs, and as many files
+  const parts = () => page.evaluate(() => {
+    const stl = (b) => [...new Uint8Array(stlBinary(buildBin(G, binCfg(b)).polys, 'b'))].join();
+    return [new Set(B().map(stl)).size, types().length, [...typeNames().values()].sort()];
+  });
+  // a back slot leaves the shelf off, so a 12 mm shelf asked for is the bin with none
+  await load(page, '0-0-2-1-4-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-16_2-0-2-1-4-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15-16');
+  expect(await parts()).toEqual([1, 1, ['bin-2x1x4-slot-b-qty2']]);
+  await expect(page.locator('#typeRows button[data-t]')).toHaveCount(1);
+
+  // a front slot holds 15 and 25 mm scoops alike to 9.92, under it; 8 mm is under it already
+  await load(page, '0-0-2-1-4-1.2-1.2-0-0-0-1-1-1-1-15-0-0-0-0-0-15-8_2-0-2-1-4-1.2-1.2-0-0-0-1-1-1-1-25-0-0-0-0-0-15-8' +
+    '_0-1-2-1-4-1.2-1.2-0-0-0-1-1-1-1-8-0-0-0-0-0-15-8');
+  expect(await parts()).toEqual([2, 2, ['bin-2x1x4-slot-f-scoop8-qty1', 'bin-2x1x4-slot-f-scoop9.92-qty2']]);
+});
