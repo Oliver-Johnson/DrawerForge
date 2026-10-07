@@ -1715,7 +1715,10 @@ function buildBin(G, cfg) {
        comes to the shelf's front, or within a BLOAT of it, runs a BLOAT into the shelf,
        as it would into its neighbour. Under the shelf that is up to two BLOAT more
        divider, the most a merge with a neighbour adds. One whose FRONT lies on the
-       shelf's front already runs into the shelf; see box for that one. */
+       shelf's front already runs into the shelf; see box for that one. "On" is to ten
+       times WELD, either side, for both. Held to WELD, a face 2 to 5 µm off the shelf's
+       front was left as it was: clean as built, but welded at 5 to 10 µm, as a slicer may
+       weld, the two shells' corners became one and the edge was shared again. */
     const spans = (n, inner, shelf) => {
       const out = [];
       for (let k = 1; k <= n; k++) {
@@ -1723,7 +1726,7 @@ function buildBin(G, cfg) {
         if (c.divRemovable) out.push([p - rail, p - slot], [p + slot, p + rail]);
         else out.push([p - t, p + t]);
       }
-      for (const s of out) if (s[1] >= shelf - BLOAT && s[1] < shelf + WELD) s[1] = shelf + BLOAT;
+      for (const s of out) if (s[1] >= shelf - BLOAT && s[1] < shelf + 10 * WELD) s[1] = shelf + BLOAT;
       out.sort((a, b) => a[0] - b[0]);
       const merged = [];
       for (const [lo, hi] of out) {
@@ -1792,7 +1795,7 @@ function buildBin(G, cfg) {
         polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
     for (const [a, b] of spans(built.divY, id, shelf))
       for (const [lo, hi] of reach(iw))
-        polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT, Math.abs(a - shelf) < WELD));
+        polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT, Math.abs(a - shelf) < 10 * WELD));
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */
