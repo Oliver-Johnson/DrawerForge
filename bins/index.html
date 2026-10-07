@@ -7782,13 +7782,16 @@ const INSERT_SPEC = {
   depthMin: 1,          // nor a depth someone typed
   clr: { min: -0.3, max: 1 },   // the Hole clearance field's limits, held here as well
 };
-/* The most holes one bin is built with. Each is a tile of its own, some 200 triangles for
-   a round hole, so the count is what the build costs: a link could ask for a 47 x 47 tray
-   of AAA holes, 9.6 million triangles, 13 s and 4.2 GB in Node. At the most, a 13 x 13 of
-   AAA (1,936) is 730,000 triangles, 1 s and 280 MB, and a 9 x 9 of hex bits (1,927), the
-   largest square a 400 mm bed prints, 210,000 and 0.4 s. Past it a bin gets none
-   (holeLayout's 'many'), from every way in, and the page says so; the page holds a whole
-   layout to the same count (holdHoles in bins/ui.js), as it does raised notes. */
+/* The most holes one bin is built with. Each is a tile of its own, 380 to 530 triangles
+   for a round hole and some 110 for a hex, so the count is what the build costs: a link
+   could ask for a 47 x 47 tray of AAA holes, 9.6 million triangles, 13 s and 4.2 GB in
+   Node. At the most, an 11.5 x 14.5 bin of AAA at the tightest hole clearance (-0.3) has
+   exactly 2,000, 40 x 50: 1.07 million triangles, a 53 MB STL, 1.4 s and under 500 MB.
+   A 13 x 13 of AAA at the usual clearance (1,936) is 730,000 triangles and 37 MB, and a
+   9 x 9 of hex bits (1,927), the largest square a 400 mm bed prints, 210,000 and 0.4 s.
+   Past it a bin gets none (holeLayout's 'many'), from every way in, and the page says so;
+   the page holds a whole layout to the same count (holdHoles in bins/ui.js), as it does
+   raised notes. */
 const HOLES_MAX = 2000;
 /* A hole of `d` across, at the origin, CCW, with what the layout and the estimate need to
    know of it. Round holes are faceted outside the nominal size, every facet a tangent of
