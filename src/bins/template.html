@@ -286,7 +286,10 @@ try {
     </div>
     <div class="hint" id="hResult" role="status">—</div>
     <div class="hint" id="binSizeHint">—</div>
-    <label class="f" id="noteRow"><b>What goes in it (optional)</b><input id="note" type="text" maxlength="28" placeholder="M3 screws, drill bits…"></label>
+    <label class="f" id="noteRow"><b>What goes in it (optional)</b><input id="note" type="text" maxlength="28" placeholder="M3 screws, drill bits…" aria-describedby="noteHint"></label>
+    <!-- What of the note prints, once "On the shelf" (with the label shelf, below) is set
+         to raise it. Written by the page, as text: it quotes the note back. -->
+    <div class="hint" id="noteHint" style="display:none"></div>
     <label class="tog"><input id="solid" type="checkbox"> Solid block (no cavity)</label>
     <div class="row" id="thickRow">
       <label class="f"><b>Wall thickness (mm)</b><input id="wall" type="number" step="0.1" min="0" max="10" value="1.2"></label>
@@ -346,6 +349,13 @@ try {
     <div class="row" id="featureRow">
       <label class="f"><b>Front scoop (mm)</b><input id="scoop" type="number" step="1" min="0" value="0"></label>
       <label class="f"><b>Label shelf (mm)</b><input id="label" type="number" step="1" min="0" value="0"></label>
+    </div>
+    <!-- What the label shelf carries, under the shelf it is about. The note raised on it
+         gives it a 12 mm shelf when it has none; the hint under the note says what prints. -->
+    <div class="row" id="labelModeRow">
+      <label class="f" style="grid-column:2"><b>On the shelf</b><select id="labelMode">
+        <option value="0">Nothing</option>
+        <option value="1">The note, raised</option></select></label>
     </div>
     <!-- Only worth showing once there is a divider to make removable. -->
     <div class="row" id="divRemovableRow" style="display:none">
@@ -622,6 +632,12 @@ try {
 </script>
 <script>
 /*__DRAWERS__*/
+</script>
+<script>
+/*__FONT__*/
+</script>
+<script>
+/*__TEXT__*/
 </script>
 <script>
 /*__BIN__*/

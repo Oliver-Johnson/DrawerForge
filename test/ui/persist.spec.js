@@ -317,3 +317,50 @@ test('a layout with half-size bins comes back after a reload', async ({ page }) 
   expect(await page.evaluate(() => [B().map((b) => [b.x, b.y, b.u, b.v]), [scratch.u, scratch.v]]))
     .toEqual(before);
 });
+
+/* A loose bin's note travels beside it (bsn), as the layers' notes do in bnotes. It was
+   never saved at all: a reload, a restore and the README's link all brought the bin back
+   without its note, and one raised on its shelf came back a plain bin under another
+   name, with no letters. A loose bin with no note has the link it always had. */
+test('a loose bin keeps its raised note through a reload, a restore and its README link', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await openBins(page);
+  await expect(page.locator('#labelMode'), 'the page has the "On the shelf" menu').toHaveCount(1, { timeout: 2000 });
+  const ready = async () => {
+    await page.waitForFunction(() => typeof THREE !== 'undefined');
+    await settle(page);
+  };
+  await page.evaluate(() => startScratch());
+  await settle(page);
+  expect(await page.evaluate(() => descString()), 'no note, no field for one').not.toContain('bsn');
+
+  await page.selectOption('#labelMode', '1');
+  await page.fill('#note', 'M3 screws');
+  await settle(page);
+  const now = () => page.evaluate(() => [!!scratch, scratch && scratch.note, scratch && scratch.labelMode,
+    scratch && typeName(types()[0])]);
+  const want = [true, 'M3 screws', 1, 'bin-1x1x3-note-m3-screws-qty1'];
+  expect(await now()).toEqual(want);
+  const readme = await page.evaluate(() => layoutReadme());
+  expect(readme).toContain('Raised note: “M3 screws” on the label shelf, 4.5 mm letters on one line.');
+  const link = readme.match(/^Layout link: (.*)$/m)[1];
+  expect(link).toContain('bsn=M3%20screws');
+
+  await page.reload();
+  await ready();
+  expect(await now(), 'after a reload').toEqual(want);
+
+  await page.goto('about:blank');
+  await page.goto(binsUrl());
+  await ready();
+  expect(await now(), 'restored, on the bare page').toEqual(want);
+
+  // and from the README's link alone, with nothing saved in this browser
+  await page.evaluate(() => localStorage.clear());
+  await page.goto('about:blank');
+  await page.goto(link);
+  await ready();
+  expect(await now(), "from the README's link").toEqual(want);
+  expect(errors).toEqual([]);
+});

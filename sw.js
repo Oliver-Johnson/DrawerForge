@@ -52,7 +52,7 @@
    load from this site, and the app's icons and manifest, as paths from the root. VERSION
    is a hash of all of those files, names and bytes, and of this script as it is served,
    FILES filled in and everything else but VERSION itself. */
-const VERSION = "df0927dd2052";
+const VERSION = "bec52311d7bc";
 const FILES = [
   "./",
   "bins/",
