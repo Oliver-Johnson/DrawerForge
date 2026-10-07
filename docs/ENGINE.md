@@ -264,6 +264,16 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   hole would have to go depends on where the bin sits. The audit slices every quarter
   against the spec and probes the line between quarters from the bed, because a
   half-size bin on whole feet is just as watertight and the body sets its footprint.
+- **Holes across the floor** for what goes in a bin (AA, AAA and 18650 cells, hex bits)
+  are built the same way, not cut. The block they are in is one convex **tile** per hole:
+  the hole's share of the cavity, a BLOAT past halfway to each neighbour and a BLOAT into
+  the wall, closed round its hole by `wallRing` from two loops sampled on the same rays
+  from the hole's centre (`holeTiles`). The cavity outline a tile is clipped by carries
+  points on its corner arcs only. With roundRect's straight-run points in it, a point
+  fell in the strip two tiles share, both tiles carried it, and every case in the audit
+  read 2 to 4 edges used four times. The audit probes every hole's centre down to the
+  floor and the block beside the first one, so a block with its holes left solid, or no
+  block, fails there however watertight it is.
 - Every rounded square in a bin shares the corner-arc centre **17.00 mm**
   (`41.5/2 − 3.75`). That constant is what makes clearance uniform around the perimeter
   instead of binding at the corners. See [socket-clearance.md](socket-clearance.md) for
