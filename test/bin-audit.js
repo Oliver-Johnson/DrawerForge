@@ -1120,6 +1120,57 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
       `among them ${fails.slice(0, 4).join('; ')}` : `${rows.length} builds, all clean`));
   if (!exact || fails.length) bad++;
 }
+/* Just off the shelf's front is as bad once a slicer welds what is close. A face 2 to 5
+   µm from it was built as it was, clean at checkManifold's micron, but its corners and
+   the shelf's became one at a weld of 5 or 10 µm and the edge was shared again. So the
+   same sweep, taking each count with a face from a micron to 20 µm off the front, is
+   welded at 5 µm and at 10 µm, and must still have every edge used twice. One in five of
+   them is welded, 591, which takes a fifth of the time: with "on" held to WELD, 52 of those
+   failed, and 241 of all 2954. */
+{
+  const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
+  const weldBad = (polys, step) => {
+    const key = (v) => v.map((x) => Math.round(x / step)).join(',');
+    const edges = new Map();
+    for (const t of G.polysToTriangles(polys)) {
+      const ks = t.map(key);
+      if (ks[0] === ks[1] || ks[1] === ks[2] || ks[0] === ks[2]) continue;   // welded away
+      for (let i = 0; i < 3; i++) {
+        const a = ks[i], b = ks[(i + 1) % 3], k = a < b ? a + '|' + b : b + '|' + a;
+        edges.set(k, (edges.get(k) || 0) + 1);
+      }
+    }
+    let n = 0;
+    for (const c of edges.values()) if (c !== 2) n++;
+    return n;
+  };
+  const rows = [];
+  for (const v of [0.5, 1, 1.5, 2, 2.5])
+    for (let w = 4; w <= 50; w++) {
+      const wall = w / 10, inner = (v - 1) * SPEC.pitch / 2 + 20.75 - wall;
+      for (let label = 1; label <= Math.min(30, 0.8 * inner); label++) {
+        const front = inner - label;
+        for (let n = 1; n <= most(2 * inner, wall); n++) {
+          let off = Infinity;
+          for (let k = 1; k <= n; k++) {
+            const p = -inner + 2 * inner * k / (n + 1);
+            for (const f of [p - wall / 2, p + wall / 2]) off = Math.min(off, Math.abs(f - front));
+          }
+          if (off >= 0.001 && off < 0.02)
+            rows.push([`${v} deep, wall ${wall}, ${label} mm shelf, ${n} along`, { u: 0.5, v, hUnits: 6, wall, label, divY: n }]);
+        }
+      }
+    }
+  const fails = [], some = rows.filter((_, i) => i % 5 === 0);
+  for (const [name, cfg] of some) {
+    const polys = buildBin(G, cfg).polys, b5 = weldBad(polys, 0.005), b10 = weldBad(polys, 0.01);
+    if (b5 || b10) fails.push(`${name}: ${b5} edges at 5 µm, ${b10} at 10 µm`);
+  }
+  console.log(`  ${`${some.length} just off its front`.padEnd(34)} ` + (!some.length ? 'NONE FOUND to build'
+    : fails.length ? `FAILED ${fails.length} welded, among them ${fails.slice(0, 3).join('; ')}`
+    : 'welded at 5 and 10 µm, all clean'));
+  if (!some.length || fails.length) bad++;
+}
 
 console.log('\ndivider boxes cut to the cavity\'s rounded corner');
 /* A divider or rail box that would stand out through a rounded corner is the cavity's
