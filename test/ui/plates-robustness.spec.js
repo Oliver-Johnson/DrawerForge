@@ -155,10 +155,11 @@ test.describe('ranges on the geometry fields', () => {
      each side and a bowtie key from each, at the same place along both. Below 14.35 mm
      the two housings overlap and that piece came out with 47 open edges; the page said
      nothing and offered the download (test/plate-audit.js, the smallest pitch). The
-     joints it names are the ones that clear at this pitch, and the audit builds each. */
+     joints it names are the ones that clear at this pitch and were swept clean there
+     (jointsThatFit), and the audit builds each. */
   const rows = (p, w) => `#pi=${p}&w=${w}&d=${w}&sp=manual&rc=1,2&cc=__&cn=bowtie`;
-  const instead = 'or use a joint that fits at 13\\.5 mm: dovetail tabs, puzzle tabs, H-clips, ' +
-    'snap clips put in from above or bowtie keys inside the walls, put in from beneath\\.';
+  const instead = 'or use a joint that fits at 13\\.5 mm: snap clips put in from above or ' +
+    'bowtie keys inside the walls, put in from beneath\\.';
   test('keys that meet across a piece one cell deep are a check, not a plate', async ({ page }) => {
     const errors = await openAt(page, rows(13.5, 40.5));
     expect(await page.evaluate(() => layout.pieces.map((pc) => `${pc.id} ${pc.nx}x${pc.ny}`)),
@@ -182,6 +183,30 @@ test.describe('ranges on the geometry fields', () => {
     expect(await text(page, 'warnings')).toMatch(new RegExp(
       'Piece B1 is one cell wide between two seams, .* Move a cut so it is two cells wide, ' +
       'use a pitch of 14\\.35 mm or more, ' + instead));
+    expect(errors).toEqual([]);
+  });
+
+  /* Clear of each other is not the same as clean. At 13.6 mm with a clearance of 0.3 the
+     dovetail's tabs are clear of each other, and it was named, and that plate has 12
+     open edges; the H-clip has 6 at 14.2 with a clearance of 1. A joint is named only
+     from the pitch it was swept clean from. */
+  test('a joint that leaks at this pitch is not named', async ({ page }) => {
+    const errors = await openAt(page,
+      '#pi=13.6&w=40.8&d=40.8&mm=custom&ml=0&mr=0&mf=0&mb=0&sp=manual&rc=1,2&cc=__&cn=bowtie&cl=0.3');
+    const said = await text(page, 'warnings');
+    expect(said).toMatch(/Piece A2 is one cell deep between two seams/);
+    expect(said).toMatch(new RegExp('or use a joint that fits at 13\\.6 mm: snap clips put in ' +
+      'from above or bowtie keys inside the walls, put in from beneath\\.'));
+    expect(said).not.toMatch(/dovetail tabs|H-clips|puzzle tabs/);
+    expect(errors).toEqual([]);
+  });
+
+  // and at 14.5 mm, where they were, the dovetail, the H-clip and the key from above come back
+  test('the joints come back at the pitch they build clean from', async ({ page }) => {
+    const errors = await openAt(page, rows(14.5, 43.5) + '&cl=0.3');
+    expect(await text(page, 'warnings')).toMatch(new RegExp('or use a joint that fits at ' +
+      '14\\.5 mm: dovetail tabs, H-clips, snap clips put in from above or bowtie keys inside ' +
+      'the walls, put in from beneath or above\\.'));
     expect(errors).toEqual([]);
   });
 

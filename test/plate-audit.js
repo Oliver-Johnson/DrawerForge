@@ -1588,6 +1588,94 @@ console.log('\nthe smallest pitch the page allows:');
   if (!opened.length) bad++;
 }
 
+/* The joints Checks names in place of keys that meet, across every pitch it refuses at.
+ *
+ * The section above builds them at 13.5 mm and the default clearance only, and named
+ * that way the message sent people to plates that leaked. jointsThatFit now names a
+ * joint only from the pitch it was swept clean from (KEY_ALTERNATIVES in core.js), and
+ * this holds it to that two ways.
+ *
+ * First, a plate from that sweep for each joint the rule holds back, each just short of
+ * where it is named from: it has to leak still, or the bound can come down, and Checks
+ * must not name it. 006ea48 named all but the cup, which it never named.
+ *
+ * Then what it does name, built: every 0.4 mm from 13.5 to 15.9, the last pitch anything
+ * is refused at, and at each joint's own bound; rows one cell deep, and rows beside
+ * columns one cell wide in one drawer; the field at 0, 0.3 and as far as the joint in use
+ * goes; each cut down to the ceiling of the joint named, as the page cuts it when that
+ * joint is chosen. A plate that leaks, or that keysMeet refuses after all, fails it. */
+console.log('\nthe joints named in place of keys that meet, wherever they meet:');
+{
+  const LAYS = {
+    rows: (p) => ({ drawerW: 3 * p, drawerD: 3 * p, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], []] }),
+    both: (p) => ({ drawerW: 3 * p, drawerD: 5 * p, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]] }),
+  };
+  const IN_USE = {
+    bowtie: { connector: 'bowtie' }, puzzlekey: { connector: 'puzzlekey' }, snap: { connector: 'snap' },
+    'bowtie wall top': { connector: 'bowtie', keyMount: 'wall', keyInsert: 'top' },
+    'puzzlekey wall top': { connector: 'puzzlekey', keyMount: 'wall', keyInsert: 'top' },
+  };
+  const OVER = {
+    dovetail: { connector: 'dovetail' }, puzzle: { connector: 'puzzle' }, hclip: { connector: 'hclip' },
+    wall: { keyMount: 'wall', keyInsert: 'bottom' }, cup: { keyMount: 'wall', keyInsert: 'top' },
+  };
+  // the joint named, built as the page builds it once chosen
+  const named = (p, lay, conf, f, over) => {
+    const base = { pitch: p, ...lay(p), ...conf, ...over };
+    return { ...base, clr: Math.min(f, G.connClrCeiling(designCfg(base)).max) };
+  };
+  const HELD = [
+    ['dovetail', 'bowtie', 13.6, 0.3], ['hclip', 'snap', 14.2, 1], ['puzzle', 'snap', 15.94, 1],
+    ['wall', 'puzzlekey', 14.48, 0.3], ['wall', 'snap', 15.24, 1], ['cup', 'bowtie', 14.44, 0.3],
+  ];
+  const held = [], unheld = [];
+  for (const [id, cn, p, f] of HELD) {
+    const cfg = designCfg({ pitch: p, ...LAYS.rows(p), ...IN_USE[cn], clr: f });
+    const L = G.computeLayout(cfg);
+    const r = buildAll(named(p, LAYS.rows, IN_USE[cn], f, OVER[id]));
+    const says = G.jointsThatFit(cfg, L).some((j) => j.id === id);
+    held.push(`${id} for ${cn} at ${p}, ${leakText(r)}`);
+    if (!G.keysMeet(cfg, L).length) unheld.push(`${id} for ${cn} at ${p}: NOTHING REFUSED`);
+    else if (says) unheld.push(`${id} for ${cn} at ${p}: NAMED, ${leakText(r)}`);
+    else if (!r.bad) unheld.push(`${id} for ${cn} at ${p}: NOW CLEAN — its bound can come down`);
+  }
+  console.log(`  held back: ${held.join('; ')}` + (unheld.length ? `   FAIL: ${unheld.join('; ')}` : ''));
+  bad += unheld.length;
+
+  const pitches = new Set([14.3, 14.5, 15.3]);
+  for (let p = 13.5; p <= 15.9 + 1e-9; p = Math.round((p + 0.4) * 10) / 10) pitches.add(p);
+  const built = new Set(), leaks = [], names = {};
+  let refused = 0;
+  const t0 = Date.now();
+  for (const p of [...pitches].sort((a, b) => a - b))
+    for (const [ln, lay] of Object.entries(LAYS))
+      for (const [cn, conf] of Object.entries(IN_USE)) {
+        const most = G.connClrCeiling(designCfg({ pitch: p, ...lay(p), ...conf })).max;
+        for (const f of new Set([0, Math.min(0.3, most), most])) {
+          const cfg = designCfg({ pitch: p, ...lay(p), ...conf, clr: f });
+          const L = G.computeLayout(cfg);
+          if (!G.keysMeet(cfg, L).length) continue;
+          refused++;
+          for (const j of G.jointsThatFit(cfg, L)) {
+            names[j.id] = (names[j.id] || 0) + 1;
+            const over = named(p, lay, conf, f, j.over), k = JSON.stringify(over);
+            if (built.has(k)) continue;
+            built.add(k);
+            const r = buildAll(over);
+            const meets = G.keysMeet(r.cfg, r.L).length > 0;
+            if (r.bad || meets)
+              leaks.push(`${j.id} for ${cn} at ${p} mm, ${ln}, field ${over.clr}: ${meets ? 'REFUSED' : leakText(r)}`);
+          }
+        }
+      }
+  console.log(`  ${refused} designs refused; named instead ${Object.entries(names).map(([id, n]) => `${id} ${n}`).join(', ')}; ` +
+              `${built.size} plates built in ${((Date.now() - t0) / 1000).toFixed(0)} s: ` +
+              (leaks.length ? `NOT ALL CLEAN: ${leaks.slice(0, 6).join('; ')}` +
+                              (leaks.length > 6 ? ` and ${leaks.length - 6} more` : '')
+                            : 'every one watertight'));
+  bad += leaks.length + (refused && built.size ? 0 : 1);
+}
+
 console.log('\nthe other limits, built at their ends:');
 {
   const R = G.PLATE_RANGES;

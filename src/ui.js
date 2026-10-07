@@ -484,9 +484,10 @@ function warningsList() {
      housings run into each other below about 14.35 mm and the plate leaks; keysMeet in
      core.js has the measurements and why this is refused rather than built. A moved cut,
      a larger pitch or another joint clears it, and the joints named are the ones
-     jointsThatFit finds clear on this layout — test/plate-audit.js builds each of them on
-     every design it refuses. Not on a grid past the caps above, which is refused already
-     and would be thousands of housings to measure on every redraw. */
+     jointsThatFit finds clear on this layout at a pitch they were measured to build clean
+     at — test/plate-audit.js builds each of them across the range it refuses. Not on a
+     grid past the caps above, which is refused already and would be thousands of housings
+     to measure on every redraw. */
   if (!overCap()) {
     const meet = keysMeet(state, layout);
     if (meet.length) {
@@ -501,10 +502,15 @@ function warningsList() {
       const is = dir ? `${named} ${one ? 'is' : 'are'} one cell ${dir}`
         : `${named} ${one ? 'has' : 'have'} one cell`;
       const keyName = { bowtie: 'bowtie keys', puzzlekey: 'puzzle keys', snap: 'snap clips' }[state.connector];
-      const JOINT = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', hclip: 'H-clips',
+      const JOINT = { dovetail: 'dovetail tabs', hclip: 'H-clips',
                       'snap top': 'snap clips put in from above',
-                      wall: `${keyName} inside the walls, put in from beneath` };
-      const fit = jointsThatFit(state, layout).map((j) => JOINT[j.id]);
+                      wall: `${keyName} inside the walls, put in from beneath`,
+                      cup: `${keyName} inside the walls, put in from above` };
+      const ok = jointsThatFit(state, layout).map((j) => j.id);
+      // the key in the wall both ways is one item, not the same words twice over
+      if (ok.includes('wall') && ok.includes('cup'))
+        JOINT.wall = `${keyName} inside the walls, put in from beneath or above`;
+      const fit = ok.filter((id) => !(id === 'cup' && ok.includes('wall'))).map((id) => JOINT[id]);
       out.push({ err: true, t: `${is} between two seams, and at this ${state.pitch} mm pitch ` +
         `the keys on ${one ? 'its' : 'their'} two sides are too close: their housings run into ` +
         'each other, which leaves holes in the plate. Move a cut so ' +
