@@ -324,6 +324,50 @@ const CASES = [
                                       labelMode: 1, note, fit: { lines: 1, cut: false } })),
 ];
 
+/* Removable plates with a note raised on the label shelf: plates across, along and both,
+   with and without a scoop, the lip on, on 2- and 3-unit bins. The shelf is a millimetre
+   lower with letters on it, and on the 2-unit bins a millimetre shallower too (7 mm where
+   a plain one is 8), and the letters stand on it between the plates across, which pass
+   it through notches. The plates are dropped in below with the rest; the letters are
+   held clear of them with the other notes. */
+const NOTE_PLATES = [];
+for (const hUnits of [2, 3])
+  for (const [u, v] of [[1, 1], [2, 1], [2, 2], [3, 2]])
+    for (const scoop of [0, 8])
+      for (const [divX, divY] of [[1, 0], [2, 0], [3, 0], [0, 1], [0, 2], [1, 1], [2, 1], [3, 2]])
+        NOTE_PLATES.push([`${u}x${v}x${hUnits}${scoop ? ', scoop' : ''}, ${divX} across and ${divY} along`,
+                          { u, v, hUnits, label: 12, scoop, divX, divY, divRemovable: true, labelMode: 1, note: 'M3' }]);
+
+/* A removable bin's plates against a note raised on its label shelf (shelfNote's `s`),
+   from the layout the bin is built from (plateLayout), so it is the notches as cut. The
+   plates across pass the shelf through a notch each, which has to be there, through the
+   lowered shelf, at the letters' own depth; every letter has to keep 0.4 mm off each
+   notch, and off the plate's slot and the rails either side of it, which take in the
+   plate and its notch. The same of the plates along, which stay in front of the shelf.
+   `zf` is the floor's top: nothing in a notch stands above it. */
+function plateNoteFaults(cfg, at, s, zf) {
+  const BLOAT = 0.05, RAIL_T = 1.2, out = [];
+  const L = plateLayout(cfg, dividersBuilt(cfg));
+  if (!s.fit || !L.railed) return { out, notch: Infinity, rail: Infinity };
+  const corners = NOTE_TEXT.noteShells(G, s.fit.segs, s.top, s.top + 0.6).flatMap((p) => p.verts);
+  const ys = corners.map((p) => p[1]), yl = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const off = (v, lo, hi) => Math.max(lo - v, v - hi);      // over 0 outside lo..hi
+  const W = L.slot + BLOAT / 2, R = L.slot + RAIL_T;
+  let notch = Infinity, rail = Infinity;
+  for (const p of L.pX) {
+    if (L.printed) {
+      const z = at(p, yl), top = z.length ? z[z.length - 1] : -Infinity;
+      if (top > zf + 1e-6) out.push(`the shelf not notched at ${p.toFixed(2)}, ${top.toFixed(2)} high`);
+      for (const [x] of corners) notch = Math.min(notch, off(x, p - W, p + W));
+    }
+    for (const [x] of corners) rail = Math.min(rail, off(x, p - R, p + R));
+  }
+  for (const q of L.pY) for (const [, y] of corners) rail = Math.min(rail, off(y, q - R, q + R));
+  if (notch < 0.4 - 1e-6) out.push(`a letter ${notch < 0 ? `${(-notch).toFixed(2)} mm into` : `only ${notch.toFixed(2)} mm off`} a notch`);
+  if (rail < 0.4 - 1e-6) out.push(`a letter ${rail < 0 ? `${(-rail).toFixed(2)} mm into` : `only ${rail.toFixed(2)} mm off`} a plate's rails`);
+  return { out, notch, rail };
+}
+
 /* Every carved footprint builds one outer fillet per reflex corner, and every one of
  * them used to be inside out: a closed 212-triangle shell of -214.259 mm³. Watertight,
  * zero bad edges, and the total volume stayed positive because it was one shell among
@@ -1925,6 +1969,10 @@ console.log('\nremovable dividers: every plate goes into its slot');
                       { u, v, hUnits: 3, wall, arcSegs, divRemovable: true, divT, divClr, divX, divY }, true]);
         }
   report('the notched lip at every smoothness', rows3, false);
+  /* With a note raised on the shelf (NOTE_PLATES): the plates across still drop in through
+     their notches in the lowered shelf, past the letters, and the plates along in front of
+     it. Each bin is checked whole as well, watertight and wound. */
+  report('a note raised on the shelf, lip on', NOTE_PLATES.map(([name, cfg]) => [name, cfg, true]), false);
 }
 
 /* Plates that go in are no proof on their own: a bin with no lip, no scoop and no shelf
@@ -1946,6 +1994,9 @@ console.log('\nremovable dividers: the notches, the cut and the halving slots ar
     ['1.5x1x4 at 24, 2 across and 1 along, scoop and shelf', { u: 1.5, v: 1, hUnits: 4, arcSegs: 24, divX: 2, divY: 1, scoop: 10, label: 10 }],
     ['2x1x3, 4 across and 3 along, 5 mm plate 1 clear, scoop', { u: 2, v: 1, hUnits: 3, divT: 5, divClr: 1, divX: 4, divY: 3, scoop: 12 }],
     ['1x2x6, 2 across and 5 along, 0.8 mm plate, no clearance', { u: 1, v: 2, hUnits: 6, divT: 0.8, divClr: 0, divX: 2, divY: 5, scoop: 15, label: 14 }],
+    // the shelf a millimetre lower with a note raised on it, and on 2 units shallower too
+    ['2x1x3, 2 across and 1 along, scoop, a note raised', { u: 2, v: 1, hUnits: 3, divX: 2, divY: 1, scoop: 8, label: 12, labelMode: 1, note: 'M3' }],
+    ['2x2x2, 3 across, a note raised on a shallower shelf', { u: 2, v: 2, hUnits: 2, divX: 3, label: 12, labelMode: 1, note: 'M3' }],
   ];
   const fails = [];
   let probes = 0, corners = 0;
@@ -1976,11 +2027,14 @@ console.log('\nremovable dividers: the notches, the cut and the halving slots ar
       if (Math.abs(z - top) < 1e-6) corners++;
       else out.push(`no lip at the ${sy > 0 ? 'back' : 'front'} ${sx > 0 ? 'right' : 'left'} corner`);
     }
-    // the shelf: notched at every slot across, standing between them
-    const d = c.label ? Math.min(c.label, id * 0.8, H - c.labelT - SPEC.footH - 0.05) : 0;
+    /* the shelf as built (shelfBuilt): notched at every slot across, standing between them
+       to its top, H or a millimetre lower with a note raised on it, measured at its front,
+       which the letters keep clear of */
+    const sh = shelfBuilt(c, iw, id, H), d = sh.depth;
+    if (c.labelMode && !(sh.note && sh.note.fit)) out.push(`no note raised on the shelf`);
     if (d > 0.05 && pX.length) {
       for (const p of pX) { const z = highest(p, id - d / 2); if (z > zf + 1e-6) out.push(`shelf at ${p.toFixed(1)} not notched: ${z.toFixed(2)}`); }
-      for (const m of mids(pX, iw, slot + 0.025)) { const z = highest(m, id - d / 2); if (Math.abs(z - H) > 1e-6) out.push(`no shelf at ${m.toFixed(1)}: ${z.toFixed(2)}`); }
+      for (const m of mids(pX, iw, slot + 0.025)) { const z = highest(m, id - d + 0.3); if (Math.abs(z - sh.top) > 1e-6) out.push(`no shelf at ${m.toFixed(1)}: ${z.toFixed(2)}`); }
     }
     // the plates across follow the scoop; the plates along stand on it
     const chainAt = (ol, u) => {
@@ -2151,7 +2205,7 @@ console.log('\nnotes raised on the label shelf');
 {
   for (const cs of CASES.filter((c) => c.labelMode === 1)) {
     const r = buildBin(G, cs), at = prober(r.polys), s = shelfNote(cs), faults = [];
-    let divClear = Infinity;
+    let divClear = Infinity, notchClear = Infinity;
     const H = cs.hUnits * SPEC.unitH;
     const id = (cs.v - 1) * SPEC.pitch / 2 + SPEC.half - (cs.wall || BIN_DEFAULTS.wall);
     if (!s.fit) faults.push(`NO LETTERS (${s.why})`);
@@ -2192,6 +2246,12 @@ console.log('\nnotes raised on the label shelf');
       if (divClear < 0.4 - 1e-6)
         faults.push(divClear < 0 ? `a letter ${(-divClear).toFixed(2)} mm into a divider's footprint`
           : `a letter only ${divClear.toFixed(2)} mm off a divider`);
+      // ...and of the notches removable plates across pass the shelf through
+      if (cs.divRemovable) {
+        const pn = plateNoteFaults(cs, at, s, r.meta.floorZ + 0.05);
+        faults.push(...pn.out);
+        notchClear = pn.notch;
+      }
       if (cs.fit.lines && s.fit.lines.length !== cs.fit.lines)
         faults.push(`${s.fit.lines.length} lines, not ${cs.fit.lines}`);
       if (s.fit.cut !== cs.fit.cut) faults.push(cs.fit.cut ? 'NOT CUT short' : 'CUT short');
@@ -2202,8 +2262,38 @@ console.log('\nnotes raised on the label shelf');
     console.log(`  ${cs.name.padEnd(22)} ${s.fit ? (s.fit.cap.toFixed(2) + ' mm, ' + s.fit.lines.length +
       (s.fit.lines.length > 1 ? ' lines' : ' line') + (s.fit.cut ? ', cut' : '')).padEnd(20) : ''.padEnd(20)} ` +
       (faults.length ? faults.join('; ') : 'letters at H - 0.4 on a shelf at H - 1.0' +
-        (isFinite(divClear) ? `, ${divClear.toFixed(2)} off the nearest divider` : '')));
+        (isFinite(divClear) ? `, ${divClear.toFixed(2)} off the nearest divider` : '') +
+        (isFinite(notchClear) ? `, ${notchClear.toFixed(2)} off the nearest notch` : '')));
     if (faults.length) bad++;
+  }
+
+  /* The removable plates with a note raised (NOTE_PLATES), which the plate section drops
+     in: the letters on the lowered shelf, every corner over it, its top a millimetre down
+     at its front, and clear of every notch, slot, plate and rail. Most of them print it. */
+  {
+    const fails = [];
+    let printed = 0, nearNotch = Infinity, nearRail = Infinity;
+    for (const [name, cfg] of NOTE_PLATES) {
+      const s = shelfNote(cfg);
+      if (!s.fit) continue;
+      printed++;
+      const r = buildBin(G, cfg), at = prober(r.polys), H = cfg.hUnits * SPEC.unitH, out = [];
+      const id = (cfg.v - 1) * SPEC.pitch / 2 + SPEC.half - BIN_DEFAULTS.wall;
+      const corners = NOTE_TEXT.noteShells(G, s.fit.segs, s.top, H - NOTE_CLEAR).flatMap((p) => p.verts);
+      const off = corners.filter(([x, y]) => !at(x, y).some((z) => Math.abs(z - s.top) < 1e-6));
+      if (off.length) out.push(`${off.length} of ${corners.length} letter corners not over the shelf`);
+      const front = at(corners[0][0], id - s.depth + 0.3).pop();
+      if (Math.abs(front - (H - 1.0)) > 1e-6) out.push(`the shelf's top at ${front.toFixed(3)}, not H - 1.0`);
+      const pn = plateNoteFaults(cfg, at, s, r.meta.floorZ + 0.05);
+      out.push(...pn.out);
+      nearNotch = Math.min(nearNotch, pn.notch); nearRail = Math.min(nearRail, pn.rail);
+      if (out.length) fails.push(`${name}: ${out.join(', ')}`);
+    }
+    console.log(`  ${'removable plates'.padEnd(22)} ` + (fails.length ? `${fails.length} FAILED: ${fails.slice(0, 4).join('; ')}`
+      : printed < NOTE_PLATES.length / 2 ? `ONLY ${printed} of ${NOTE_PLATES.length} print their note`
+      : `${printed} of ${NOTE_PLATES.length} print their note, on the lowered shelf, ` +
+        `${nearNotch.toFixed(2)} mm or more off every notch and ${nearRail.toFixed(2)} off every plate's rails`));
+    if (fails.length || printed < NOTE_PLATES.length / 2) bad++;
   }
 
   /* Each glyph alone, so a fault is pinned to the character that has it: watertight,
