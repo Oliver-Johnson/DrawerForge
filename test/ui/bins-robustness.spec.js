@@ -415,6 +415,27 @@ test('one removable divider is not built where the rails the other way would sta
   expect(errors).toEqual([]);
 });
 
+/* A plate under a millimetre long is no plate, as one under a millimetre tall is not
+   listed: a 1x0.5 with a 9.9 mm wall at 0.3 mm clearance listed one 0.1 mm long, in the
+   downloads, the README and the weight, and built rails for it. None is built, the field
+   offers none, and Checks says why. */
+test('no removable divider is built whose plate would be under a millimetre long', async ({ page }) => {
+  const errors = await openAt(page, 'bl=0-0-1-0.5-3-9.9-1.2-1-0-0-1-1-1-1-0-0-0-0-1-0-15&bdt=1.6&bdc=0.3');
+  await settle(page, 600);
+  expect(await page.evaluate(() => [state.divClr, B()[0].wall, B()[0].divX, builtDivs(B()[0])]))
+    .toEqual([0.3, 9.9, 1, { divX: 0, divY: 0 }]);
+  expect(await page.evaluate(() => dividerParts().map((d) => d.name))).toEqual([]);
+  expect(await page.evaluate(() => layoutReadme())).not.toContain('DIVIDER');
+  expect((await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent)))
+    .filter((t) => t.includes('removable dividers'))).toEqual(['Layer 1, the 1×0.5 bin at column 1 row 1: is built with ' +
+    'no removable dividers across, not the 1 it asks for, as the clearance at a plate\'s ends would leave it under 1 mm ' +
+    'long, with a 1.6 mm plate at 0.3 mm clearance.']);
+  await H.clickCell(page, 0, -0.25);
+  await settle(page, 600);
+  expect(await page.evaluate(() => +document.getElementById('divX').max)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
 /* Kept from more than one direction for different reasons, Checks says it once for both,
    and one direction may have none: it said "no more fit" of a half cell 2 deep with a 5 mm
    wall at a 5 mm plate, asking for 1 across and 12 along, which has none across (the lone rule) and

@@ -2853,7 +2853,8 @@ function binIssues(b, k, claims) {
        corners, and two more. 'lone': room for one divider's slot and a rail either side,
        but not for the rails the other way beside it, which are kept room for whether or
        not it has any, so that dividers the other way never take it away. 'length': the
-       clearance at a plate's two ends takes the whole cavity. Either would read wrongly
+       clearance at a plate's two ends leaves it under PLATE_MIN long, as a plate under
+       PLATE_MIN tall is not listed either. Either would read wrongly
        as "none leave every slot room", as the slot itself has room. 'fit': two of those,
        or one of them with the slots or corners, said once for both directions, either of
        which may have none. */
@@ -2868,7 +2869,7 @@ function binIssues(b, k, claims) {
         : by === 'corners' ? (more ? `more would stand the end ones so far into ${them} rounded corners that a plate would lose the clearance at its corner, with ${at}`
           : `even one would stand so far into ${them} rounded corners that its plate would lose the clearance at its corner, with ${at}`)
         : by === 'lone' ? `even one would leave too little room beside its slot for the rails of dividers the other way, with ${at}`
-        : by === 'length' ? `the clearance at a plate's ends would leave it no length, with ${at}`
+        : by === 'length' ? `the clearance at a plate's ends would leave it under ${PLATE_MIN} mm long, with ${at}`
         : by === 'fit' ? (them === 'their' ? `only those fit with ${at}` : `that is as many as fit with ${at}`)
         : `${more ? 'no more' : 'none'} leave every slot room and keep the end ones out of ${them} rounded corners with ${at}`);
       out.push({ note: true, group: `rails-${by}`,

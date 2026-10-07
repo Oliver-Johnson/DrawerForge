@@ -1730,7 +1730,9 @@ function shelfBuilt(c, iw, id, H) {
  *
  * And none at all where the clearance at the plate's two ends takes the whole cavity:
  * a 1x0.5 with a 9.5 mm wall and 1 mm clearance listed a plate -0.5 mm long, and at a
- * 10 mm wall and the usual clearance one with no volume.
+ * 10 mm wall and the usual clearance one with no volume. Nor where it leaves the plate
+ * under PLATE_MIN long, as the page lists no plate under PLATE_MIN tall: the same 1x0.5
+ * with a 9.9 mm wall and 0.3 mm clearance listed one 0.1 mm long.
  *
  * Two more things can stand over a slot, and each brings the count down again where it
  * would. With a stacking lip, each slot is a notch through the lip (notchedLip), cut
@@ -1756,8 +1758,8 @@ function railedLimit(cfg, axis) {
   if (!most && inner >= slot + RAIL_D + c.divClr + 10 * WELD - 1e-9) most = 1;
   // its slot and a rail would go in, but not the room for the rails the other way
   else if (!most && inner >= slot + RAIL_T - 1e-9) why = 'lone';
-  // none where the clearance at the plate's ends leaves it no length (see dividerPart)
-  if ((axis === 'x' ? hd : hw) - c.divClr < WELD) { most = 0; why = 'length'; }
+  // none where the clearance at the plate's ends leaves it under PLATE_MIN long (see dividerPart)
+  if (2 * ((axis === 'x' ? hd : hw) - c.divClr) < PLATE_MIN - 1e-9) { most = 0; why = 'length'; }
   const slots = most;
   // the cavity's corner as roundRect builds it, and whether a point stands out through it
   const r = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(hw, hd) - 0.01));
@@ -1779,7 +1781,7 @@ function railedLimit(cfg, axis) {
   const last = (k) => -inner + (2 * inner) * k / (k + 1);
   /* Only with a plate to go in: under a millimetre tall the page lists none, and the bin
      keeps its lip and shelf whole (plateLayout). */
-  const printed = c.hUnits * SPEC.unitH - (SPEC.footH + builtFloorT(c)) - c.divClr >= 1;
+  const printed = c.hUnits * SPEC.unitH - (SPEC.footH + builtFloorT(c)) - c.divClr >= PLATE_MIN;
   const full = (isHalfSize(c) || isFullRect(c)) && printed;
   if (full && lipNotched(c))
     while (most > 0 && last(most) + slot + 2 * BLOAT > inner + c.wall - LIP[0][1]) most--;
@@ -1858,6 +1860,11 @@ function dividersWhy(cfg) {
  * shape: identical ones are one part with a quantity, as ever.
  */
 const PLATE_END = 1;   // the least plate kept where it stands in its rails, or crosses another
+/* The least a plate is, as tall or as long. Under it the page lists none, and a bin has
+   no rails for one: under PLATE_MIN tall it keeps its lip and shelf whole and lists no
+   plate (plateLayout, dividerPlates), and under PLATE_MIN long none is built at all
+   (railedLimit), as a sliver that long holds nothing apart. */
+const PLATE_MIN = 1;
 
 /* Where a removable bin's plates stand and what shape each is, for `counts` of them:
    the numbers buildBin and dividerPart both build from, so a plate and the bin it goes
@@ -1882,7 +1889,7 @@ function plateLayout(cfg, counts) {
     return out;
   };
   const pX = railed ? at(counts.divX || 0, iw) : [], pY = railed ? at(counts.divY || 0, id) : [];
-  const printed = tall >= 1;                       // the page lists no plate shorter
+  const printed = tall >= PLATE_MIN;               // the page lists no plate shorter
   const r = railed ? scoopRadius(c, H, floorZ, id, pX.length && printed ? ztop - PLATE_END - clr - floorZ : undefined) : 0;
   // and the scoop it would be with no plates across to keep their ends in their rails
   const scoopFree = railed ? scoopRadius(c, H, floorZ, id) : 0;
@@ -2101,14 +2108,14 @@ function dividerPart(G, cfg, axis, k = 1) {
    the plates across, which are all alike, and as many for the plates along as there are
    shapes among them. `ks` are the positions each is for, counting from 1, and `key` is
    its shape, the same for the same plate in any bin. Plates the page would not list,
-   under a millimetre tall, are left out, as the page leaves them out. */
+   under PLATE_MIN tall or long, are left out, as the page leaves them out. */
 function dividerPlates(G, cfg) {
   const built = dividersBuilt(cfg), out = [];
   for (const [axis, n] of [['y', built.divX], ['x', built.divY]]) {
     const byKey = new Map();
     for (let k = 1; k <= n; k++) {
       const d = dividerPart(G, cfg, axis, k);
-      if (d.meta.tall < 1) continue;
+      if (d.meta.tall < PLATE_MIN || d.meta.span < PLATE_MIN) continue;
       const shape = d.meta.outline
         ? d.meta.outline.map((p) => [p[0], p[1] - d.meta.zc].map((x) => x.toFixed(4)).join(',')).join(' ') : 'plain';
       const key = `${d.meta.span.toFixed(4)}x${d.meta.tall.toFixed(4)}x${d.meta.t}:${shape}`;

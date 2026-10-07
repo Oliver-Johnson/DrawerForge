@@ -1745,7 +1745,7 @@ console.log('\nremovable dividers: every plate goes into its slot');
         if (m.tall < 1) continue;            // the page lists no plate this short
         plates++;
         if (pl.end < RAIL_D) short++;
-        if (!(pl.end > 0)) { out.push(`${what} has no length`); continue; }
+        if (!(2 * pl.end >= 1 - 1e-9)) { out.push(`${what} has a length of ${(2 * pl.end).toFixed(2)} mm, under 1 mm`); continue; }
         if (m.at !== undefined && Math.abs(m.at - pl.p) > 1e-9) { out.push(`${what} made for ${m.at.toFixed(3)}, stands at ${pl.p.toFixed(3)}`); continue; }
         const mf = meshFault(d);
         if (mf) { out.push(`${what}: ${mf}`); continue; }
@@ -1782,11 +1782,11 @@ console.log('\nremovable dividers: every plate goes into its slot');
         }
       }
       /* one more: crowded by a neighbour, its slots or their rails into a wall of the bare
-         bin, a slot where the rails the other way would stand, or a plate with no length */
+         bin, a slot where the rails the other way would stand, or a plate under 1 mm long */
       if (oneMore && n < (c[key] || 0)) {
         const k = n + 1, crowded = k > 1 && 2 * inner / (k + 1) < pitch - 1e-9;
         const reach = RAIL_D + c.divClr + 0.02;
-        if (!crowded && platesOf(c, r, k, ax, E).every((pl) => pl.end > 0 && clear(slotOf(pl, ax, E)) &&
+        if (!crowded && platesOf(c, r, k, ax, E).every((pl) => 2 * pl.end >= 1 - 1e-9 && clear(slotOf(pl, ax, E)) &&
             railsOf(pl, ax, H).every(clear) && pl.faces[0] >= -inner + reach - 1e-9 && pl.faces[1] <= inner - reach + 1e-9))
           out.push(`${key}: ${k} would have fit, ${n} built`);
       }
@@ -1846,6 +1846,18 @@ console.log('\nremovable dividers: every plate goes into its slot');
             rows.push([label(u, v, wall, n, key, divT, divClr, 12),
                        { u, v, hUnits: 3, wall, divRemovable: true, lip: false, divT, divClr, arcSegs: 12, [key]: n }]);
         }
+  /* A plate under a millimetre long is no plate, as one under a millimetre tall is not
+     listed: a 1 x 0.5 with a 9.9 mm wall at 0.3 mm clearance listed one 0.1 mm long. None
+     is built, nor rails for it, where the clearance leaves it under 1 mm, and one is where
+     it leaves 1 mm or more: walls either side of that, at the usual clearance and at 0.3,
+     each way. */
+  for (const divClr of [0.25, 0.3])
+    for (const wall of [9.4, 9.5, 9.6, 9.7, 9.8, 9.9])
+      for (const key of ['divX', 'divY']) {
+        const [u, v] = key === 'divX' ? [1, 0.5] : [0.5, 1];
+        rows.push([label(u, v, wall, 1, key, 1.6, divClr, 12),
+                   { u, v, hUnits: 3, wall, divRemovable: true, lip: false, divT: 1.6, divClr, arcSegs: 12, [key]: 1 }]);
+      }
   /* Both ways at once: the rails the other way stand along each end wall, a rail's depth
      and the clearance out from it, and must keep out of every slot. On a half cell with a
      thick wall the one divider there is room for stands near them; on whole cells with
