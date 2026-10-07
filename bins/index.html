@@ -9358,7 +9358,21 @@ const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefi
    that asks for none is answered without asking it, and is the bin it always was. */
 const FINGER_WALLS = { f: 'front', b: 'back', l: 'left', r: 'right' };
 const fingersAsked = (b) => !b.solid && !!b.fingerSlots && FINGER_SIDES.some((k) => b.fingerSlots[k]);
-const fingerPlan = (b) => (fingersAsked(b) ? fingerSlotPlan(binCfg(b)) : null);
+/* Kept by the settings that asked it: a refresh asks it of each bin several times over,
+   for its key, its name, its lip, Checks and its weight, and 63 slotted bins spent 19 ms
+   a refresh on it. fingerSlotPlan is pure, so the same settings have the same answer,
+   and nothing here changes one. */
+const fingerPlans = new Map();
+const fingerPlan = (b) => {
+  if (!fingersAsked(b)) return null;
+  const cfg = binCfg(b), key = JSON.stringify(cfg);
+  let p = fingerPlans.get(key);
+  if (!p) {
+    if (fingerPlans.size >= 500) fingerPlans.clear();
+    fingerPlans.set(key, (p = fingerSlotPlan(cfg)));
+  }
+  return p;
+};
 // the walls that really get one, 'fb', or '' for none
 const fingersBuilt = (b) => { const p = fingerPlan(b); return p ? p.built : ''; };
 // "front", "front and back", "front, left and right"
