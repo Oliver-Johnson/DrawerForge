@@ -291,6 +291,26 @@ test('a bin with room for one removable divider and no more is built with one', 
   expect(errors).toEqual([]);
 });
 
+/* A type is weighed from its first bin, and two bins built alike are one type whatever
+   each asks for. Weighed as asked, a 1x1 asking for 30 removable dividers and one asking
+   for 10, both built with 10, were one row of two at 72 g, or at 37 g the other way round. */
+test('bins built with the same removable dividers weigh the same, whichever comes first', async ({ page }) => {
+  const asks = (x, n) => `${x}-0-1-1-3-1.2-1.2-${n}-0-0-1-1-1-1-0-0-0-0-1-0-15`;
+  const rows = async (bl) => {
+    await page.goto('about:blank');
+    await openAt(page, 'bl=' + bl);
+    await settle(page, 600);
+    return page.evaluate(() => [...document.querySelectorAll('#typeRows tr')]
+      .map((tr) => [...tr.children].map((td) => td.textContent.trim()).join(' | ')));
+  };
+  // one row: the size and compartments, the measurements, how many, the grams
+  const asTen = await rows(asks(0, 10) + '_' + asks(1, 10));
+  expect(asTen).toHaveLength(1);
+  expect(asTen[0]).toMatch(/^1×1×3 · 11 comp \| .* \| 2 \| \d+ g \| /);
+  expect(await rows(asks(0, 30) + '_' + asks(1, 10))).toEqual(asTen);
+  expect(await rows(asks(0, 10) + '_' + asks(1, 30))).toEqual(asTen);
+});
+
 test('a bin designed on its own is held to the 50 cells a link carries', async ({ page }) => {
   test.setTimeout(60_000);            // 100 × 100 took 14 s an edit with no limit at all
   const errors = await openAt(page, '');

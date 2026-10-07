@@ -470,7 +470,14 @@ function footProfileHalf(z) {
    them: a rail's depth and the clearance, or the whole way across a cavity too shallow
    for two. `along` is half the length of those walls inside the cavity, hwI for the
    dividers that stand at a fixed x (divX), hdI for the others, as buildBin's spans() and
-   reach() take them, and `across` half the distance between them.
+   reach() take them, and `across` half the distance between them. The plate and the
+   clearance are the ones buildBin is given for the bin (binCfg), so the two cannot drift.
+   Where the rails stand in the lip's chamfer, the scoop or the label shelf they are
+   counted in full all the same, as if those were not there, so such a bin comes out a
+   little heavy: about 0.2 g on a 1x1x3 or a 2x1x6 with two or three dividers each way, an
+   8 mm scoop and a 10 mm shelf, of which the chamfer is 0.03 g. It grows with the count
+   and with the scoop and the shelf, to about 3.5 g on a 2x1x6 with 23 across and 10
+   along under a 20 mm scoop and a 20 mm shelf.
    Placed, sorted and merged where two meet exactly as spans() does it, so dividers packed
    close enough for one's rail to run into the next count the plastic they share once.
    A rail beside an end wall can stand in the cavity's rounded corner, where buildBin
@@ -482,10 +489,10 @@ function footProfileHalf(z) {
    of a square millimetre at the coarsest smoothness). A rail on a straight run is
    counted whole, so at any count that keeps the rails out of the corners the sum is
    exactly the rails' own area. */
-function railArea(n, along, across, wall) {
+function railArea(n, along, across, wall, divT, divClr) {
   if (!(n > 0) || !(along > 0)) return 0;
-  const slot = state.divT / 2 + state.divClr, rail = slot + RAIL_T;
-  const deep = RAIL_D + state.divClr >= across - BLOAT / 2 ? across : RAIL_D + state.divClr;
+  const slot = divT / 2 + divClr, rail = slot + RAIL_T;
+  const deep = RAIL_D + divClr >= across - BLOAT / 2 ? across : RAIL_D + divClr;
   const spans = [];
   for (let k = 1; k <= n; k++) {
     const p = -along + (2 * along) * k / (n + 1);
@@ -568,10 +575,14 @@ function volumeMm3(c) {
      its 20 g of plates the job was 60 g where it is 47 g. A carved bin gets no rails
      (buildBin leaves dividers off a carved shape, as dividerParts does its plates), so a
      removable one counts none. */
-  const built = { divX: c.divX || 0, divY: c.divY || 0 };   // the dividers it is built with
+  /* As many as it is built with: a bin asking for more removable ones than fit has the
+     rails of as many as fit (builtDivs), and weighed as asked, two bins of one type could
+     weigh 72 g or 37 g by which came first. Fixed ones are built as asked. */
+  const built = builtDivs(c), bc = binCfg(c);
   const divs = !c.divRemovable
     ? (built.divX * wall * 2 * hdI + built.divY * wall * 2 * hwI) * (H - floorZ)
-    : isCarved(c) ? 0 : (railArea(built.divX, hwI, hdI, wall) + railArea(built.divY, hdI, hwI, wall)) * (H - floorZ);
+    : isCarved(c) ? 0 : (railArea(built.divX, hwI, hdI, wall, bc.divT, bc.divClr) +
+                         railArea(built.divY, hdI, hwI, wall, bc.divT, bc.divClr)) * (H - floorZ);
   const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
   return { raw: baseRaw + thin, filament: baseFil + thin };
