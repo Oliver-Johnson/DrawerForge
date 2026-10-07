@@ -3185,10 +3185,17 @@ function triangulateRing(outer, inner) {
 /* The region's outline with every point the strip's edges need: where a side of `open`
    crosses it, and a corner of `open` it passes within `tol` of. A vertex within `tol` of a
    side is moved onto it, so no two points of this shell are closer than the edge-matching
-   tolerance anyone reading the mesh uses (1e-3 in checkManifold). It moves the outline
-   by no more than that, inside this shell only: the margin's region beside the strip
-   starts at least a hundredth past the strip's side (clearCut), so it has none of the
-   vertices moved. */
+   tolerance anyone reading the mesh uses (1e-3 in checkManifold).
+
+   And a vertex within ten `tol` of a corner the outline runs through is moved onto the
+   corner itself. Without that, the arc's next vertex one or two thousandths past the
+   corner went onto the side's line beyond it, the outline ran out along that line and
+   the strip's underside piece came back up it: a needle of no width, which earTriangulate
+   dropped a triangle of, a hole in the bed face (0.1 mm margins beside 2.08 mm ones by a
+   3.08 mm corner). Three and six `tol` still left some. So the outline moves by up to
+   ten `tol` here, a hundredth, and by `tol` elsewhere, inside this shell only: the
+   margin's region beside the strip starts more than a hundredth past the strip's side
+   (clearCut), so it has none of the vertices moved. */
 function openSplit(loop, open, tol) {
   let C = loop.map((p) => [p[0], p[1]]);
   const corners = [];
@@ -3208,6 +3215,8 @@ function openSplit(loop, open, tol) {
   }
   const lines = [[0, open[0]], [1, open[1]], [0, open[2]], [1, open[3]]].filter(([, c]) => isFinite(c));
   for (const [k, c] of lines) for (const p of C) if (Math.abs(p[k] - c) <= tol) p[k] = c;
+  for (const q of corners)
+    for (const p of C) if (Math.hypot(p[0] - q[0], p[1] - q[1]) <= 10 * tol) { p[0] = q[0]; p[1] = q[1]; }
   for (const [k, c] of lines) {
     const out = [];
     for (let i = 0; i < C.length; i++) {
@@ -3465,13 +3474,64 @@ function annulusStrip(outerLoop, innerLoop, cx, cy, z, up) {
   return polys;
 }
 
+/* Where a cell's bottom cap is fanned from: the average of its outline, unless a spoke
+   from there passes a few thousandths from a corner of a mounting cutter's wall.
+
+   The cutter is a cylinder of 12 or 14 sides, and the subtraction cuts the cap along
+   each side's plane. Where a spoke passes that close to a corner, the two sides meeting
+   there cross it a couple of thousandths apart and further than that from the corner.
+   healCsgSeams takes the two crossings for one point, and the sliver between them and
+   the corner, which is floor, goes with it: three open edges at the pocket's rim (one
+   cell with 6 mm magnets and 4 mm corners, or 0.25 and 0.5 mm margins joined to the cell
+   beside the same corner). The window is under a hundredth wide, so whether a plate hit
+   it was a lottery on its margins and corner radius.
+
+   So where a spoke from the average comes within FAN_NEAR of a corner, the fan moves to
+   the first of a few points about the average from which every spoke keeps FAN_CLEAR
+   from every corner and every triangle still turns the outline's way. Where the
+   average's spokes are clear, which is most cells, nothing moves; where no point is
+   clear, nothing moves either. The cap is the same flat face whichever point it is
+   fanned from. */
+const FAN_NEAR = 0.008, FAN_CLEAR = 0.01;
+function fanCentre(oc, avoid) {
+  const n = oc.length, cc = [0, 0];
+  for (const p of oc) { cc[0] += p[0]/n; cc[1] += p[1]/n; }
+  if (!avoid || !avoid.length) return cc;
+  const gap = (c) => {
+    let g = Infinity;
+    for (const p of oc) {
+      const dx = p[0] - c[0], dy = p[1] - c[1], L2 = dx*dx + dy*dy;
+      if (L2 < 1e-12) continue;
+      for (const q of avoid) {
+        const t = Math.max(0, Math.min(1, ((q[0] - c[0])*dx + (q[1] - c[1])*dy) / L2));
+        g = Math.min(g, Math.hypot(c[0] + t*dx - q[0], c[1] + t*dy - q[1]));
+      }
+    }
+    return g;
+  };
+  if (gap(cc) >= FAN_NEAR) return cc;
+  const turn = Math.sign(polyArea2D(oc));
+  const fans = (c) => oc.every((p, i) => {
+    const q = oc[(i + 1) % n];
+    return turn * ((p[0] - c[0])*(q[1] - c[1]) - (p[1] - c[1])*(q[0] - c[0])) > 1e-6;
+  });
+  for (const rho of [0.05, 0.1, 0.2, 0.4, 0.8, 1.6])
+    for (let k = 0; k < 12; k++) {
+      const c = [cc[0] + rho*Math.cos(k*Math.PI/6), cc[1] + rho*Math.sin(k*Math.PI/6)];
+      if (fans(c) && gap(c) >= FAN_CLEAR) return c;
+    }
+  return cc;
+}
+
 /* `half` is the cell's half size on each axis, [hx, hy]: left out, a whole cell at the
    profile's pitch. A half cell passes its own (see halfStrips) and gets the same socket,
    the same distance in from each of its sides, on a rounded rectangle: the strip around
    the socket, the rim on top and the floor cap all follow the ring, and annulusStrip
    pairs the cell outline against it by angle about the centre as it does a square, both
-   loops being star-shaped about that point. */
-function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half) {
+   loops being star-shaped about that point.
+
+   `avoid` is where the mounting cutters' walls stand on the bottom face (fanCentre). */
+function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half, avoid) {
   const polys = [];
   const { pts: oc } = earTriangulate(clipped);
   const n = oc.length;
@@ -3510,8 +3570,7 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half) {
      * magnets, screws and both: the ear clip leaks at r = 2 and r = 4 and is clean either
      * side, which is a lottery rather than a property. A fan from an interior point has
      * no chords: every edge either lies on the outline or runs to one fixed point. */
-    const cc = [0, 0];
-    for (const p of oc) { cc[0] += p[0]/n; cc[1] += p[1]/n; }
+    const cc = fanCentre(oc, avoid);
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
       const p = makePoly([[cc[0], cc[1], 0], [oc[j][0], oc[j][1], 0], [oc[i][0], oc[i][1], 0]]);
@@ -3747,23 +3806,46 @@ function keysMeet(cfg, layout) {
   return out;
 }
 /* Joints that would fit where keysMeet refuses, as [{ id, over }], `over` being the
-   settings that make it: the two tabs, which have no housing to meet; the H-clip; a snap
-   clip put in from above; and the same key housed in the wall and put in from beneath,
-   whose slim key reaches 6.6 mm. Each is put to keysMeet on the design as it stands, so
-   one is only named where it is clear, and test/plate-audit.js builds every one named on
-   every design it refuses: all five come out watertight at 13.5 mm. */
+   settings that make it: the dovetail tab, which has no housing to meet; the H-clip; a
+   snap clip put in from above; and the same key housed in the wall, put in from beneath
+   (its slim key reaches 6.6 mm) or from above (the cup). Each is put to keysMeet on the
+   design as it stands, so one is only named where it is clear, and only from the pitch
+   it was measured to build clean at, `from`.
+
+   Clear is not clean. At pitches this small the joints leak on their own, a few open
+   edges at a time and at no pitch or clearance that a rule could pick out, and naming
+   every joint keysMeet cleared sent people to them: dovetail tabs at 13.6 mm with a
+   field of 0.3, 3 to 12 open edges. So every design keysMeet refuses was built with
+   each joint it clears instead: pitches 13.5 to 15.94 mm by 0.01, the last that refuses
+   anything (a snap clip in the floor with a field of 1); the field every 0.1 from 0 to
+   1, and at 0.05, 0.15 and 0.25 below 14.4 mm and 0.25 and 0.35 above, as far as the
+   joint in use allows, and for the joint named cut down to its own ceiling, as the page
+   cuts it when that joint is chosen; rows one cell deep, columns one cell wide, and both
+   in one drawer; with every key and housing that is refused. 32,000 plates. The snap
+   clip from above, in the floor or in the wall, and a bowtie in the wall from beneath
+   never leaked. The rest leaked up to: the dovetail 14.44 mm, the H-clip 14.2,
+   a puzzle key in the wall from beneath 14.48 and a snap clip 15.24, a bowtie or puzzle
+   key in the wall from above 14.44, and puzzle tabs 15.94, which is the whole range, so
+   they are not offered at all. `from` is the next tenth up from each, and
+   test/plate-audit.js builds every joint this names over that range again, on a
+   coarser grid. Whether a leaking joint should have a check of its own at these
+   pitches is a separate question; this only stops sending people to one. */
 const KEY_ALTERNATIVES = [
-  ['dovetail', { connector: 'dovetail' }],
-  ['puzzle', { connector: 'puzzle' }],
-  ['hclip', { connector: 'hclip' }],
-  ['snap top', { connector: 'snap', keyType: 'snap', keyInsert: 'top' }],
-  ['wall', { keyMount: 'wall', keyInsert: 'bottom' }],
+  ['dovetail', { connector: 'dovetail' }, 14.5],
+  ['hclip', { connector: 'hclip' }, 14.3],
+  ['snap top', { connector: 'snap', keyType: 'snap', keyInsert: 'top' }, 0],
+  ['wall', { keyMount: 'wall', keyInsert: 'bottom' }, { bowtie: 0, puzzlekey: 14.5, snap: 15.3 }],
+  ['cup', { keyMount: 'wall', keyInsert: 'top' }, { bowtie: 14.5, puzzlekey: 14.5, snap: 0 }],
 ];
 function jointsThatFit(cfg, layout) {
   const keyed = ['bowtie', 'puzzlekey', 'snap'].includes(cfg.connector);
-  return KEY_ALTERNATIVES.filter(([id, over]) => (id !== 'wall' || keyed) &&
-      keysMeet(Object.assign({}, cfg, over), layout).length === 0)
-    .map(([id, over]) => ({ id, over }));
+  return KEY_ALTERNATIVES.filter(([id, over, from]) => {
+    if (typeof from !== 'number') {
+      if (!keyed) return false;          // a key in the wall is the key in use, moved
+      from = from[cfg.connector];
+    }
+    return cfg.pitch >= from && keysMeet(Object.assign({}, cfg, over), layout).length === 0;
+  }).map(([id, over]) => ({ id, over }));
 }
 
 /* Region-decomposed build: no global CSG. Each piece = margin/corner regions (plain
@@ -3796,6 +3878,19 @@ function buildPiece(cfg, layout, piece, onStatus) {
   // one cutter for every mounting site on the piece, built once and moved into place
   const cellFastener = ((cfg.magnets || cfg.screws) && solidBase)
     ? fastenerCutter(cfg, pad - cfg.magnetH, pad + 0.02, H + 0.5) : null;
+  // the corners of its walls where they stand on the bottom face, about its axis (fanCentre)
+  const fastenerFoot = [];
+  if (cellFastener) {
+    const seen = new Set();
+    for (const p of cellFastener) {
+      const zs = p.verts.map((v) => v[2]);
+      if (!(Math.min(...zs) < 0 && Math.max(...zs) > 0)) continue;
+      for (const v of p.verts) {
+        const k = `${v[0].toFixed(6)} ${v[1].toFixed(6)}`;
+        if (!seen.has(k)) { seen.add(k); fastenerFoot.push([v[0], v[1]]); }
+      }
+    }
+  }
 
   // ---- connectors ----
   const conn = pieceConnectors(cfg, layout, piece);
@@ -3900,14 +3995,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * the corner itself, on the plate's edge, so no cut moves and a margin up to 0.1 mm
    * joins. Beside a rounded one the cut steps past each arc vertex within two BLOATs, the
    * next can be within two BLOATs of where it lands, and it goes on until there is a gap
-   * (and past the crossings below): over margins of 0 to 3 mm, in any mix on the four
-   * sides, beside every corner from 0 to 6 mm by 0.01, a cut that stays moved up to
-   * 0.72 mm, and 0.19 where the margin is the same all round. Under a 1.22 mm corner the
-   * arc's vertices are that close all the way along, so the cut runs off the plate and
-   * every margin up to about the radius plus 0.09 joins its cells, 1.3 mm by a 1.21 mm
-   * corner; beside larger corners up to 1.13 mm can join, and up to 0.62 mm by a corner
-   * of 4 mm or more. The plate is the same plate whichever region builds it (and see
-   * wasL below for a skeleton cell).
+   * (and past the crossings below). Where the margin is the same all round, beside every
+   * corner from 0 to 6 mm by 0.01, a cut that stays moves 0.19 mm at most. With the four
+   * margins anything from 0 to 3 mm, it moves further: 0.98 mm with 0.85, 1.81, 0.57 and
+   * 0.77 by a 3.16 mm corner, and up to 1.07 over three million drawn at random. Under a
+   * 1.22 mm corner the arc's vertices are that close all the way along, so the cut runs
+   * off the plate and every margin up to about the radius plus 0.09 joins its cells,
+   * 1.3 mm by a 1.21 mm corner; beside larger corners up to 1.13 mm joined, and 1.02 mm
+   * by a corner of 4 mm or more. The plate is the same plate whichever region builds it
+   * (and see wasL below for a skeleton cell).
    *
    * A vertex less than a hundredth inside two BLOATs is left where it is rather than
    * stepped past. Clearing it would move the cut a hair, and a skeleton cell beside a
@@ -4053,7 +4149,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
         ? skeletonCellRegion(clipped, prof, cx, cy, H, cfg.arcSegs || 6,
                              Math.max(0.4, cfg.skin || 0.8), open)
         : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6,
-                           halfX || halfY ? [halfX ? half/2 : half, halfY ? half/2 : half] : undefined);
+                           halfX || halfY ? [halfX ? half/2 : half, halfY ? half/2 : half] : undefined,
+                           halfX || halfY ? undefined : [-1, 1].flatMap((sx) => [-1, 1].flatMap((sy) =>
+                             fastenerFoot.map(([u, v]) => [cx + sx*cfg.holeOffset + u, cy + sy*cfg.holeOffset + v]))));
       /* Small convex cutters local to this cell, batched by feature and subtracted one
        * batch at a time.
        *
