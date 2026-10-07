@@ -8150,7 +8150,8 @@ function fingerZ(s, x) {
  *   scoopWas  the radius it would have been built at without the slots, and
  *   scoopNow  the one it is built at, 0 for none
  *   area      the wall the slots take away, mm2 in the plane of the wall, for the page's
- *             filament estimate
+ *             filament estimate: the mean of its two faces, which differ on a wall over
+ *             3.35 mm
  *   splits    the extra points for each straight of the wall rings, in roundRect's
  *             order (back, left, front, right), as fractions of its length */
 function fingerSlots(c) {
@@ -8225,25 +8226,31 @@ function fingerSlots(c) {
       let from = -inner;
       for (const [a, b] of bounds) { room.push([from, a]); from = b; }
       room.push([from, inner]);
+      /* The slot is its shape on the wall's inner face, where a finger goes in. The two
+         rings take the same fractions of their straights, and with a wall over 3.35 mm the
+         inner straight is the shorter, so on the outer face the slot is `out` (S / Si) times
+         as wide, and its sides less steep. Settled on the outer face, as it first was, the
+         inner one came out narrower than the least and steeper than the 75 degrees a
+         wall's top is held to: 12.2 mm at 77.5 on a 10 mm wall. */
+      const out = Si > 0 ? S / Si : 0;
       for (const [a0, b0] of room) {
-        /* On the inner ring's straight, then out to the outer one's: both take the same
-           fractions, and with a wall over 3.35 mm the inner straight is the shorter. */
-        const a = Math.max(a0, lo0, -Si), b = Math.min(b0, hi0, Si);
-        const x0 = (Si > 0 ? Math.max(a * S / Si, lo) : 0) + FINGER.keep;
-        const x1 = (Si > 0 ? Math.min(b * S / Si, hi) : 0) - FINGER.keep;
+        const x0 = Math.max(a0, lo0, -Si, out ? lo / out : 0) + FINGER.keep;
+        const x1 = Math.min(b0, hi0, Si, out ? hi / out : 0) - FINGER.keep;
         if (!(x1 - x0 >= FINGER.least - 1e-9)) { s.narrow++; continue; }
         /* In the middle of the compartment, or as near it as the corner, a ramp, the scoop
            or the shelf allow: the end compartments' middles are near the corners. */
         const half = Math.min(FINGER.top, x1 - x0) / 2;
-        const mid = Si > 0 ? (a0 + b0) / 2 * S / Si : 0;
-        const at = Math.min(x1 - half, Math.max(x0 + half, mid));
-        const slot = fingerProfile(at, half, T, Math.min(D, deepest(half)));
+        const at = Math.min(x1 - half, Math.max(x0 + half, (a0 + b0) / 2));
+        const inside = fingerProfile(at, half, T, Math.min(D, deepest(half)));
+        // and on the outer face, the outline fingerDip lowers
+        const slot = { c: at * out, a: half * out, top: T, bottom: inside.bottom,
+                       prof: inside.prof.map(([x, z]) => [x * out, z]) };
         s.slots.push(slot);
-        for (let i = 1; i < slot.prof.length; i++) {
-          const [xa, za] = slot.prof[i - 1], [xb, zb] = slot.prof[i];
-          plan.area += (xb - xa) * ((T - za) + (T - zb)) / 2;
+        for (let i = 1; i < inside.prof.length; i++) {
+          const [xa, za] = inside.prof[i - 1], [xb, zb] = inside.prof[i];
+          plan.area += (1 + out) / 2 * (xb - xa) * ((T - za) + (T - zb)) / 2;
         }
-        for (const [x] of slot.prof) plan.splits[straight].push(dir > 0 ? (x + S) / (2 * S) : (S - x) / (2 * S));
+        for (const [x] of inside.prof) plan.splits[straight].push(dir > 0 ? (x + Si) / (2 * Si) : (Si - x) / (2 * Si));
       }
       if (!s.slots.length) s.why = 'narrow';
     };

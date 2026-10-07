@@ -427,6 +427,9 @@ const CASES = [
      and the page is told they gave way (holesGaveWay) rather than that the shelf took it. */
   { name: '1x0.5x3-slot-b-aaa-L8', u: 1, v: 0.5, hUnits: 3, insert: 2, label: 8,
     fingerSlots: { b: true }, slots: { b: 1 }, gave: true },
+  // on a thick wall the outer face is the wider: the inner one, where a finger goes, is to spec
+  { name: '2x1x3-slot-wall5', u: 2, v: 1, hUnits: 3, wall: 5, fingerSlots: { f: true, l: true },
+    slots: { f: 1, l: 1 } },
   // from the lowered wall's own top, off its ramps
   { name: '2x1x3-slot-low', u: 2, v: 1, hUnits: 3, edges: { f: 0.5 }, fingerSlots: { f: true, l: true },
     slots: { f: 1, l: 1 } },
@@ -2402,14 +2405,18 @@ function weldOpen(polys, tol) {
 /* Finger slots: a U-shaped dip in the top of a wall, one per compartment.
  *
  * Built, not merely closed: a bin whose slots were left out is just as watertight. So the
- * top of every wall asked for one is read off the mesh, on its outer face, and every dip
- * in it measured against the spec, written here: 20 mm across the top or the room the
+ * top of every wall asked for one is read off the mesh, on both its faces, and every dip
+ * in its inner face, where a finger goes in, measured against the spec, written here:
+ * 20 mm across the top or the room the
  * compartment has, never under 13; sides at 70 degrees; two 4 mm rounded corners at the
  * bottom; the bottom half way down the wall's own height above the floor, or where the
  * two corners meet if that is higher, or half a millimetre over the block of holes across
  * the floor if that is higher still. A wall's top edge as a whole is held to the 75
  * degrees every wall's is (see where a lowered wall meets a full-height one), and the
- * stacking lip has to be gone, since a lip over a dip has nothing under it.
+ * stacking lip has to be gone, since a lip over a dip has nothing under it. The outer face
+ * takes the same fractions of its straight, which is the longer on a wall over 3.35 mm,
+ * where the cavity's corners stop getting smaller, so there each dip is wider by the two
+ * straights' ratio, about the same middle, to the same bottom.
  *
  * Nothing inside may stand in a slot: along each one, just inside the wall, the highest
  * thing is no higher than the top of the wall there. That is what keeps a slot off the
@@ -2439,48 +2446,66 @@ console.log('\nfinger slots');
       faults.push(`${r.meta.holes || 0} holes built, ${told} said, ${cs.holes || 0} wanted`);
     if (plan.shelfOff !== !!(cs.label && cs.slots.b)) faults.push(`shelfOff ${plan.shelfOff}`);
     if (!!plan.holesGaveWay !== !!cs.gave) faults.push(`holesGaveWay ${!!plan.holesGaveWay}, not ${!!cs.gave}`);
-    let worstSide = 0, narrowest = Infinity, bottoms = [];
+    let worstSide = 0, narrowest = Infinity, widest = 0, bottoms = [];
     for (const side of ['f', 'b', 'l', 'r']) {
       const e = cs.edges && cs.edges[side] !== undefined ? cs.edges[side] : 1;
       const T = floorZ + e * (H - floorZ);
-      // the top of the wall along its outer face, the highest point at each place along it
-      const across = side === 'f' || side === 'b';
-      const face = side === 'f' ? -hd : side === 'b' ? hd : side === 'l' ? -hw : hw;
-      const tops = new Map();
-      for (const p of r.polys) for (const w of p.verts) {
-        if (Math.abs(w[across ? 1 : 0] - face) > 1e-4 || w[2] < floorZ + 0.5) continue;
-        const k = (across ? w[0] : w[1]).toFixed(4);
-        tops.set(k, Math.max(tops.get(k) ?? -Infinity, w[2]));
-      }
-      const prof = [...tops].map(([k, z]) => [+k, z]).sort((a, b) => a[0] - b[0]);
+      /* The top of the wall along each face, the highest point at each place along it, read
+         off the ribbon across the wall's top: its faces are the only ones with a corner on
+         each face, so a divider, the scoop or the shelf against the inner face is not taken
+         for the wall. */
+      const across = side === 'f' || side === 'b', sign = side === 'f' || side === 'l' ? -1 : 1;
+      const outerAt = sign * (across ? hd : hw), innerAt = outerAt - sign * wall;
+      const on = (w, f) => Math.abs(w[across ? 1 : 0] - f) < 1e-4;
+      const ribbon = r.polys.filter((p) => p.verts.some((w) => on(w, outerAt)) && p.verts.some((w) => on(w, innerAt)));
+      const topAlong = (f) => {
+        const tops = new Map();
+        for (const p of ribbon) for (const w of p.verts) {
+          if (!on(w, f) || w[2] < floorZ + 0.5) continue;
+          const k = (across ? w[0] : w[1]).toFixed(4);
+          tops.set(k, Math.max(tops.get(k) ?? -Infinity, w[2]));
+        }
+        return [...tops].map(([k, z]) => [+k, z]).sort((a, b) => a[0] - b[0]);
+      };
+      const outer = topAlong(outerAt), prof = topAlong(innerAt);
       const edgeAt = (x) => {
         for (let i = 1; i < prof.length; i++)
           if (x <= prof[i][0]) return prof[i - 1][1] + (prof[i][1] - prof[i - 1][1]) *
             (x - prof[i - 1][0]) / (prof[i][0] - prof[i - 1][0]);
         return prof[prof.length - 1][1];
       };
-      // the whole top edge, ramps and all
-      let steep = 0;
-      for (let i = 1; i < prof.length; i++) {
-        const climb = Math.abs(prof[i][1] - prof[i - 1][1]);
-        if (climb >= 0.2) steep = Math.max(steep, Math.atan2(climb, prof[i][0] - prof[i - 1][0]) * 180 / Math.PI);
-      }
-      if (steep > 75) faults.push(`${side}: a cliff of ${steep.toFixed(1)} degrees`);
+      // the whole top edge, ramps and all, on both faces
+      const steepest = (pr) => {
+        let steep = 0;
+        for (let i = 1; i < pr.length; i++) {
+          const climb = Math.abs(pr[i][1] - pr[i - 1][1]);
+          if (climb >= 0.2) steep = Math.max(steep, Math.atan2(climb, pr[i][0] - pr[i - 1][0]) * 180 / Math.PI);
+        }
+        return steep;
+      };
+      for (const [f, pr] of [['inner', prof], ['outer', outer]])
+        if (steepest(pr) > 75) faults.push(`${side}: a cliff of ${steepest(pr).toFixed(1)} degrees on the ${f} face`);
       // each run below the wall's own top is a slot, from the top corner before it to the one after
-      const dips = [];
-      for (let i = 0; i < prof.length; i++) {
-        if (!(prof[i][1] < T - 1e-6)) continue;
-        let j = i;
-        while (j + 1 < prof.length && prof[j + 1][1] < T - 1e-6) j++;
-        if (i === 0 || j + 1 === prof.length) { dips.length = 0; break; }   // no top corner: not a slot
-        dips.push({ x0: prof[i - 1][0], x1: prof[j + 1][0], run: prof.slice(i - 1, j + 2) });
-        i = j;
-      }
-      if (dips.length !== (cs.slots[side] || 0)) {
-        faults.push(`${side}: ${dips.length} slots, ${cs.slots[side] || 0} wanted`);
+      const dipsOf = (pr) => {
+        const dips = [];
+        for (let i = 0; i < pr.length; i++) {
+          if (!(pr[i][1] < T - 1e-6)) continue;
+          let j = i;
+          while (j + 1 < pr.length && pr[j + 1][1] < T - 1e-6) j++;
+          if (i === 0 || j + 1 === pr.length) return [];      // no top corner: not a slot
+          dips.push({ x0: pr[i - 1][0], x1: pr[j + 1][0], run: pr.slice(i - 1, j + 2) });
+          i = j;
+        }
+        return dips;
+      };
+      const dips = dipsOf(prof), outs = dipsOf(outer);
+      if (dips.length !== (cs.slots[side] || 0) || outs.length !== dips.length) {
+        faults.push(`${side}: ${dips.length} slots inside, ${outs.length} outside, ${cs.slots[side] || 0} wanted`);
         continue;
       }
-      for (const d of dips) {
+      // the two straights, end to end along each face: the outer is the longer on a thick wall
+      const stretch = (outer[outer.length - 1][0] - outer[0][0]) / (prof[prof.length - 1][0] - prof[0][0]);
+      for (const [i, d] of dips.entries()) {
         const w = d.x1 - d.x0, mid = (d.x0 + d.x1) / 2;
         const bottom = Math.min(...d.run.map(([, z]) => z));
         let sides = 0;
@@ -2501,6 +2526,10 @@ console.log('\nfinger slots');
         if (Math.abs(sides - F.angle) > 0.5) faults.push(`${side}: sides at ${sides.toFixed(1)} degrees`);
         if (Math.abs(bottom - expect) > 1e-3)
           faults.push(`${side}: bottom at ${bottom.toFixed(3)}, not ${expect.toFixed(3)}`);
+        const o = outs[i], ow = o.x1 - o.x0;
+        if (Math.abs(ow - w * stretch) > 1e-3 || Math.abs((o.x0 + o.x1) / 2 - mid * stretch) > 1e-3 ||
+            Math.abs(Math.min(...o.run.map(([, z]) => z)) - bottom) > 1e-6)
+          faults.push(`${side}: ${ow.toFixed(2)} across outside, not ${(w * stretch).toFixed(2)}`);
         for (let x = d.x0 + 0.5; x <= d.x1 - 0.5; x += 0.5) {
           const z = inside(x), edge = edgeAt(x) - (cs.insert ? F.clear : 0);
           if (z > edge + 1e-3) { faults.push(`${side}: at ${x.toFixed(1)} something inside stands ${(z - edge).toFixed(2)} into the slot`); break; }
@@ -2508,13 +2537,15 @@ console.log('\nfinger slots');
         // with nothing to keep it off-centre, in the middle of the wall
         if (!cs.divX && !cs.divY && !cs.label && !cs.scoop && !cs.edges && Math.abs(mid) > 1e-3)
           faults.push(`${side}: ${mid.toFixed(2)} off the middle`);
+        widest = Math.max(widest, ow);
         worstSide = Math.max(worstSide, sides);
         narrowest = Math.min(narrowest, w);
         bottoms.push(bottom);
       }
     }
     console.log(`  ${cs.name.padEnd(22)} ` + (faults.length ? 'WRONG: ' + faults.slice(0, 4).join('; ')
-      : `${String(n).padStart(2)} ${n > 1 ? 'slots' : 'slot '} ${narrowest.toFixed(2)}+ across, sides ` +
+      : `${String(n).padStart(2)} ${n > 1 ? 'slots' : 'slot '} ${narrowest.toFixed(2)}+ across` +
+        `${widest > narrowest + 1e-3 && cs.wall > 3.35 ? ` (to ${widest.toFixed(2)} outside)` : ''}, sides ` +
         `${worstSide.toFixed(1)}°, bottom ${Math.min(...bottoms).toFixed(2)}${bottoms.some((b) => b !== bottoms[0]) ? ' to ' + Math.max(...bottoms).toFixed(2) : ''}, no lip`));
     if (faults.length) bad++;
   }
