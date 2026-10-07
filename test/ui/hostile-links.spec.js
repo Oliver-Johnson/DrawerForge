@@ -296,6 +296,25 @@ test('a note full of markup and emoji, raised on its shelf, breaks nothing it re
   expect(errors).toEqual([]);
 });
 
+/* A loose bin's note arrives beside it (bsn), cleaned as a layer's note is: one line of
+   at most 28 characters, shown as text. A note with no loose bin to go on is nothing. */
+test('a loose bin\'s note from a link is one clean line, as a layer\'s is', async ({ page }) => {
+  const errors = watch(page);
+  const bin = '0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-1';
+  await arrive(page, H.BINS_URL + '#bs=' + bin + '&bsn=' +
+    encodeURIComponent('one\ntwo\u0007<b>three</b>' + '\u{1F642}'.repeat(40)));
+  const n = await page.evaluate(() => scratch.note);
+  expect(n).toBe('one two <b>three</b>' + '\u{1F642}'.repeat(4));
+  await expect(page.locator('#noteHint')).toContainText('cannot print, so it is left off');
+  expect(await page.locator('#noteHint b, #warnings b').count()).toBe(0);
+  const bins = (await page.evaluate(() => layoutReadme())).split('\n').filter((l) => l.startsWith('Bin: '));
+  expect(bins).toEqual(['Bin: 1x1x3  — ' + n]);
+
+  await arrive(page, H.BINS_URL + '#bl=0-0-1-1-3&bsn=stray');
+  expect(await page.evaluate(() => [scratch, B()[0].note || ''])).toEqual([null, '']);
+  expect(errors).toEqual([]);
+});
+
 /* A link can ask for as many raised notes as it has bins, and each is a part to build and
    hold: 256 took the page to 1.3 GB and 20 s. The first hundred print, layer by layer and
    bin by bin, the rest print plain, and Checks says so the way it does for a drawer past
