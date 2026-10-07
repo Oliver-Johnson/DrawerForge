@@ -4356,11 +4356,21 @@ function showSetAside(msg, canPutBack, canTry) {
 $('putBack').addEventListener('click', putBack);
 $('tryAnyway').addEventListener('click', tryAnyway);
 
+/* Not while a press on the map is held (drag): the save waits for the release, which
+   refreshes, and so sets it going again from there. On a link that set a layout aside,
+   the first save to find the design changed takes the set-aside line above the map away
+   (below), and a press that grabs a bin sets a save going. A drag held 400 ms met it:
+   the save found the bin half moved, the map went up 43 px under the pointer, and the
+   bin landed a row off. The save is the one thing that runs on a clock while a press is
+   held (an edit still waiting lands at the press, landEdit), so holding it holds all a
+   save changes above the map, the drawer bar's "not saving" too, rather than each line
+   being held on its own. And what a save keeps is a design someone has let go of, not
+   a bin half way across the map. */
 function rememberState() {
   if (!hashReady) return;
   clearTimeout(hashSaveT);
   addEventListener('beforeunload', dropSave);
-  hashSaveT = setTimeout(saveNow, 400);
+  hashSaveT = setTimeout(() => { if (!drag) saveNow(); }, 400);
 }
 function saveNow() {
   clearTimeout(hashSaveT);
