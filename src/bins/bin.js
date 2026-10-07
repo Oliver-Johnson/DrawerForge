@@ -1314,9 +1314,16 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
  * their slots, and both plates go in.
  *
  * Even spacing stands the end ones as far from the end walls as from each other, which
- * one alone does not need: with no neighbour, it needs only its slot and a rail either
- * side inside the cavity. Asked for a neighbour's spacing as well, a half-cell bin with a
- * 3 mm wall built none at a 5 mm plate and 1 mm clearance, where one fits with room over.
+ * one alone does not need: with no neighbour, it needs only its slot and, from there to
+ * each end wall, room for the rails the other way, should there be any, which reach a
+ * rail's depth and the clearance out from the wall (see reach in buildBin), more than
+ * its own rail takes. Held only to its slot and a rail either side, the other way's
+ * rails stood in its clearance, 0.45 mm into each side of the 1 mm asked on a half-cell
+ * bin with a 5 mm wall and a 5 mm plate. With ten times WELD over, their tips stop short
+ * of the slot's face rather than flush with it, where in a square bin a rail each way
+ * had a corner on one edge, used four times. Asked for a neighbour's spacing as well, a
+ * half-cell bin with a 3 mm wall built none at a 5 mm plate and 1 mm clearance, where
+ * one fits with room over.
  *
  * The end ones must clear the cavity's rounded corners as well. Spaced so, the plate
  * nearest an end wall stands a slot and a rail from it less half a plate, which with a
@@ -1331,6 +1338,10 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
  * outline as built, chords and all, or on it. The plate's own corner, between that face
  * and the middle, is then inside too. Fewer dividers rather than end plates cut to the
  * corner, because every plate is then the same part, and goes in any slot.
+ *
+ * And none at all where the clearance at the plate's two ends takes the whole cavity:
+ * a 1x0.5 with a 9.5 mm wall and 1 mm clearance listed a plate -0.5 mm long, and at a
+ * 10 mm wall and the usual clearance one with no volume.
  */
 function railedLimit(cfg, axis) {
   // the size as it is built, to the nearest half cell (halfSized), as buildBin does
@@ -1340,7 +1351,9 @@ function railedLimit(cfg, axis) {
   const inner = axis === 'x' ? hw : hd;
   const slot = c.divT / 2 + c.divClr, pitch = 2 * slot + RAIL_T;
   let most = Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0;
-  if (!most && inner >= slot + RAIL_T - 1e-9) most = 1;
+  if (!most && inner >= slot + RAIL_D + c.divClr + 10 * WELD - 1e-9) most = 1;
+  // none where the clearance at the plate's ends leaves it no length (see dividerPart)
+  if ((axis === 'x' ? hd : hw) - c.divClr < WELD) most = 0;
   const slots = most;
   // the cavity's corner as roundRect builds it, and whether a point stands out through it
   const r = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(hw, hd) - 0.01));

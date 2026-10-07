@@ -291,6 +291,19 @@ test('a bin with room for one removable divider and no more is built with one', 
   expect(errors).toEqual([]);
 });
 
+/* The one divider there is room for must leave room for the rails the other way too, which
+   reach a rail's depth and the clearance out from the end walls. Given only room for its
+   own rails, a half-cell bin with a 5 mm wall, one across and two along at a 5 mm plate
+   and 1 mm clearance, had the rails along standing 0.45 mm into each side of the one
+   across's 1 mm clearance. */
+test('one removable divider is not built where the rails the other way would stand in its clearance', async ({ page }) => {
+  const errors = await openAt(page, 'bl=0-0-0.5-1-3-5-1.2-1-2-0-1-1-1-1-0-0-0-0-1-0-15&bdt=5&bdc=1');
+  await settle(page, 600);
+  expect(await page.evaluate(() => [B()[0].divX, B()[0].divY, builtDivs(B()[0])])).toEqual([1, 2, { divX: 0, divY: 2 }]);
+  expect(await page.evaluate(() => dividerParts().reduce((n, d) => n + d.qty, 0))).toBe(2);
+  expect(errors).toEqual([]);
+});
+
 /* Both ways, where the end spacing on both axes was a rail and its reach, the tip of the
    end rail one way met the end rail the other way corner to corner, on one edge used four
    times: a 1x1 with a 0.4 mm wall and 10 each way at the usual plate and clearance, which

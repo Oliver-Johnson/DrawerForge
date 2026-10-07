@@ -1342,25 +1342,39 @@ console.log('\nremovable dividers: every plate goes into its slot');
    went in with 0.208 mm of clearance where 0.25 was asked for, at 12 not at all. With a
    thin plate and little clearance the end plates' corners stood in the cavity's rounded
    corners, up to 0.26 mm into the wall at a 0.8 mm plate and 0.1 clearance. So each plate
-   a bin is built for is set in its slot, as wide, thick and tall as dividerPart makes it
-   and standing on the floor, and the bin's triangles must keep out of it, to a micron
-   either way. Then each face of its slot, at each end of the plate, must have a rail
-   standing from the floor to the rim along a full rail's depth of that end: the rails
-   reached only a rail's depth from the wall while the plate stops the clearance short of
-   it, so at 1 mm clearance a plate end sat 0.2 mm in its rails and could twist out. Each
-   end is measured on its own: measured from the middle out, the far wall's rail counted
-   for the near end, and a bin with rails on one wall only passed most of the rows.
+   a bin is built for must have some length, and is set in its slot, as wide, thick and
+   tall as dividerPart makes it and standing on the floor, and the bin's triangles must
+   keep out of it, to a micron either way. Where the clearance at its ends took the whole
+   cavity, a 1x0.5 with a 9.5 mm wall and 1 mm clearance listed a plate -0.5 mm long.
+   The slot itself, the room the plate has to move by the clearance either way, must then
+   be clear of the walls of the bin with no dividers, and of every rail of the bin as
+   built. Held only to having the plate's corner inside the cavity, the end ones kept
+   0.0014 mm of the 0.1 mm clearance asked at their corners on a 2x1 with a 1.2 mm wall,
+   a 0.8 mm plate and 35 across. Held only to room for its own rails, a lone divider had
+   the rails the other way 0.45 mm into each side of its 1 mm clearance on a half-cell bin
+   with a 5 mm wall and a 5 mm plate, which only a bin with dividers both ways shows.
+   Then each face of its slot, at each end of the plate, must have a rail standing from
+   the floor to the rim along a full rail's depth of that end: the rails reached only a
+   rail's depth from the wall while the plate stops the clearance short of it, so at 1 mm
+   clearance a plate end sat 0.2 mm in its rails and could twist out. Each end is
+   measured on its own: measured from the middle out, the far wall's rail counted for the
+   near end, and a bin with rails on one wall only passed most of the rows.
    Asked for as many as the fields allow, a bin is built with as many as fit, and one more
    would not. One more is set out the same way in the same bin with no dividers, and fits
-   if its plates and the rails that would hold them, a rail thick across and a rail's
-   depth along, are clear of the walls and the floor, and no two stand closer than a slot
-   and a rail. A lone divider has no neighbour, so what decides it is room for its rails
-   alone: the limit asked it for a neighbour's spacing, and built none on a half-cell bin
-   with a 3 mm wall at a 5 mm plate, where one fits. Some of the rows below are just that.
-   That is done at both ends of the plate and the clearance the page takes, and at its
-   three smoothnesses, which set the corners' chords. The lip is left off. Its chamfer
-   stands over the top of every plate's ends, which is a matter of the lip and not of
-   where the dividers stand. */
+   if its plates have length, its slots and the rails that would hold them, a rail thick
+   across and a rail's depth along, are clear of the walls and the floor, no two stand
+   closer than a slot and a rail, and no slot stands where the rails the other way would:
+   a rail's depth and the clearance from each end wall, and ten times WELD (0.02 mm) more
+   so that their tips are not flush with its face. The limit for one way cannot know
+   whether there will be any the other way, so it keeps clear of them either way. That
+   only ever decides a lone divider, which has no neighbour, so what decides it is room
+   for those rails: the limit once asked it for a neighbour's spacing, and built none on
+   a half-cell bin with a 3 mm wall at a 5 mm plate, where one fits. Some of the rows
+   below are just that. That is done at both ends of the plate and the clearance the page
+   takes, and at its three smoothnesses, which set the corners' chords, and then with
+   dividers both ways on half cells with thick walls and on whole cells with thin ones.
+   The lip is left off. Its chamfer stands over the top of every plate's ends, which is a
+   matter of the lip and not of where the dividers stand. */
 {
   const triBox = (c, h, t) => {
     const v = t.map((p) => [p[0] - c[0], p[1] - c[1], p[2] - c[2]]);
@@ -1412,6 +1426,12 @@ console.log('\nremovable dividers: every plate goes into its slot');
   /* Where a plate's rails must stand to hold it, a micron inside: a rail thick out from
      each face of its slot, and a rail's depth back from each end of the plate, floor to
      rim. Or the plate's whole half, when that is shorter than a rail's depth. */
+  // the slot a plate stands in, from face to face, grown by `grow` across it
+  const slotOf = (pl, ax, grow) => {
+    const lo = pl.lo.slice(), hi = pl.hi.slice();
+    lo[ax] = pl.faces[0] - grow; hi[ax] = pl.faces[1] + grow;
+    return { lo, hi };
+  };
   const railsOf = (pl, ax, H) => {
     const out = [], along = Math.min(RAIL_D, pl.end);
     for (const [a, b] of [[pl.faces[0] - RAIL_T, pl.faces[0]], [pl.faces[1], pl.faces[1] + RAIL_T]])
@@ -1450,7 +1470,12 @@ console.log('\nremovable dividers: every plate goes into its slot');
       for (const pl of platesOf(c, r, n, ax, -E)) {
         plates++;
         if (pl.end < RAIL_D) short++;
+        if (!(pl.end > 0)) { out.push(`${key} plate ${pl.k} of ${n} has no length`); continue; }
         if (!inside(pl) || blocked(tris, pl.lo, pl.hi)) { out.push(`${key} plate ${pl.k} of ${n} blocked`); continue; }
+        // its room to move by the clearance either way: clear of the walls, then of every rail
+        const slot = slotOf(pl, ax, -E);
+        if (!clear(slot)) { out.push(`${key} plate ${pl.k} of ${n} has its slot in a corner`); continue; }
+        if (blocked(tris, slot.lo, slot.hi)) { out.push(`${key} plate ${pl.k} of ${n} has a rail in its clearance`); continue; }
         // each face of the slot, at each end on its own: from the middle to that end
         const need = Math.min(RAIL_D, pl.end) - 1e-6;
         for (const x of pl.faces) for (const s of [-1, 1]) {
@@ -1460,10 +1485,13 @@ console.log('\nremovable dividers: every plate goes into its slot');
           if (hold < need) { out.push(`${key} plate ${pl.k} of ${n} held ${hold.toFixed(2)} mm at one end`); break; }
         }
       }
-      // one more: crowded by a neighbour, or its plates or their rails into a wall of the bare bin
+      /* one more: crowded by a neighbour, its slots or their rails into a wall of the bare
+         bin, a slot where the rails the other way would stand, or a plate with no length */
       if (n < (c[key] || 0)) {
         const k = n + 1, crowded = k > 1 && 2 * inner / (k + 1) < pitch - 1e-9;
-        if (!crowded && platesOf(c, r, k, ax, E).every((pl) => clear(pl) && railsOf(pl, ax, H).every(clear)))
+        const reach = RAIL_D + c.divClr + 0.02;
+        if (!crowded && platesOf(c, r, k, ax, E).every((pl) => pl.end > 0 && clear(slotOf(pl, ax, E)) &&
+            railsOf(pl, ax, H).every(clear) && pl.faces[0] >= -inner + reach - 1e-9 && pl.faces[1] <= inner - reach + 1e-9))
           out.push(`${key}: ${k} would have fit, ${n} built`);
       }
     }
@@ -1489,7 +1517,7 @@ console.log('\nremovable dividers: every plate goes into its slot');
      and the plates spanning that half cell, as short as the rails are deep or shorter,
      where the rails from its two walls meet and are one rib across. */
   for (const [divT, divClr] of pairs)
-    for (const wall of [2.5, 3, 4, 5, 6, 7, 8, 9])
+    for (const wall of [2.5, 3, 4, 5, 6, 7, 8, 9, 9.5, 10])
       for (const key of ['divX', 'divY'])
         for (const [a, b] of [[0.5, 1], [2, 0.5]]) {
           const top = most((a - 1) * 42 + 41.5 - 2 * wall, wall), [u, v] = key === 'divX' ? [a, b] : [b, a];
@@ -1497,13 +1525,31 @@ console.log('\nremovable dividers: every plate goes into its slot');
             rows.push([label(u, v, wall, n, key, divT, divClr, 12),
                        { u, v, hUnits: 3, wall, divRemovable: true, lip: false, divT, divClr, arcSegs: 12, [key]: n }]);
         }
+  /* Both ways at once: the rails the other way stand along each end wall, a rail's depth
+     and the clearance out from it, and must keep out of every slot. On a half cell with a
+     thick wall the one divider there is room for stands near them; on whole cells with
+     thin walls the end ones of both ways crowd the same corners. */
+  const both = (u, v, wall, nx, ny, divT, divClr) => rows.push([`${u}x${v} wall ${wall}, ${nx} across and ${ny} along` +
+    `${divT === 1.6 && divClr === 0.25 ? '' : `, ${divT} mm plate ${divClr} clear`}`,
+    { u, v, hUnits: 3, wall, divRemovable: true, lip: false, divT, divClr, arcSegs: 12, divX: nx, divY: ny }]);
+  for (const [divT, divClr] of pairs) {
+    for (const wall of [2.5, 3, 4, 5, 5.5, 6, 7, 7.5, 8, 8.5, 9])
+      for (const [u, v] of [[0.5, 1], [1, 0.5], [0.5, 0.5]]) {
+        const tx = most((u - 1) * 42 + 41.5 - 2 * wall, wall), ty = most((v - 1) * 42 + 41.5 - 2 * wall, wall);
+        for (const nn of new Set([[1, ty], [tx, 1], [tx, ty]].filter(([x, y]) => x && y).map(String)))
+          both(u, v, wall, ...nn.split(',').map(Number), divT, divClr);
+      }
+    for (const wall of [0.4, 1.2, 2])
+      for (const [u, v] of [[1, 1], [2, 1]])
+        both(u, v, wall, most((u - 1) * 42 + 41.5 - 2 * wall, wall), most((v - 1) * 42 + 41.5 - 2 * wall, wall), divT, divClr);
+  }
   let plates = 0;
   const fails = [], kinds = {};
   for (const [name, cfg] of rows) {
     const f = faults(cfg);
     plates += f.plates;
     if (f.out.length) fails.push(`${name}: ${f.out[0]}${f.out.length > 1 ? ` and ${f.out.length - 1} more` : ''}`);
-    for (const k of new Set(f.out.map((t) => t.replace(/.*\b(blocked|held|would have fit|asked)\b.*/, '$1'))))
+    for (const k of new Set(f.out.map((t) => t.replace(/.*\b(length|blocked|corner|clearance|held|would have fit|asked)\b.*/, '$1'))))
       kinds[k] = (kinds[k] || 0) + 1;
   }
   console.log(`  ${rows.length} bins, ${plates} plates, ${lone} with one divider where two would not go: ` + (fails.length
