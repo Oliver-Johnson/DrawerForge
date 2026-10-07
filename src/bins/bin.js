@@ -108,13 +108,15 @@ function scoopPrism(G, hwI, hdI, floorZ, r, segs) {
   prof.push([y0 - BLOAT, floorZ + r], [y0 - BLOAT, floorZ - BLOAT], [y0, floorZ - BLOAT]);
   return G.profilePrism(prof, -hwI - BLOAT, hwI + BLOAT, (u, v) => [v, u]);
 }
-function labelPrism(G, hwI, hdI, H, depth, t) {
+/* From side wall to side wall, a BLOAT into each, or from x0 to x1: one piece of a shelf
+   notched for removable plates to pass (see plateLayout). */
+function labelPrism(G, hwI, hdI, H, depth, t, x0 = -hwI - BLOAT, x1 = hwI + BLOAT) {
   const yb = hdI;
   const prof = [
     [yb + BLOAT, H - t - depth], [yb + BLOAT, H], [yb - depth, H],
     [yb - depth, H - t],
   ];
-  return G.profilePrism(prof, -hwI - BLOAT, hwI + BLOAT, (u, v) => [v, u]);
+  return G.profilePrism(prof, x0, x1, (u, v) => [v, u]);
 }
 
 /* ...which suits a wall of the usual thickness and nothing much thinner. The prisms end
@@ -253,9 +255,23 @@ function scoopRounded(G, hwI, hdI, wall, floorZ, r, segs, n) {
   return bandSolid(G, cavityRing(hwI, hdI, wall, n), -Infinity, y0 + r,
                    prof.map(([y]) => y), piecewise(prof), () => floorZ - BLOAT / 2);
 }
-function labelRounded(G, hwI, hdI, wall, H, depth, t, n) {
+/* `xs`, when given, is the piece [x0, x1] of a notched shelf, as labelPrism's, null at an
+   end that runs into the side wall. Cut from the outline and thinned along the cuts as a
+   divider's box is (see the dividers in buildBin), and for the same reason: a vertex of
+   the outline just inside a cut is nearly in line with the cut's own edge. A piece with
+   next to nothing left inside the outline is all wall, and is not built. */
+function labelRounded(G, hwI, hdI, wall, H, depth, t, n, xs) {
   const yb = hdI;
-  return bandSolid(G, cavityRing(hwI, hdI, wall, n), yb - depth, Infinity, [],
+  let ring = cavityRing(hwI, hdI, wall, n);
+  if (xs) {
+    const cuts = [[xs[0], 1], [xs[1], -1]].filter(([x]) => x !== null);
+    for (const [x, keep] of cuts) ring = clipSide(ring, 0, x, keep);
+    ring = ring.filter((p) => cuts.every(([x]) => p[0] === x || Math.abs(p[0] - x) >= 10 * WELD));
+    ring = ring.filter((p, i) => Math.hypot(p[0] - ring[(i + 1) % ring.length][0],
+                                            p[1] - ring[(i + 1) % ring.length][1]) >= WELD);
+    if (ring.length < 3 || Math.abs(G.polyArea2D(ring)) < 0.01) return [];
+  }
+  return bandSolid(G, ring, yb - depth, Infinity, [],
                    () => H, piecewise([[yb - depth, H - t], [yb + BLOAT, H - t - depth]]));
 }
 
@@ -620,15 +636,17 @@ function wallRing(G, outer, inner, z0, zTop) {
   return polys;
 }
 
-// Closed lip ring: a socket-profiled rim standing on top of the bin walls.
-// A separate overlapping shell. How it meets the wall depends on whether the wall
-// is thinner than the lip's base or not; see the chamfer below.
-function lipRing(G, c, hwO, hdO, H, n) {
-  const ring = (t) => roundRect(hwO - t, hdO - t, SPEC.r - t, n);
+/* The lip's inner surface, bottom up: each level's inset from the bin's outer outline
+   and its height, with the lip's own height. The outer surface is the outline itself,
+   from the lowest level to the top. One function for the whole ring and for the ring
+   notched at a removable bin's slots (notchedLip), so the two are the same lip. `thin`
+   says the wall is thinner than the lip's base, which is the lip that has to be notched
+   (see notchedLip). */
+function lipLevels(c, H) {
   const lipH = lipHeight(c.lipMin);
   const steps = LIP.concat([[lipH, c.lipMin]]);
-  const inner = steps.map(([, t]) => ring(t));
-  const zsI = steps.map(([z]) => H + z);
+  const ts = steps.map(([, t]) => t);
+  const zs = steps.map(([z]) => H + z);
   /* Chamfer the underside of the lip instead of dropping it straight down.
      The wall is 1.2 mm and the lip base is 2.70, so the lip used to begin with
      1.50 mm of material starting in mid-air over the cavity. Every printed bin
@@ -640,8 +658,9 @@ function lipRing(G, c, hwO, hdO, H, n) {
      the floor. Steeper still beats a flat overhang. */
   const base = steps[0][1];                         // 2.70, the socket floor's inset
   const room = Math.max(BLOAT, H - (SPEC.footH + c.floorT) - 0.3);
-  if (base - c.wall >= BLOAT) {
-    inner.unshift(ring(c.wall)); zsI.unshift(H - Math.min(base - c.wall, room));
+  const thin = base - c.wall >= BLOAT;
+  if (thin) {
+    ts.unshift(c.wall); zs.unshift(H - Math.min(base - c.wall, room));
   } else {
     /* A wall as thick as the lip's base has nothing to chamfer: the lip stands on it.
        But the chamfer above collapsed to zero height there, putting the lip's bottom
@@ -654,9 +673,19 @@ function lipRing(G, c, hwO, hdO, H, n) {
        face, and the lip's next ring sits a BLOAT up its own 45 degree chamfer instead
        of on that corner. The cost is a 0.05 mm triangle off the corner where the
        chamfer meets the wall top, in the loose direction, under any nozzle. */
-    inner[0] = ring(base - BLOAT); zsI[0] = H + BLOAT;
-    inner.unshift(ring(Math.min(c.wall, base) - BLOAT)); zsI.unshift(H - Math.min(1, room));
+    ts[0] = base - BLOAT; zs[0] = H + BLOAT;
+    ts.unshift(Math.min(c.wall, base) - BLOAT); zs.unshift(H - Math.min(1, room));
   }
+  return { ts, zs, lipH, thin };
+}
+
+// Closed lip ring: a socket-profiled rim standing on top of the bin walls.
+// A separate overlapping shell. How it meets the wall depends on whether the wall
+// is thinner than the lip's base or not; see the chamfer in lipLevels.
+function lipRing(G, c, hwO, hdO, H, n) {
+  const ring = (t) => roundRect(hwO - t, hdO - t, SPEC.r - t, n);
+  const { ts, zs: zsI, lipH } = lipLevels(c, H);
+  const inner = ts.map(ring);
   const drop = H - zsI[0];
 
   const outer = ring(0);
@@ -686,6 +715,221 @@ function lipRing(G, c, hwO, hdO, H, n) {
      would leave the two skins ending at different z with nothing joining them. */
   polys.push(...ringStrip(G.makePoly, outer, inner[0], H - drop, false));
   polys.push(...ringStrip(G.makePoly, outer, inner[inner.length - 1], H + lipH, true));
+  return polys;
+}
+
+/* The lip of a bin with removable dividers: the same lip as lipRing's, built in pieces
+ * with a notch between them at every slot, so a plate goes in straight down. bandsX are
+ * the notches through the front and back of the lip, as spans of x, for the plates across
+ * the bin; bandsY through the sides, as spans of y, for the plates along it.
+ *
+ * Each notch is cut straight across the lip, as the slot runs, so at a corner its sides
+ * are planes x = const (or y) through the corner's arcs and not radii of it: a radius
+ * would take the outer edge of the lip away twice as wide as the slot. Every level of the
+ * lip's profile is a ring about the same corner centres, so a cut meets each level's ring
+ * on the same side or corner: on the straight it is the profile itself, in a corner each
+ * level at its own angle, and the end of a piece is the profile in the cut's plane. Along
+ * a piece each level runs the same number of points, so the skins are strips index to
+ * index as lipRing's are: a whole arc keeps roundRect's points, a part of one is taken in
+ * as many equal steps for every level as the widest needs, each step on the arc's chords
+ * so nothing stands outside the outline the bin is built to, and a straight is just its
+ * two ends. The ends of a piece are fanned from the foot of the outline, which sees the
+ * whole profile, chamfer and all, at any angle a cut meets it.
+ *
+ * A piece too short to build, at a corner where a notch from each side comes close, is
+ * left out and the two notches run together: less lip there, never a sliver of one. A cut
+ * that misses a level altogether (railedLimits keeps every notch inside the lip's socket
+ * floor, so none does) leaves out the pieces either side of its notch the same way. */
+function notchedLip(G, c, hwO, hdO, H, n, bandsX, bandsY) {
+  const { ts, zs } = lipLevels(c, H);
+  const levels = [0].concat(ts);             // the outline, then the inner surface bottom up
+  const zB = zs[0], zT = zs[zs.length - 1], K = ts.length;
+  const cx = hwO - SPEC.r, cy = hdO - SPEC.r, D = 90 / n, W = 10 * WELD;
+  const DEG = Math.PI / 180;
+  // roundRect's corners, in its order: the corner's signs and the angle its arc starts at
+  const CORNER = [[1, 1, 0], [-1, 1, 90], [-1, -1, 180], [1, -1, 270]];
+  const centre = (k, t) => {
+    const r = SPEC.r - t;
+    return [CORNER[k][0] * ((hwO - t) - r), CORNER[k][1] * ((hdO - t) - r), r];
+  };
+  const arcs = levels.map((t) => CORNER.map((cr, k) => {
+    const [ox, oy, r] = centre(k, t), out = [];
+    for (let j = 0; j <= n; j++) {
+      const a = (cr[2] + 90 * j / n) * DEG;
+      out.push([ox + r * Math.cos(a), oy + r * Math.sin(a)]);
+    }
+    return out;
+  }));
+  // the point on corner k's chords at angle a (degrees from the arc's start), level L
+  const onChords = (L, k, a) => {
+    const [ox, oy, r] = centre(k, levels[L]);
+    const j = Math.min(n - 1, Math.max(0, Math.floor(a / D))), mid = (j + 0.5) * D;
+    const rho = r * Math.cos(D / 2 * DEG) / Math.cos((a - mid) * DEG), g = (CORNER[k][2] + a) * DEG;
+    return [ox + rho * Math.cos(g), oy + rho * Math.sin(g)];
+  };
+  /* The perimeter in roundRect's order, as eight segments: corner k's arc is segment 2k,
+     and the straight after it 2k + 1. Where a cut through `side` at axis value v meets
+     level L: its segment, the point, and how far along the segment it is, 0 to 1, as an
+     angle on an arc. null if it misses that level. */
+  const segOf = (side, v) => {
+    if (side === 'f') return v < -cx ? 4 : v <= cx ? 5 : 6;
+    if (side === 'b') return v > cx ? 0 : v >= -cx ? 1 : 2;
+    if (side === 'r') return v < -cy ? 6 : v <= cy ? 7 : 0;
+    return v > cy ? 2 : v >= -cy ? 3 : 4;
+  };
+  const locate = (L, cut) => {
+    const s = cut.seg, ax = cut.ax, v = cut.v;
+    if (s % 2) {
+      const a = arcs[L][(s - 1) / 2][n], b = arcs[L][((s + 1) / 2) % 4][0];
+      const f = (v - a[ax]) / (b[ax] - a[ax]);
+      const p = [];
+      p[ax] = v; p[1 - ax] = a[1 - ax] + (b[1 - ax] - a[1 - ax]) * f;
+      return { p, f };
+    }
+    const k = s / 2, pts = arcs[L][k];
+    for (let j = 0; j < n; j++) {
+      const a = pts[j], b = pts[j + 1];
+      if ((a[ax] - v) * (b[ax] - v) > 0 || a[ax] === b[ax]) continue;
+      const f = (v - a[ax]) / (b[ax] - a[ax]), p = [];
+      p[ax] = v; p[1 - ax] = a[1 - ax] + (b[1 - ax] - a[1 - ax]) * f;
+      const [ox, oy] = centre(k, levels[L]);
+      let ang = Math.atan2(p[1] - oy, p[0] - ox) / DEG - CORNER[k][2];
+      while (ang < -1e-9) ang += 360;
+      return { p, f: Math.min(90, Math.max(0, ang)) / 90 };
+    }
+    return null;
+  };
+  /* The cuts: each notch's entry and exit as the perimeter runs anticlockwise. A side of
+     a cut within ten WELD of where a straight meets a corner is put there, so no piece
+     has a sliver of arc or of straight at its end. */
+  const snap = (v, e) => (Math.abs(v - e) < W ? e : Math.abs(v + e) < W ? -e : v);
+  const notches = [];
+  const notch = (side, ax, from, to) => {
+    const cut = (v) => {
+      const seg = segOf(side, v), at = levels.map((t, L) => locate(L, { seg, ax, v }));
+      return { seg, ax, v, at, key: seg + (at[0] ? at[0].f : 0) };
+    };
+    notches.push({ entry: cut(from), exit: cut(to) });
+  };
+  for (const [a, b] of bandsX) {
+    const lo = snap(a, cx), hi = snap(b, cx);
+    notch('f', 0, lo, hi); notch('b', 0, hi, lo);
+  }
+  for (const [a, b] of bandsY) {
+    const lo = snap(a, cy), hi = snap(b, cy);
+    notch('r', 1, lo, hi); notch('l', 1, hi, lo);
+  }
+  if (!notches.length) return lipRing(G, c, hwO, hdO, H, n);
+  // round the perimeter from its start, running together any that meet at the outline
+  notches.sort((p, q) => p.entry.key - q.entry.key);
+  const runs = [];
+  for (const nt of notches) {
+    const end = nt.exit.key < nt.entry.key ? nt.exit.key + 8 : nt.exit.key;
+    const last = runs[runs.length - 1];
+    if (last && nt.entry.key <= last.end) {
+      if (end > last.end) { last.end = end; last.exit = nt.exit; }
+    } else runs.push({ entry: nt.entry, exit: nt.exit, start: nt.entry.key, end });
+  }
+  if (runs.length > 1 && runs[runs.length - 1].end - 8 >= runs[0].start) {
+    const tail = runs.pop();
+    if (tail.end - 8 > runs[0].end) runs[0].exit = tail.exit;
+    runs[0].entry = tail.entry;
+  }
+
+  /* One piece, from the exit of one notch to the entry of the next, at every level: its
+     points along the perimeter, or null if it cannot be built. */
+  const pieceAt = (A, B) => {
+    if (A.at.some((x) => !x) || B.at.some((x) => !x)) return null;
+    /* Its parts, segment by segment: within one, or from A to the end of its segment,
+       every segment whole up to B's, and that one up to B, the whole way round if need be.
+       Within one, B has to come after A at every level, not only at the outline: two
+       notches at a corner can cross at the smaller rings and not at the outline. */
+    const parts = [];
+    if (A.seg === B.seg && B.key > A.key) {
+      if (levels.some((t, L) => B.at[L].f <= A.at[L].f)) return null;
+      parts.push([A.seg, A, B]);
+    } else {
+      parts.push([A.seg, A, null]);
+      for (let s = (A.seg + 1) % 8; s !== B.seg; s = (s + 1) % 8) parts.push([s, null, null]);
+      parts.push([B.seg, null, B]);
+    }
+    // the steps each part of an arc takes, the same at every level
+    const steps = parts.map(([s, a, b]) => {
+      if (s % 2 || (!a && !b)) return n;
+      let most = 0;
+      for (let L = 0; L < levels.length; L++)
+        most = Math.max(most, ((b ? b.at[L].f : 1) - (a ? a.at[L].f : 0)) * 90);
+      return Math.max(1, Math.ceil(most / D - 1e-9));
+    });
+    const out = levels.map((t, L) => {
+      const pts = [];
+      const put = (p) => {
+        const q = pts[pts.length - 1];
+        if (!q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-9) pts.push(p);
+      };
+      parts.forEach(([s, a, b], i) => {
+        if (s % 2) {                              // a straight: its two ends
+          put(a ? a.at[L].p : arcs[L][(s - 1) / 2][n]);
+          put(b ? b.at[L].p : arcs[L][((s + 1) / 2) % 4][0]);
+          return;
+        }
+        const k = s / 2;
+        if (!a && !b) { arcs[L][k].forEach(put); return; }
+        const f0 = a ? a.at[L].f : 0, f1 = b ? b.at[L].f : 1, m = steps[i];
+        put(a ? a.at[L].p : arcs[L][k][0]);
+        for (let j = 1; j < m; j++) put(onChords(L, k, (f0 + (f1 - f0) * j / m) * 90));
+        put(b ? b.at[L].p : arcs[L][k][n]);
+      });
+      return pts;
+    });
+    // as many points at every level, and none of it shorter than a tenth of a millimetre
+    if (out.some((pts) => pts.length !== out[0].length || pts.length < 2)) return null;
+    const len = (pts) => pts.reduce((s, p, i) => (i ? s + Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) : 0), 0);
+    if (out.some((pts) => len(pts) < 0.1)) return null;
+    for (let L = 0; L < out.length; L++)
+      for (let j = 1; j < out[L].length; j++)
+        if (Math.hypot(out[L][j][0] - out[L][j - 1][0], out[L][j][1] - out[L][j - 1][1]) < WELD) return null;
+    return out;
+  };
+
+  const polys = [];
+  const mk = (v) => { const p = G.makePoly(v); if (p) polys.push(p); };
+  for (let i = 0; i < runs.length; i++) {
+    const P = pieceAt(runs[i].exit, runs[(i + 1) % runs.length].entry);
+    if (!P) continue;
+    const N = P[0].length;
+    const at = (L, j, z) => [P[L][j][0], P[L][j][1], z];
+    // inner skin, normals into the recess, as lipRing's
+    for (let L = 1; L < K; L++)
+      for (let j = 0; j + 1 < N; j++) {
+        const a0 = at(L, j, zs[L - 1]), b0 = at(L, j + 1, zs[L - 1]);
+        const a1 = at(L + 1, j, zs[L]), b1 = at(L + 1, j + 1, zs[L]);
+        mk([a0, b1, b0]); mk([a0, a1, b1]);
+      }
+    for (let j = 0; j + 1 < N; j++) {
+      mk([at(0, j, zB), at(0, j + 1, zB), at(0, j + 1, zT), at(0, j, zT)]);   // outer skin
+      const o0 = at(0, j, zB), o1 = at(0, j + 1, zB), i0 = at(1, j, zB), i1 = at(1, j + 1, zB);
+      mk([i1, o1, o0]); mk([i0, i1, o0]);                                     // underside
+      const p0 = at(0, j, zT), p1 = at(0, j + 1, zT), q0 = at(K, j, zT), q1 = at(K, j + 1, zT);
+      mk([p0, p1, q1]); mk([p0, q1, q0]);                                     // top rim
+    }
+    // the two ends, each facing out of the piece along the perimeter
+    for (const [j, nb] of [[0, 1], [N - 1, N - 2]]) {
+      const face = [at(0, j, zB)];
+      for (let L = 1; L <= K; L++) face.push(at(L, j, zs[L - 1]));
+      face.push(at(0, j, zT));
+      const out = [P[0][j][0] - P[0][nb][0], P[0][j][1] - P[0][nb][1]];
+      const tris = [];
+      for (let m = 1; m + 1 < face.length; m++) tris.push([face[0], face[m], face[m + 1]]);
+      let nx = 0, ny = 0;
+      for (const [a, b, d] of tris) {
+        nx += (b[1] - a[1]) * (d[2] - a[2]) - (b[2] - a[2]) * (d[1] - a[1]);
+        ny += (b[2] - a[2]) * (d[0] - a[0]) - (b[0] - a[0]) * (d[2] - a[2]);
+      }
+      const flip = nx * out[0] + ny * out[1] < 0;
+      for (const tr of tris) mk(flip ? tr.slice().reverse() : tr);
+    }
+  }
   return polys;
 }
 
@@ -1299,6 +1543,41 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
 
 /* ---------- the bin ------------------------------------------------------- */
 
+// how high a wall stands, as a share of the height above the floor; 1 when not lowered
+const wallEdge = (c, k) => (c.edges && c.edges[k] !== undefined ? c.edges[k] : 1);
+/* Whether a bin's stacking lip is the one notched at its slots, for removable dividers:
+   a lip, over a wall thinner than its base (lipLevels). Over a wall as thick as the
+   base the lip stands on the wall and nowhere over the cavity, so a plate clears it. */
+const lipNotched = (c) => !!c.lip && !c.solid && ['f', 'b', 'l', 'r'].every((k) => wallEdge(c, k) >= 1) &&
+  LIP[0][1] - c.wall >= BLOAT;
+/* The scoop's radius as buildBin builds it, 0 for none: no taller than the front wall it
+   fills the corner of (see buildBin), and with plates across a removable bin no taller
+   than leaves their front ends `plate` mm to stand in. */
+function scoopRadius(c, H, floorZ, id, plate) {
+  const eF = wallEdge(c, 'f');
+  if (!(c.scoop > 0.05 && eF > 0)) return 0;
+  const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF), plate === undefined ? Infinity : plate);
+  return r > 0.05 ? r : 0;
+}
+/* The label shelf's depth as buildBin builds it, 0 for none.
+   Limited by height as well as depth. The shelf's underside runs down at 45
+   degrees, so a shelf deeper than the bin is tall pokes its foot through the
+   floor and out among the feet: 4 open edges from 8 mm on a 1-unit bin. Into
+   the floor is fine, it is solid, and overlap is how every shell here meets the
+   next; out of it is not. The slab starts a BLOAT below the body, so the foot
+   stops at the top of the feet, a BLOAT above it, whatever the floor — which is
+   where a whole-millimetre shelf on whole units bottoms out, so none of those
+   moves. Held 0.2 above the floor, it cut shelves that had always built
+   cleanly: a 14 mm label on a 1x1x3 came out 13.65.
+   With screws the foot stops above the screws' ends instead, for the reason the
+   wall ring does: behind a wall over 5 mm thick it reaches in over a hole. */
+function shelfDepth(c, id, H) {
+  if (!(c.label > 0.05 && wallEdge(c, 'b') > 0.99)) return 0;
+  const footAt = c.screws && !feetHolesOff(c) ? FOOT_HOLES.screwTop + BLOAT : SPEC.footH + BLOAT;
+  const d = Math.min(c.label, id * 0.8, H - c.labelT - footAt);
+  return d > 0.05 ? d : 0;
+}
+
 /* The most removable dividers that fit along one direction of a bin: `axis` is 'x' for
  * divX, the ones standing at a fixed x, and 'y' for divY.
  *
@@ -1319,8 +1598,18 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
  * down until the end plates' corners are inside the cavity's outline as built, chords
  * and all, or on it. Fewer dividers rather than end plates cut to the corner, because
  * every plate is then the same part, and goes in any slot.
+ *
+ * Two more things can stand over a slot, and each brings the count down again where it
+ * would. With a stacking lip, each slot is a notch through the lip (notchedLip), cut
+ * straight across it; the notch nearest a corner has to cross the lip's socket floor,
+ * 2.70 mm in, before that turns the corner, or the cut misses it and the notch cannot
+ * be made. And a label shelf stands over the back of the cavity: a plate along the
+ * depth, parallel to it, would have to be slid in under it, which a plate dropped into
+ * rails cannot be, so the last one stays in front of the shelf, slot and all. The plates
+ * across pass through notches in the shelf instead, so the shelf limits only these.
+ * railedLimits says which brought the count down, for the page to say why.
  */
-function railedMost(cfg, axis) {
+function railedLimits(cfg, axis) {
   // the size as it is built, to the nearest half cell (halfSized), as buildBin does
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
@@ -1343,7 +1632,19 @@ function railedMost(cfg, axis) {
     return axis === 'x' ? outside(face, hd - c.divClr) : outside(hw - c.divClr, face);
   };
   while (most > 0 && endOut(most)) most--;
-  return most;
+  const rails = most;
+  // the last slot of k, as buildBin places it, and its half width
+  const last = (k) => -inner + (2 * inner) * k / (k + 1), slot = c.divT / 2 + c.divClr;
+  const full = isHalfSize(c) || isFullRect(c);
+  if (full && lipNotched(c))
+    while (most > 0 && last(most) + slot + 2 * BLOAT > inner + c.wall - LIP[0][1]) most--;
+  const lip = most;
+  const shelf = axis === 'y' && full ? shelfDepth(c, hd, c.hUnits * SPEC.unitH) : 0;
+  if (shelf) while (most > 0 && last(most) + slot + BLOAT > hd - shelf) most--;
+  return { rails, lip, shelf: most };
+}
+function railedMost(cfg, axis) {
+  return railedLimits(cfg, axis).shelf;
 }
 /* The dividers a bin is built with: as many as it asks for, bar removable ones past the
    most that fit. What a bin asks for is left as it is, in the link and everywhere it is
@@ -1352,7 +1653,254 @@ function railedMost(cfg, axis) {
 function dividersBuilt(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg);
   const n = (key, axis) => Math.min(c[key] || 0, c.divRemovable ? railedMost(c, axis) : Infinity);
-  return { divX: n('divX', 'x'), divY: n('divY', 'y') };
+  const out = { divX: n('divX', 'x'), divY: n('divY', 'y') };
+  /* Removable plates along the depth have to keep enough plate where they stand: over the
+     scoop they are shorter (plateLayout), and where they cross the plates across each
+     keeps half its height less the clearance. One that would keep under PLATE_END is
+     one too many, so the count comes down until every one keeps it. Only for plates
+     the page prints: under 1 mm tall it lists none, and its rails stay as they were.
+     And with plates both ways the lip has to keep its corners (plateLayout), which the
+     same does: fewer along puts their end notches further from the corners. */
+  if (c.divRemovable)
+    for (let L = plateLayout(c, out); out.divY > 0 && !(L.fitsY && L.corners); L = plateLayout(c, out)) out.divY--;
+  return out;
+}
+/* Why a removable bin is built with fewer dividers than it asks for, along each direction:
+   'rails' when no more leave every slot room for its plate, 'lip' when the end notches
+   would miss the lip's socket floor, 'shelf' when one more along would stand under the
+   label shelf (railedLimits), 'cross' when the plates along would keep under PLATE_END
+   where they stand or cross, and 'corner' when the lip would lose its corners
+   (dividersBuilt). Null where it is built with all it asks for. */
+function dividersWhy(cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg), built = dividersBuilt(c), out = { divX: null, divY: null };
+  if (!c.divRemovable) return out;
+  for (const [key, axis] of [['divX', 'x'], ['divY', 'y']]) {
+    const asked = c[key] || 0;
+    if (built[key] >= asked) continue;
+    const L = railedLimits(c, axis);
+    out[key] = asked > L.rails ? 'rails' : asked > L.lip ? 'lip' : asked > L.shelf ? 'shelf'
+      : plateLayout(c, Object.assign({}, built, { [key]: Math.min(asked, L.shelf) })).fitsY ? 'corner' : 'cross';
+  }
+  return out;
+}
+
+/* ---------- removable dividers: how the plates go in ---------------------
+ *
+ * A removable plate goes in from above, straight down between its rails, and lifts
+ * straight out. Three things used to stand in its way, and this is what clears each.
+ *
+ *  - The stacking lip's chamfer overhangs every plate's ends by about a millimetre over
+ *    the usual wall. So the lip has a notch through it at each slot, as wide as the slot
+ *    and a BLOAT more each side (notchedLip). The notch is what a bin stacked on top
+ *    stands over: it seats on the lip between the notches and at the corners, which is
+ *    where a bin is located, and a gap a couple of millimetres wide in a lip a foot
+ *    stands on along its whole length is nothing a foot can catch in or drop into.
+ *  - The scoop fills the front of the cavity where a plate across it meets the floor,
+ *    so the plates across have their bottom front corner cut to the scoop's own profile,
+ *    a clearance clear of it on both axes. The label shelf stands over the back, and a
+ *    plate dropped from above cannot be cut to pass under it: the part under the shelf
+ *    would still have to come down through it. So the shelf has a notch at each slot
+ *    instead, like the lip, and the plate keeps its full height at the back, held by its
+ *    rails to the rim. Each compartment gets a stretch of shelf of its own to label.
+ *    A plate along the depth is parallel to both. Over the scoop it is cut shorter from
+ *    below and stands on the scoop; under the shelf it could not go in at all, so the
+ *    count keeps them in front of it (railedLimits).
+ *  - Removable plates both ways cross. Where they do, the plates across have a slot
+ *    from the top and the plates along a slot from the bottom, each half of the height
+ *    where they overlap plus the clearance, so they halve together: the plates across go
+ *    in first, slots up, then the plates along drop over them, slots down.
+ *
+ * The plates across are all one part. The plates along can differ, by how much of the
+ * scoop they stand on and how deep their slots are, so dividerPlates groups them by
+ * shape: identical ones are one part with a quantity, as ever.
+ */
+const PLATE_END = 1;   // the least plate kept where it stands in its rails, or crosses another
+
+/* Where a removable bin's plates stand and what shape each is, for `counts` of them:
+   the numbers buildBin and dividerPart both build from, so a plate and the bin it goes
+   in cannot drift apart. Heights are the bin's: a plate stands on the floor, at zf, and
+   its top is at ztop. `u` along a plate is the bin's y for the plates across (at x =
+   pX[i]) and its x for the plates along (at y = pY[j]). */
+function plateLayout(cfg, counts) {
+  const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
+  if (isHalfSize(c)) c.cells = null;
+  const H = c.hUnits * SPEC.unitH;
+  const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+  const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
+  const iw = hwO - c.wall, id = hdO - c.wall;
+  const floorZ = floorTop(c), clr = c.divClr, t = c.divT, slot = t / 2 + clr;
+  // dividerPart's height, standing on the floor's surface, a BLOAT above floorZ
+  const tall = (H - (SPEC.footH + builtFloorT(c))) - clr;
+  const zf = floorZ + BLOAT, ztop = zf + tall;
+  const railed = !!c.divRemovable && isFullRect(c) && !builtSolid(c);
+  const at = (n, inner) => {
+    const out = [];
+    for (let k = 1; k <= n; k++) out.push(-inner + (2 * inner) * k / (n + 1));
+    return out;
+  };
+  const pX = railed ? at(counts.divX || 0, iw) : [], pY = railed ? at(counts.divY || 0, id) : [];
+  const printed = tall >= 1;                       // the page lists no plate shorter
+  const r = railed ? scoopRadius(c, H, floorZ, id, pX.length && printed ? ztop - PLATE_END - clr - floorZ : undefined) : 0;
+  // and the scoop it would be with no plates across to keep their ends in their rails
+  const scoopFree = railed ? scoopRadius(c, H, floorZ, id) : 0;
+  const segs = Math.max(4, c.arcSegs), y0 = -id;
+  // the scoop's profile as buildBin builds it, front to back, and its height at any y
+  const arc = [];
+  for (let k = segs; k >= 0 && r; k--) {
+    const a = (k / segs) * Math.PI / 2;
+    arc.push([y0 + r - r * Math.sin(a), floorZ + r - r * Math.cos(a)]);
+  }
+  const S = r ? piecewise(arc) : () => -Infinity;
+  const spanX = 2 * id - 2 * clr, spanY = 2 * iw - 2 * clr;
+  const W = 10 * WELD;
+  // the plates along stand where the plates across have their slots from the top
+  const edges = [];
+  for (const q of pY) edges.push(q - slot, q + slot);
+  /* The bottom of the plates across, front to back. Over the scoop it is the scoop's
+     profile moved back and up by the clearance, which keeps it at least that clear of
+     the scoop everywhere, and down to where the scoop goes under the floor; there it
+     steps down by the clearance onto the floor. The profile is convex, so leaving out a
+     point only raises the plate off the scoop: points closer than ten WELD along the
+     plate, to each other, to the step or to a slot's edge, are left out (see bandSolid). */
+  let chainX = [[-spanX / 2, zf], [spanX / 2, zf]];
+  if (r) {
+    const p = arc.map(([y, z]) => [y + clr, z + clr]);
+    p[0][0] = -spanX / 2;
+    const lim = zf + clr;
+    let i = p.findIndex((q) => q[1] <= lim);
+    if (i < 1) i = p.length - 1;
+    const [ua, za] = p[i - 1], [ub, zb] = p[i];
+    let uS = zb === za ? ub : ua + (ub - ua) * (lim - za) / (zb - za);
+    uS = Math.max(uS, p[0][0] + W);
+    for (const e of edges) if (Math.abs(uS - e) < W) uS = e >= uS ? e : e + W;
+    const keep = [p[0]];
+    for (let k = 1; k < i; k++) {
+      const u = p[k][0];
+      if (u - keep[keep.length - 1][0] >= W && uS - u >= W && !edges.some((e) => Math.abs(e - u) < W)) keep.push(p[k]);
+    }
+    keep.push([uS, lim]);
+    if (clr > 0) keep.push([uS, zf]);
+    chainX = keep.concat([[spanX / 2, zf]]);
+  }
+  // the bottom of the plates across at u, the higher side of a step
+  const bX = (u) => {
+    for (let k = 1; k < chainX.length; k++) {
+      const [ua, za] = chainX[k - 1], [ub, zb] = chainX[k];
+      if (u <= ub && ub > ua) return u <= ua ? za : za + (zb - za) * (u - ua) / (ub - ua);
+    }
+    return chainX[chainX.length - 1][1];
+  };
+  /* The plates along: each stands on the floor, or on the scoop where the scoop rises
+     under its front face, the highest point under it. Where it crosses a plate across,
+     the two halve the height they share: zs is the middle of it, the plate across keeps
+     what is below it less the clearance, and this one what is above it less the same. */
+  const along = pY.map((q) => {
+    const zb = Math.max(zf, S(q - t / 2));
+    const base = pX.length ? Math.max(zb, bX(q - slot)) : zb;
+    return { q, zb, zs: (base + ztop) / 2, keep: pX.length ? (ztop - base) / 2 - clr : ztop - zb };
+  });
+  const fitsY = !printed || along.every((a) => a.keep >= PLATE_END - 1e-9 && ztop - a.zb >= PLATE_END - 1e-9);
+  const lip = railed && (pX.length || pY.length) ? lipNotched(c) : false;
+  /* Whether the lip keeps its corners. A notch near a corner is cut into its arc, and with
+     plates both ways a notch from each side can meet round it: notchedLip then runs the
+     two together and the corner of the lip is gone, which is where a bin stacked on top
+     is located from. The arc left between them, at the tightest level of the lip, the
+     socket floor 2.70 in, has to be a fifth of a millimetre or more. */
+  let corners = true;
+  if (lip && pX.length && pY.length) {
+    const into = (last, centre, R) => Math.asin(Math.max(0, Math.min(1, (last + slot + BLOAT - centre) / R)));
+    corners = lipLevels(c, H).ts.every((t) => {
+      const R = SPEC.r - t;
+      return R * (Math.PI / 2 - into(pX[pX.length - 1], hwO - SPEC.r, R) - into(pY[pY.length - 1], hdO - SPEC.r, R)) >= 0.2;
+    });
+  }
+  return { c, H, hwO, hdO, iw, id, floorZ, zf, ztop, tall, t, clr, slot, printed, railed,
+           pX, pY, r, scoopFree, arc, S, spanX, spanY, chainX, along, fitsY, corners,
+           shelf: railed ? shelfDepth(c, id, H) : 0, lip };
+}
+
+/* One plate's outline, in the bin's frame: [u, z] along the plate and up, as a bottom and
+   a top each running from one end to the other, or null for a plain rectangle. `axis` is
+   dividerPart's: 'y' for the plates across, 'x' for the plates along; k counts from 1. */
+function plateShape(L, axis, k) {
+  if (!L.printed) return null;
+  const across = axis === 'y';
+  if (across ? k > L.pX.length : k > L.pY.length) return null;
+  const { zf, ztop, clr, slot } = L;
+  if (across) {
+    if (!L.r && !L.pY.length) return null;
+    const top = [[-L.spanX / 2, ztop]];
+    L.along.forEach(({ q, zs }) => top.push([q - slot, ztop], [q - slot, zs - clr], [q + slot, zs - clr], [q + slot, ztop]));
+    top.push([L.spanX / 2, ztop]);
+    return { bottom: L.chainX, top, at: L.pX[k - 1], span: L.spanX,
+             cut: !!L.r, slots: L.pY.length ? 'top' : '' };
+  }
+  const a = L.along[k - 1];
+  if (!L.pX.length && a.zb === zf) return null;
+  const bottom = [[-L.spanY / 2, a.zb]];
+  for (const p of L.pX) bottom.push([p - slot, a.zb], [p - slot, a.zs + clr], [p + slot, a.zs + clr], [p + slot, a.zb]);
+  bottom.push([L.spanY / 2, a.zb]);
+  return { bottom, top: [[-L.spanY / 2, ztop], [L.spanY / 2, ztop]], at: a.q, span: L.spanY,
+           stands: a.zb > zf, slots: L.pX.length ? 'bottom' : '' };
+}
+
+/* A plate whose outline is a bottom and a top that each run from one end to the other,
+   laid flat and `t` thick, as dividerPart lays a plain one: u across the bed, z up the
+   bed centred on zc. Cut into strips at every u either chain has a vertex at, each strip
+   is a quadrilateral between a straight piece of each chain, with the vertices any step
+   puts on its sides: convex, so fanned from its middle, or split in two when it has only
+   its four corners. The sides are one face per edge of the outline, with every vertex the
+   strips have on it, so the faces meet edge to edge. Built directly, because the outline
+   is not convex and earTriangulate fails silently on what it cannot do. */
+function dividerMesh(G, bottom, top, zc, t) {
+  const us = [...new Set(bottom.concat(top).map((p) => p[0]))].sort((a, b) => a - b);
+  // a chain's heights at u: arriving from the lower u, and leaving towards the higher
+  const at = (ch, u) => {
+    const on = ch.filter((p) => p[0] === u);
+    if (on.length) return [on[0][1], on[on.length - 1][1]];
+    for (let k = 1; k < ch.length; k++)
+      if (ch[k - 1][0] < u && ch[k][0] > u) {
+        const z = ch[k - 1][1] + (ch[k][1] - ch[k - 1][1]) * (u - ch[k - 1][0]) / (ch[k][0] - ch[k - 1][0]);
+        return [z, z];
+      }
+    return null;
+  };
+  const B = us.map((u) => at(bottom, u)), T = us.map((u) => at(top, u));
+  const polys = [];
+  const mk = (v) => { const p = G.makePoly(v); if (p) polys.push(p); };
+  const v3 = (p, w) => [p[0], p[1] - zc, w];
+  for (let k = 0; k + 1 < us.length; k++) {
+    const uL = us[k], uR = us[k + 1], b0 = B[k][1], b1 = B[k + 1][0], t0 = T[k][1], t1 = T[k + 1][0];
+    // every height either chain has on each side, between this strip's bottom and top
+    const side = (i, lo, hi) => [...new Set(B[i].concat(T[i]))].filter((z) => z > lo && z < hi);
+    const cell = [[uL, b0], [uR, b1]];
+    for (const z of side(k + 1, b1, t1).sort((a, b) => a - b)) cell.push([uR, z]);
+    cell.push([uR, t1], [uL, t0]);
+    for (const z of side(k, b0, t0).sort((a, b) => b - a)) cell.push([uL, z]);
+    const tris = [];
+    if (cell.length === 4) tris.push([cell[0], cell[1], cell[2]], [cell[0], cell[2], cell[3]]);
+    else {
+      const m = [cell.reduce((s, p) => s + p[0], 0) / cell.length, cell.reduce((s, p) => s + p[1], 0) / cell.length];
+      cell.forEach((p, i) => tris.push([m, p, cell[(i + 1) % cell.length]]));
+    }
+    for (const [a, b, c] of tris) {
+      mk([v3(a, t), v3(b, t), v3(c, t)]);          // the face up, anticlockwise
+      mk([v3(c, 0), v3(b, 0), v3(a, 0)]);          // the face on the bed
+    }
+  }
+  // the outline anticlockwise: along the bottom, up the far end, back along the top
+  const ring = [];
+  us.forEach((u, i) => { ring.push([u, B[i][0]]); if (B[i][1] !== B[i][0]) ring.push([u, B[i][1]]); });
+  for (let i = us.length - 1; i >= 0; i--) {
+    ring.push([us[i], T[i][1]]);
+    if (T[i][0] !== T[i][1]) ring.push([us[i], T[i][0]]);
+  }
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    if (a[0] === b[0] && a[1] === b[1]) continue;
+    mk([v3(a, 0), v3(b, 0), v3(b, t), v3(a, t)]);
+  }
+  return polys;
 }
 
 /* The loose divider plate, for a bin built with removable dividers.
@@ -1365,11 +1913,12 @@ function dividersBuilt(cfg) {
  * `axis` is 'y' for the plate that stands at a fixed x — the one that divides the bin
  * left from right — matching the rails() call in buildBin.
  *
- * A plain slab: no foot, no lip, nothing that has to stack. It prints flat on its side,
+ * A slab: no foot, no lip, nothing that has to stack. It prints flat on its side,
  * which is also the orientation that puts its layers across the load rather than along
- * the split.
+ * the split. Plain unless something it passes needs it cut (see plateLayout): then `k`
+ * says which of its direction's plates, counting from 1, and the outline is that one's.
  */
-function dividerPart(G, cfg, axis) {
+function dividerPart(G, cfg, axis, k = 1) {
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
@@ -1387,10 +1936,46 @@ function dividerPart(G, cfg, axis) {
      and how the plate packer has to place it. It was built standing up first, which
      matched neither: a 1.6 mm wide tower is not a thing anyone prints, and the packer
      rotates about z only, so it could never have been laid flat afterwards. */
-  const rect = [[-span / 2, -tall / 2], [span / 2, -tall / 2],
-                [span / 2, tall / 2], [-span / 2, tall / 2]];
-  return { polys: G.extrudePoly(rect, 0, t),
-           meta: { span, tall, t, slot: t + 2 * c.divClr, W: span, D: tall, totalH: t } };
+  const L = plateLayout(cfg, dividersBuilt(cfg)), sh = plateShape(L, axis, k);
+  if (!sh) {
+    const rect = [[-span / 2, -tall / 2], [span / 2, -tall / 2],
+                  [span / 2, tall / 2], [-span / 2, tall / 2]];
+    return { polys: G.extrudePoly(rect, 0, t),
+             meta: { span, tall, t, slot: t + 2 * c.divClr, W: span, D: tall, totalH: t } };
+  }
+  /* Centred on the bed as the plain one is, so the packer and the preview place it the
+     same way. `outline` is in the bin's frame, anticlockwise, for the audit to drop it in
+     with: u along the plate, at `at` across it. */
+  const zmin = Math.min(...sh.bottom.map((p) => p[1])), zmax = Math.max(...sh.top.map((p) => p[1]));
+  const zc = (zmin + zmax) / 2, h = zmax - zmin;
+  const outline = sh.bottom.concat(sh.top.slice().reverse())
+    .filter((p, i, a) => i === 0 || p[0] !== a[i - 1][0] || p[1] !== a[i - 1][1]);
+  return { polys: dividerMesh(G, sh.bottom, sh.top, zc, t),
+           meta: { span, tall: h, t, slot: t + 2 * c.divClr, W: span, D: h, totalH: t,
+                   axis, k, at: sh.at, zc, outline, cut: !!sh.cut, stands: !!sh.stands, slots: sh.slots } };
+}
+
+/* The distinct plates of a removable bin, each with how many of it the bin takes: one for
+   the plates across, which are all alike, and as many for the plates along as there are
+   shapes among them. `ks` are the positions each is for, counting from 1, and `key` is
+   its shape, the same for the same plate in any bin. Plates the page would not list,
+   under a millimetre tall, are left out, as the page leaves them out. */
+function dividerPlates(G, cfg) {
+  const built = dividersBuilt(cfg), out = [];
+  for (const [axis, n] of [['y', built.divX], ['x', built.divY]]) {
+    const byKey = new Map();
+    for (let k = 1; k <= n; k++) {
+      const d = dividerPart(G, cfg, axis, k);
+      if (d.meta.tall < 1) continue;
+      const shape = d.meta.outline
+        ? d.meta.outline.map((p) => [p[0], p[1] - d.meta.zc].map((x) => x.toFixed(4)).join(',')).join(' ') : 'plain';
+      const key = `${d.meta.span.toFixed(4)}x${d.meta.tall.toFixed(4)}x${d.meta.t}:${shape}`;
+      if (!byKey.has(key)) byKey.set(key, { axis, key, ks: [], meta: d.meta, polys: d.polys });
+      byKey.get(key).ks.push(k);
+    }
+    for (const p of byKey.values()) out.push(Object.assign(p, { qty: p.ks.length }));
+  }
+  return out;
 }
 
 /* A lid for a bin: a flat plate with a skirt that seats inside the bin's stacking lip.
@@ -1580,6 +2165,10 @@ function buildBin(G, cfg) {
   const bodyBase = SPEC.footH;
   // see floorTop for the clamp, and for why it is not written out here
   const floorZ = floorTop(c);
+  /* The dividers it is built with (removable ones no more than fit, however many are
+     asked for: see railedMost), and where removable plates stand and what they pass on
+     the way in, which the scoop, the shelf and the lip are built to let them by. */
+  const built = dividersBuilt(c), fit = plateLayout(c, built);
 
   /* Whether there is a lip has to be known before the body: a carved bin's wall
      panels carry their own lip, so the decision cannot wait until after. A lip over
@@ -1653,34 +2242,31 @@ function buildBin(G, cfg) {
 
     /* scoop and label shelf — added shells, and only where there is a wall to
        attach them to (an open front has no corner to fill). */
-    const eF = c.edges && c.edges.f !== undefined ? c.edges.f : 1;
-    const eB = c.edges && c.edges.b !== undefined ? c.edges.b : 1;
     const iw = hw - c.wall, id = hd - c.wall, poke = cornersPoke(hw, hd, iw, id, n);
-    if (c.scoop > 0.05 && eF > 0) {
-      /* No taller than the front wall it fills the corner of. With the front lowered,
-         a scoop held only to the full height stood above the wall, and above the
-         height binTop quotes: a 2x1x4 with every wall at a quarter and an 8.5 mm scoop
-         was 14.45 mm built and 11.5 quoted, to its README and the bed check. */
-      const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF));
-      if (r > 0.05) polys.push(...(poke ? scoopRounded(G, iw, id, c.wall, floorZ, r, Math.max(4, n), n)
-                                        : scoopPrism(G, iw, id, floorZ, r, Math.max(4, n))));
-    }
-    if (c.label > 0.05 && eB > 0.99) {
-      /* Limited by height as well as depth. The shelf's underside runs down at 45
-         degrees, so a shelf deeper than the bin is tall pokes its foot through the
-         floor and out among the feet: 4 open edges from 8 mm on a 1-unit bin. Into
-         the floor is fine, it is solid, and overlap is how every shell here meets the
-         next; out of it is not. The slab starts a BLOAT below the body, so the foot
-         stops at the top of the feet, a BLOAT above it, whatever the floor — which is
-         where a whole-millimetre shelf on whole units bottoms out, so none of those
-         moves. Held 0.2 above the floor, it cut shelves that had always built
-         cleanly: a 14 mm label on a 1x1x3 came out 13.65.
-         With screws the foot stops above the screws' ends instead, for the reason the
-         wall ring does: behind a wall over 5 mm thick it reaches in over a hole. */
-      const footAt = plan && plan.screws ? FOOT_HOLES.screwTop + BLOAT : bodyBase + BLOAT;
-      const d = Math.min(c.label, id * 0.8, H - c.labelT - footAt);
-      if (d > 0.05) polys.push(...(poke ? labelRounded(G, iw, id, c.wall, H, d, c.labelT, n)
-                                        : labelPrism(G, iw, id, H, d, c.labelT)));
+    /* No taller than the front wall it fills the corner of. With the front lowered,
+       a scoop held only to the full height stood above the wall, and above the
+       height binTop quotes: a 2x1x4 with every wall at a quarter and an 8.5 mm scoop
+       was 14.45 mm built and 11.5 quoted, to its README and the bed check. With
+       removable plates across, no taller than leaves their front ends standing in their
+       rails, which plateLayout works out with the plates. */
+    const rS = c.divRemovable ? fit.r : scoopRadius(c, H, floorZ, id);
+    if (rS) polys.push(...(poke ? scoopRounded(G, iw, id, c.wall, floorZ, rS, Math.max(4, n), n)
+                                : scoopPrism(G, iw, id, floorZ, rS, Math.max(4, n))));
+    const d = shelfDepth(c, id, H);
+    if (d) {
+      /* With removable plates across, in pieces between notches at their slots, so the
+         plates pass the shelf on their way down (see plateLayout). Each notch is the slot
+         and half a BLOAT more each side: the lip's notches above are a BLOAT more, so the
+         ends of the two never stand in one plane. */
+      const cuts = [-iw - BLOAT];
+      for (const p of fit.pX) cuts.push(p - fit.slot - BLOAT / 2, p + fit.slot + BLOAT / 2);
+      cuts.push(iw + BLOAT);
+      for (let k = 0; k < cuts.length; k += 2) {
+        const whole = cuts.length === 2, x0 = cuts[k], x1 = cuts[k + 1];
+        if (poke) polys.push(...labelRounded(G, iw, id, c.wall, H, d, c.labelT, n,
+                                             whole ? null : [k ? x0 : null, k + 2 < cuts.length ? x1 : null]));
+        else polys.push(...labelPrism(G, iw, id, H, d, c.labelT, x0, x1));
+      }
     }
 
     /* Dividers — separate overlapping shells, never unioned.
@@ -1781,12 +2367,9 @@ function buildBin(G, cfg) {
         ? G.extrudePoly(cut, floorZ - BLOAT, H) : [];
     };
     /* Where the label shelf's front stands, for a fixed divider to meet it: the depth the
-       shelf above was built to, by the same sum. Nothing, when there is no shelf. */
-    const shelfFoot = plan && plan.screws ? FOOT_HOLES.screwTop + BLOAT : bodyBase + BLOAT;
-    const shelfD = Math.min(c.label, id * 0.8, H - c.labelT - shelfFoot);
-    const shelf = !c.divRemovable && c.label > 0.05 && eB > 0.99 && shelfD > 0.05 ? id - shelfD : NaN;
-    // removable ones no more than fit, however many are asked for: see railedMost
-    const built = dividersBuilt(c);
+       shelf above was built to. Nothing, when there is no shelf. */
+    const shelf = !c.divRemovable && d ? id - d : NaN;
+    // removable ones no more than fit, however many are asked for: built, at the top
     for (const [a, b] of spans(built.divX, iw))
       for (const [lo, hi] of reach(id))
         polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
@@ -1798,7 +2381,11 @@ function buildBin(G, cfg) {
   /* A rectangle's lip is still its own swept ring around the rounded outline. */
   const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
-  if (hasLip && full) polys.push(...lipRing(G, c, hwO, hdO, H, n));
+  if (hasLip && full && fit.lip) {
+    // a notch at each removable plate's slot, a BLOAT wider each side than the slot
+    const band = (p) => [p - fit.slot - BLOAT, p + fit.slot + BLOAT];
+    polys.push(...notchedLip(G, c, hwO, hdO, H, n, fit.pX.map(band), fit.pY.map(band)));
+  } else if (hasLip && full) polys.push(...lipRing(G, c, hwO, hdO, H, n));
 
   // H stays the stacking pitch whatever the walls do; topZ is how tall it really is,
   // which for an all-open tray is just the floor. See binTop, which the page quotes too.
@@ -1993,7 +2580,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, dividerPart, railedMost, dividersBuilt, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, dividerPart, dividerPlates, plateLayout, railedMost, railedLimits, dividersBuilt, dividersWhy, lipNotched, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, binHeights, unitsForInside, unitsForTop, REQUIRED_CORE,
     FOOT_HOLES, SCREW_FLOOR, holeSites, holePlan, builtFloorT, feetBits, feetFrom,
     isHalfSize, binFeet, feetHolesOff,

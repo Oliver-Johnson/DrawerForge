@@ -1013,8 +1013,7 @@ console.log('\nwalls across the whole range the page accepts');
 /* The other limits the page and a shared link share: a floor as thick as the bin is
    tall, and as many dividers as fit across the inside. Each used to build broken at its
    edge, so each is built here at the edge of what is allowed. */
-const cleanBuild = (cfg) => {
-  const r = buildBin(G, cfg);
+const cleanBuild = (cfg, r = buildBin(G, cfg)) => {
   const m = G.checkManifold(r.polys), ori = checkOrientation(r.polys);
   let zmax = -Infinity;
   for (const p of r.polys) for (const w of p.verts) zmax = Math.max(zmax, w[2]);
@@ -1209,28 +1208,41 @@ console.log('\nthe outline at other smoothnesses and with extra clearance');
 
 console.log('\nremovable dividers: every plate goes into its slot');
 /* A removable divider is a slot between two rails on each wall it runs between, and the
-   plate dividerPart makes, dropped into it. It goes in only if nothing stands where it
-   stands. Spaced closer than a slot and a rail apart, a neighbour's rail ran across the
-   slot: the fields allowed 31 on a 1x1, and past 10 no slot would take its plate. With a
-   thin plate and little clearance the end plates' corners stood in the cavity's rounded
-   corners, up to 0.26 mm into the wall at a 0.8 mm plate and 0.1 clearance. So
-   each plate a bin is built for is set in its slot, as wide, thick and tall as
-   dividerPart makes it and standing on the floor, and the bin's triangles must keep out
-   of it, to a micron either way; and on both faces at both ends a rail must stand from
-   the floor to the rim along at least half a rail's depth of the plate's edge, or there
-   is nothing to hold it. Asked for as many as the fields allow, a bin is built with as
-   many as fit, and one more would not: set out the same way against the same bin with
+   plate dividerPart makes, dropped into it from above. It goes in only if nothing stands
+   in its way, all the way down. Spaced closer than a slot and a rail apart, a neighbour's
+   rail ran across the slot: the fields allowed 31 on a 1x1, and past 10 no slot would take
+   its plate. With a thin plate and little clearance the end plates' corners stood in the
+   cavity's rounded corners, up to 0.26 mm into the wall at a 0.8 mm plate and 0.1
+   clearance. And three things stood over every plate whatever the spacing: the stacking
+   lip's chamfer over its ends, about a millimetre at the usual wall; the scoop where a
+   plate across met the floor at the front, and the label shelf over its top at the back;
+   and, with removable dividers both ways, the plates of the other direction.
+
+   So each plate a bin is built for is taken as dividerPart makes it, outline and all, and
+   moved straight down into its slot from above the top of the bin, lip included: the
+   space it passes through on the way, everything above its bottom edge across its span
+   and its thickness, must keep clear of every triangle of the bin, to a micron. The
+   plates across go in first; the plates along come down over them, so they must keep
+   clear of the plates across as well, standing in their slots. On both faces at both
+   ends a rail must stand from the floor to the rim along at least half a rail's depth of
+   the plate's edge, or there is nothing to hold it. Each distinct plate is watertight,
+   wound outwards, and as big as its outline times its thickness, which is what ties the
+   outline swept here to the plate that is printed.
+
+   Asked for as many as the fields allow, a bin with no lip, scoop or shelf is built with
+   as many as fit, and one more would not: set out the same way against the same bin with
    no dividers, the plates of one more must crowd a neighbour's slot or meet the wall.
    That is done at both ends of the plate and the clearance the page takes, and at its
-   three smoothnesses, which set the corners' chords. The lip is left off. Its chamfer stands over the top of every plate's ends, which is
-   a matter of the lip and not of where the dividers stand. */
+   three smoothnesses, which set the corners' chords. Then lip, scoop and shelf each on
+   and off, with dividers one way and both ways. */
 {
+  const sub = (p, q) => [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+  const cross = (p, q) => [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
+  const dot = (p, q) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
   const triBox = (c, h, t) => {
     const v = t.map((p) => [p[0] - c[0], p[1] - c[1], p[2] - c[2]]);
     for (let a = 0; a < 3; a++)
       if (Math.min(v[0][a], v[1][a], v[2][a]) > h[a] || Math.max(v[0][a], v[1][a], v[2][a]) < -h[a]) return false;
-    const sub = (p, q) => [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
-    const cross = (p, q) => [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
     const apart = (ax) => {
       if (!ax[0] && !ax[1] && !ax[2]) return false;
       const p = v.map((q) => q[0] * ax[0] + q[1] * ax[1] + q[2] * ax[2]);
@@ -1244,21 +1256,101 @@ console.log('\nremovable dividers: every plate goes into its slot');
   const trisOf = (polys) => G.polysToTriangles(polys).map((t) => ({ t,
     lo: [0, 1, 2].map((a) => Math.min(t[0][a], t[1][a], t[2][a])),
     hi: [0, 1, 2].map((a) => Math.max(t[0][a], t[1][a], t[2][a])) }));
+  const near = (tris, lo, hi) => tris.filter(({ lo: a, hi: b }) =>
+    a[0] <= hi[0] && b[0] >= lo[0] && a[1] <= hi[1] && b[1] >= lo[1] && a[2] <= hi[2] && b[2] >= lo[2]);
   // whether any triangle reaches into the box lo..hi
   const blocked = (tris, lo, hi) => {
     const c = [0, 1, 2].map((a) => (lo[a] + hi[a]) / 2), h = [0, 1, 2].map((a) => (hi[a] - lo[a]) / 2);
-    return tris.some(({ t, lo: a, hi: b }) =>
-      a[0] <= hi[0] && b[0] >= lo[0] && a[1] <= hi[1] && b[1] >= lo[1] && a[2] <= hi[2] && b[2] >= lo[2] &&
-      triBox(c, h, t));
+    return near(tris, lo, hi).some(({ t }) => triBox(c, h, t));
   };
   const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
   const RAIL_T = 1.2, RAIL_D = 1.2, E = 1e-6;
+  /* A convex solid, given by its corners, the normals of its faces and the directions of
+     its edges, against a triangle, by separating axes. Touching is apart, and so is
+     overlapping by under E along any axis: a plate may stand on the floor, and with no
+     clearance against its rails and the walls at its ends. */
+  const meets = (P, t) => {
+    const te = [sub(t[1], t[0]), sub(t[2], t[1]), sub(t[0], t[2])];
+    const axes = P.normals.concat([cross(te[0], te[1])]);
+    for (const d of P.dirs) for (const e of te) axes.push(cross(d, e));
+    for (const ax of axes) {
+      const l = Math.hypot(ax[0], ax[1], ax[2]);
+      if (l < 1e-12) continue;
+      let p0 = Infinity, p1 = -Infinity, q0 = Infinity, q1 = -Infinity;
+      for (const v of P.verts) { const s = dot(v, ax) / l; p0 = Math.min(p0, s); p1 = Math.max(p1, s); }
+      for (const v of t) { const s = dot(v, ax) / l; q0 = Math.min(q0, s); q1 = Math.max(q1, s); }
+      if (p1 <= q0 + E || q1 <= p0 + E) return false;
+    }
+    return true;
+  };
+  /* Triangles bucketed on a 2 mm grid in plan, so a plate's sweep is tested against the
+     few under its own footprint rather than every one in the bin. */
+  const indexOf = (tris) => {
+    const C = 2, cells = new Map();
+    tris.forEach((tr, i) => {
+      for (let gx = Math.floor(tr.lo[0] / C); gx <= Math.floor(tr.hi[0] / C); gx++)
+        for (let gy = Math.floor(tr.lo[1] / C); gy <= Math.floor(tr.hi[1] / C); gy++) {
+          const k = gx * 100003 + gy;
+          if (!cells.has(k)) cells.set(k, []);
+          cells.get(k).push(i);
+        }
+    });
+    return (lo, hi) => {
+      const seen = new Set(), out = [];
+      for (let gx = Math.floor(lo[0] / C); gx <= Math.floor(hi[0] / C); gx++)
+        for (let gy = Math.floor(lo[1] / C); gy <= Math.floor(hi[1] / C); gy++)
+          for (const i of cells.get(gx * 100003 + gy) || []) if (!seen.has(i)) { seen.add(i); out.push(tris[i]); }
+      return near(out, lo, hi);
+    };
+  };
+  const hits = (index, P) => index(P.lo, P.hi).find(({ t }) => meets(P, t));
+  /* The space a plate passes through coming straight down to its seat: everything above
+     its bottom edge, up to Z, across its thickness w0..w1. Convex pieces, one over each
+     piece of the bottom edge that runs along the plate. `frame` takes a point along the
+     plate, up it and through it to the bin's x, y and z. */
+  const swept = (bottom, w0, w1, Z, frame) => {
+    const out = [];
+    for (let i = 1; i < bottom.length; i++) {
+      const [ua, za] = bottom[i - 1], [ub, zb] = bottom[i];
+      if (ub <= ua) continue;
+      const verts = [];
+      for (const w of [w0, w1]) for (const [u, z] of [[ua, za], [ub, zb], [ub, Z], [ua, Z]]) verts.push(frame(u, z, w));
+      const o = frame(0, 0, 0), dir = (u, z, w) => sub(frame(u, z, w), o);
+      const W = dir(0, 0, 1), U = dir(1, 0, 0), Up = dir(0, 1, 0), slope = dir(ub - ua, zb - za, 0);
+      out.push({ verts, normals: [W, U, Up, cross(slope, W)], dirs: [W, U, Up, slope],
+                 lo: [0, 1, 2].map((a) => Math.min(...verts.map((v) => v[a])) + E),
+                 hi: [0, 1, 2].map((a) => Math.max(...verts.map((v) => v[a])) - E) });
+    }
+    return out;
+  };
+  // the bottom edge of an anticlockwise outline that starts at its lower end: up to the far end
+  const bottomOf = (ol) => {
+    const top = Math.max(...ol.map((p) => p[0]));
+    return ol.slice(0, ol.findIndex((p) => p[0] === top) + 1);
+  };
+  const outlineOf = (m, zf) => m.outline ||
+    [[-m.span / 2, zf], [m.span / 2, zf], [m.span / 2, zf + m.tall], [-m.span / 2, zf + m.tall]];
+  /* Each distinct plate: closed, wound outwards, and its outline times its thickness. The
+     plain one is the rectangle it always was. */
+  const meshSeen = new Map();
+  const meshFault = (d) => {
+    const key = JSON.stringify([d.meta.outline || [d.meta.span, d.meta.tall], d.meta.t]);
+    if (meshSeen.has(key)) return meshSeen.get(key);
+    const m = G.checkManifold(d.polys), ori = checkOrientation(d.polys);
+    const area = d.meta.outline ? Math.abs(G.polyArea2D(d.meta.outline)) : d.meta.span * d.meta.tall;
+    const f = [m.bad ? `${m.bad} bad edges` : '', ori.ok ? '' : orientationNote(ori),
+               Math.abs(ori.volume - area * d.meta.t) > 1e-6 * area * d.meta.t
+                 ? `${ori.volume.toFixed(3)} mm3, its outline ${(area * d.meta.t).toFixed(3)}` : '']
+      .filter(Boolean).join(', ');
+    meshSeen.set(key, f);
+    return f;
+  };
   const bare = new Map();
   /* The plates of n dividers along axis ax (0: the ones across, at a fixed x), as boxes
-     each with where its slot's faces are. A plate may touch the floor it stands on and,
-     with no clearance, the walls at its ends, so it is a micron short of both; through
-     its thickness it is grown by `grow`, a micron either way. */
-  const platesOf = (c, r, n, ax, grow) => {
+     each with where its slot's faces are, for the bare bin: one more of them must not fit.
+     A plate may touch the floor it stands on and, with no clearance, the walls at its
+     ends, so it is a micron short of both; through its thickness it is grown by `grow`. */
+  const boxesOf = (c, r, n, ax, grow) => {
     const wall = Math.max(0.4, c.wall);
     const inner = (ax ? (c.v - 1) * 21 + 20.75 : (c.u - 1) * 21 + 20.75) - wall;
     const d = dividerPart(G, c, ax ? 'x' : 'y').meta, floor = r.meta.floorZ + 0.05;
@@ -1268,16 +1360,19 @@ console.log('\nremovable dividers: every plate goes into its slot');
       const lo = [0, 0, floor + E], hi = [0, 0, floor + d.tall - E];
       lo[ax] = p - d.t / 2 - grow; hi[ax] = p + d.t / 2 + grow;
       lo[1 - ax] = -d.span / 2 + E; hi[1 - ax] = d.span / 2 - E;
-      out.push({ k, p, lo, hi, end: d.span / 2, faces: [p - d.slot / 2, p + d.slot / 2] });
+      out.push({ lo, hi });
     }
     return out;
   };
-  const faults = (cfg) => {
+  const faults = (cfg, oneMore) => {
     const c = Object.assign({}, BIN_DEFAULTS, cfg), H = c.hUnits * SPEC.unitH;
-    const r = buildBin(G, cfg), tris = trisOf(r.polys), built = dividersBuilt(cfg), out = [];
-    const bareKey = JSON.stringify(Object.assign({}, cfg, { divX: 0, divY: 0, divRemovable: false }));
-    if (!bare.has(bareKey)) bare.set(bareKey, trisOf(buildBin(G, JSON.parse(bareKey)).polys));
-    let plates = 0;
+    const r = buildBin(G, cfg), tris = trisOf(r.polys), binAt = indexOf(tris), built = dividersBuilt(cfg), out = [];
+    let Z = -Infinity;
+    for (const p of r.polys) for (const v of p.verts) Z = Math.max(Z, v[2]);
+    Z += 1;
+    const zf = r.meta.floorZ + 0.05;
+    const seated = [];            // the plates across, standing in their slots
+    let seatedAt = null, plates = 0;
     for (const [key, ax] of [['divX', 0], ['divY', 1]]) {
       const n = built[key];
       if (n > (c[key] || 0)) out.push(`${n} ${key} built of ${c[key]} asked`);
@@ -1287,27 +1382,64 @@ console.log('\nremovable dividers: every plate goes into its slot');
         const w = p.verts, x = w[0][ax];
         if (!w.every((q) => Math.abs(q[ax] - x) < 1e-9)) continue;
         const zs = w.map((q) => q[2]), as = w.map((q) => q[1 - ax]);
-        if (Math.min(...zs) <= r.meta.floorZ + 0.05 + E && Math.max(...zs) >= H - E)
+        if (Math.min(...zs) <= zf + E && Math.max(...zs) >= H - E)
           faces.push([x, Math.min(...as), Math.max(...as)]);
       }
-      for (const pl of platesOf(c, r, n, ax, -E)) {
+      const inner = (ax ? (c.v - 1) * 21 + 20.75 : (c.u - 1) * 21 + 20.75) - Math.max(0.4, c.wall);
+      const frame = ax ? (u, z, w) => [u, w, z] : (u, z, w) => [w, u, z];
+      for (let k = 1; k <= n; k++) {
+        const d = dividerPart(G, cfg, ax ? 'x' : 'y', k), m = d.meta;
+        if (m.tall < 1) continue;            // the page lists no plate this short
         plates++;
-        if (blocked(tris, pl.lo, pl.hi)) { out.push(`${key} plate ${pl.k} of ${n} blocked`); continue; }
-        for (const x of pl.faces) for (const s of [-1, 1]) {
+        const p = -inner + (2 * inner) * k / (n + 1), what = `${key} plate ${k} of ${n}`;
+        if (m.at !== undefined && Math.abs(m.at - p) > 1e-9) { out.push(`${what} made for ${m.at.toFixed(3)}, stands at ${p.toFixed(3)}`); continue; }
+        const mf = meshFault(d);
+        if (mf) { out.push(`${what}: ${mf}`); continue; }
+        const P = swept(bottomOf(outlineOf(m, zf)), p - m.t / 2, p + m.t / 2, Z, frame);
+        if (ax && !seatedAt) seatedAt = indexOf(seated);
+        const bin = P.find((pc) => hits(binAt, pc)), plate = ax && !bin && P.find((pc) => hits(seatedAt, pc));
+        if (bin || plate) {
+          const at = (bin || plate).lo.map((x, a) => ((x + (bin || plate).hi[a]) / 2).toFixed(1)).join(', ');
+          out.push(`${what} ${bin ? 'blocked' : 'meets a plate across'} going in, near ${at}`);
+          continue;
+        }
+        const end = m.span / 2;
+        for (const x of [p - m.slot / 2, p + m.slot / 2]) for (const s of [-1, 1]) {
           const hold = Math.max(0, ...faces.filter((f) => Math.abs(f[0] - x) < 1e-7)
-            .map(([, a, b]) => (s > 0 ? Math.min(b, pl.end) - a : b - Math.max(a, -pl.end))));
-          if (hold < RAIL_D / 2) { out.push(`${key} plate ${pl.k} of ${n} held ${hold.toFixed(2)} mm`); break; }
+            .map(([, a, b]) => (s > 0 ? Math.min(b, end) - a : b - Math.max(a, -end))));
+          if (hold < RAIL_D / 2) { out.push(`${what} held ${hold.toFixed(2)} mm`); break; }
+        }
+        if (!ax) {
+          const zc = m.zc !== undefined ? m.zc : zf + m.tall / 2;
+          seated.push(...trisOf(d.polys.map((q) => ({ verts: q.verts.map(([x, y, z]) => frame(x, y + zc, p - m.t / 2 + z)) }))));
         }
       }
       // one more: crowded by a neighbour, or into the wall of the bare bin
-      if (n < (c[key] || 0)) {
-        const inner = (ax ? (c.v - 1) * 21 + 20.75 : (c.u - 1) * 21 + 20.75) - Math.max(0.4, c.wall);
+      if (oneMore && n < (c[key] || 0)) {
+        const bareKey = JSON.stringify(Object.assign({}, cfg, { divX: 0, divY: 0, divRemovable: false }));
+        if (!bare.has(bareKey)) bare.set(bareKey, trisOf(buildBin(G, JSON.parse(bareKey)).polys));
         const crowded = 2 * inner / (n + 2) < c.divT + 2 * c.divClr + RAIL_T - 1e-9;
-        if (!crowded && !platesOf(c, r, n + 1, ax, E).some((pl) => blocked(bare.get(bareKey), pl.lo, pl.hi)))
+        if (!crowded && !boxesOf(c, r, n + 1, ax, E).some((pl) => blocked(bare.get(bareKey), pl.lo, pl.hi)))
           out.push(`${key}: ${n + 1} would have fit, ${n} built`);
       }
     }
-    return { out, plates };
+    return { out, plates, r };
+  };
+  // a row may ask for the whole bin to be checked too, watertight and wound: see cleanBuild
+  const report = (label, rows, oneMore) => {
+    let plates = 0;
+    const fails = [];
+    for (const [name, cfg, clean] of rows) {
+      const f = faults(cfg, oneMore);
+      plates += f.plates;
+      const mesh = clean ? cleanBuild(cfg, f.r) : '';
+      if (mesh) f.out.unshift(`the bin: ${mesh}`);
+      if (f.out.length) fails.push(`${name}: ${f.out[0]}${f.out.length > 1 ? ` and ${f.out.length - 1} more` : ''}`);
+    }
+    console.log(`  ${label}: ${rows.length} bins, ${plates} plates: ` + (fails.length
+      ? `${fails.length} FAILED, ${fails.slice(0, 4).join('; ')}${fails.length > 4 ? ` and ${fails.length - 4} more` : ''}`
+      : 'every one in its slot'));
+    if (fails.length) bad++;
   };
   const rows = [];
   for (const [divT, divClr] of [[1.6, 0.25], [0.8, 0], [0.8, 0.1], [0.8, 1], [5, 0], [5, 1]])
@@ -1323,16 +1455,159 @@ console.log('\nremovable dividers: every plate goes into its slot');
                          `${arcSegs === 12 ? '' : ` at ${arcSegs}`}`,
                          { u, v, hUnits: 3, wall, divRemovable: true, lip: false, divT, divClr, arcSegs, [key]: n }]);
           }
-  let plates = 0;
+  report('one way, no lip, scoop or shelf', rows, true);
+  /* Lip, scoop and shelf each on and off, with plates one way and both ways, as many as
+     the fields allow and half that, at walls either side of the lip's base, where it stops
+     overhanging. The bins with the most notches in the lip are checked whole as well,
+     watertight and wound, and the notched lip again below at every smoothness. */
+  const rows2 = [];
+  const feats = [];
+  for (const lip of [true, false]) for (const scoop of [0, 8]) for (const label of [0, 12])
+    feats.push([{ lip, scoop, label }, [lip ? 'lip' : '', scoop ? 'scoop' : '', label ? 'shelf' : ''].filter(Boolean).join('+') || 'bare']);
+  for (const [divT, divClr] of [[1.6, 0.25], [0.8, 0], [5, 1]])
+    for (const [u, v, arcSegs] of [[1, 1, 12], [2, 1, 12], [1, 2, 12], [0.5, 1.5, 12], [1, 1, 8], [1.5, 1, 24]])
+      for (const wall of [0.4, 1.2, 2.65, 3])
+        for (const [f, fname] of feats)
+          for (const keys of [['divX'], ['divY'], ['divX', 'divY']]) {
+            const top = { divX: most((u - 1) * 42 + 41.5 - 2 * wall, wall), divY: most((v - 1) * 42 + 41.5 - 2 * wall, wall) };
+            for (const half of [false, true]) {
+              const ns = {};
+              for (const k of keys) ns[k] = half ? Math.ceil(top[k] / 2) : top[k];
+              rows2.push([`${u}x${v} wall ${wall}, ${fname}, ${keys.map((k) => `${ns[k]} ${k === 'divX' ? 'across' : 'along'}`).join(' and ')}` +
+                          `${divT === 1.6 && divClr === 0.25 ? '' : `, ${divT} mm plate ${divClr} clear`}` +
+                          `${arcSegs === 12 ? '' : ` at ${arcSegs}`}`,
+                          Object.assign({ u, v, hUnits: 3, wall, divRemovable: true, divT, divClr, arcSegs }, f, ns),
+                          f.lip && !half && keys.length === 2]);
+            }
+          }
+  /* A scoop as big as the bin allows on a short bin, which holds it down so the plates
+     across keep a millimetre of end in their front rails; a thick floor; a lowered wall,
+     which takes the lip off; and screw holes, which raise the floor. */
+  for (const [divT, divClr] of [[1.6, 0.25], [0.8, 1]])
+    for (const extra of [{ hUnits: 2, scoop: 20 }, { hUnits: 2, scoop: 20, label: 6 }, { hUnits: 6, scoop: 30, label: 20 },
+                         { hUnits: 3, floorT: 6, scoop: 20 }, { hUnits: 3, edges: { f: 0.5 }, scoop: 8, label: 12 },
+                         { hUnits: 4, magnets: true, screws: true, scoop: 10, label: 12 }])
+      rows2.push([`2x2 ${JSON.stringify(extra)}${divT === 1.6 ? '' : `, ${divT} mm plate ${divClr} clear`}`,
+                  Object.assign({ u: 2, v: 2, wall: 1.2, divRemovable: true, divT, divClr, divX: 3, divY: 3 }, extra), true]);
+  report('lip, scoop and shelf on and off, both ways', rows2, false);
+  /* The notched lip is cut through each corner's chords at every level, so it is built at
+     the smoothnesses the engine takes as well as the page's three, at walls up to the
+     lip's base, with as many plates both ways as fit: where the notches come closest to
+     the corners, and to each other round them. */
+  const rows3 = [];
+  for (const [divT, divClr] of [[1.6, 0.25], [0.8, 0.1], [5, 1]])
+    for (const [u, v] of [[1, 1], [1.5, 2.5]])
+      for (const wall of [0.4, 0.8, 1.2, 1.6, 2, 2.4, 2.65])
+        for (const arcSegs of [4, 8, 24, 48]) {
+          const divX = most((u - 1) * 42 + 41.5 - 2 * wall, wall), divY = most((v - 1) * 42 + 41.5 - 2 * wall, wall);
+          rows3.push([`${u}x${v} wall ${wall} at ${arcSegs}, ${divT} mm plate ${divClr} clear`,
+                      { u, v, hUnits: 3, wall, arcSegs, divRemovable: true, divT, divClr, divX, divY }, true]);
+        }
+  report('the notched lip at every smoothness', rows3, false);
+}
+
+/* Plates that go in are no proof on their own: a bin with no lip, no scoop and no shelf
+   takes any plate. So the bins are probed from above. In every notch nothing stands
+   above the rim, and between the notches, and round each corner, the lip still stands
+   to its top; in every notch in the label shelf nothing stands above the floor, and
+   between them the shelf does, to the rim. Then the plates: a plate across follows the
+   scoop, no more than twice its clearance above it where the scoop is shallow enough to
+   measure, rather than being cut short; a plate along over the scoop stands on it; and
+   where plates cross, each keeps a millimetre of itself, and the two halve the height
+   they share. */
+console.log('\nremovable dividers: the notches, the cut and the halving slots are built');
+{
+  const SET = [
+    ['1x1x3, 3 across and 2 along, scoop and shelf', { u: 1, v: 1, hUnits: 3, divX: 3, divY: 2, scoop: 8, label: 12 }],
+    ['2x2x3, 1 each way', { u: 2, v: 2, hUnits: 3, divX: 1, divY: 1 }],
+    ['1x1x3, 10 each way', { u: 1, v: 1, hUnits: 3, divX: 10, divY: 10 }],
+    ['1x1x3 wall 0.4, 12 each way, 0.8 mm plate 0.1 clear', { u: 1, v: 1, hUnits: 3, wall: 0.4, divT: 0.8, divClr: 0.1, divX: 12, divY: 12 }],
+    ['1.5x1x4 at 24, 2 across and 1 along, scoop and shelf', { u: 1.5, v: 1, hUnits: 4, arcSegs: 24, divX: 2, divY: 1, scoop: 10, label: 10 }],
+    ['2x1x3, 4 across and 3 along, 5 mm plate 1 clear, scoop', { u: 2, v: 1, hUnits: 3, divT: 5, divClr: 1, divX: 4, divY: 3, scoop: 12 }],
+    ['1x2x6, 2 across and 5 along, 0.8 mm plate, no clearance', { u: 1, v: 2, hUnits: 6, divT: 0.8, divClr: 0, divX: 2, divY: 5, scoop: 15, label: 14 }],
+  ];
   const fails = [];
-  for (const [name, cfg] of rows) {
-    const f = faults(cfg);
-    plates += f.plates;
-    if (f.out.length) fails.push(`${name}: ${f.out[0]}${f.out.length > 1 ? ` and ${f.out.length - 1} more` : ''}`);
+  let probes = 0, corners = 0;
+  for (const [name, base] of SET) {
+    const cfg = Object.assign({ divRemovable: true }, base), c = Object.assign({}, BIN_DEFAULTS, cfg);
+    const r = buildBin(G, cfg), at = prober(r.polys), built = dividersBuilt(cfg), out = [];
+    const H = c.hUnits * SPEC.unitH, top = H + lipHeightOf(c.lipMin), zf = r.meta.floorZ + 0.05;
+    const hwO = (c.u - 1) * 21 + 20.75, hdO = (c.v - 1) * 21 + 20.75, iw = hwO - c.wall, id = hdO - c.wall;
+    const cx = hwO - SPEC.r, cy = hdO - SPEC.r, t = c.divT, clr = c.divClr, slot = t / 2 + clr;
+    const pos = (n, inner) => Array.from({ length: n }, (_, k) => -inner + (2 * inner) * (k + 1) / (n + 1));
+    const pX = pos(built.divX, iw), pY = pos(built.divY, id);
+    const highest = (x, y) => { probes++; const z = at(x, y); return z.length ? z[z.length - 1] : -Infinity; };
+    /* Halfway along each stretch between notches a slot and a BLOAT wide, and between the
+       end ones and where the side turns the corner, if there is any stretch there. */
+    const mids = (ps, end, w) => {
+      const a = [-end].concat(...ps.map((p) => [p - w, p + w]), [end]), out = [];
+      for (let i = 0; i + 1 < a.length; i += 2) if (a[i + 1] - a[i] > 0.2) out.push((a[i] + a[i + 1]) / 2);
+      return out;
+    };
+    // the lip: notched at every slot, standing between them, on all four sides
+    for (const [ps, end, side] of [[pX, cx, (x, s) => [x, s * (hdO - 0.3)]], [pY, cy, (y, s) => [s * (hwO - 0.3), y]]])
+      for (const s of [-1, 1]) {
+        for (const p of ps) { const z = highest(...side(p, s)); if (z > H + 1e-6) out.push(`lip at ${side(p, s).map((v) => v.toFixed(1))} not notched: ${z.toFixed(2)}`); }
+        for (const m of mids(ps, end, slot + 0.05)) { const z = highest(...side(m, s)); if (Math.abs(z - top) > 1e-6) out.push(`no lip between notches at ${side(m, s).map((v) => v.toFixed(1))}: ${z.toFixed(2)}`); }
+      }
+    for (const [sx, sy] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+      const z = highest(sx * (cx + 3.45 * Math.SQRT1_2), sy * (cy + 3.45 * Math.SQRT1_2));
+      if (Math.abs(z - top) < 1e-6) corners++;
+      else out.push(`no lip at the ${sy > 0 ? 'back' : 'front'} ${sx > 0 ? 'right' : 'left'} corner`);
+    }
+    // the shelf: notched at every slot across, standing between them
+    const d = c.label ? Math.min(c.label, id * 0.8, H - c.labelT - SPEC.footH - 0.05) : 0;
+    if (d > 0.05 && pX.length) {
+      for (const p of pX) { const z = highest(p, id - d / 2); if (z > zf + 1e-6) out.push(`shelf at ${p.toFixed(1)} not notched: ${z.toFixed(2)}`); }
+      for (const m of mids(pX, iw, slot + 0.025)) { const z = highest(m, id - d / 2); if (Math.abs(z - H) > 1e-6) out.push(`no shelf at ${m.toFixed(1)}: ${z.toFixed(2)}`); }
+    }
+    // the plates across follow the scoop; the plates along stand on it
+    const chainAt = (ol, u) => {
+      const b = ol.slice(0, ol.findIndex((p) => p[0] === Math.max(...ol.map((q) => q[0]))) + 1);
+      for (let i = 1; i < b.length; i++) if (b[i][0] > b[i - 1][0] && u >= b[i - 1][0] && u <= b[i][0])
+        return b[i - 1][1] + (b[i][1] - b[i - 1][1]) * (u - b[i - 1][0]) / (b[i][0] - b[i - 1][0]);
+      return NaN;
+    };
+    // a plain plate is the rectangle it always was, standing on the floor
+    const withOutline = (m) => Object.assign({ outline: [[-m.span / 2, zf], [m.span / 2, zf], [m.span / 2, zf + m.tall], [-m.span / 2, zf + m.tall]] }, m);
+    const across = pX.map((p, k) => withOutline(dividerPart(G, cfg, 'y', k + 1).meta));
+    const along = pY.map((q, k) => withOutline(dividerPart(G, cfg, 'x', k + 1).meta));
+    if (c.scoop && pX.length) {
+      let measured = 0;
+      for (let u = -id + clr + 0.5; u < 0; u += 0.25) {
+        const s = highest(pX[0], u);
+        if (s < zf + 0.2 || s > H - 1) continue;
+        const z0 = highest(pX[0], u - 0.1);
+        if (Math.abs(s - z0) > 0.1) continue;          // steeper than 45 degrees: not measured
+        measured++;
+        const gap = chainAt(across[0].outline, u) - s;
+        if (!(gap >= -1e-6 && gap <= 2 * clr + 0.1)) { out.push(`plate across ${gap.toFixed(3)} mm above the scoop at y ${u.toFixed(2)}`); break; }
+      }
+      if (!measured) out.push('no scoop under the plates across to measure');
+    }
+    along.forEach((m, k) => {
+      const s = highest(0, pY[k] - t / 2 + 1e-4), zb = Math.min(...m.outline.map((p) => p[1]));
+      if (s > zf + 1e-6 && !(zb >= s - 1e-6 && zb - s < 0.01)) out.push(`plate along ${k + 1} stands at ${zb.toFixed(3)}, the scoop under it at ${s.toFixed(3)}`);
+    });
+    // where they cross: each keeps a millimetre, and they share the height between them
+    if (pX.length && pY.length) {
+      const ztop = zf + dividerPart(G, Object.assign({}, cfg, { divY: 0 }), 'x').meta.tall;
+      along.forEach((m, k) => {
+        const q = pY[k], ol = across[0].outline, olY = m.outline;
+        // the bottom of the slot from the top: the lowest of the outline there that is not its bottom edge
+        const cut = Math.min(...ol.filter((p) => p[0] >= q - slot - 1e-9 && p[0] <= q + slot + 1e-9 &&
+                                                 p[1] > chainAt(ol, p[0]) + 1e-9).map((p) => p[1]));
+        const lift = Math.max(...olY.filter((p) => p[0] >= pX[0] - slot - 1e-9 && p[0] <= pX[0] + slot + 1e-9).map((p) => p[1]));
+        const keepX = cut - chainAt(ol, q - slot), keepY = ztop - lift;
+        if (!isFinite(cut) || !isFinite(lift)) out.push(`crossing ${k + 1} has no ${isFinite(cut) ? '' : 'slot from the top'}${isFinite(cut) || isFinite(lift) ? '' : ' or '}${isFinite(lift) ? '' : 'slot from the bottom'}`);
+        else if (keepX < 1 - 1e-6 || keepY < 1 - 1e-6) out.push(`crossing ${k + 1} keeps ${keepX.toFixed(2)} and ${keepY.toFixed(2)} mm`);
+        else if (Math.abs(lift - cut - 2 * clr) > 1e-6) out.push(`crossing ${k + 1} slots ${(lift - cut).toFixed(3)} mm apart, not twice the clearance`);
+      });
+    }
+    if (out.length) fails.push(`${name}: ${out[0]}${out.length > 1 ? ` and ${out.length - 1} more` : ''}`);
   }
-  console.log(`  ${rows.length} bins, ${plates} plates: ` + (fails.length
-    ? `${fails.length} FAILED, ${fails.slice(0, 4).join('; ')}${fails.length > 4 ? ` and ${fails.length - 4} more` : ''}`
-    : 'every one in its slot'));
+  console.log('  ' + (fails.length ? `${fails.length} FAILED: ${fails.join('; ')}`
+    : `${SET.length} bins, ${probes} probes: notched at every slot, the lip and shelf standing between, ${corners} of ${4 * SET.length} corners whole; plates cut to the scoop and halved where they cross`));
   if (fails.length) bad++;
 }
 
@@ -1412,7 +1687,8 @@ console.log('\nlinks from before half sizes build the same bytes');
     ['1x1x3', '0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15-0', 'a6b5ca988bcf9ec4'],
     ['1x1x1', '4-1-1-1-1-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15-0', '055b9aa96e86b515'],
     ['3x2x5, dividers, scoop and label', '1-2-3-2-5-1.2-1.2-2-1-0-1-1-1-1-6-10-0-0-0-0-15-0', '66c515b3c3ab2fcc'],
-    ['2x2x3, removable dividers', '0-0-2-2-3-1.2-1.2-1-1-0-1-1-1-1-0-0-0-0-1-0-15-0', '857e407d5b6d51d2'],
+    // its lip now has a notch at each slot, so each plate drops in past it: was 857e407d5b6d51d2
+    ['2x2x3, removable dividers', '0-0-2-2-3-1.2-1.2-1-1-0-1-1-1-1-0-0-0-0-1-0-15-0', 'e4d7d2ee5fbfcaf7'],
     ['2x1x3, front at half, left at a quarter', '0-0-2-1-3-1.2-1.2-0-0-0-0.5-1-0.25-1-0-0-0-0-0-0-15-0', '1838902a9b3e1fda'],
     ['2x2x2 tray', '0-0-2-2-2-1.2-1.2-0-0-0-0-0-0-0-0-0-0-0-0-0-15-0', '16583a72aa4bdfc9'],
     ['1x1x3 solid', '0-0-1-1-3-1.2-1.2-0-0-1-1-1-1-1-0-0-0-0-0-0-15-0', 'c6e857cede8b8d80'],
