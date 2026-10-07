@@ -245,12 +245,18 @@ function noteHintSay(b) {
       : ['Nothing in this note can print, so the shelf stays plain.',
          `The letters are A to Z and a to z without accents, the digits, the punctuation on a ` +
          `keyboard, and \u00b5 \u03a9 \u00b0 \u00b1 \u00d7 \u00d8. ${charList(s.dropped)} ${s.dropped.length > 1 ? 'are' : 'is'} not among them.`];
+  /* Which limit held the shelf (noteOnShelf's `by`) is what to change: the depth asked
+     for, the inside's own depth, or the height. Said as the height, a 1 x 0.5 bin six
+     units tall with 3 mm walls was told a taller bin had room for a deeper shelf. */
   if (s.why === 'shallow')
-    return [(b.label < S.shelfMin
+    return [(s.by === 'asked'
       ? `The label shelf is ${mm(b.label)} mm deep, and letters need ${S.shelfMin} mm, so nothing prints.`
+      : s.by === 'inside' ? `A shelf takes at most 80% of the inside's depth, ${mm(s.depth)} mm here, and letters need ${S.shelfMin} mm, so nothing prints.`
       : s.depth < 0.05 ? 'A bin this short has no room under its rim for a shelf to print on, so nothing prints.'
       : `A bin this tall has room under its rim for a shelf ${mm(s.depth)} mm deep, and letters need ${S.shelfMin} mm, so nothing prints.`) + off,
-      rest(b.label < S.shelfMin ? '' : 'The shelf slopes down to the wall at 45 degrees, so its depth is held to the room above the floor. A taller bin has room for a deeper one.', offMore)];
+      rest(s.by === 'asked' ? ''
+        : s.by === 'inside' ? 'A bin deeper from front to back, or with thinner walls, has room for a deeper shelf.'
+        : 'The shelf slopes down to the wall at 45 degrees, so its depth is held to the room above the floor. A taller bin has room for a deeper one.', offMore)];
   return [{
     noshelf: 'Give it a label shelf above, and the note prints raised on it.',
     carved: 'A carved shape has no label shelf, so the note does not print.',

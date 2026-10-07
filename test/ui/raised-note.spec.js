@@ -209,3 +209,17 @@ test('dividers: the note goes between them, or the hint and Checks say there is 
   expect(await lead(page)).toBe('Prints 3 mm tall on two lines, between the dividers, cut short to fit.');
   expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
 });
+
+/* A shelf is held to 80% of the inside's depth as well as to the height under the rim. A
+   bin only half a cell deep with thick walls is held by that, and was told a taller bin
+   had room for a deeper shelf, which it does not. */
+test('a shelf held by the inside\'s depth says so, not that a taller bin would do', async ({ page }) => {
+  await page.evaluate(() => startScratch());
+  await settle(page);
+  for (const [id, x] of [['v', 0.5], ['hUnits', 6], ['wall', 3], ['label', 12]]) await H.setField(page, id, x);
+  await raise(page);
+  await note(page, 'M3');
+  expect(await lead(page)).toBe("A shelf takes at most 80% of the inside's depth, 5.8 mm here, and letters need 6 mm, so nothing prints.");
+  await expect(hint(page).locator('.moretext')).toHaveText(
+    'A bin deeper from front to back, or with thinner walls, has room for a deeper shelf.');
+});
