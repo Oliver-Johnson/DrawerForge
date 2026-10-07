@@ -247,3 +247,100 @@ test('a cut-map press let go outside the page does not keep the saves waiting', 
   expect(await page.evaluate(() => location.hash), 'the typed width saved').toMatch(/[#&]w=520(&|$)/);
   await expect(page.locator('#setAside')).toBeHidden();
 });
+
+/* ---------- leaving with a bin still held ----------------------------------------
+   The header's Baseplates and Guide links save the design and hand it to the next page
+   (leave), and either can be pressed while the mouse still holds a bin on the map: from
+   the keyboard, or with a finger on a touch screen. What they hand over has the bin where
+   the drag had it, which is where a press the page loses lands it (lostpointercapture).
+   But the press stayed on: the bin went on following the pointer while the next page
+   loaded, and letting go set a save going that wrote another layout into the address and
+   the local save after the hand-over, so Back came to a layout the other page was never
+   given. The next page is held back here until the bin has been let go somewhere else
+   and that save would have come.
+   Over HTTP, as drawers.spec.js is: the header links point at directories, which file://
+   does not resolve, and a request the service worker answers never reaches page.route. */
+test.describe('leaving with a bin still held', () => {
+  test.use({ serviceWorkers: 'block' });
+  let site;
+  test.beforeAll(async () => { site = await H.serveRoot(); });
+  test.afterAll(() => site.close());
+
+  // BINS_LINK's layout with the 2 x 2 two cells right, as packBin writes it
+  const HELD = BINS_LINK.replace(/^bl=3-3-/, '5-3-');
+  const binsIn = (h) => (decodeURIComponent(h || '').match(/(?:^|[#&])bl=([^&]*)/) || [])[1];
+
+  async function openOver(page) {
+    const errors = page.__errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    await page.goto(site.base + 'bins/#' + BINS_LINK);
+    await page.waitForFunction(() => typeof THREE !== 'undefined' && typeof drawers !== 'undefined');
+    await page.waitForTimeout(600);                      // past the boot's save
+  }
+  /* The 2 x 2 grabbed and moved two cells right, `go` following the link with it held,
+     then the pointer moved on and let go elsewhere on the map while the page the link
+     asked for (`to`) is held back, and that page let through once the save the release
+     would set going is due. Focus moving down the page scrolls it, so where the pointer
+     goes on to lands on whichever cell is there by then. */
+  async function holdAndLeave(page, to, go) {
+    const from = await H.cellPoint(page, 3, 3), held = await H.cellPoint(page, 5, 3);
+    const away = await H.cellPoint(page, 1, 6);
+    let letThrough;
+    const gate = new Promise((r) => { letThrough = r; });
+    await page.route(to, async (route) => { await gate; await route.continue(); });
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(held.x, held.y, { steps: 6 });
+    expect(await binsNow(page), 'held two cells right').toEqual([[5, 3, 2, 2], [0, 6, 1, 1]]);
+    /* The next page asked for is the link followed, so leave() has run. Nothing is read
+       out of the page until the next one arrives: the browser answers no evaluate while
+       a navigation waits, and the press or tap that started it may wait for it too. */
+    const asked = page.waitForRequest((r) => to(new URL(r.url())));
+    const going = go();
+    await asked;
+    await page.mouse.move(away.x, away.y, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(600);                      // past the save's 400 ms
+    letThrough();
+    await going;
+    await page.waitForURL(to);
+  }
+  /* What the next page was handed, what the bins page saved on this device, and what Back
+     comes to: each the bin where it was when the link was followed. */
+  async function heldEverywhere(page) {
+    expect(binsIn(page.url()), 'handed over').toBe(HELD);
+    expect(binsIn(await page.evaluate(() => localStorage.getItem('drawerforge:bins:v1'))),
+      'the bins page\'s save').toBe(HELD);
+    await page.goBack();
+    await page.waitForFunction(() => typeof B === 'function' && typeof drawers !== 'undefined');
+    expect(await binsNow(page), 'Back').toEqual([[5, 3, 2, 2], [0, 6, 1, 1]]);
+  }
+
+  test('the Baseplates link followed from the keyboard with a bin held keeps the layout it handed over',
+    async ({ page }) => {
+      await openOver(page);
+      await holdAndLeave(page, (u) => u.pathname === '/', async () => {
+        // Tab on from where the press was, as far as the link
+        for (let i = 0; i < 100; i++) {
+          await page.keyboard.press('Tab');
+          if (await page.evaluate(() => document.activeElement.id === 'navPlates')) break;
+        }
+        await page.keyboard.press('Enter');
+      });
+      await heldEverywhere(page);
+    });
+
+  test.describe('on a touch screen', () => {
+    test.use({ hasTouch: true });
+    test('the Guide link tapped with a bin held by the mouse keeps the layout it handed over',
+      async ({ page }) => {
+        await openOver(page);
+        await holdAndLeave(page, (u) => u.pathname === '/guide/', async () => {
+          const box = await page.locator('#navGuide').boundingBox();
+          await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+        });
+        await heldEverywhere(page);
+      });
+  });
+});
