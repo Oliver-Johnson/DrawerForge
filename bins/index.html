@@ -1309,7 +1309,7 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <div class="row" id="divRemovableRow" style="display:none">
       <label class="tog"><input id="divRemovable" type="checkbox"> Removable dividers — print them loose</label>
     </div>
-    <div class="hint" id="divRemovableHint" style="display:none">Builds rails on the walls instead of a divider across the bin, and exports the plates as parts of their own, which drop in from above and lift straight out. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>A drawer gets re-divided far more often than it gets reprinted. So that every plate goes in, the stacking lip has a notch at each slot; a bin stacked on top still sits on the lip between the notches and round the corners. The label shelf has a notch at each plate across, and the plates along stay in front of it. Over a scoop, the plates across have their bottom front corner cut to follow it, and that corner goes to the front; a plate along over the scoop is cut shorter to stand on it, and is made for its own slot. Dividers both ways halve together where they cross: put the plates across in first, slots up, then drop the plates along over them, slots down. The platesThe plates&rsquo; rows in Download, their files&rsquo; names and the README all say which is which.rsquo; rows under Download your bins, their filesThe plates&rsquo; rows in Download, their files&rsquo; names and the README all say which is which.rsquo; names and the README all say which is which.</span>
+    <div class="hint" id="divRemovableHint" style="display:none">Builds rails on the walls instead of a divider across the bin, and exports the plates as parts of their own, which drop in from above and lift straight out. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>A drawer gets re-divided far more often than it gets reprinted. So that every plate goes in, the stacking lip has a notch at each slot; a bin stacked on top still sits on the lip between the notches and round the corners. The label shelf has a notch at each plate across, and a note raised on it goes in the widest space between them; the plates along stay in front of it. Over a scoop, the plates across have their bottom front corner cut to follow it, and that corner goes to the front; a plate along over the scoop is cut shorter to stand on it, and is made for its own slot. Dividers both ways halve together where they cross: put the plates across in first, slots up, then drop the plates along over them, slots down. The plates&rsquo; rows under Download your bins, their files&rsquo; names and the README all say which is which.</span>
     <div class="row" style="margin-top:6px">
       <label class="f"><b>Divider thickness (mm)</b><input id="divT" type="number" step="0.2" min="0.8" max="5" value="1.6"></label>
       <label class="f"><b>Slot clearance (mm)</b><input id="divClr" type="number" step="0.05" min="0" max="1" value="0.25"></label>
@@ -8009,7 +8009,9 @@ function shelfBuilt(c, iw, id, H) {
  *
  * And none at all where the clearance at the plate's two ends takes the whole cavity:
  * a 1x0.5 with a 9.5 mm wall and 1 mm clearance listed a plate -0.5 mm long, and at a
- * 10 mm wall and the usual clearance one with no volume.
+ * 10 mm wall and the usual clearance one with no volume. Nor where it leaves the plate
+ * under PLATE_MIN long, as the page lists no plate under PLATE_MIN tall: the same 1x0.5
+ * with a 9.9 mm wall and 0.3 mm clearance listed one 0.1 mm long.
  *
  * Two more things can stand over a slot, and each brings the count down again where it
  * would. With a stacking lip, each slot is a notch through the lip (notchedLip), cut
@@ -8035,8 +8037,8 @@ function railedLimit(cfg, axis) {
   if (!most && inner >= slot + RAIL_D + c.divClr + 10 * WELD - 1e-9) most = 1;
   // its slot and a rail would go in, but not the room for the rails the other way
   else if (!most && inner >= slot + RAIL_T - 1e-9) why = 'lone';
-  // none where the clearance at the plate's ends leaves it no length (see dividerPart)
-  if ((axis === 'x' ? hd : hw) - c.divClr < WELD) { most = 0; why = 'length'; }
+  // none where the clearance at the plate's ends leaves it under PLATE_MIN long (see dividerPart)
+  if (2 * ((axis === 'x' ? hd : hw) - c.divClr) < PLATE_MIN - 1e-9) { most = 0; why = 'length'; }
   const slots = most;
   // the cavity's corner as roundRect builds it, and whether a point stands out through it
   const r = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(hw, hd) - 0.01));
@@ -8058,7 +8060,7 @@ function railedLimit(cfg, axis) {
   const last = (k) => -inner + (2 * inner) * k / (k + 1);
   /* Only with a plate to go in: under a millimetre tall the page lists none, and the bin
      keeps its lip and shelf whole (plateLayout). */
-  const printed = c.hUnits * SPEC.unitH - (SPEC.footH + builtFloorT(c)) - c.divClr >= 1;
+  const printed = c.hUnits * SPEC.unitH - (SPEC.footH + builtFloorT(c)) - c.divClr >= PLATE_MIN;
   const full = (isHalfSize(c) || isFullRect(c)) && printed;
   if (full && lipNotched(c))
     while (most > 0 && last(most) + slot + 2 * BLOAT > inner + c.wall - LIP[0][1]) most--;
@@ -8137,6 +8139,11 @@ function dividersWhy(cfg) {
  * shape: identical ones are one part with a quantity, as ever.
  */
 const PLATE_END = 1;   // the least plate kept where it stands in its rails, or crosses another
+/* The least a plate is, as tall or as long. Under it the page lists none, and a bin has
+   no rails for one: under PLATE_MIN tall it keeps its lip and shelf whole and lists no
+   plate (plateLayout, dividerPlates), and under PLATE_MIN long none is built at all
+   (railedLimit), as a sliver that long holds nothing apart. */
+const PLATE_MIN = 1;
 
 /* Where a removable bin's plates stand and what shape each is, for `counts` of them:
    the numbers buildBin and dividerPart both build from, so a plate and the bin it goes
@@ -8161,7 +8168,7 @@ function plateLayout(cfg, counts) {
     return out;
   };
   const pX = railed ? at(counts.divX || 0, iw) : [], pY = railed ? at(counts.divY || 0, id) : [];
-  const printed = tall >= 1;                       // the page lists no plate shorter
+  const printed = tall >= PLATE_MIN;               // the page lists no plate shorter
   const r = railed ? scoopRadius(c, H, floorZ, id, pX.length && printed ? ztop - PLATE_END - clr - floorZ : undefined) : 0;
   // and the scoop it would be with no plates across to keep their ends in their rails
   const scoopFree = railed ? scoopRadius(c, H, floorZ, id) : 0;
@@ -8380,14 +8387,14 @@ function dividerPart(G, cfg, axis, k = 1) {
    the plates across, which are all alike, and as many for the plates along as there are
    shapes among them. `ks` are the positions each is for, counting from 1, and `key` is
    its shape, the same for the same plate in any bin. Plates the page would not list,
-   under a millimetre tall, are left out, as the page leaves them out. */
+   under PLATE_MIN tall or long, are left out, as the page leaves them out. */
 function dividerPlates(G, cfg) {
   const built = dividersBuilt(cfg), out = [];
   for (const [axis, n] of [['y', built.divX], ['x', built.divY]]) {
     const byKey = new Map();
     for (let k = 1; k <= n; k++) {
       const d = dividerPart(G, cfg, axis, k);
-      if (d.meta.tall < 1) continue;
+      if (d.meta.tall < PLATE_MIN || d.meta.span < PLATE_MIN) continue;
       const shape = d.meta.outline
         ? d.meta.outline.map((p) => [p[0], p[1] - d.meta.zc].map((x) => x.toFixed(4)).join(',')).join(' ') : 'plain';
       const key = `${d.meta.span.toFixed(4)}x${d.meta.tall.toFixed(4)}x${d.meta.t}:${shape}`;
@@ -11941,7 +11948,8 @@ function binIssues(b, k, claims) {
        corners, and two more. 'lone': room for one divider's slot and a rail either side,
        but not for the rails the other way beside it, which are kept room for whether or
        not it has any, so that dividers the other way never take it away. 'length': the
-       clearance at a plate's two ends takes the whole cavity. Either would read wrongly
+       clearance at a plate's two ends leaves it under PLATE_MIN long, as a plate under
+       PLATE_MIN tall is not listed either. Either would read wrongly
        as "none leave every slot room", as the slot itself has room. 'fit': two of those,
        or one of them with the slots or corners, said once for both directions, either of
        which may have none. */
@@ -11956,7 +11964,7 @@ function binIssues(b, k, claims) {
         : by === 'corners' ? (more ? `more would stand the end ones so far into ${them} rounded corners that a plate would lose the clearance at its corner, with ${at}`
           : `even one would stand so far into ${them} rounded corners that its plate would lose the clearance at its corner, with ${at}`)
         : by === 'lone' ? `even one would leave too little room beside its slot for the rails of dividers the other way, with ${at}`
-        : by === 'length' ? `the clearance at a plate's ends would leave it no length, with ${at}`
+        : by === 'length' ? `the clearance at a plate's ends would leave it under ${PLATE_MIN} mm long, with ${at}`
         : by === 'fit' ? (them === 'their' ? `only those fit with ${at}` : `that is as many as fit with ${at}`)
         : `${more ? 'no more' : 'none'} leave every slot room and keep the end ones out of ${them} rounded corners with ${at}`);
       out.push({ note: true, group: `rails-${by}`,
