@@ -340,7 +340,7 @@ test('a loose bin keeps its raised note through a reload, a restore and its READ
   await settle(page);
   const now = () => page.evaluate(() => [!!scratch, scratch && scratch.note, scratch && scratch.labelMode,
     scratch && typeName(types()[0])]);
-  const want = [true, 'M3 screws', 1, 'bin-1x1x3-m3-screws-qty1'];
+  const want = [true, 'M3 screws', 1, 'bin-1x1x3-note-m3-screws-qty1'];
   expect(await now()).toEqual(want);
   const readme = await page.evaluate(() => layoutReadme());
   expect(readme).toContain('Raised note: “M3 screws” on the label shelf, 4.5 mm letters on one line.');

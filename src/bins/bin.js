@@ -290,14 +290,18 @@ function labelRounded(G, hwI, hdI, wall, H, depth, t, n) {
  * and, where dividers the other way cross it, the deepest from front to back. A space
  * that will not take the note at the usual sizes (noteFit's readable) takes nothing. The
  * walls alone leave one that narrow only on a half-size bin with walls past about 6.5 mm,
- * where letters came out half a millimetre tall.
+ * where letters came out half a millimetre tall. noteFit lets letters under 3 mm stand
+ * where the depth it is given is the shelf's, and a space cut short by dividers along the
+ * bin is not: there they came out a millimetre tall, or under nothing and mirrored, and a
+ * space like that takes letters only 3 mm tall or more.
  *
  * `footAt` is how low the shelf's slope may reach, which buildBin works out. Returns what
  * goes on the shelf: { why } with why 'off' when no note was asked for, 'empty' when
  * nothing in it prints, 'shallow' when the lowered shelf is under 6 mm deep (with its
  * depth, and `by`: 'asked' for a shelf asked for that shallow, 'inside' for one held to
  * 0.8 of the inside's depth, 'height' for one held to the room above the floor),
- * 'dividers' when the dividers leave no space the note fits and 'narrow' when the walls
+ * 'dividers' when the dividers leave no space the note fits (with `along` when it was
+ * the ones along the bin that cut the shelf's depth short) and 'narrow' when the walls
  * do (both with its depth); otherwise { why: '', top, depth, text, fit, divided }, `fit`
  * being noteFit's answer and `divided` whether dividers narrowed the space it was fitted
  * to. */
@@ -331,9 +335,11 @@ function noteOnShelf(c, iw, id, H, footAt) {
     return gaps.reduce((w, g) => (!w || g[1] - g[0] > w[1] - w[0] + 1e-9 ? g : w), null);
   };
   const xs = widest(-iw + m, iw - m, c.divX, iw), ys = widest(id - depth + S.front, id - m, c.divY, id);
-  if (!xs || !ys) return { why: 'dividers', depth };
+  if (!xs || !ys) return Object.assign({ why: 'dividers', depth }, ys ? {} : { along: true });
   const fit = NOTE_TEXT.noteFit(text, { x0: xs[0], x1: xs[1], y0: ys[0], y1: ys[1] });
-  if (!fit.readable) return { why: divided ? 'dividers' : 'narrow', depth };
+  const along = ys[1] - ys[0] < (id - m) - (id - depth + S.front) - 1e-9;
+  if (!fit.readable || !(fit.cap > 0) || (along && fit.cap < S.capMin - 1e-9))
+    return Object.assign({ why: divided ? 'dividers' : 'narrow', depth }, along ? { along } : {});
   return { why: '', top, depth, text, fit, divided };
 }
 

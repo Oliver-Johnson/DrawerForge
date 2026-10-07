@@ -197,7 +197,9 @@ const holesText = (b) => {
    each with its own label. Past it, a bin whose note is not among the first hundred,
    layer by layer and bin by bin, prints plain, and Checks says so, as it does for a
    drawer past the most this tool lays out; the bins keep the setting, so the link and
-   the saved drawer still say what was asked. A loose bin is one bin, and never held. */
+   the saved drawer still say what was asked. A loose bin is one bin, and never held. A
+   bin whose note does not fit its shelf builds no part for it, so it takes none of the
+   hundred: a hundred shelfless bins with notes held the one note that could print. */
 const RAISED_MAX = 100;
 /* Which bins are past it, worked out afresh at the start of every pass that reads or
    draws the layout (readControls, refresh), since anything can have changed a note or
@@ -209,7 +211,7 @@ function holdNotes() {
   for (const L of layers) for (const b of L.bins) {
     if (+b.labelMode !== 1 || !b.note) continue;
     const t = notePrintable(b.note).text;
-    if (!t) continue;
+    if (!t || !shelfNote(binCfg(b)).fit) continue;
     if (!allowed.has(t) && !held.has(t)) (allowed.size < RAISED_MAX ? allowed : held).add(t);
     if (held.has(t)) noteHeld.add(b);
   }
@@ -273,6 +275,9 @@ function noteHintSay(b) {
                  f.cap < S.capMin - 1e-9 ? `That is under the ${S.capMin} mm that stays readable; a deeper shelf has room for bigger letters.` : '',
                  offMore)];
   }
+  if (s.why === 'dividers' && s.along)
+    return [`The dividers along the bin leave too little of the label shelf's depth for letters ${S.capMin} mm tall, so nothing prints.` + off,
+            rest('They stand through the shelf, and the letters keep clear of each one. Fewer of them, or a bin deeper from front to back, leaves room.', offMore)];
   if (s.why === 'dividers')
     return ['The dividers leave no space on the label shelf wide enough for the note, so nothing prints.' + off,
             rest('They stand through the shelf, and the letters keep clear of each one. Fewer dividers, a bigger bin or a shorter note leaves room.', offMore)];
@@ -2747,6 +2752,9 @@ function binIssues(b, k, claims) {
     if (s.why === '' && s.fit.cut)
       out.push({ note: true, t: `has its note cut short to fit its label shelf, ${mm(s.fit.cap)} mm tall: ` +
         `it prints as \u201c${s.fit.lines.join(' / ')}\u201d` });
+    else if (s.why === '' && s.fit.cap < NOTE_SPEC.capMin - 1e-9)
+      out.push({ note: true, t: `has its note ${mm(s.fit.cap)} mm tall${s.fit.lines.length > 1 ? ' on two lines' : ''}, ` +
+        `under the ${NOTE_SPEC.capMin} mm that stays readable: its label shelf is too shallow for bigger letters` });
     else if (s.why === '' && s.fit.lines.length > 1)
       out.push({ note: true, t: `has its note on two lines, ${mm(s.fit.cap)} mm tall, as on one it would print ` +
         `under the ${NOTE_SPEC.capMin} mm that stays readable` });
@@ -2761,7 +2769,9 @@ function binIssues(b, k, claims) {
       out.push({ note: true, t: 'is set to print its note on its label shelf, but ' +
         (s.why === 'back' ? 'its back wall is lowered, so it has none' : 'it has none') });
     if (s.why === 'dividers' || s.why === 'narrow')
-      out.push({ note: true, t: `has ${s.why === 'dividers' ? 'dividers across its label shelf too close together'
+      out.push({ note: true, t: s.along
+        ? `has dividers along it that leave too little of its label shelf's depth for its note, so its note is not printed`
+        : `has ${s.why === 'dividers' ? 'dividers across its label shelf too close together'
         : 'walls too thick'} for its note to fit between them, so its note is not printed` });
   }
   return out;
@@ -3809,10 +3819,12 @@ const holeTag = (b) => (!holesBuilt(b) ? ''
   : '-' + [b.magnets ? 'magnets' : '', b.screws ? 'screws' : ''].filter(Boolean).join('-') +
     (everyMatters(b) ? '-every-cell' : ''));
 /* A bin printing its note says so in its name, as the note shortened to a-z, 0-9 and
-   dashes (noteSlug): "bin-1x1x3-m3-screws-qty2.stl". Two bins with the same shape and
-   different notes are two files, and the name says which is which. A note that does not
-   print stays out of the name, as it always has. */
-const noteTag = (b) => { const p = printedNote(b); return p ? '-' + noteSlug(p.fit.lines.join(' ')) : ''; };
+   dashes (noteSlug) behind "note": "bin-1x1x3-note-m3-screws-qty2.stl". Two bins with the
+   same shape and different notes are two files, and the name says which is which. The
+   word keeps a note from reading as the rest of the name: a note "solid" was
+   "bin-1x1x3-solid-qty1", a solid block's name. A note that does not print stays out of
+   the name, as it always has. */
+const noteTag = (b) => { const p = printedNote(b); return p ? '-note-' + noteSlug(p.fit.lines.join(' ')) : ''; };
 function typeName(t) {
   return `bin-${t.b.u}x${t.b.v}x${t.b.hUnits}${t.b.solid ? '-solid' : ''}` +
          `${t.b.divX || t.b.divY ? `-${t.b.divX}x${t.b.divY}div` : ''}${holeTag(t.b)}${noteTag(t.b)}-qty${t.qty}`;

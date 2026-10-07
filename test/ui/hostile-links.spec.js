@@ -349,6 +349,23 @@ test('a link raising more different notes than one layout prints raises the firs
   expect(errors).toEqual([]);
 });
 
+/* A bin whose note cannot print builds no part for it, so it takes none of the hundred:
+   a hundred bins with no shelf to print on held back the one note that could print, and
+   Checks counted 101 different notes. */
+test('notes that cannot print take none of the hundred', async ({ page }) => {
+  const errors = watch(page);
+  const bins = [], notes = [];
+  for (let i = 0; i < 101; i++) {
+    bins.push(`${i % 11}-${Math.floor(i / 11)}-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-${i === 100 ? 12 : 0}-0-0-0-0-15-0-1`);
+    notes.push(`N${i}`);
+  }
+  await arrive(page, H.BINS_URL + '#w=462&d=462&bl=' + bins.join('_') +
+    '&bnotes=' + encodeURIComponent(JSON.stringify([notes])));
+  expect(await page.evaluate(() => types().filter((t) => printedNote(t.b)).map((t) => t.b.note))).toEqual(['N100']);
+  await expect(page.locator('#warnings')).not.toContainText('different notes');
+  expect(errors).toEqual([]);
+});
+
 test('a fractional position is rounded rather than thrown on', async ({ page }) => {
   const errors = watch(page);
   await arrive(page, H.BINS_URL + '#bl=0-0.5-1-1-3');

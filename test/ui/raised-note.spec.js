@@ -70,7 +70,7 @@ test('the note raised: the menu gives the bin a shelf, and the bin becomes its o
   const codes = [...'M3 screws'].map((c) => c.codePointAt(0).toString(16).padStart(4, '0')).join('');
   expect(key).toBe(plain[0] + '-L12-n' + codes + '.' + +cap.toFixed(6));
   expect(key).not.toMatch(/M3|screws/i);
-  expect(name).toBe('bin-1x1x3-m3-screws-qty1');
+  expect(name).toBe('bin-1x1x3-note-m3-screws-qty1');
   expect(top, 'the letters stop 0.4 mm under the rim').toBeCloseTo(-0.4, 6);
   // the link carries it in the one field it added, and a plain bin's is as it was
   expect(await page.evaluate(() => packBin(B()[0]).split('-').slice(21))).toEqual(['0', '1']);
@@ -215,6 +215,43 @@ test('dividers: the note goes between them, or the hint and Checks say there is 
   expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
 });
 
+/* Dividers along the bin cross the shelf too, and cut it short from front to back. The
+   letters were sized to what was left: 1 mm tall here, and under nothing with removable
+   ones, with no word from Checks. Under 3 mm only a shelf shallow by itself prints, and
+   Checks says that too. */
+test('dividers along that cut the shelf short print nothing', async ({ page }) => {
+  await page.evaluate(() => startScratch());
+  await settle(page);
+  for (const [id, x] of [['v', 0.5], ['hUnits', 6], ['label', 12]]) await H.setField(page, id, x);
+  await raise(page);
+  await note(page, 'M3 screws');
+  expect(await lead(page)).toBe('Prints 4.2 mm tall on one line.');
+  await H.setField(page, 'divY', 3);
+  expect(await lead(page)).toBe(
+    "The dividers along the bin leave too little of the label shelf's depth for letters 3 mm tall, so nothing prints.");
+  await expect(hint(page).locator('.moretext')).toHaveText(
+    'They stand through the shelf, and the letters keep clear of each one. Fewer of them, or a bin deeper from front to back, leaves room.');
+  await expect(checks(page)).toContainText(
+    "has dividers along it that leave too little of its label shelf's depth for its note, so its note is not printed");
+  expect(await page.evaluate(() => typeKey(scratch).includes('-n')), 'the plain part').toBe(false);
+  await page.check('#divRemovable');
+  await settle(page);
+  expect(await lead(page)).toBe(
+    "The dividers along the bin leave too little of the label shelf's depth for letters 3 mm tall, so nothing prints.");
+});
+// a shelf 6 mm deep is shallow by itself: the letters print, under 3 mm, and Checks says so
+test('letters under 3 mm on a shallow shelf are named in Checks', async ({ page }) => {
+  await page.evaluate(() => startScratch());
+  await settle(page);
+  await H.setField(page, 'label', 6);
+  await raise(page);
+  await note(page, 'M3 screws');
+  expect(await lead(page)).toBe('Prints 2.9 mm tall on one line.');
+  await expect(checks(page)).toContainText(
+    'has its note 2.9 mm tall, under the 3 mm that stays readable: its label shelf is too shallow for bigger letters');
+  expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
+});
+
 /* A shelf is held to 80% of the inside's depth as well as to the height under the rim. A
    bin only half a cell deep with thick walls is held by that, and was told a taller bin
    had room for a deeper shelf, which it does not. */
@@ -245,5 +282,5 @@ test('two notes are two parts, even two a 32-bit hash cannot tell apart', async 
   }));
   expect(out.hashes[0], 'the two notes this case is about hash alike').toBe(out.hashes[1]);
   expect(out.lines).toEqual(['Kit 2wlfa', 'Kit zqdha']);
-  expect(out.names).toEqual(['bin-1x1x3-kit-2wlfa-qty1', 'bin-1x1x3-kit-zqdha-qty1']);
+  expect(out.names).toEqual(['bin-1x1x3-note-kit-2wlfa-qty1', 'bin-1x1x3-note-kit-zqdha-qty1']);
 });

@@ -145,6 +145,7 @@ function noteLine(text) {
 }
 
 const NOTE_ELLIPSIS = '...';
+const NOTE_CUT_KEEPS = 3;     // a cut keeping fewer of the note's characters is no note
 /* The note cut short to fit, with an ellipsis, when it will not go on two lines 3 mm
    tall: { lays, s, cut }, or null when cutting would not make it any bigger. Every line
    is given the vertical reach of the whole note, so whatever is kept fits whatever was
@@ -178,7 +179,10 @@ function noteCut(text, W, Hh) {
       if (sp > 0) k = sp;
     }
     const first = text.slice(0, k).trimEnd(), rest = text.slice(k).trimStart();
-    lines = rest ? [first, cutTo(rest)] : [first];
+    const second = rest ? cutTo(rest) : '';
+    /* A second line of nothing but the ellipsis is not a line: the note goes on one,
+       cut to fit. In a gap between dividers "M3 screws" came out "M / ...". */
+    lines = !rest ? [first] : second === NOTE_ELLIPSIS ? [cutTo(text)] : [first, second];
   }
   return { lays: lines.map(noteLine), s, cut };
 }
@@ -196,9 +200,12 @@ function noteCut(text, W, Hh) {
    shallow even for one line 3 mm tall is smaller than 3 mm, and `cap` says so; that is
    the shelf's depth, and still readable. A band too NARROW is not: when not even the
    ellipsis goes in at the size the depth allows, nothing could be cut to fit, and the
-   letters come out as small as the width makes them; and when all that goes in is the
-   ellipsis, none of the note is there. A shelf the width of a bin is never that narrow;
-   the spaces between dividers can be (noteOnShelf). */
+   letters come out as small as the width makes them; and when a cut keeps fewer than
+   three of the note's characters, or less than all of a shorter one, too little of it is
+   there to read: "M..." says nothing "M3 screws" did. Nor is a band with no width or
+   depth left at all, where the size came out at nothing or under it, mirroring the
+   letters. A shelf the width of a bin is never that narrow; the spaces between dividers
+   can be (noteOnShelf). */
 const noteFits = new Map();
 function noteFit(text, outer) {
   const k = [text, outer.x0, outer.x1, outer.y0, outer.y1].join('|');
@@ -238,9 +245,12 @@ function noteFit(text, outer) {
     yTop -= (lay.span + gap) * s;
   }
   const sDepth = Math.min(sMin, Hh / noteLine(text).span);
-  const none = best.cut && best.lays.every((l) => l.text === '' || l.text === NOTE_ELLIPSIS);
+  // what a cut keeps, its own ellipsis (always at the end of the last line) and spaces aside
+  const chars = (t) => t.replace(/\s/g, '').length, shown = best.lays.map((l) => l.text).join(' ');
+  const few = best.cut &&
+    chars(shown.slice(0, -NOTE_ELLIPSIS.length)) < Math.min(NOTE_CUT_KEEPS, chars(text));
   const out = { lines: best.lays.map((l) => l.text), cap: s * NOTE_CAP_U, cut: best.cut, segs,
-                readable: !none && s >= sDepth - 1e-9 };
+                readable: !few && W > 0 && Hh > 0 && s >= sDepth - 1e-9 };
   if (noteFits.size > 500) noteFits.clear();
   noteFits.set(k, out);
   return out;

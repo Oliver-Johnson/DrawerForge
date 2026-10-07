@@ -1358,15 +1358,63 @@ console.log('\nnotes raised on the label shelf');
     // a half cell with 8 mm walls is 4 mm across inside: its letters were 0.5 mm tall
     ['walls too thick for any of it', Object.assign({}, one, { u: 0.5, wall: 8 }),
      { labelMode: 1, note: 'M3 screws' }, 'narrow'],
+    // ...and with 7 mm walls only "M / ..." went in, which is not a note
+    ['walls leaving room for one letter', Object.assign({}, one, { u: 0.5, wall: 7 }),
+     { labelMode: 1, note: 'M3 screws' }, 'narrow'],
+    ['dividers leaving room for one letter', Object.assign({}, one, { divX: 4 }),
+     { labelMode: 1, note: 'M3 screws' }, 'dividers'],
+    /* Dividers along the bin cross the shelf and cut its depth short. Letters sized to
+       what was left came out 1.05 mm tall here, -0.25 mm (mirrored, outside the lip's
+       opening) with removable ones, and 0.46 mm on the 1x1. */
+    ['dividers along cutting the shelf short', { u: 1, v: 0.5, hUnits: 6, label: 12, divY: 3 },
+     { labelMode: 1, note: 'M3 screws' }, 'dividers along'],
+    ['removable ones along, past nothing', { u: 1, v: 0.5, hUnits: 6, label: 12, divY: 3, divRemovable: true },
+     { labelMode: 1, note: 'M3 screws' }, 'dividers along'],
+    ['six removable ones along', { u: 1, v: 1, hUnits: 6, label: 12, divY: 6, divRemovable: true },
+     { labelMode: 1, note: 'M3 screws' }, 'dividers along'],
   ];
   const moved = SAME.map(([name, cfg, extra, why]) => {
-    const withIt = Object.assign({}, cfg, extra), got = shelfNote(withIt).why;
+    const withIt = Object.assign({}, cfg, extra), say = shelfNote(withIt);
+    const got = say.why + (say.along ? ' along' : '');
     if (digest(cfg) !== digest(withIt)) return `${name}: BUILT DIFFERENTLY`;
     return got === why ? '' : `${name}: shelfNote says ${got}, not ${why}`;
   }).filter(Boolean);
   console.log(`  bins with nothing to print ` + (moved.length ? 'FAILED: ' + moved.join('; ')
     : `${SAME.length} kinds, each the same STL to the byte, and the page told why`));
   if (moved.length) bad++;
+
+  /* What the dividers leave has to be a note, over the bins people make most: letters at
+     least 3 mm tall wherever dividers along the bin cut the shelf short (only a shelf
+     shallow by itself prints smaller, and then no smaller than it alone would), and no
+     cut that keeps fewer than three characters or a line of nothing but "...". Squeezed
+     by dividers along, 78 of the first 252 printed under 3 mm and passed as readable, 15
+     at nothing or under it; across, 44 of 448 printed "M / ..." or the like. */
+  const S = NOTE_TEXT.NOTE_SPEC, squeezed = [];
+  let tried = 0, printed = 0;
+  const kept = (lines) => lines.join(' ').replace(/\.\.\.$/, '').replace(/\s/g, '').length;
+  for (const [u, v] of [[1, 1], [2, 1], [1, 2], [2, 2], [3, 1], [1, 0.5], [2, 0.5], [0.5, 1]])
+    for (const label of [8, 12, 15]) for (const divRemovable of [false, true])
+      for (const note of ['M3 screws', 'M2', 'Drill bits 1-6 mm']) {
+        const base = { u, v, hUnits: 6, label, labelMode: 1, note, divRemovable };
+        const alone = shelfNote(base);
+        for (const [k, n] of [['divY', 1], ['divY', 2], ['divY', 3], ['divY', 4], ['divY', 5], ['divY', 6],
+                              ['divX', 1], ['divX', 2], ['divX', 3], ['divX', 4], ['divX', 5], ['divX', 6]]) {
+          const s = shelfNote(Object.assign({}, base, { [k]: n })), at = `${u}x${v} label ${label} ${k} ${n}` +
+            `${divRemovable ? ' removable' : ''} "${note}"`;
+          tried++;
+          if (!s.fit) continue;
+          printed++;
+          if (!(s.fit.cap > 0)) squeezed.push(`${at}: ${s.fit.cap.toFixed(2)} mm`);
+          else if (s.fit.cap < S.capMin - 1e-9 && !(alone.fit && s.fit.cap >= alone.fit.cap - 1e-9))
+            squeezed.push(`${at}: ${s.fit.cap.toFixed(2)} mm, under what the shelf alone gives`);
+          if (s.fit.cut && (kept(s.fit.lines) < Math.min(3, note.replace(/\s/g, '').length) ||
+                            s.fit.lines.includes('...')))
+            squeezed.push(`${at}: prints "${s.fit.lines.join(' / ')}"`);
+        }
+      }
+  console.log(`  between dividers         ` + (squeezed.length ? `${squeezed.length} FAILED: ` +
+    squeezed.slice(0, 6).join('; ') : `${printed} of ${tried} everyday bins print their note, each one readable`));
+  if (squeezed.length) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');
