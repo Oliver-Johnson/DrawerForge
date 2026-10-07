@@ -28,12 +28,18 @@ const rest = (page) => page.evaluate(() => {
 });
 const checks = (page) => page.locator('#warnings');
 const tail = (page, i = 0) => page.evaluate((i) => packBin(B()[i]).split('-').slice(21), i);
-// a fresh page at a link, as hostile-links.spec.js arrives at one
+/* A fresh page at a link, through about:blank, as half-cells.spec.js opens one: a hash
+   alone does not reload it. The blank page now and then asks for the favicon of the
+   page it replaced, which it may not load from file://, and says so in the console; that
+   line is the hop's, not the page's, and is let go. */
+const BLANK_FAVICON = /^Not allowed to load local resource: file:\S*\/favicon\.svg$/;
 const arrive = async (page, hash) => {
   await page.goto('about:blank');
   await page.goto(H.BINS_URL + hash);
   await page.waitForFunction(() => typeof THREE !== 'undefined');
   await settle(page);
+  const errors = page.__errors;
+  for (let i = errors.length - 1; i >= 0; i--) if (BLANK_FAVICON.test(errors[i])) errors.splice(i, 1);
 };
 // one bin as a link writes it: at x, y, u by v, h units tall, with holes for `insert`
 const linkBin = (x, y, u, v, h, insert) =>
@@ -429,6 +435,28 @@ test('a layout past the most holes one layout builds builds the first, and says 
   expect(await built()).toEqual([['bin-1x1x3-hex-bit-holes-qty1', 16], ['bin-2x2x3-hex-bit-holes-qty2', 80], ['bin-9x9x3-qty1', 0]]);
   await expect(checks(page)).not.toContainText('holes are set');
 });
+
+/* A bin asking for more removable dividers than fit is built with as many as fit, and
+   Checks says so; with holes across its floor it is built with none, so it is told they
+   are left off, and nothing of how many fit: no plates, no compartments, no rails. */
+test('a bin with holes asking for 31 removable dividers is told they are left off, not that 10 are built',
+  async ({ page }) => {
+    const link = (insert) => `#bl=0-0-1-1-3-1.2-1.2-31-0-0-1-1-1-1-0-0-0-0-1-0-15-0-0-${insert}-0`;
+    await arrive(page, link(0));
+    await expect(checks(page)).toContainText('is built with 10 removable dividers across, not the 31 it asks for');
+    expect(await page.evaluate(() => [typeName(types()[0]), dividerParts().length, compartments(B()[0])]))
+      .toEqual(['bin-1x1x3-10x0div-qty1', 1, 11]);
+
+    await arrive(page, link(1));
+    await expect(checks(page)).toContainText('has holes for AA batteries, so its dividers are left off');
+    await expect(checks(page)).not.toContainText('removable divider');
+    expect(await page.evaluate(() => [typeName(types()[0]), dividerParts().length, compartments(B()[0]),
+      geomFor(B()[0]).meta.holes, B()[0].divX]))
+      .toEqual(['bin-1x1x3-aa-holes-qty1', 0, 0, 4, 31]);
+    await H.clickCell(page, 0, 0);
+    await settle(page);
+    expect(await rest(page)).toContain('Dividers are left off a bin with holes.');
+  });
 
 // and one bin past it on its own has none, as a fault: what was asked for is not built
 test('a bin with more holes than one bin is built with has none, and says so', async ({ page }) => {
