@@ -6602,13 +6602,21 @@ function labelRounded(G, hwI, hdI, wall, H, depth, t, n, xs) {
  * to. */
 const NOTE_CLEAR = 0.4;      // letters stop this far under H
 const NOTE_DIV_CLEAR = 0.4;  // ...and this far off a divider, its rails or its plate's slot
-function noteOnShelf(c, iw, id, H, footAt) {
+/* Where a note raised on the shelf puts the shelf, before the dividers come into it: its
+   top, and its depth, which that lower top can make shallower than the plain shelf's.
+   railedLimit counts removable plates along against it. */
+function noteShelfAt(c, id, H, footAt) {
+  const top = H - NOTE_CLEAR - NOTE_TEXT.NOTE_SPEC.relief;
+  const inside = id * 0.8, room = top - c.labelT - footAt;
+  return { top, inside, room, depth: Math.min(c.label, inside, room) };
+}
+/* `built` is the dividers to fit it between, dividersBuilt(c) when not given: railedLimit
+   asks with the plates along it is counting, which is how it asks without asking itself. */
+function noteOnShelf(c, iw, id, H, footAt, built) {
   if (+c.labelMode !== 1) return { why: 'off' };
   const text = NOTE_TEXT.notePrintable(c.note).text;
   if (!text) return { why: 'empty' };
-  const S = NOTE_TEXT.NOTE_SPEC, top = H - NOTE_CLEAR - S.relief;
-  const inside = id * 0.8, room = top - c.labelT - footAt;
-  const depth = Math.min(c.label, inside, room);
+  const S = NOTE_TEXT.NOTE_SPEC, { top, inside, room, depth } = noteShelfAt(c, id, H, footAt);
   if (!(depth >= S.shelfMin))
     return { why: 'shallow', depth: Math.max(0, depth),
              by: depth === c.label ? 'asked' : depth === inside ? 'inside' : 'height' };
@@ -6631,7 +6639,7 @@ function noteOnShelf(c, iw, id, H, footAt) {
   };
   const y0 = id - depth + S.front, y1 = id - m;
   // the dividers as built: removable ones no more than fit (dividersBuilt)
-  const built = dividersBuilt(c);
+  if (!built) built = dividersBuilt(c);
   const xs = widest(-iw + m, iw - m, built.divX, iw), across = divided, ys = widest(y0, y1, built.divY, id);
   const fitIn = (x, y) => NOTE_TEXT.noteFit(text, { x0: x[0], x1: x[1], y0: y[0], y1: y[1] });
   const prints = (f) => f.readable && f.cap > 0;
@@ -7954,10 +7962,9 @@ function shelfDepth(c, id, H) {
    it by, for the fixed dividers that come to its front, and for the audit. Its top is H,
    or a millimetre lower with a note raised on it, and its depth then the note's, on a
    short bin up to a millimetre less than shelfDepth's (noteOnShelf). `note` is
-   noteOnShelf's answer, null with no shelf. Whether the note fits depends on the dividers,
-   so how many removable plates along stay in front of the shelf is counted against
-   shelfDepth's (railedLimit), the deepest the shelf is built: they are in front of this
-   one either way. */
+   noteOnShelf's answer, null with no shelf. Removable plates along are counted to stand
+   in front of it (railedLimit): of the note's shelf where the note prints with them, and
+   otherwise of the plain one, the deepest it is built, so in front of this one either way. */
 function shelfBuilt(c, iw, id, H) {
   const plain = shelfDepth(c, id, H);
   if (!plain) return { depth: 0, top: H, note: null };
@@ -8022,8 +8029,11 @@ function shelfBuilt(c, iw, id, H) {
  * rails cannot be, so the last one stays in front of the shelf, slot and all. The plates
  * across pass through notches in the shelf instead, so the shelf limits only these.
  * With a note raised on it the shelf is a millimetre lower, and on a short bin up to a
- * millimetre shallower (shelfBuilt); whether the note fits depends on the dividers, so
- * the count keeps them in front of the shelf with nothing on it, the deepest it is built.
+ * millimetre shallower (shelfBuilt), and the plates along come up to that one: as many
+ * more as stand in front of it with the note still printing, where the dividers as built
+ * leave it room, which noteOnShelf is asked with the plates along being counted rather
+ * than dividersBuilt's, which would ask this. Where it would not print, the shelf is the
+ * plain one, and they stay in front of that, the deepest it is built.
  * Both only where there is a plate to go in: see printed below.
  */
 function railedLimit(cfg, axis) {
@@ -8065,8 +8075,21 @@ function railedLimit(cfg, axis) {
   if (full && lipNotched(c))
     while (most > 0 && last(most) + slot + 2 * BLOAT > inner + c.wall - LIP[0][1]) most--;
   const lip = most;
-  const shelf = axis === 'y' && full ? shelfDepth(c, hd, c.hUnits * SPEC.unitH) : 0;
-  if (shelf) while (most > 0 && last(most) + slot + BLOAT > hd - shelf) most--;
+  const H = c.hUnits * SPEC.unitH, shelf = axis === 'y' && full ? shelfDepth(c, hd, H) : 0;
+  // the most in front of a shelf `d` deep
+  const before = (d) => { let k = most; while (k > 0 && last(k) + slot + BLOAT > hd - d) k--; return k; };
+  if (shelf) {
+    const plain = before(shelf), raised = +c.labelMode === 1 ? noteShelfAt(c, hd, H, shelfFootAt(c)).depth : shelf;
+    /* With a note raised on it the shelf is built shallower on a short bin (shelfBuilt),
+       and the plates along come up to that one where the note still prints between them
+       and the plates across as built; more along only bring the last one nearer it. */
+    let k = raised < shelf - 1e-9 ? before(raised) : plain;
+    if (k > plain) {
+      const divX = Math.min(c.divX || 0, railedMost(c, 'x'));
+      while (k > plain && !noteOnShelf(c, hw, hd, H, shelfFootAt(c), { divX, divY: k }).fit) k--;
+    }
+    most = k;
+  }
   return { most, by: why || (most < lip ? 'shelf' : most < corners ? 'lip' : most < slots ? 'corners' : 'slots') };
 }
 const railedMost = (cfg, axis) => railedLimit(cfg, axis).most;
