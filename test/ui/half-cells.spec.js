@@ -925,16 +925,37 @@ test('a press lost to a drawer size says why in a line a phone has room for, unt
    drawer under 7 columns, and in a 7-column one wherever the window brings the map to its
    40 px cells. Now the card is as wide as the whole title and the switch need. Checked
    at the window sizes it was cut at, from a first visit's drawer, a deep 7-column one and
-   a narrow one, in this machine's font and in the wider DejaVu Sans. */
+   a narrow one, in this machine's font, in the wider DejaVu Sans and in Liberation Sans,
+   which has Arial's widths. Each of those two only where it is not the font this machine
+   draws the page in already, as DejaVu Sans is on many Linux machines: there the pass in
+   it was the first pass again, and only one font was tried. */
 test('the map card\'s title is whole beside the Steps switch, whatever the drawer and window', async ({ page }) => {
   test.setTimeout(120000);
   const sizes = [[1281, 680], [1366, 600], [1366, 657], [1366, 700], [1366, 768], [1536, 730], [1920, 1080]];
+  // the title's width in a font, as the heading draws it: null is this machine's own
+  const titleIn = (font) => page.evaluate((f) => {
+    const h3 = document.querySelector('#s-layout h3'), cs = getComputedStyle(h3);
+    const s = document.createElement('span');
+    s.textContent = h3.textContent;
+    Object.assign(s.style, { position: 'absolute', whiteSpace: 'nowrap', fontSize: cs.fontSize,
+      fontWeight: cs.fontWeight, letterSpacing: cs.letterSpacing, textTransform: cs.textTransform,
+      fontFamily: f ? `'${f}'` : cs.fontFamily });
+    document.body.appendChild(s);
+    const w = s.getBoundingClientRect().width;
+    s.remove();
+    return w;
+  }, font);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openAt(page, '');
+  const own = await titleIn(null), fonts = [null];
+  for (const f of ['DejaVu Sans', 'Liberation Sans']) if (Math.abs(await titleIn(f) - own) > 0.01) fonts.push(f);
+  expect(fonts.length, 'a font this machine does not draw the page in').toBeGreaterThan(1);
   for (const [drawer, hash, barInView] of [['the first visit\'s drawer', '', true],
                                           ['a deep 7-column drawer', 'w=306&d=600', false],
                                           ['a 150 mm drawer', 'w=150&d=380', true]]) {
     await page.setViewportSize({ width: 1366, height: 768 });
     await openAt(page, hash);
-    for (const font of [null, 'DejaVu Sans']) {
+    for (const font of fonts) {
       if (font) await page.evaluate((f) => { document.documentElement.style.setProperty('--sans', `'${f}'`); }, font);
       for (const [w, h] of sizes) {
         await page.setViewportSize({ width: w, height: h });
