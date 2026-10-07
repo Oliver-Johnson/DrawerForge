@@ -8,7 +8,7 @@ const path = require('path');
 const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
-        unpackBin, binFeet, dividersBuilt, shelfNote, NOTE_CLEAR, insertPlan,
+        unpackBin, binFeet, dividersBuilt, shelfNote, NOTE_CLEAR, insertPlan, HOLES_MAX,
         fingerSlotPlan } = require('../src/bins/bin.js');
 const NOTE_TEXT = require('../src/bins/text.js');
 const HERSHEY = require('../src/bins/font.js');
@@ -2341,6 +2341,22 @@ function weldOpen(polys, tol) {
   console.log(`  ${'bins with no holes'.padEnd(20)} ` + (moved.length ? 'FAILED: ' + moved.join('; ')
     : `${SAME.length} kinds, each the same STL to the byte, and the page told why`));
   if (moved.length) bad++;
+
+  /* The most holes one bin is built with, at the boundary: exactly HOLES_MAX are laid
+     out, and one more is refused ('many'), where the row above only tries 2392. Asked of
+     insertPlan alone: the 2000 AAA holes are 1.07 million triangles to build. */
+  const EDGE = [
+    ['AAA on an 11.5x14.5, 40 x 50', { u: 11.5, v: 14.5, hUnits: 6, insert: 2, holeClr: -0.3 }, '', HOLES_MAX],
+    ['hex bits on a 4.5x18, 5 mm walls', { u: 4.5, v: 18, hUnits: 6, wall: 5, insert: 4, holeClr: -0.3 },
+     'many', HOLES_MAX + 1],
+  ];
+  const off = EDGE.map(([name, cfg, why, n]) => {
+    const h = insertPlan(cfg), got = why ? h.count : h.n;
+    return h.why === why && got === n ? '' : `${name}: ${h.why || 'built'}, ${got} holes`;
+  }).filter(Boolean);
+  console.log(`  ${'the most holes'.padEnd(20)} ` + (off.length ? 'WRONG: ' + off.join('; ')
+    : `${HOLES_MAX} laid out, ${HOLES_MAX + 1} refused`));
+  if (off.length) bad++;
 
   /* Links from before holes, built by the engine before them: the same bytes. A shelf, a
      raised note and the dividers and scoop are what the holes' code goes past on its way,
