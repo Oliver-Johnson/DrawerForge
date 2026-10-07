@@ -279,12 +279,14 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   lists of the wall's straights, so the outer and inner rings still pair index for index,
   and the top of the wall is lowered at those points after `edgeHeights` has set it. The
   profile's sides are 70 degrees, under the 75 the audit holds every wall's top edge to.
-  A slot takes the lip as a lowered wall does. A slot on the back takes the label shelf's
+  A slot takes the lip as a lowered wall does. There is one per compartment, between the
+  dividers as built (`dividersBuilt`, none on a bin with holes), clear of a removable
+  one's rails and the gap between them. A slot on the back takes the label shelf's
   place. A slot on the front holds the scoop under its bottom. Holes across the floor are
-  laid out as if there were no slots, and the slots stop over their block, so nothing goes
-  round in a circle. A bin with no slots built gets the same split lists it always had, so
-  it is byte for byte what it was. The audit reads every slot's bottom and sides off the
-  mesh.
+  laid out as if there were no slots (`floorPlan`, with the shelf as asked), and the slots
+  stop over their block, so nothing goes round in a circle. A bin with no slots built
+  gets the same split lists it always had, so it is byte for byte what it was. The audit
+  reads every slot's bottom and sides off the mesh.
 - Every rounded square in a bin shares the corner-arc centre **17.00 mm**
   (`41.5/2 − 3.75`). That constant is what makes clearance uniform around the perimeter
   instead of binding at the corners. See [socket-clearance.md](socket-clearance.md) for
