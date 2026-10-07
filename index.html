@@ -2586,16 +2586,17 @@ function keyHalf(type, edge, e, s, prm, grow) {
      * regions meet — and both regions cut this same cutter, so both carry the apex and
      * the vertical edge either side of it: one edge used four times per site, 14 per
      * plate on every floor-mounted puzzle key and 7 on a wall-mounted one. It is the
-     * defect ENGINE.md quarantines for the puzzle NOTCH at arcSegs 6, and the rule stated
-     * there applies here too — a cutter straddling a region boundary must cross it with a
-     * face, not a vertex.
+     * defect ENGINE.md records for the puzzle NOTCH, and the rule stated there applies
+     * here too — a cutter straddling a region boundary must cross it with a face, not a
+     * vertex.
      *
-     * There it is quarantined because every fix costs joint geometry. Here it costs
-     * nothing, because the arc is inflated to put the missing depth back (below). 19
-     * segments rather than the smallest odd number that would do: the count decides where
-     * this cutter's facets cross the socket's, and 17 leaves 56 sliver folds in the
-     * top-inserted wall cup at the shipped smoothness where 19 leaves none. Measured over
-     * 17/19/21/25/33 at arcSegs 6 and 12, on all four mount-and-insert combinations.
+     * The notch keeps its pole, because it mates with a printed tab and reshaping it costs
+     * joint geometry; buildPiece starts the region past the pole beyond it instead. Here
+     * reshaping costs nothing, because the arc is inflated to put the missing depth back
+     * (below). 19 segments rather than the smallest odd number that would do: the count
+     * decides where this cutter's facets cross the socket's, and 17 leaves 56 sliver folds
+     * in the top-inserted wall cup at the shipped smoothness where 19 leaves none. Measured
+     * over 17/19/21/25/33 at arcSegs 6 and 12, on all four mount-and-insert combinations.
      *
      * Nothing measured any of this before, because the audit's puzzlekey cases were
      * building a bowtie: keyType and connector are separate fields and only the page ever
@@ -3013,6 +3014,52 @@ function triangulateRing(outer, inner) {
   return { pts, tris };
 }
 
+/* The region's outline with every point the strip's edges need: where a side of `open`
+   crosses it, and a corner of `open` it passes within `tol` of. A vertex within `tol` of a
+   side is moved onto it, so no two points of this shell are closer than the edge-matching
+   tolerance anyone reading the mesh uses (1e-3 in checkManifold). It moves the outline
+   by no more than that, inside this shell only: the margin's region beside the strip
+   starts at least a hundredth past the strip's side (clearCut), so it has none of the
+   vertices moved. */
+function openSplit(loop, open, tol) {
+  let C = loop.map((p) => [p[0], p[1]]);
+  const corners = [];
+  for (const x of [open[0], open[2]]) for (const y of [open[1], open[3]])
+    if (isFinite(x) && isFinite(y)) corners.push([x, y]);
+  for (const q of corners) {
+    for (let i = 0; i < C.length; i++) {
+      const a = C[i], b = C[(i + 1) % C.length];
+      const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx*dx + dy*dy;
+      const s = l2 ? Math.max(0, Math.min(1, ((q[0]-a[0])*dx + (q[1]-a[1])*dy) / l2)) : 0;
+      if (Math.hypot(a[0] + s*dx - q[0], a[1] + s*dy - q[1]) > tol) continue;
+      if (Math.hypot(a[0] - q[0], a[1] - q[1]) <= tol) C[i] = q.slice();
+      else if (Math.hypot(b[0] - q[0], b[1] - q[1]) <= tol) C[(i + 1) % C.length] = q.slice();
+      else C.splice(i + 1, 0, q.slice());
+      break;
+    }
+  }
+  const lines = [[0, open[0]], [1, open[1]], [0, open[2]], [1, open[3]]].filter(([, c]) => isFinite(c));
+  for (const [k, c] of lines) for (const p of C) if (Math.abs(p[k] - c) <= tol) p[k] = c;
+  for (const [k, c] of lines) {
+    const out = [];
+    for (let i = 0; i < C.length; i++) {
+      const a = C[i], b = C[(i + 1) % C.length];
+      out.push(a);
+      if ((a[k] - c) * (b[k] - c) < 0) {
+        const p = [0, 0];
+        p[k] = c;
+        p[1-k] = a[1-k] + (c - a[k]) / (b[k] - a[k]) * (b[1-k] - a[1-k]);
+        out.push(p);
+      }
+    }
+    C = out;
+  }
+  return C.filter((p, i) => {
+    const q = C[(i + 1) % C.length];
+    return p[0] !== q[0] || p[1] !== q[1];
+  });
+}
+
 // direct watertight mesh for a cell region (no CSG); supports closed floor (pad>0)
 /* Skeleton cell region — a lighter alternative to directCellRegion.
  *
@@ -3026,9 +3073,57 @@ function triangulateRing(outer, inner) {
  * socket profile, and the bulk between that shell and the cell boundary simply is not
  * built. One closed shell, so there are no overlapping or coplanar caps to confuse a
  * slicer.
+ *
+ * `open`, when given, is [x0, y0, x1, y1]: the bulk is left out only inside it, and the
+ * rest of the region is solid all the way down. buildPiece passes it for a cell whose
+ * region has grown over part of a margin (see clearCut there), so the plastic below z 2.5
+ * stays where the margin had it. ±Infinity on a side that has no such strip.
  */
-function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin) {
+function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin, open) {
   const polys = [];
+  /* With `open`, the bulk is left out of `under`, the part of the region inside it, rather
+     than the whole region, and the outline gains the points the solid strip's edges need. */
+  let under = clipped, clip = null;
+  const nicks = [];
+  const inOpen = (p) => !open || (p[0] >= open[0] - 1e-9 && p[0] <= open[2] + 1e-9 &&
+                                  p[1] >= open[1] - 1e-9 && p[1] <= open[3] + 1e-9);
+  if (open) {
+    clipped = openSplit(clipped, open, 1e-3);
+    // every point clipToRect works out again is one already there: the outline's, or a
+    // corner of `open`, and it is given back exactly so the edges match
+    const known = clipped.concat([[open[0], open[1]], [open[2], open[1]],
+                                  [open[2], open[3]], [open[0], open[3]]]);
+    clip = (x0, y0, x1, y1) => {
+      const c = clipToRect(clipped, x0, y0, x1, y1);
+      return c && c.map((p) => known.find((q) => Math.abs(q[0] - p[0]) < 1e-7 &&
+                                                 Math.abs(q[1] - p[1]) < 1e-7) || p);
+    };
+    under = clip(open[0], open[1], open[2], open[3]);
+    /* Where the outline runs through a corner of `open` itself — 1.38 mm margins by a
+       4.88 mm corner put the arc through it — `under` meets the outline at that one point
+       and the strip either side is pinched to nothing there: one edge with four faces on
+       it. So that corner of the bulk left out is cut off NICK inside, which leaves
+       0.0005 mm² of plastic the margin never had, and the strip goes round it. */
+    if (under) {
+      const onOutline = new Set(clipped.map((p) => `${p}`));
+      const outlineEdge = new Set(clipped.map((p, i) => `${p}|${clipped[(i + 1) % clipped.length]}`));
+      const NICK = 0.03, nicked = [];
+      for (let i = 0; i < under.length; i++) {
+        const p = under[(i + under.length - 1) % under.length], q = under[i];
+        const r = under[(i + 1) % under.length];
+        const along = (s) => (s[0] === q[0] || s[1] === q[1]) &&
+                             Math.hypot(s[0] - q[0], s[1] - q[1]) > 2 * NICK;
+        if (onOutline.has(`${q}`) && !outlineEdge.has(`${p}|${q}`) && !outlineEdge.has(`${q}|${r}`) &&
+            along(p) && along(r)) {
+          const toward = (s) => [q[0] + Math.sign(s[0] - q[0]) * NICK, q[1] + Math.sign(s[1] - q[1]) * NICK];
+          const a = toward(p), b = toward(r);
+          nicked.push(a, b);
+          nicks.push([a, q, b]);
+        } else nicked.push(q);
+      }
+      under = nicked;
+    }
+  }
   const zs = prof.zs.slice(1, 5), ds = prof.ds.slice(1, 5);
   const ringAt = (i, off) => {
     const d = ds[i];
@@ -3062,14 +3157,59 @@ function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin) {
   const annulus = (outerLoop, innerLoop, z, up) =>
     polys.push(...annulusStrip(outerLoop, innerLoop, cx, cy, z, up));
   annulus(shell[0], inner[0], zs[0], false);            // underside of the shell
-  annulus(clipped, shell[2], zs[2], false);             // underside of the solid band
-  for (let i = 0; i < clipped.length; i++) {            // outer wall of the solid band
-    const j = (i + 1) % clipped.length;
-    const p = makePoly([[clipped[i][0], clipped[i][1], zs[2]], [clipped[j][0], clipped[j][1], zs[2]],
-                        [clipped[j][0], clipped[j][1], H], [clipped[i][0], clipped[i][1], H]]);
+  annulus(under, shell[2], zs[2], false);               // underside of the solid band
+  const wall = (a, b, z0, z1) => {
+    const p = makePoly([[a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], z1], [a[0], a[1], z1]]);
     if (p) polys.push(p);
+  };
+  const edges = new Set();
+  for (let i = 0; i < clipped.length; i++) {            // outer wall of the solid band
+    const a = clipped[i], b = clipped[(i + 1) % clipped.length];
+    wall(a, b, zs[2], H);
+    edges.add(`${a}|${b}`);
+    // and on down to the bed where the strip is
+    if (!inOpen([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])) wall(a, b, 0, zs[2]);
   }
   annulus(clipped, inner[3].map((v) => [v[0], v[1]]), H, true);   // the rim
+  if (!open) return polys;
+  // the strip's inner side, facing the bulk that is left out
+  for (let i = 0; i < under.length; i++) {
+    const a = under[i], b = under[(i + 1) % under.length];
+    if (!edges.has(`${a}|${b}`)) wall(b, a, 0, zs[2]);
+  }
+  /* Its underside, in convex pieces either side of the open rectangle and a triangle at
+     each nick, each piece given the points of the pieces beside it that fall along one
+     of its edges — the open rectangle's corners, the ends of a nick — so their edges
+     meet point for point. */
+  const [ox0, oy0, ox1, oy1] = open;
+  const pieces = nicks.slice();
+  if (isFinite(ox0)) pieces.push(clip(-Infinity, -Infinity, ox0, Infinity));
+  if (isFinite(ox1)) pieces.push(clip(ox1, -Infinity, Infinity, Infinity));
+  if (isFinite(oy0)) pieces.push(clip(ox0, -Infinity, ox1, oy0));
+  if (isFinite(oy1)) pieces.push(clip(ox0, oy1, ox1, Infinity));
+  const ends = [[ox0, oy0], [ox0, oy1], [ox1, oy0], [ox1, oy1]]
+    .filter(([x, y]) => isFinite(x) && isFinite(y))
+    .concat(...nicks.map(([a, , b]) => [a, b]));
+  for (const piece of pieces) {
+    if (!piece) continue;
+    let pts = piece;
+    for (const s of ends) {
+      const k = pts.findIndex((p, i) => {
+        const q = pts[(i + 1) % pts.length];
+        return (p[0] === s[0] && q[0] === s[0] && Math.min(p[1], q[1]) < s[1] - 1e-9 &&
+                Math.max(p[1], q[1]) > s[1] + 1e-9) ||
+               (p[1] === s[1] && q[1] === s[1] && Math.min(p[0], q[0]) < s[0] - 1e-9 &&
+                Math.max(p[0], q[0]) > s[0] + 1e-9);
+      });
+      if (k >= 0) pts = pts.slice(0, k + 1).concat([s], pts.slice(k + 1));
+    }
+    const { pts: P, tris } = earTriangulate(pts);
+    for (const t of tris) {
+      const p = makePoly([[P[t[2]][0], P[t[2]][1], 0], [P[t[1]][0], P[t[1]][1], 0],
+                          [P[t[0]][0], P[t[0]][1], 0]]);
+      if (p) polys.push(p);
+    }
+  }
   return polys;
 }
 
@@ -3371,9 +3511,10 @@ function offJunction(bo, pitch, piece) {
   const off = (v) => Math.abs(v / pitch - Math.round(v / pitch)) > 0.25;
   return off(bo.s) && off(bo.s - g0);
 }
-/* The pieces in which two key housings would meet, as [{ id, needs }]: `needs` is how
- * deep the piece would have to be, in mm, for the pair that comes closest to stand a
- * BLOAT apart — which for a piece one cell deep is the pitch it needs.
+/* The pieces in which two key housings would meet, as [{ id, needs, across }]: `needs` is
+ * how deep the piece would have to be, in mm, for the pair that comes closest to stand a
+ * BLOAT apart — which for a piece one cell deep is the pitch it needs — and `across` says
+ * which way: 'deep' for keys in its front and back seams, 'wide' for its left and right.
  *
  * A piece one cell deep with a seam on each side takes a key from each, at the same place
  * along the two seams wherever the cuts line up, which is always for a midpoint. Each key's
@@ -3389,40 +3530,72 @@ function offJunction(bo, pitch, piece) {
  * be wrong, which is why this refuses rather than repairs. The key is 14 mm long, so
  * below 14 mm the two keys themselves overlap and the second will not go in, and from 14
  * up to where the housings clear they would share one slot, tip to tip. The page puts
- * this in Checks, where a moved cut or a larger pitch clears it; nothing here can.
+ * this in Checks, where a moved cut, a larger pitch or another joint clears it; nothing
+ * here can.
  *
  * Measured off the solids keySiteOps cuts, so it is the same housing buildPiece makes,
- * with the same sites: pieceConnectors' list less any a wall junction rules out. */
+ * with the same sites: pieceConnectors' list less any a wall junction rules out. Two keys
+ * on one seam are a pitch apart along it, and a key in a side seam sits a whole cell in
+ * from the corner, so only facing keys come this close: at a pitch that leaves room for
+ * two housings' reach and a BLOAT, nothing can meet and there is nothing to measure. The
+ * page asks on every redraw, and at 42 mm that is one housing rather than one per site. */
 function keysMeet(cfg, layout) {
   if (!['bowtie', 'puzzlekey', 'snap', 'hclip'].includes(cfg.connector)) return [];
   const plan = keyPlan(cfg), H = platePad(cfg) + cfg.plateHeight;
   const APART = 0.05;   // buildPiece's BLOAT
+  const box = (bo) => {
+    const b = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const p of keySiteOps(plan.kind, plan.shape, plan.prm, plan.clr, bo.edge, bo.e, bo.s, H).cut)
+      for (const v of p.verts) {
+        b[0] = Math.min(b[0], v[0]); b[1] = Math.min(b[1], v[1]);
+        b[2] = Math.max(b[2], v[0]); b[3] = Math.max(b[3], v[1]);
+      }
+    return b;
+  };
+  // how far a housing reaches into the piece from the seam it is cut from
+  if (cfg.pitch >= 2 * box({ edge: '-y', e: 0, s: 0 })[3] + APART - 1e-9) return [];
   const out = [];
   for (const piece of layout.pieces) {
     const hs = [];
     for (const bo of pieceConnectors(cfg, layout, piece).keyed) {
       if (plan.junction && offJunction(bo, cfg.pitch, piece)) continue;
-      const b = [Infinity, Infinity, -Infinity, -Infinity];
-      for (const p of keySiteOps(plan.kind, plan.shape, plan.prm, plan.clr, bo.edge, bo.e, bo.s, H).cut)
-        for (const v of p.verts) {
-          b[0] = Math.min(b[0], v[0]); b[1] = Math.min(b[1], v[1]);
-          b[2] = Math.max(b[2], v[0]); b[3] = Math.max(b[3], v[1]);
-        }
-      // how far it reaches into the piece from the seam it is cut from
+      const b = box(bo);
       const reach = bo.edge === '-x' ? b[2] - bo.e : bo.edge === '+x' ? bo.e - b[0]
                   : bo.edge === '-y' ? b[3] - bo.e : bo.e - b[1];
-      hs.push({ b, reach });
+      hs.push({ b, reach, across: bo.edge === '-y' || bo.edge === '+y' ? 'deep' : 'wide' });
     }
-    let needs = 0;
+    let needs = 0, across = null;
     for (let i = 0; i < hs.length; i++) for (let j = i + 1; j < hs.length; j++) {
       const a = hs[i].b, c = hs[j].b;
       const near = (lo, hi) => lo < hi + APART - 1e-9;
-      if (near(a[0], c[2]) && near(c[0], a[2]) && near(a[1], c[3]) && near(c[1], a[3]))
-        needs = Math.max(needs, hs[i].reach + hs[j].reach + APART);
+      if (near(a[0], c[2]) && near(c[0], a[2]) && near(a[1], c[3]) && near(c[1], a[3]) &&
+          hs[i].reach + hs[j].reach + APART > needs) {
+        needs = hs[i].reach + hs[j].reach + APART;
+        across = hs[i].across;
+      }
     }
-    if (needs) out.push({ id: piece.id, needs });
+    if (needs) out.push({ id: piece.id, needs, across });
   }
   return out;
+}
+/* Joints that would fit where keysMeet refuses, as [{ id, over }], `over` being the
+   settings that make it: the two tabs, which have no housing to meet; the H-clip; a snap
+   clip put in from above; and the same key housed in the wall and put in from beneath,
+   whose slim key reaches 6.6 mm. Each is put to keysMeet on the design as it stands, so
+   one is only named where it is clear, and test/plate-audit.js builds every one named on
+   every design it refuses: all five come out watertight at 13.5 mm. */
+const KEY_ALTERNATIVES = [
+  ['dovetail', { connector: 'dovetail' }],
+  ['puzzle', { connector: 'puzzle' }],
+  ['hclip', { connector: 'hclip' }],
+  ['snap top', { connector: 'snap', keyType: 'snap', keyInsert: 'top' }],
+  ['wall', { keyMount: 'wall', keyInsert: 'bottom' }],
+];
+function jointsThatFit(cfg, layout) {
+  const keyed = ['bowtie', 'puzzlekey', 'snap'].includes(cfg.connector);
+  return KEY_ALTERNATIVES.filter(([id, over]) => (id !== 'wall' || keyed) &&
+      keysMeet(Object.assign({}, cfg, over), layout).length === 0)
+    .map(([id, over]) => ({ id, over }));
 }
 
 /* Region-decomposed build: no global CSG. Each piece = margin/corner regions (plain
@@ -3553,23 +3726,69 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * crosses the arc, each region's clip lands a BLOAT clear of the arc's vertices too
    * rather than a hair from one. It is also what a margin past a strip of half cells was
    * already held to, and that margin is cut the same way now. Cuts between cells never
-   * come near the outline's vertices: the arc is never wider than half a cell. */
-  const CLEAR = 2 * BLOAT;
+   * come near the outline's vertices: the arc is never wider than half a cell.
+   *
+   * Two BLOATs clear is not two BLOATs moved. Beside a square corner the only vertex is
+   * the corner itself, on the plate's edge, so no cut moves and a margin up to 0.1 mm
+   * joins. Beside a rounded one the cut steps past each arc vertex within two BLOATs, the
+   * next can be within two BLOATs of where it lands, and it goes on until there is a gap
+   * (and past the crossings below): over margins of 0 to 3 mm, in any mix on the four
+   * sides, beside every corner from 0 to 6 mm by 0.01, a cut that stays moved up to
+   * 0.72 mm, and 0.19 where the margin is the same all round. Under a 1.22 mm corner the
+   * arc's vertices are that close all the way along, so the cut runs off the plate and
+   * every margin up to about the radius plus 0.09 joins its cells, 1.3 mm by a 1.21 mm
+   * corner; beside larger corners up to 1.13 mm can join, and up to 0.62 mm by a corner
+   * of 4 mm or more. The plate is the same plate whichever region builds it (and see
+   * wasL below for a skeleton cell).
+   *
+   * A vertex less than a hundredth inside two BLOATs is left where it is rather than
+   * stepped past. Clearing it would move the cut a hair, and a skeleton cell beside a
+   * moved cut keeps the strip it gained solid out to where the margin was cut before
+   * (wasL below): that strip's side and the margin region's would be a hair apart, two
+   * shells' faces closer than the mesh's own tolerance tells apart — 0.0005 mm on a
+   * skeleton plate with 0.42 mm margins by a 6 mm corner, four edges each used four
+   * times. So a cut that moves, moves at least a hundredth, and the vertex it leaves is
+   * still four hundredths outside the band. The plate's edge is held to the full two. */
+  const CLEAR = 2 * BLOAT, HAIR = 0.01;
   const clearCut = (c, edge, vs) => {
     const toward = edge < c ? -1 : 1;
-    vs = vs.concat(edge);
     for (;;) {
-      const hit = vs.filter((v) => Math.abs(v - c) <= CLEAR + 1e-9);
+      if (Math.abs(edge - c) <= CLEAR + 1e-9) return null;
+      const hit = vs.filter((v) => Math.abs(v - c) < CLEAR - HAIR);
       if (!hit.length) return c;
       c = toward < 0 ? Math.min(...hit) - CLEAR - 1e-6 : Math.max(...hit) + CLEAR + 1e-6;
       if (toward < 0 ? c <= edge : c >= edge) return null;
     }
   };
-  const outX = outline.map((p) => p[0]), outY = outline.map((p) => p[1]);
-  const cutL = clearCut(piece.mL, 0, outX), cutF = clearCut(piece.mF, 0, outY);
   // the last cell's far side, a strip of half cells' when there is one
-  const cutR = clearCut(hxR ? gx0 + piece.nx*pitch + half : gx0 + piece.nx*pitch, W, outX);
-  const cutB = clearCut(hyB ? gy0 + piece.ny*pitch + half : gy0 + piece.ny*pitch, D, outY);
+  const lastX = gx0 + piece.nx*pitch + (hxR ? half : 0);
+  const lastY = gy0 + piece.ny*pitch + (hyB ? half : 0);
+  const outX = outline.map((p) => p[0]), outY = outline.map((p) => p[1]);
+  let cutL = clearCut(piece.mL, 0, outX), cutF = clearCut(piece.mF, 0, outY);
+  let cutR = clearCut(lastX, W, outX), cutB = clearCut(lastY, D, outY);
+  /* A region's corners are points of the outline too. Where the arc crosses a clip line of
+     the other axis — a BLOAT either side of a cut — every region along that line has the
+     same crossing point, so it is held clear of the band like a vertex. The two axes
+     depend on each other, so this goes round until neither moves; a cut only ever moves
+     out, so it settles. 0.75 mm margins by a 4.88 mm corner put a crossing in both. */
+  const crossings = (k, at) => {
+    const out = [];
+    for (let i = 0; i < outline.length; i++) {
+      const a = outline[i], b = outline[(i + 1) % outline.length];
+      if ((a[k] - at) * (b[k] - at) < 0)
+        out.push(a[1-k] + (at - a[k]) / (b[k] - a[k]) * (b[1-k] - a[1-k]));
+    }
+    return out;
+  };
+  const clipLines = (...cs) => cs.filter((c) => c !== null).flatMap((c) => [c - BLOAT, c + BLOAT]);
+  for (let pass = 0; pass < 20; pass++) {
+    const xv = outX.concat(...clipLines(cutF, cutB).map((y) => crossings(1, y)));
+    const yv = outY.concat(...clipLines(cutL, cutR).map((x) => crossings(0, x)));
+    const next = [cutL === null ? null : clearCut(cutL, 0, xv), cutF === null ? null : clearCut(cutF, 0, yv),
+                  cutR === null ? null : clearCut(cutR, W, xv), cutB === null ? null : clearCut(cutB, D, yv)];
+    if (next[0] === cutL && next[1] === cutF && next[2] === cutR && next[3] === cutB) break;
+    [cutL, cutF, cutR, cutB] = next;
+  }
   const xs = [0]; if (cutL !== null) xs.push(cutL);
   for (let i = 1; i <= piece.nx; i++) xs.push(gx0 + i*pitch);
   if (hxR) xs.push(gx0 + piece.nx*pitch + half);
@@ -3580,6 +3799,16 @@ function buildPiece(cfg, layout, piece, onStatus) {
   if (cutB !== null) { ys[ys.length-1] = cutB; ys.push(D); } else ys[ys.length-1] = D;
   const cellXi = cutL !== null ? 1 : 0;           // index offset of first cell column
   const cellYi = cutF !== null ? 1 : 0;
+  /* Where each margin was cut before its cut could move, or null where it joined its
+     cells then too: under 0.01 mm, or 0.1 past a strip of half cells. A skeleton cell is
+     hollow below z 2.5 out to the edge of its region, so the region growing over a margin
+     would hollow the margin with it, and the plate's footprint on the bed changed — a
+     1 mm margin by a 1 mm corner lost its whole solid border. So a cell beside a moved cut
+     is still judged whole or not on the region it had, and hollowed only that far:
+     skeletonCellRegion builds the rest of it solid to the bed, as the margin was. */
+  const wasL = piece.mL > 0.01 ? piece.mL : null, wasF = piece.mF > 0.01 ? piece.mF : null;
+  const wasR = (hxR ? piece.mR - half > 0.1 : piece.mR > 0.01) ? lastX : null;
+  const wasB = (hyB ? piece.mB - half > 0.1 : piece.mB > 0.01) ? lastY : null;
 
   /* Shells, kept apart rather than poured into one soup, because the top-insert pass
      below has to subtract from each one on its own — a subtraction is only defined
@@ -3589,8 +3818,25 @@ function buildPiece(cfg, layout, piece, onStatus) {
   let done = 0;
   for (let ix = 0; ix < xs.length-1; ix++) {
     for (let iy = 0; iy < ys.length-1; iy++) {
-      const x0 = Math.max(0, xs[ix] - BLOAT), x1 = Math.min(W, xs[ix+1] + BLOAT);
-      const y0 = Math.max(0, ys[iy] - BLOAT), y1 = Math.min(D, ys[iy+1] + BLOAT);
+      let x0 = Math.max(0, xs[ix] - BLOAT), x1 = Math.min(W, xs[ix+1] + BLOAT);
+      let y0 = Math.max(0, ys[iy] - BLOAT), y1 = Math.min(D, ys[iy+1] + BLOAT);
+      /* A puzzle notch's lobe points straight in from a cell junction, so its far pole is
+         a vertex on the line between two cells, inside the band where their regions
+         overlap. Both regions cut the notch, so both carried the pole and the edge up
+         through it: one edge used four times per notch, or two edges twice each wherever
+         the two cuts happened to split it at different heights, which is the same defect
+         reading clean. Any change to either region's outline could turn one into the
+         other. So the region past the pole starts half a BLOAT beyond it rather than a
+         BLOAT short, and the pole is in one region only. The overlap is still there, from
+         the region's new edge to its neighbour's, and the notch is the same notch. */
+      for (const pn of pnotches) {
+        const reach = cfg.puzzle.neckL + cfg.puzzle.lobeR * 1.6 + 1;
+        if (pn.edge === '-y' || pn.edge === '+y') {
+          if (ix > 0 && Math.abs(pn.s - xs[ix]) < 1e-6 &&
+              (pn.edge === '-y' ? y0 < reach : y1 > D - reach)) x0 = xs[ix] + BLOAT/2;
+        } else if (iy > 0 && Math.abs(pn.s - ys[iy]) < 1e-6 &&
+                   (pn.edge === '-x' ? x0 < reach : x1 > W - reach)) y0 = ys[iy] + BLOAT/2;
+      }
       const clipped = clipToRect(outline, x0, y0, x1, y1);
       if (!clipped) continue;
       const ci = ix - cellXi, cj = iy - cellYi;
@@ -3618,14 +3864,26 @@ function buildPiece(cfg, layout, piece, onStatus) {
       // cells are built bloated by BLOAT per side, so a whole one measures (pitch+0.1)^2;
       // anything the piece boundary has cut into measures less than pitch^2 — and so does
       // a half cell, which stays solid: skeletonCellRegion's rings are square
-      const fullCell = Math.abs(polyArea2D(clipped)) >= pitch * pitch - 0.5;
+      const movedL = ci === 0 && wasL !== null && cutL !== wasL;
+      const movedF = cj === 0 && wasF !== null && cutF !== wasF;
+      const movedR = ci === piece.nx + hxR - 1 && wasR !== null && cutR !== wasR;
+      const movedB = cj === piece.ny + hyB - 1 && wasB !== null && cutB !== wasB;
+      const moved = movedL || movedF || movedR || movedB;
+      const asWas = !moved ? clipped : clipToRect(outline,
+        movedL ? Math.max(0, wasL - BLOAT) : x0, movedF ? Math.max(0, wasF - BLOAT) : y0,
+        movedR ? Math.min(W, wasR + BLOAT) : x1, movedB ? Math.min(D, wasB + BLOAT) : y1);
+      const fullCell = !!asWas && Math.abs(polyArea2D(asWas)) >= pitch * pitch - 0.5;
       const onEdge = ci === 0 || cj === 0 || ci === piece.nx - 1 || cj === piece.ny - 1;
       const jointed = cfg.connector && cfg.connector !== 'none';
       const skel = cfg.plateStyle === 'skeleton' && pad <= 0.01 && fullCell
                    && !cfg.magnets && !cfg.screws && !(jointed && onEdge);
+      // hollow only where the margin's solid ended: a BLOAT past where it was cut
+      const open = moved ? [movedL ? wasL + BLOAT : -Infinity, movedF ? wasF + BLOAT : -Infinity,
+                            movedR ? wasR - BLOAT : Infinity, movedB ? wasB - BLOAT : Infinity]
+                         : undefined;
       let region = skel
         ? skeletonCellRegion(clipped, prof, cx, cy, H, cfg.arcSegs || 6,
-                             Math.max(0.4, cfg.skin || 0.8))
+                             Math.max(0.4, cfg.skin || 0.8), open)
         : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6,
                            halfX || halfY ? [halfX ? half/2 : half, halfY ? half/2 : half] : undefined);
       /* Small convex cutters local to this cell, batched by feature and subtracted one
@@ -4246,7 +4504,7 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, keysMeet, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, keysMeet, jointsThatFit, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
@@ -6179,22 +6437,37 @@ function warningsList() {
   if (!heightFits())
     out.push({ err: true, t: `The plate is ${roundMm(plateHeightMm())} mm tall, more than ` +
       `your printer's ${state.bedH} mm build height — lower the extra floor, or check the bed height.` });
-  /* A key on each side of a piece one cell across, facing each other. Their housings run
-     into each other below about 14.35 mm and the plate leaks; keysMeet in core.js has the
-     measurements and why this is refused rather than built. Only a moved cut or a larger
-     pitch clears it. Not on a grid past the caps above, which is refused already and
-     would be thousands of housings to measure on every redraw. */
+  /* A key on each side of a piece one cell deep (or wide), facing each other. Their
+     housings run into each other below about 14.35 mm and the plate leaks; keysMeet in
+     core.js has the measurements and why this is refused rather than built. A moved cut,
+     a larger pitch or another joint clears it, and the joints named are the ones
+     jointsThatFit finds clear on this layout — test/plate-audit.js builds each of them on
+     every design it refuses. Not on a grid past the caps above, which is refused already
+     and would be thousands of housings to measure on every redraw. */
   if (!overCap()) {
     const meet = keysMeet(state, layout);
     if (meet.length) {
       const ids = meet.map((m) => m.id), one = ids.length === 1;
       const needs = Math.ceil(Math.max(...meet.map((m) => m.needs)) * 100 - 1e-6) / 100;
-      const named = one ? `Piece ${ids[0]} is`
-        : `Pieces ${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]} are`;
-      out.push({ err: true, t: `${named} one cell across between two seams, and at this ` +
-        `${state.pitch} mm pitch the keys on ${one ? 'its' : 'their'} two sides are too close: ` +
-        'their housings run into each other, which leaves holes in the plate. Move a cut so ' +
-        `${one ? 'it is' : 'they are'} two cells across, or use a pitch of ${needs} mm or more.` });
+      const list = (xs) => xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
+      // deep where the two seams are front and back, wide where they are left and right
+      const dirs = [...new Set(meet.map((m) => m.across))];
+      const dir = dirs.length === 1 ? dirs[0] : null;
+      const named = one ? `Piece ${ids[0]}`
+        : `Pieces ${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]}`;
+      const is = dir ? `${named} ${one ? 'is' : 'are'} one cell ${dir}`
+        : `${named} ${one ? 'has' : 'have'} one cell`;
+      const keyName = { bowtie: 'bowtie keys', puzzlekey: 'puzzle keys', snap: 'snap clips' }[state.connector];
+      const JOINT = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', hclip: 'H-clips',
+                      'snap top': 'snap clips put in from above',
+                      wall: `${keyName} inside the walls, put in from beneath` };
+      const fit = jointsThatFit(state, layout).map((j) => JOINT[j.id]);
+      out.push({ err: true, t: `${is} between two seams, and at this ${state.pitch} mm pitch ` +
+        `the keys on ${one ? 'its' : 'their'} two sides are too close: their housings run into ` +
+        'each other, which leaves holes in the plate. Move a cut so ' +
+        (dir ? `${one ? 'it is' : 'they are'} two cells ${dir}` : `${one ? 'it has' : 'they have'} two`) +
+        `, use a pitch of ${needs} mm or more` +
+        (fit.length ? `, or use a joint that fits at ${state.pitch} mm: ${list(fit)}.` : '.') });
     }
   }
   if (layout.pieces.some(pc => pc.nx*pc.ny === 1 && !pc.hR && !pc.hB))
