@@ -56,16 +56,19 @@ test('the note raised: the menu gives the bin a shelf, and the bin becomes its o
   await expect(hint(page)).toBeVisible();
   expect(await lead(page)).toBe('Prints 4.5 mm tall on one line.');
 
-  const [key, name, top] = await page.evaluate(() => {
+  const [key, name, top, cap] = await page.evaluate(() => {
     const b = B()[0], H = b.hUnits * SPEC.unitH;
     // the highest point the build reaches well inside the lip's opening: the letters' tops
     let z = -Infinity;
     for (const p of geomFor(b).polys)
       for (const v of p.verts) if (Math.abs(v[0]) < 15 && Math.abs(v[1]) < 15) z = Math.max(z, v[2]);
-    return [typeKey(b), typeName(types()[0]), z - H];
+    return [typeKey(b), typeName(types()[0]), z - H, printedNote(b).fit.cap];
   });
   expect(key, 'a printed note is its own part').not.toBe(plain[0]);
-  expect(key, 'named by a hash of the note, never the note').toMatch(/-n[0-9a-f]{8}$/);
+  /* keyed on the lines as printed, written as character codes, and the letters' size:
+     never the note itself */
+  const codes = [...'M3 screws'].map((c) => c.codePointAt(0).toString(16).padStart(4, '0')).join('');
+  expect(key).toBe(plain[0] + '-L12-n' + codes + '.' + +cap.toFixed(6));
   expect(key).not.toMatch(/M3|screws/i);
   expect(name).toBe('bin-1x1x3-m3-screws-qty1');
   expect(top, 'the letters stop 0.4 mm under the rim').toBeCloseTo(-0.4, 6);
@@ -222,4 +225,23 @@ test('a shelf held by the inside\'s depth says so, not that a taller bin would d
   expect(await lead(page)).toBe("A shelf takes at most 80% of the inside's depth, 5.8 mm here, and letters need 6 mm, so nothing prints.");
   await expect(hint(page).locator('.moretext')).toHaveText(
     'A bin deeper from front to back, or with thinner walls, has room for a deeper shelf.');
+});
+
+/* Two notes are two parts. The key used to carry a 32-bit hash of the printed lines,
+   and these two hash alike: they came out one part, one bin printing the other's
+   letters, with one file between them. */
+test('two notes are two parts, even two a 32-bit hash cannot tell apart', async ({ page }) => {
+  for (const [x, text] of [[0, 'Kit 2wlfa'], [1, 'Kit zqdha']]) {
+    await H.dragCells(page, [x, 0], [x, 0]);
+    await raise(page);
+    await note(page, text);
+  }
+  const out = await page.evaluate(() => ({
+    hashes: B().map((b) => noteHash(b.note)),
+    lines: types().map((t) => printedNote(t.b).fit.lines.join(' / ')).sort(),
+    names: [...typeNames().values()].sort(),
+  }));
+  expect(out.hashes[0], 'the two notes this case is about hash alike').toBe(out.hashes[1]);
+  expect(out.lines).toEqual(['Kit 2wlfa', 'Kit zqdha']);
+  expect(out.names).toEqual(['bin-1x1x3-kit-2wlfa-qty1', 'bin-1x1x3-kit-zqdha-qty1']);
 });

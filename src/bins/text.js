@@ -340,10 +340,13 @@ function noteShells(G, segs, z0, z1) {
 
 /* ---------- names --------------------------------------------------------- */
 
-/* Eight hex digits that stand for the printed note wherever the note itself must not go:
-   in the part's key, which becomes the object name in a 3MF. FNV-1a, 32 bits: two
-   different notes in one drawer sharing a key would share a part, and at 32 bits that
-   is a chance in a few hundred million for a drawer of a hundred notes. */
+/* Eight hex digits (FNV-1a, 32 bits) that name a printed note in a file name when the
+   note has nothing noteSlug can spell. Only a name: two notes that hash alike still
+   download as two files, since typeNames numbers a clash apart. It is not what tells
+   one part from another. It was, in the part's key, and two notes sharing a key share a
+   part, so one bin printed the other's letters: in a drawer of a hundred notes that is
+   about one drawer in 868,000, not the chance in a few hundred million this said. The
+   key now carries the printed lines themselves (noteKey in ui.js). */
 function noteHash(text) {
   let h = 0x811c9dc5;
   const s = String(text);
