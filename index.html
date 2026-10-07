@@ -1849,7 +1849,11 @@ function healCsgSeams(polys) {
    * the sign of its normal without lying back to back with anything, and laying those out
    * again made pieces worse: a corner's fan stood triangles in the plane of an H-clip's
    * wall, where they folded against it; ears re-wound a sliver the weld had turned over,
-   * against its neighbours; a corner's diagonal was an edge another face already had. Nor
+   * against its neighbours; a corner's diagonal was an edge another face already had. Each
+   * face laid out differently here is cut again by whatever comes next, and laying out more
+   * of them, even soundly, still opened a hole downstream in one piece only the engine
+   * reaches. One that stands on edge and does fold, against the face beside it, is laid
+   * out on the finished piece instead, where nothing cuts it again (unfoldFinished). Nor
    * is the face's own average tried: where the plates come from the page it lays out
    * nothing a corner does not, and where only the engine reaches it traded folds for open
    * edges on two pieces, which nothing else here does. A face whose plain fan lies right
@@ -4309,7 +4313,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
     for (const st of sites) shells.push(st.add);
   }
   if (onStatus) onStatus('done');
-  const outPolys = clampZ([].concat(...shells), 0);
+  const outPolys = unfoldFinished(clampZ([].concat(...shells), 0));
   const protr = { l: 0, r: 0, f: 0, b: 0 };
   for (const tb of tabs) {
     if (tb.edge === '+x') protr.r = t.dp; else if (tb.edge === '-x') protr.l = t.dp;
@@ -4333,6 +4337,142 @@ function buildTestTile(cfg) {
   const piece = { id: 'TEST', band: 0, seg: 0, cellX0: 0, cellY0: 0, nx: 1, ny: 1, mL: 0, mR: 0, mF: 0, mB: 0 };
   const c2 = Object.assign({}, cfg, { connector: 'none' });
   return buildPiece(c2, layout, piece);
+}
+
+/* The finished piece, as the STL will have it. polysToTriangles fans each polygon from its
+ * first corner, and a polygon that came out of the cuts with a sliver in it (a corner a
+ * thousandth or two across the line of its neighbours, or run along a straight edge in
+ * a row of seam vertices) can fan into a triangle standing well off its own plane. Where
+ * that triangle lies back to back with the one across its edge, a slicer sees a coplanar
+ * fold: the side of an H-clip pocket from above, at the top of its clearance, is where the
+ * page reaches it. healCsgSeams lays out again the mended faces whose fan folds onto
+ * itself, but a sliver standing on edge can fold against the face beside it instead, and
+ * only shows once the piece is finished.
+ *
+ * So a polygon of the finished piece whose plain fan lays a triangle more than 60 degrees
+ * off its plane, and has a triangle in a fold (two triangles on one edge, back to back, as
+ * test/orientation.js counts them), is laid out again from the first of these that is
+ * sound: each of its corners in turn, then ears in its own plane. Sound means every
+ * triangle has area and lies within 60 degrees of the plane, no diagonal is an edge the
+ * piece already has, and no triangle lies back to back with the one across its edge.
+ * Positions are keyed to a thousandth, as checkManifold and the orientation test key
+ * them. A polygon with nothing sound goes out as it was, and so does every other one.
+ * Nothing it changes is cut again, so it can move no other polygon: an edge of the polygon
+ * stays an edge, and a diagonal is new, used by the polygon's own two triangles only. */
+function unfoldFinished(polys) {
+  const fan = (vs) => {
+    const t = [];
+    for (let i = 2; i < vs.length; i++) t.push([vs[0], vs[i - 1], vs[i]]);
+    return t;
+  };
+  const off = (vs, nn) => {
+    for (let i = 2; i < vs.length; i++) {
+      const x = V.cross(V.sub(vs[i - 1], vs[0]), V.sub(vs[i], vs[0])), l = Math.sqrt(V.dot(x, x));
+      if (l > 1e-12 && V.dot(x, nn) < 0.5 * l) return true;
+    }
+    return false;
+  };
+  const todo = [];
+  polys.forEach((p, i) => { if (p.verts.length > 3 && off(p.verts, p.plane.n)) todo.push(i); });
+  if (!todo.length) return polys;
+  /* Only a polygon near one of those can share an edge with it: keyed to a thousandth, a
+     shared edge's ends are within a thousandth of the polygon's corners. So the edges are
+     tabled for those alone, which on a piece of thousands of polygons is a handful. */
+  const box = (vs, m) => {
+    const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+    for (const v of vs)
+      for (let k = 0; k < 3; k++) {
+        if (v[k] - m < b[k]) b[k] = v[k] - m;
+        if (v[k] + m > b[k + 3]) b[k + 3] = v[k] + m;
+      }
+    return b;
+  };
+  const near = todo.map((i) => box(polys[i].verts, 2e-3));
+  const close = (vs) => {
+    const b = box(vs, 0);
+    return near.some((a) => a[0] <= b[3] && b[0] <= a[3] && a[1] <= b[4] && b[1] <= a[4] &&
+                            a[2] <= b[5] && b[2] <= a[5]);
+  };
+  // every triangle as written, by edge: its unit normal and the polygon it comes from
+  const key = (v) => v.map(x => Math.round(x * 1000) / 1000).join(',');
+  const ek = (a, b) => { const x = key(a), y = key(b); return x < y ? x + '|' + y : y + '|' + x; };
+  const unit = (t) => {
+    const x = V.cross(V.sub(t[1], t[0]), V.sub(t[2], t[0])), l = Math.sqrt(V.dot(x, x));
+    return l < 1e-12 ? null : V.scale(x, 1 / l);
+  };
+  const back = (a, b) => a && b && V.dot(a, b) < -0.999999;
+  const E = new Map();
+  const put = (ts, pi) => {
+    for (const t of ts) {
+      const u = unit(t);
+      for (let i = 0; i < 3; i++) {
+        const k = ek(t[i], t[(i + 1) % 3]);
+        let l = E.get(k);
+        if (!l) E.set(k, l = []);
+        l.push({ u, pi });
+      }
+    }
+  };
+  const drop = (ts, pi) => {
+    for (const t of ts)
+      for (let i = 0; i < 3; i++) {
+        const k = ek(t[i], t[(i + 1) % 3]), l = E.get(k);
+        if (l) E.set(k, l.filter((e) => e.pi !== pi));
+      }
+  };
+  polys.forEach((p, pi) => { if (close(p.verts)) put(fan(p.verts), pi); });
+  const out = polys.slice();
+  for (const pi of todo) {
+    const p = polys[pi], vs = p.verts, n = vs.length, nn = p.plane.n, plain = fan(vs);
+    const folded = plain.some((t) => {
+      for (let i = 0; i < 3; i++) {
+        const l = E.get(ek(t[i], t[(i + 1) % 3]));
+        if (l && l.length === 2 && back(l[0].u, l[1].u)) return true;
+      }
+      return false;
+    });
+    if (!folded) continue;
+    drop(plain, pi);
+    const at = new Map(vs.map((v, i) => [v, i]));
+    const sound = (ts) => {
+      for (const t of ts) {
+        const x = V.cross(V.sub(t[1], t[0]), V.sub(t[2], t[0])), l = Math.sqrt(V.dot(x, x));
+        if (l < 1e-9 || V.dot(x, nn) < 0.5 * l) return false;
+        const u = V.scale(x, 1 / l);
+        for (let i = 0; i < 3; i++) {
+          const a = t[i], b = t[(i + 1) % 3], ia = at.get(a), ib = at.get(b);
+          const l2 = E.get(ek(a, b)) || [];
+          if ((ia + 1) % n === ib || (ib + 1) % n === ia) {
+            if (l2.length === 1 && back(u, l2[0].u)) return false;   // folds across its edge
+          } else if (key(a) === key(b) || l2.length) return false;     // a diagonal already there
+        }
+      }
+      return true;
+    };
+    let got = null;
+    for (let k = 0; k < n && !got; k++) {
+      const r = k ? vs.slice(k).concat(vs.slice(0, k)) : vs;
+      if (sound(fan(r))) got = [r];
+    }
+    if (!got) {
+      const m = nn.map(Math.abs);
+      const ax = m[0] > m[1] ? (m[0] > m[2] ? 0 : 2) : (m[1] > m[2] ? 1 : 2);
+      const proj = vs.map((v, i) => [v[(ax + 1) % 3], v[(ax + 2) % 3], i]);
+      const { pts, tris } = earTriangulate(proj);
+      if (tris.length === n - 2) {
+        // earTriangulate turns them anticlockwise in the projection; the polygon's own way round
+        const rev = polyArea2D(proj) < 0;
+        const ts = tris.map((e) => (rev ? [e[0], e[2], e[1]] : e).map((j) => vs[pts[j][2]]));
+        if (sound(ts)) got = ts;
+      }
+    }
+    if (!got) { put(plain, pi); continue; }
+    put([].concat(...got.map(fan)), pi);
+    out[pi] = got.map((g) => ({ verts: g, plane: p.plane }));
+  }
+  const flat = [];
+  for (const o of out) if (Array.isArray(o)) flat.push(...o); else flat.push(o);
+  return flat;
 }
 
 // ---------- STL ----------
