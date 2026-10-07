@@ -303,35 +303,45 @@ const tallestWall = (c) => (c.solid || !isFullRect(c) ? 1 : Math.max(...['f', 'b
    so they cannot drift. It is buildBin's figure, not a measurement of the mesh: the
    share is taken from the top of the slab while the wall ring runs from floorZ, so a
    part-height wall stands up to BLOAT under it (0.025 mm at half height). */
-const binTop = (c) => {
+const binTop = (c) => (c.divX > 0 || c.divY > 0 ? c.hUnits * SPEC.unitH : wallTop(c));
+/* The top of the tallest wall, dividers aside: what holds a part standing in the bin,
+   and so what its inside depth is measured to (binHeights). */
+const wallTop = (c) => {
   const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
-  if (builtSolid(c) || c.divX > 0 || c.divY > 0) return H;
+  if (builtSolid(c)) return H;
   return floorZ + BLOAT + tallestWall(c) * (H - floorZ - BLOAT);
 };
 
 /* A bin's heights as the page quotes them, from the numbers buildBin builds it with
    rather than from constants kept beside them. H is the stacking height, units x 7 —
    the top of the walls, which is where the feet of a bin stacked on this one come to
-   rest — and the lip stands above it. The inside depth runs from the floor to that same
-   top, because a part standing any taller is in the way of the bin above it, or of a
-   lid. A solid bin has no inside, and a bin with a lowered wall has no lip.
+   rest — and the lip stands above it. The inside depth runs from the floor to the top
+   of the walls, because a part standing any taller is in the way of the bin above it,
+   or of a lid, or with a wall lowered is no longer held by it. A solid bin has no
+   inside, and a bin with a lowered wall has no lip.
 
    The floor a part stands on is not floorZ itself. buildBin runs the slab a BLOAT past
    it, so the wall ring that starts below floorZ is buried in the slab instead of meeting
    it face to face, and the surface left inside the bin is that BLOAT higher. Measured
    from floorZ, every inside depth was quoted 0.05 mm deeper than the bin is. */
 function binHeights(cfg) {
-  const c = Object.assign({}, BIN_DEFAULTS, cfg || {});
+  /* Sized as buildBin sizes it, and a half-size bin's mask dropped as buildBin drops it:
+     asked with one, the quote took it for a carved bin, walled full height. */
+  const c = halfSized(Object.assign({}, BIN_DEFAULTS, cfg || {}));
+  if (isHalfSize(c)) c.cells = null;
   const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c), top = binTop(c);
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) =>
     c.edges[k] === undefined || c.edges[k] >= 1);
   const lipH = c.lip && allFull && !c.solid ? lipHeight(c.lipMin) : 0;
-  /* `top` is H unless a wall is lowered all round, and the inside runs up to it: a part
-     standing taller than every wall is not in the bin. `hollow` says whether the bin has
-     an inside at any height. A solid block never does, and nor does a tray open on every
-     side, whose top is its floor whatever its units. */
+  /* `top` is H unless a wall is lowered all round. The inside runs up to the tallest
+     wall, which is `top` but for a bin with dividers: they stand it H tall whatever its
+     walls do, but they are not what holds a part in it, and measured to them half walls
+     at 6 units were quoted 36 mm inside where the walls stop 18 mm above the floor. A
+     part standing taller than every wall is not in the bin. `hollow` says whether the
+     bin has an inside at any height. A solid block never does, and nor does a tray open
+     on every side, whose walls stop at its floor whatever its units. */
   return { H, floorZ, top, lipH, hollow: !c.solid && tallestWall(c) > 0,
-           inside: builtSolid(c) ? 0 : Math.max(0, top - (floorZ + BLOAT)) };
+           inside: builtSolid(c) ? 0 : Math.max(0, wallTop(c) - (floorZ + BLOAT)) };
 }
 /* The fewest whole units that give at least `depth` mm inside. Rounded up, not to the
    nearest: someone typing the inside depth is sizing a bin for a part, and a bin a
@@ -768,8 +778,16 @@ function maskCheck(mask, u, v) {
  * here and dropped from a link.
  */
 const isWhole = (x) => Math.abs(x - Math.round(x)) < 1e-9;
-// a size that is not a number is nobody's half: the floor and holes it decides stay whole
-const isHalfSize = (c) => [c.u, c.v].some((n) => isFinite(n) && !isWhole(n));
+/* Width and depth to the nearest half cell, never under one half, as the panel reads
+   them. Every part starts here, so a size with no place on the grid builds as the half
+   it is nearest, body and feet alike: built as asked, 1.25 was a 52 mm body on quarter
+   feet 62.5 mm across. A whole size or a half is its own nearest half, so builds as it
+   did. Neither the page nor a link hands the engine anything else. */
+const toHalf = (n) => (isFinite(n) ? Math.max(0.5, Math.round(n * 2) / 2) : n);
+const halfSized = (c) => Object.assign(c, { u: toHalf(c.u), v: toHalf(c.v) });
+/* Half-size as it would be built, so 1.2, which builds as 1, is not. A size that is not
+   a number is nobody's half: the floor and holes it decides stay whole. */
+const isHalfSize = (c) => [c.u, c.v].some((n) => isFinite(n) && !isWhole(toHalf(n)));
 const QUARTER_IN = SPEC.pitch / 4;      // 10.5: a quarter foot is a whole one less this per side
 
 /* The feet a bin stands on, as { i, j, x, y, inset }: the cell, or for a half-size bin the
@@ -778,7 +796,7 @@ const QUARTER_IN = SPEC.pitch / 4;      // 10.5: a quarter foot is a whole one l
    built them, so a whole bin comes out byte for byte as it did. Pure, so the page can
    count and weigh feet without building anything. */
 function binFeet(cfg) {
-  const c = Object.assign({}, BIN_DEFAULTS, cfg || {}), out = [];
+  const c = halfSized(Object.assign({}, BIN_DEFAULTS, cfg || {})), out = [];
   if (isHalfSize(c)) {
     const p = SPEC.pitch / 2, nx = Math.round(c.u / 0.5), ny = Math.round(c.v / 0.5);
     for (let i = 0; i < nx; i++)
@@ -1292,7 +1310,7 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
  * the split.
  */
 function dividerPart(G, cfg, axis) {
-  const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg));
+  const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const iw = hw - c.wall, id = hd - c.wall;
@@ -1362,8 +1380,8 @@ function feetFrom(n) {
 }
 
 function lidPart(G, cfg) {
-  const c = Object.assign({}, BIN_DEFAULTS, { lidT: 1.2, lidClr: 0.2, lidSkirt: 3.0,
-                                              lidSides: null }, cfg);
+  const c = halfSized(Object.assign({}, BIN_DEFAULTS, { lidT: 1.2, lidClr: 0.2, lidSkirt: 3.0,
+                                                        lidSides: null }, cfg));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const r = SPEC.half - SPEC.centre;
@@ -1422,7 +1440,7 @@ function lidPart(G, cfg) {
 }
 
 function buildBin(G, cfg) {
-  const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg || {}));
+  const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg || {})));
   // screw holes run up past the foot, and the floor grows to keep them closed
   c.floorT = builtFloorT(c);
   const n = c.arcSegs;
@@ -1821,19 +1839,29 @@ const maxDividers = (inside, wall) =>
 const numAt = (p, i, d, hi) => (isFinite(p[i]) ? Math.min(hi, Math.max(0, p[i])) : d);
 const countAt = (p, i, d, lo, hi) =>
   (isFinite(p[i]) ? Math.min(hi, Math.max(lo, Math.round(p[i]))) : d);
-// the same in half cells: to the nearest half, so 0.25 is a half and 1.2 is a whole one
+/* A size or a place as a page writes it: whole, or since half-size bins, half a cell on.
+   Kept as it is. Anything else is read as countAt reads it, which is how a page from
+   before half sizes read every one: no page writes 1.3, so one is typed by hand, and was
+   a whole cell there. Snapped to the nearest half instead, 1.4 x 1.4 came back a cell and
+   a half where it had been a cell, and a 1.3 grew into the bin beside it. */
 const halfAt = (p, i, d, lo, hi) =>
-  (isFinite(p[i]) ? Math.min(hi, Math.max(lo, Math.round(p[i] * 2) / 2)) : d);
+  (isFinite(p[i]) && Number.isInteger(p[i] * 2) && p[i] >= 0.5 && p[i] <= hi ? p[i]
+    : countAt(p, i, d, Math.max(1, lo), hi));
+const placeAt = (p, i, hi) =>
+  (isFinite(p[i]) && Number.isInteger(p[i] * 2) && p[i] >= 0 && p[i] <= hi ? p[i]
+    : countAt(p, i, 0, 0, hi));
 /* Sizes and positions are in cells, and since half-size bins they may end in .5. The
    four fields are the same four, so the format did not grow and a link from before reads
-   exactly as it did: it only ever held whole numbers, and a whole number is its own
-   nearest half.
-     u and v snap to halves, the smallest half a cell.
-     x and y snap to halves for a half-size bin, and to whole cells for a whole one, which
+   exactly as it did: it only ever held whole numbers.
+     u and v keep a half (halfAt); anything between halves is a whole cell, as it was.
+     x and y keep a half for a half-size bin, and are whole cells for a whole one, which
    stays on whole cells (see binFeet): a whole bin on a half step is rounded onto the
    grid as a fractional position always was.
-     A half-size bin's mask is dropped. A mask counts whole cells and nothing carves a
-   half-size bin, so one can only be a link typed by hand.
+     A bin with a carve mask is read as a page from before half sizes read it, all four
+   rounded to whole cells, and keeps its mask. A mask counts whole cells, and no page
+   writes one for a half-size bin, so a bin that has one came from a whole-cell page or
+   was typed over one: read in halves, a 2.5 wide bin lost its shape where it had been
+   a 3 wide L.
    A page from before half sizes reads 1.5 as 2, and has no way to know it should not:
    neither page checks the link's version. That is the one thing a new link loses in an
    old tab. */
@@ -1842,21 +1870,24 @@ function unpackBin(t) {
   const p = raw.map(Number);
   const edges = {};
   PACK_EDGES.forEach((k, i) => { edges[k] = snapEdge(p[10 + i]); });
-  const u = halfAt(p, 2, BIN_DEFAULTS.u, 0.5, LINK_MAX.cells);
-  const v = halfAt(p, 3, BIN_DEFAULTS.v, 0.5, LINK_MAX.cells);
-  const half = isHalfSize({ u, v }), posAt = half ? halfAt : countAt;
+  const mask = raw[16] && raw[16] !== '0' ? raw[16] : '';
+  const sizeAt = mask ? countAt : halfAt;
+  const u = sizeAt(p, 2, BIN_DEFAULTS.u, 1, LINK_MAX.cells);
+  const v = sizeAt(p, 3, BIN_DEFAULTS.v, 1, LINK_MAX.cells);
+  const half = isHalfSize({ u, v });
+  const posAt = (i) => (half ? placeAt(p, i, LINK_MAX.cells) : countAt(p, i, 0, 0, LINK_MAX.cells));
   const hUnits = countAt(p, 4, BIN_DEFAULTS.hUnits, 1, LINK_MAX.hUnits);
   const H = hUnits * SPEC.unitH;
   const wall = numAt(p, 5, BIN_DEFAULTS.wall, LINK_MAX.wall);
   const inside = (n) => (n - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall;
   /* A floor or scoop past the bin's height, or a label shelf past its depth, builds
      the same part as one at it: the geometry already stops them there. */
-  return { x: posAt(p, 0, 0, 0, LINK_MAX.cells), y: posAt(p, 1, 0, 0, LINK_MAX.cells),
+  return { x: posAt(0), y: posAt(1),
            u, v, hUnits, wall, floorT: numAt(p, 6, BIN_DEFAULTS.floorT, H),
            divX: countAt(p, 7, 0, 0, maxDividers(inside(u), wall)),
            divY: countAt(p, 8, 0, 0, maxDividers(inside(v), wall)), solid: !!p[9],
            edges, scoop: numAt(p, 14, 0, H), label: numAt(p, 15, 0, v * SPEC.pitch),
-           cells: half ? null : bitsToCells(raw[16] && raw[16] !== '0' ? raw[16] : '', u, v),
+           cells: half ? null : bitsToCells(mask, u, v),
            done: !!p[17], divRemovable: !!p[18],
            lid: !!p[19], lidSides: lidSidesFrom(p[20]), ...feetFrom(p[21]) };
 }

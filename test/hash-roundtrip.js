@@ -181,8 +181,9 @@ console.log('\nholes in the feet');
    in cells as always and now allowed to end in .5, so the format did not grow. What a
    link from before held was whole, and a whole number reads as it always did. A whole
    bin stays on whole cells, so one on a half step is put back on the grid the way a
-   fractional position always was; a mask counts whole cells, so one on a half-size bin
-   is dropped; and a size between halves goes to the nearest, never below one half. */
+   fractional position always was. Anything between halves, which no page writes, is
+   read the way a page from before half sizes read it, rounded to whole cells; so is a
+   bin with a carve mask, which only whole-cell bins carry, mask and all. */
 console.log('\nhalf-size bins');
 {
   const KEYS4 = ['x', 'y', 'u', 'v'];
@@ -200,27 +201,46 @@ console.log('\nhalf-size bins');
     if (!ok) bad++;
   }
 
-  // typed by hand: sizes and positions between halves
+  /* Typed by hand: sizes and positions between halves. No page writes one, so each is
+     read as a page from before half sizes read it, rounded to a whole cell and at least
+     one, and the bin is what it was there. Snapped to the nearest half instead, 1.4 came
+     back a cell and a half where it had been one, and a 1.3 grew into the bin beside it. */
   const tail = '3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15-0';
   for (const [name, link, want] of [
-    ['0.25 snaps to a half, not to nothing', `0.25-0.75-0.25-0.25-${tail}`, [0.5, 1, 0.5, 0.5]],
-    ['a size under a quarter is still a half', `0-0-0.1-0-${tail}`, [0, 0, 0.5, 0.5]],
-    ['1.3 is 1.5, and 1.2 is 1', `1.3-1.2-1.3-1.2-${tail}`, [1.5, 1, 1.5, 1]],
+    ['0.25 is a cell, as before half sizes', `0.25-0.75-0.25-0.25-${tail}`, [0, 1, 1, 1]],
+    ['a size under a quarter is still a cell', `0-0-0.1-0-${tail}`, [0, 0, 1, 1]],
+    ['1.3 and 1.2 are 1', `1.3-1.2-1.3-1.2-${tail}`, [1, 1, 1, 1]],
+    ['1.4 x 1.4 is a 1 x 1, as on main', '0-0-1.4-1.4-3', [0, 0, 1, 1]],
     ['a whole bin is not moved by a quarter', `1.3-1.75-2-1-${tail}`, [1, 2, 2, 1]],
+    ['a half keeps a hand-typed place whole', `0.3-1.6-1.5-0.5-${tail}`, [0, 2, 1.5, 0.5]],
   ]) {
     const back = unpackBin(link);
     const ok = KEYS4.every((k, i) => back[k] === want[i]);
-    console.log(`  ${name.padEnd(38)} ${ok ? 'snapped' : 'WRONG: ' + read(back)}`);
+    console.log(`  ${name.padEnd(38)} ${ok ? 'as before' : 'WRONG: ' + read(back)}`);
+    if (!ok) bad++;
+  }
+  /* Two bins side by side as a page from before read them: the 1.3 is one cell, so the
+     bin at column 2 is beside it, not under it. Read as 1.5 they shared half a cell. */
+  {
+    const two = unpackLayers('0-0-1.3-1-3_1-0-1-1-3')[0].bins.map((b) => [b.x, b.y, b.u, b.v]);
+    const ok = JSON.stringify(two) === '[[0,0,1,1],[1,0,1,1]]';
+    console.log(`  ${'1.3 beside a 1 x 1 does not overlap it'.padEnd(38)} ${ok ? 'side by side' : 'WRONG: ' + JSON.stringify(two)}`);
     if (!ok) bad++;
   }
 
-  /* A mask on a half-size bin is never written and never read back. The 6-cell mask is
-     what a 2 x 3 would carry, which is how 1.5 x 2.5 rounds in a page from before. */
+  /* A mask is never written for a half-size bin, so a bin that carries one came from a
+     page that counted whole cells, or was typed over one: it is read as that page read
+     it, every size and place rounded to whole cells, and keeps its shape. The 6-cell mask
+     is what a 2 x 3 carries, and 1.5 x 2.5 is 2 x 3 there; 2.5 x 2 is 3 x 2. */
   const masked = unpackBin('0-0-1.5-2.5-3-1.2-1.2-0-0-0-1-1-1-1-0-0-110111');
+  const wide = unpackBin('0-0-2.5-2-3-1.2-1.2-0-0-0-1-1-1-1-0-0-110111');
   const written = packBin(bin({ u: 1.5, v: 1, cells: [[0, 0]] })).split('-')[16];
-  const maskOk = masked.cells === null && masked.u === 1.5 && masked.v === 2.5 && written === '0';
-  console.log(`  ${'a mask on a half-size bin is dropped'.padEnd(38)} ` +
-              (maskOk ? 'dropped' : `WRONG: read ${JSON.stringify(masked.cells)}, wrote ${written}`));
+  const maskOk = masked.u === 2 && masked.v === 3 && (masked.cells || []).length === 5 &&
+                 wide.u === 3 && wide.v === 2 && (wide.cells || []).length === 5 && written === '0';
+  console.log(`  ${'a bin with a mask is read as before'.padEnd(38)} ` + (maskOk
+    ? 'whole cells, shape kept; none written for a half'
+    : `WRONG: read ${read(masked)} ${JSON.stringify(masked.cells)} and ${read(wide)} ` +
+      `${JSON.stringify(wide.cells)}, wrote ${written}`));
   if (!maskOk) bad++;
 
   /* Holes in the feet are not built on a half-size bin yet, but what was asked for is
