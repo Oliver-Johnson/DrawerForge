@@ -285,6 +285,42 @@ const CASES = [
   { name: 'screws, two sides joined', drawerW: 84.59, drawerD: 84.58, mLeft: 0.59, mRight: 0,
     mFront: 0.58, mBack: 0, outerRadius: 6, magnets: true, screws: true, connector: 'none',
     arcSegs: 6 },
+  /* A dented face with no point that sees all of it: a dent between two straight runs, in
+     the bottom face beside a screw hole. Only the ears lay it right; without them it is
+     three coplanar folds (clean on main). */
+  { name: 'ears, a dent between runs', pitch: 50, drawerW: 100, drawerD: 102, mLeft: 0,
+    mRight: 0, mFront: 0.63, mBack: 1.37, outerRadius: 1.31, magnets: true, magnetSide: 'top',
+    screws: true, connector: 'none', arcSegs: 6 },
+  /* And three that laying a dented face out again made worse, each through the engine alone:
+     the mounting sites 2 or 3.5 mm from a cell's centre (holeOffset, which the page does not
+     set) with pockets small enough to fit there, at the small pitches. On the socket's
+     sloped wall, a corner's fan stood triangles in the plane of an H-clip pocket's wall and
+     folded them against it (four coplanar folds on each of two pieces that are clean on
+     main); where a bowtie's cup cuts that wall, a corner's fan and then ears used two edges
+     four times; ears turned a 3-corner sliver the weld had turned over back to face the
+     plane, so its edges ran the same way as its neighbours' (three on each of two pieces).
+     healCsgSeams now lays a face out again only where its plain fan lies back to back with
+     it, and only in a layout whose every triangle lies within 60 degrees of the face, keeps
+     its winding and repeats no edge. The bowtie keeps folds where main has them by the
+     cup, fewer (6 and 3 against main's 10 and 5). The puzzle tabs keep three on each of
+     the two pieces, at the sliver itself, which faces the wrong way however it is laid
+     out; main builds those two clean, because its puzzle notch regions are cut
+     differently (the pole moved into one region, above). */
+  { name: 'H-clip above, holes in', pitch: 14.3, drawerW: 3 * 14.3, drawerD: 3 * 14.3,
+    bedW: 400, bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], []],
+    connector: 'hclip', keyType: 'bowtie', keyInsert: 'top', magnets: true, magnetSide: 'top',
+    holeOffset: 2, magnetD: 2.4, hclip: { ...G.DEFAULTS.hclip, clr: 0.08 }, arcSegs: 6 },
+  { name: 'bowtie cup, holes in', pitch: 14.5, drawerW: 3 * 14.5, drawerD: 3 * 14.5,
+    bedW: 400, bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], []],
+    connector: 'bowtie', keyType: 'bowtie', keyMount: 'wall', keyInsert: 'top', magnets: true,
+    magnetSide: 'top', holeOffset: 2, magnetD: 2.5, key: { ...G.DEFAULTS.key, clr: 0.1 },
+    arcSegs: 6, oriQuarantine: 'slivers by the cup, folded as on main, fewer',
+    oriWorst: { A2: 6, A3: 3 } },
+  { name: 'puzzle 20, holes in', pitch: 20, drawerW: 60, drawerD: 100, bedW: 400, bedD: 400,
+    splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]], connector: 'puzzle',
+    keyType: 'bowtie', magnets: true, magnetSide: 'top', holeOffset: 3.5, magnetD: 5.1,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 }, tab: { ...G.DEFAULTS.tab, clr: 0.3 }, arcSegs: 6,
+    oriQuarantine: 'a 3-corner sliver the weld turned over', oriWorst: { B3: 3, C3: 3 } },
 
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 

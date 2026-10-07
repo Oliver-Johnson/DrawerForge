@@ -455,8 +455,8 @@ Two things the checks must **not** treat as defects, and do not:
   by exactly two triangles, so it never sees them. Measured clean on every quarantined
   case.
 
-Three orientation defects are quarantined by name rather than fixed, on the same terms as
-the leaks. The plate audit holds its two to their size on file, piece by piece or plate
+Five orientation defects are quarantined by name rather than fixed, on the same terms as
+the leaks. The plate audit holds its four to their size on file, piece by piece or plate
 by plate, so a quarantine for a few folds cannot wave through more:
 
 - **The carved bins' reflex fillet**, in `test/bin-audit.js`. One inside-out closed shell
@@ -482,6 +482,13 @@ by plate, so a quarantine for a few folds cannot wave through more:
   same counts. The section builds every joint Checks names in place of keys that meet,
   and finds it on 8 of the H-clips it builds, wherever the pitch is 14.1 mm more than the
   field.
+- **Two plates only the engine can build**, mounting sites 2 or 3.5 mm from a cell's
+  centre (`holeOffset`, which the page does not set) at small pitches, in
+  `test/plate-audit.js`. A bowtie's cup in the wall at 14.5 mm keeps folds by the cup
+  where main has them, fewer of them (6 and 3 on two pieces, against main's 10 and 5).
+  Puzzle tabs at 20 mm keep three on each of two pieces, at a 3-corner sliver the weld
+  turned right over, which faces the wrong way however it is laid out; main builds those
+  two clean, and the sliver came with the puzzle notch's pole moving into one region.
 
   The puzzle fit sample used to be quarantined here for six slivers of 5.2e-5 to 5.5e-4 mm²
   on two of its four tiles, and it is clean now. The honest account is that the coupon's
@@ -492,13 +499,40 @@ by plate, so a quarantine for a few folds cannot wave through more:
 One kind of fold is fixed rather than quarantined. Where `healCsgSeams` welds a vertex
 onto its group it can land a thousandth or two across the line of its neighbours, and the
 face it mends comes out with a dent too small to see. Fanned from its first corner, or
-from its average, one sliver of the fan turns against the face: three coplanar folds by a
-puzzle notch, in the bottom face beside a mounting pocket, or in the side of a puzzle
-tab. Such a face is now fanned from the first point whose fan turns nothing back (its
-average, then each of its corners, skipping a corner that would lay a triangle of no
-area along a straight run), and failing all of them is cut into ears in its own plane.
-Only a face whose fan would have folded is touched, so every plate without one is the
-same bytes as before.
+from its average, one sliver of the fan can lie back to back with the face: three coplanar
+folds by a puzzle notch, in the bottom face beside a mounting pocket, or in the side of a
+puzzle tab. A mended face whose plain fan lays a triangle within 8 degrees of back to back
+with it is laid out again from the first of these that is sound: each of its corners in
+turn, then ears cut in its own plane. Sound means every triangle has area, is wound the
+face's way and lies within 60 degrees of it, and no diagonal is already an edge of another
+face. A face with nothing sound goes out as it was. The face's own average is not tried:
+over the page's designs below it laid out nothing a corner did not, and through the engine
+alone it traded folds for open edges on two pieces (3 and 14 edges), which no corner and no
+ear did anywhere.
+
+Nothing else is touched. The first version of this took any face whose fan turned a
+triangle back by the sign of its normal alone, and a third of the faces it touched over
+the random mount designs below (341 of 1,081) had no fold in them: slivers that lean or
+stand on edge. Laying those out again made some pieces worse through the engine alone
+(folds against an H-clip pocket's wall, edges used four times by a bowtie's cup, a
+turned-over sliver re-wound against its neighbours; three rows of the plate audit hold
+them), and dropping the ears instead let a page design fold again (the audit's dent
+between two straight runs). Widening it again, with the checks above, does not pay
+either. Taking as well every face whose fan folds within itself, or turns a triangle
+back, or stands one more than 60 degrees off the face, leaves fewer engine-only pieces
+with any defect (316, 282 and 216 of 2,060 against 410, over the designs named below; the
+last two puzzle folds below go too), but each of the three puts the bowtie cup row's
+edges used four times back, and the wider two open a hole in an engine-only piece that
+only folded.
+
+Every face it touches on the page's designs had a fold in its plain fan, by
+`test/orientation.js`'s own test: 740 over 3,893 random mount designs, 195 over 1,200
+random puzzle designs, 188 over the 960 joint designs below. Through the engine alone
+(595 designs at 14.3 to 17.5 mm pitches with the mounting sites moved in) it touches 5,944
+faces, and 10 of them had no such fold: 3 laid a triangle within 3 degrees of back to
+back with the face, 7 one between 3 and 8 degrees. The first version touched 578 like
+that there. A face whose plain fan lies right is laid out exactly as before, and so is
+every plate with no such face.
 Over 960 designs of eight joints (five pitches, four clearances, rows and quads, three
 corner radii) main has 528 folds on 134 pieces and this has none; over 1,200 random
 puzzle designs, 2 pieces of 4,686 fold, one fold each, as they do on main.
