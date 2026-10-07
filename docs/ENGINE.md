@@ -279,10 +279,11 @@ construction — was wrong twice over. Overlapping shells do not produce bad edg
 shell is closed on its own, so every edge is still used exactly twice. The 20% was holes,
 and treating it as normal is what let them stay for the life of the project.
 
-Four configurations still leak, and they are **quarantined by name in
-`test/plate-audit.js` rather than excused here**, so the summary line cannot say
-"watertight" over them. Do not generalise from them to a new tolerance for nonzero
-counts; the whole point of naming them is that the number for everything else is zero.
+Three configurations still leak, all of them corner bosses that abut, and they are
+**quarantined by name in `test/plate-audit.js` rather than excused here**, so the summary
+line cannot say "watertight" over them. Do not generalise from them to a new tolerance
+for nonzero counts; the whole point of naming them is that the number for everything else
+is zero.
 
 **A configuration with no case is worse than one with a quarantined case**, and this file
 had four of them. `keyInsert: 'top'` had never been built by the audit in any of its
@@ -535,4 +536,9 @@ currently installed):
   latent defects — the vestigial `triangulateRing` underside, and the ear clip's chords
   skimming the mounting cylinders — only surfaced once the radii were connected. If you
   change what the outline is made of, re-run the audit with magnets *and* screws on: they
-  are the cases with cutters close enough to a cap's triangulation to feel it.
+  are the cases with cutters close enough to a cap's triangulation to feel it. The fan
+  that replaced the ear clip felt it too, more rarely: a spoke a few thousandths from a
+  corner of a cutter's wall is crossed by the two sides meeting there a couple of
+  thousandths apart, `healCsgSeams` welds the two crossings, and the sliver of floor
+  between them and the corner goes. One cell with magnets from below was quarantined for
+  that until `fanCentre` moved the fan off any spoke so close.

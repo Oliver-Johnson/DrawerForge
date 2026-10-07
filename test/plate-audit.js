@@ -221,6 +221,22 @@ const CASES = [
     mFront: 2.715, mBack: 2.715, outerRadius: 4, connector: 'none', plateStyle: 'skeleton',
     arcSegs: 6 },
 
+  /* A spoke of a cell's bottom cap a few thousandths from a corner of a mounting cutter.
+     The cutter's two sides there cross the spoke a couple of thousandths apart,
+     healCsgSeams takes the two crossings for one point, and the sliver of floor between
+     them and the corner goes with it: three or six open edges in the bottom face at the
+     pocket's rim. One cell with 6 mm magnets and 4 mm corners had it on main, at every
+     arc smoothness, and was quarantined for it as near-coincident outlines in the cap,
+     past healCsgSeams' tolerance; this is the shape of the bin fit test tile. A margin
+     of 0.25 or 0.08 mm joined to the cell beside the corner (clearCut) moved the fan's
+     centre onto two more. The fan now moves off any spoke that close (fanCentre). */
+  { name: '1x1 magnets', drawerW: 42, drawerD: 42, magnets: true },
+  { name: 'magnets, joined margins', drawerW: 84.75, drawerD: 84.75, mLeft: 0.25, mRight: 0.5,
+    mFront: 0.25, mBack: 0.5, outerRadius: 4, magnets: true, connector: 'none', arcSegs: 6 },
+  { name: 'screws, joined margins', drawerW: 84.24, drawerD: 84.24, mLeft: 0.08, mRight: 0.16,
+    mFront: 0.08, mBack: 0.16, outerRadius: 4.88, magnets: true, screws: true, connector: 'none',
+    arcSegs: 6 },
+
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 
   /* Benign, but it has to be named rather than waved through: corner bosses of adjacent
@@ -232,19 +248,6 @@ const CASES = [
     baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
   { name: '3x3 bosses+screws', drawerW: 126, drawerD: 126, screws: true,
     baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
-  /* Found by the pocket-floor section further down, and older than it: one cell, with
-     magnets opened from below, leaves a sliver hole in the bottom face at the rim of the
-     two left-hand pockets — six edges used once, at every arc smoothness. It needs the
-     4 mm rounded corners and the 6 mm magnet together (no corner radius, a 1 mm one, a
-     5 or 6.5 mm magnet, or a second cell in either direction all come out watertight),
-     so it is two near-coincident outlines in the bottom cap's triangulation, a few
-     microns apart and past healCsgSeams' tolerance. It matters because this is the
-     shape of the bin fit test tile, which is built the same way.
-     `worst` pins it where it stands. A quarantine alone fails only when the case comes
-     good, so the hole could have grown to sixty edges or six hundred and this line
-     would have read "known" over every one of them. */
-  { name: '1x1 magnets', drawerW: 42, drawerD: 42, magnets: true,
-    quarantine: 'bottom-face sliver at the pocket rim', worst: 6 },
   /* The bosses with half cells, which add nothing: the loop builds the case again as
      solid margin and requires the same edges used the same number of times. The bosses
      sit on whole cells, so the strips do not meet them. */
@@ -1244,8 +1247,8 @@ console.log('\nmagnet and screw pockets keep a floor:');
       cfg: { screws: true, screwHeadDepth: 2.5 } },
   ];
   for (const pk of POCKETS) {
-    // 2 × 2 rather than one cell: a single cell with magnets from below has a leak of
-    // its own, quarantined at the top of this file, and this is not about that
+    // 2 × 2 rather than one cell, as it was when one cell with magnets from below had a
+    // leak of its own at the pocket rim; that is the cases' at the top of this file now
     const r = buildAll(Object.assign({ drawerW: 84, drawerD: 84, arcSegs: 12 }, pk.cfg));
     const polys = r.pieces[0];
     const c = r.cfg.pitch / 2;
@@ -2002,8 +2005,11 @@ console.log('\nplates without half cells build the same bytes:');
       alignX: 'start', alignY: 'start', connector: 'none' }, '0643a57626c1be52'],
     ['190 x 170, margin right and back', { drawerW: 190, drawerD: 170, marginMode: 'auto',
       alignX: 'end', alignY: 'end', connector: 'none' }, '37b5f305cc4da6dd'],
+    // fanCentre moved four of its nine cells' bottom caps off a spoke a few thousandths from
+    // a cutter's corner: the same bottom face fanned from another point, its area and the
+    // volume unchanged
     ['126 x 126, magnets and screws', { drawerW: 126, drawerD: 126, marginMode: 'custom',
-      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, '061f12cb36018140'],
+      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, '5b339b75bd8c513e'],
     ['140 x 140, corner pockets', { drawerW: 140, drawerD: 140, marginMode: 'auto',
       magnets: true, baseMode: 'bosses' }, '7088f24def428095'],
     ['168 x 180, skeleton', { drawerW: 168, drawerD: 180, marginMode: 'auto',

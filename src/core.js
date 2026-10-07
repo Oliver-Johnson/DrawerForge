@@ -1916,13 +1916,64 @@ function annulusStrip(outerLoop, innerLoop, cx, cy, z, up) {
   return polys;
 }
 
+/* Where a cell's bottom cap is fanned from: the average of its outline, unless a spoke
+   from there passes a few thousandths from a corner of a mounting cutter's wall.
+
+   The cutter is a cylinder of 12 or 14 sides, and the subtraction cuts the cap along
+   each side's plane. Where a spoke passes that close to a corner, the two sides meeting
+   there cross it a couple of thousandths apart and further than that from the corner.
+   healCsgSeams takes the two crossings for one point, and the sliver between them and
+   the corner, which is floor, goes with it: three open edges at the pocket's rim (one
+   cell with 6 mm magnets and 4 mm corners, or 0.25 and 0.5 mm margins joined to the cell
+   beside the same corner). The window is under a hundredth wide, so whether a plate hit
+   it was a lottery on its margins and corner radius.
+
+   So where a spoke from the average comes within FAN_NEAR of a corner, the fan moves to
+   the first of a few points about the average from which every spoke keeps FAN_CLEAR
+   from every corner and every triangle still turns the outline's way. Where the
+   average's spokes are clear, which is most cells, nothing moves; where no point is
+   clear, nothing moves either. The cap is the same flat face whichever point it is
+   fanned from. */
+const FAN_NEAR = 0.008, FAN_CLEAR = 0.01;
+function fanCentre(oc, avoid) {
+  const n = oc.length, cc = [0, 0];
+  for (const p of oc) { cc[0] += p[0]/n; cc[1] += p[1]/n; }
+  if (!avoid || !avoid.length) return cc;
+  const gap = (c) => {
+    let g = Infinity;
+    for (const p of oc) {
+      const dx = p[0] - c[0], dy = p[1] - c[1], L2 = dx*dx + dy*dy;
+      if (L2 < 1e-12) continue;
+      for (const q of avoid) {
+        const t = Math.max(0, Math.min(1, ((q[0] - c[0])*dx + (q[1] - c[1])*dy) / L2));
+        g = Math.min(g, Math.hypot(c[0] + t*dx - q[0], c[1] + t*dy - q[1]));
+      }
+    }
+    return g;
+  };
+  if (gap(cc) >= FAN_NEAR) return cc;
+  const turn = Math.sign(polyArea2D(oc));
+  const fans = (c) => oc.every((p, i) => {
+    const q = oc[(i + 1) % n];
+    return turn * ((p[0] - c[0])*(q[1] - c[1]) - (p[1] - c[1])*(q[0] - c[0])) > 1e-6;
+  });
+  for (const rho of [0.05, 0.1, 0.2, 0.4, 0.8, 1.6])
+    for (let k = 0; k < 12; k++) {
+      const c = [cc[0] + rho*Math.cos(k*Math.PI/6), cc[1] + rho*Math.sin(k*Math.PI/6)];
+      if (fans(c) && gap(c) >= FAN_CLEAR) return c;
+    }
+  return cc;
+}
+
 /* `half` is the cell's half size on each axis, [hx, hy]: left out, a whole cell at the
    profile's pitch. A half cell passes its own (see halfStrips) and gets the same socket,
    the same distance in from each of its sides, on a rounded rectangle: the strip around
    the socket, the rim on top and the floor cap all follow the ring, and annulusStrip
    pairs the cell outline against it by angle about the centre as it does a square, both
-   loops being star-shaped about that point. */
-function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half) {
+   loops being star-shaped about that point.
+
+   `avoid` is where the mounting cutters' walls stand on the bottom face (fanCentre). */
+function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half, avoid) {
   const polys = [];
   const { pts: oc } = earTriangulate(clipped);
   const n = oc.length;
@@ -1961,8 +2012,7 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half) {
      * magnets, screws and both: the ear clip leaks at r = 2 and r = 4 and is clean either
      * side, which is a lottery rather than a property. A fan from an interior point has
      * no chords: every edge either lies on the outline or runs to one fixed point. */
-    const cc = [0, 0];
-    for (const p of oc) { cc[0] += p[0]/n; cc[1] += p[1]/n; }
+    const cc = fanCentre(oc, avoid);
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
       const p = makePoly([[cc[0], cc[1], 0], [oc[j][0], oc[j][1], 0], [oc[i][0], oc[i][1], 0]]);
@@ -2247,6 +2297,19 @@ function buildPiece(cfg, layout, piece, onStatus) {
   // one cutter for every mounting site on the piece, built once and moved into place
   const cellFastener = ((cfg.magnets || cfg.screws) && solidBase)
     ? fastenerCutter(cfg, pad - cfg.magnetH, pad + 0.02, H + 0.5) : null;
+  // the corners of its walls where they stand on the bottom face, about its axis (fanCentre)
+  const fastenerFoot = [];
+  if (cellFastener) {
+    const seen = new Set();
+    for (const p of cellFastener) {
+      const zs = p.verts.map((v) => v[2]);
+      if (!(Math.min(...zs) < 0 && Math.max(...zs) > 0)) continue;
+      for (const v of p.verts) {
+        const k = `${v[0].toFixed(6)} ${v[1].toFixed(6)}`;
+        if (!seen.has(k)) { seen.add(k); fastenerFoot.push([v[0], v[1]]); }
+      }
+    }
+  }
 
   // ---- connectors ----
   const conn = pieceConnectors(cfg, layout, piece);
@@ -2504,7 +2567,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
         ? skeletonCellRegion(clipped, prof, cx, cy, H, cfg.arcSegs || 6,
                              Math.max(0.4, cfg.skin || 0.8), open)
         : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6,
-                           halfX || halfY ? [halfX ? half/2 : half, halfY ? half/2 : half] : undefined);
+                           halfX || halfY ? [halfX ? half/2 : half, halfY ? half/2 : half] : undefined,
+                           halfX || halfY ? undefined : [-1, 1].flatMap((sx) => [-1, 1].flatMap((sy) =>
+                             fastenerFoot.map(([u, v]) => [cx + sx*cfg.holeOffset + u, cy + sy*cfg.holeOffset + v]))));
       /* Small convex cutters local to this cell, batched by feature and subtracted one
        * batch at a time.
        *
