@@ -336,6 +336,11 @@ test('removable plates both ways and over a scoop say how they go in, in Checks,
   await expect(hint).toContainText('the stacking lip has a notch at each slot; a bin stacked on top still sits on the lip between the notches and round the corners');
   await expect(hint).toContainText('put the plates across in first, slots up, then drop the plates along over them, slots down');
   await expect(hint).toContainText('that corner goes to the front');
+  await expect(hint).toContainText('The label shelf has a notch at each plate across, and a note raised on it goes in the widest space between them; the plates along stay in front of it.');
+  /* ...and ends saying where the plates are told apart, once: it read "The platesThe
+     plates' rows in Download, ... which is which.rsquo; rows under Download your bins,
+     ..." */
+  await expect(hint.locator('.moretext')).toHaveText(/slots down\. The plates\u2019 rows under Download your bins, their files\u2019 names and the README all say which is which\.$/);
   expect(errors).toEqual([]);
 });
 
