@@ -418,6 +418,15 @@ const CASES = [
     slots: { f: 1, l: 1 } },
   { name: '2x1x5-slot-aa-label', u: 2, v: 1, hUnits: 5, insert: 1, label: 12, holes: 4,
     fingerSlots: { f: true, l: true }, slots: { f: 1, l: 1 } },
+  /* A back slot takes the label shelf, and the holes spread into its room: 4 AA cells,
+     where keeping in front of a shelf that is not there left room for 2. */
+  { name: '1x1x4-slot-b-aa-L12', u: 1, v: 1, hUnits: 4, insert: 1, label: 12, holes: 4,
+    fingerSlots: { b: true }, slots: { b: 1 } },
+  /* Spread into its room, the AAA cells' block stands 0.5 under the rim, too high for the
+     slot, so they keep in front of where the shelf would be, which leaves room for none,
+     and the page is told they gave way (holesGaveWay) rather than that the shelf took it. */
+  { name: '1x0.5x3-slot-b-aaa-L8', u: 1, v: 0.5, hUnits: 3, insert: 2, label: 8,
+    fingerSlots: { b: true }, slots: { b: 1 }, gave: true },
   // from the lowered wall's own top, off its ramps
   { name: '2x1x3-slot-low', u: 2, v: 1, hUnits: 3, edges: { f: 0.5 }, fingerSlots: { f: true, l: true },
     slots: { f: 1, l: 1 } },
@@ -2226,7 +2235,7 @@ function weldOpen(polys, tol) {
   const ITEM = { 1: { across: 15.0, len: 50.5 }, 2: { across: 11.0, len: 44.5 },
                  3: { across: 19.0, len: 65.5 }, 4: { across: 6.65, len: 25, hex: true } };
   const near = (z, want) => z !== undefined && Math.abs(z - want) < 1e-6;
-  for (const cs of CASES.filter((c) => c.insert)) {
+  for (const cs of CASES.filter((c) => c.insert && c.holes)) {
     const t0 = Date.now();
     const r = buildBin(G, cs);
     const ms = Date.now() - t0;
@@ -2260,7 +2269,8 @@ function weldOpen(polys, tol) {
       const hw = (cs.u - 1) * 21 + 20.75, hd = (cs.v - 1) * 21 + 20.75;
       const lip = !cs.edges, Wl = Math.max(0.4, wall);
       const side = lip ? Math.max(0.8, 2.70 + 0.25 - Wl) : 0.8;
-      const shelf = cs.label ? shelfNote(cs) : null;
+      // a finger slot in the back wall takes the shelf away
+      const shelved = cs.label && !(cs.slots && cs.slots.b), shelf = shelved ? shelfNote(cs) : null;
       const webs = [];
       for (let i = 1; i < h.xs.length; i++) webs.push(h.xs[i] - h.xs[i - 1] - bx);
       for (let j = 1; j < h.ys.length; j++) webs.push(h.ys[j] - h.ys[j - 1] - by);
@@ -2292,7 +2302,7 @@ function weldOpen(polys, tol) {
          that checkManifold, which rounds to a micron, could miss. */
       const open = weldOpen(r.polys, 0.01), was = weldOpen(buildBin(G, Object.assign({}, cs, { insert: 0 })).polys, 0.01);
       if (open > was) faults.push(`${open} edges open welded at 10 microns, where the bin without holes has ${was}`);
-      if (cs.label) {
+      if (shelved) {
         // the shelf as built: noteOnShelf's depth with a note, else as asked (12 fits all of these)
         const sd = shelf && shelf.depth ? shelf.depth : cs.label;
         const top = shelf && shelf.fit ? H - 1.0 : H;
@@ -2422,6 +2432,13 @@ console.log('\nfinger slots');
     const want = Object.entries(cs.slots);
     const n = want.reduce((s, [, k]) => s + k, 0);
     if (r.meta.fingers !== n) faults.push(`${r.meta.fingers} slots built, ${n} wanted`);
+    /* The holes the page is told of are the ones built, and with a back slot over a
+       shelf, whether they gave way to it. */
+    const plan = fingerSlotPlan(cs), told = cs.insert ? insertPlan(cs).n || 0 : 0;
+    if ((r.meta.holes || 0) !== (cs.holes || 0) || told !== (cs.holes || 0))
+      faults.push(`${r.meta.holes || 0} holes built, ${told} said, ${cs.holes || 0} wanted`);
+    if (plan.shelfOff !== !!(cs.label && cs.slots.b)) faults.push(`shelfOff ${plan.shelfOff}`);
+    if (!!plan.holesGaveWay !== !!cs.gave) faults.push(`holesGaveWay ${!!plan.holesGaveWay}, not ${!!cs.gave}`);
     let worstSide = 0, narrowest = Infinity, bottoms = [];
     for (const side of ['f', 'b', 'l', 'r']) {
       const e = cs.edges && cs.edges[side] !== undefined ? cs.edges[side] : 1;

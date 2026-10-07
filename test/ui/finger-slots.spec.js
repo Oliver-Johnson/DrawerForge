@@ -256,3 +256,40 @@ test('a link carries the slots, and one without them is written as it always was
   expect(await page.evaluate(() => [...typeNames().values()].sort()))
     .toEqual(['bin-1x1x3-magnets-qty1', 'bin-2x1x3-1x0div-slot-fr-qty1']);
 });
+
+/* Load a layout from its link and select the bin at the first cell. */
+const load = async (page, bl) => {
+  await page.evaluate((h) => { clearSel(); loadFromHash('bl=' + encodeURIComponent(h)); readControls(); refresh(); }, bl);
+  await settle(page);
+  expect(await page.evaluate(() => packLayers(layers)), 'the layout loaded').toBe(bl);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+};
+
+test('a back slot gives the holes the label shelf’s room, or says they kept clear of it', async ({ page }) => {
+  // a 1x1x4 for AA cells with a 12 mm shelf: the 4 holes of a bin with none, not the 2 in front of one
+  await load(page, '0-0-1-1-4-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-16-0-1-0');
+  expect(await page.evaluate(() => {
+    const b = B()[0], m = geomFor(b).meta;
+    return [m.holes, holesIn(b).n, m.fingerWalls, typeName(types()[0])];
+  })).toEqual([4, 4, 'b', 'bin-1x1x4-aa-holes-slot-b-qty1']);
+  await expect(page.locator('#insertHint')).toContainText('4 holes, 16.8 mm deep.');
+  await expect(checks(page)).toContainText('has a finger slot in its back wall, so its label shelf is left off');
+  await expect(checks(page)).not.toContainText('where its label shelf would be');
+
+  /* A 1x0.5x3 for AAA cells with an 8 mm shelf: in the shelf's room a row of them would
+     stand too high for the slot, so they keep clear of it, which leaves room for none, and
+     Checks says so, not that a shelf the bin does not have is too deep. */
+  await load(page, '0-0-1-0.5-3-1.2-1.2-0-0-0-1-1-1-1-0-8-0-0-0-0-15-16-0-2-0');
+  expect(await page.evaluate(() => {
+    const b = B()[0], m = geomFor(b).meta;
+    return [m.holes, holesIn(b), m.fingerWalls];
+  })).toEqual([0, null, 'b']);
+  await expect(checks(page)).toContainText('has no holes for AAA batteries: they keep in front of where its label ' +
+    'shelf would be, to leave room for the finger slot in its back wall, and there is no room there for even one');
+  await expect(checks(page)).toContainText('has a finger slot in its back wall, so its label shelf is left off');
+  await expect(checks(page)).not.toContainText('label shelf too deep');
+  await expect(page.locator('#insertHint')).toContainText('The holes keep clear of where the label shelf would be, ' +
+    'to leave room for the finger slot in the back wall, and in front of it there is no room for even one hole for AAA batteries.');
+  expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
+});

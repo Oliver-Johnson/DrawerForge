@@ -287,13 +287,24 @@ function insertHintSay(b) {
   if (h.why === 'carved') return ['Holes need a rectangle, so a carved shape is built without them.', ''];
   const size = `Each hole is ${+h.d.toFixed(2)} mm ${p.shape === 'hex' ? 'across the flats' : 'across'}, ` +
     `the largest ${p.items} with ${+(h.d - p.size).toFixed(2)} mm to spare.`;
-  const under = h.under === 'shelf' ? 'the label shelf' : 'the rim';
+  /* A finger slot in the back wall takes the shelf away, and the holes spread into its
+     room unless that stands them too high for the slot: then they keep clear of where it
+     would be (holesGaveWay), and are said to. */
+  const gave = !!(fingerPlan(b) || {}).holesGaveWay;
+  const why = 'The finger slot in the back wall takes the label shelf away, but laid out in its room the ' +
+    'holes would stand too high for the slot.';
+  const under = h.under === 'shelf' ? (gave ? 'where the label shelf would be' : 'the label shelf') : 'the rim';
   if (h.why === 'short')
     return [`This bin has room for holes ${h.room > 0.05 ? `only ${mm(h.room)} mm deep` : 'no depth at all'} ` +
             `under ${under}, and they need ${S.minDepth} mm, so it has none.`,
-            `A taller bin has room for them${h.shelf ? ', and so has one without a label shelf' : ''}.`];
+            `${gave ? `${why} ` : ''}A taller bin has room for them` +
+            `${h.shelf && !gave ? ', and so has one without a label shelf' : ''}.`];
   if (h.why === 'none')
-    return h.byShelf
+    return gave
+      ? [`The holes keep clear of where the label shelf would be, to leave room for the finger slot in the ` +
+         `back wall, and in front of it there is no room for even one hole for ${p.items}.`,
+         `${why} A shallower shelf has room for them. ${size}`]
+      : h.byShelf
       ? [`The label shelf leaves no room in front of it for even one hole for ${p.items}.`,
          `A shallower shelf, or none, has room for them. ${size}`]
       : [`Not one hole for ${p.items} fits in a bin this size.`, size];
@@ -310,6 +321,7 @@ function insertHintSay(b) {
   const off = [b.divX || b.divY ? 'Dividers' : '', b.scoop ? 'the scoop' : ''].filter(Boolean);
   const rest = [
     size,
+    gave ? `They keep clear of where the label shelf would be: ${why[0].toLowerCase()}${why.slice(1)}` : '',
     h.over > 1e-9 && !(h.above > 1e-9) ? `They stop ${mm(-h.above)} mm under the rim, and a bin stacked ` +
       `on this one comes down ${S.seat} mm into it.` : '',
     h.capped ? `${h.asked ? `${mm(want)} mm` : `A third of their length, ${mm(want)} mm,`} is more than ` +
@@ -891,8 +903,10 @@ function volumeMm3(c) {
        shelf's 45 degree underside already fills, from its foot up to the block's top: a
        triangle in section, as wide as the shelf. That plastic is the shelf's, so the
        block does not add it again; counted, a 1x1x3 with AAA holes and a 12 mm shelf
-       weighed 26% more block than it has. */
-    const sh = holes.shelf;
+       weighed 26% more block than it has. A finger slot in the back wall leaves the shelf
+       off, and then the block fills the wedge itself, even where the holes keep clear of
+       where the shelf would be (holesGaveWay). */
+    const sh = (fingerPlan(c) || {}).shelfOff ? null : holes.shelf;
     if (sh) {
       const foot = sh.top - (c.labelT || BIN_DEFAULTS.labelT) - sh.depth;
       const lo = Math.max(holes.floor, foot), hi = holes.top;
@@ -3150,6 +3164,21 @@ function insertIssues(b, z) {
     out.push({ note: true, t: `is a carved shape, so its holes for ${p.items} are left off: holes need a rectangle` });
     return out;
   }
+  /* Kept clear of a label shelf the back wall's finger slot takes away, because laid out
+     in its room they would stand too high for the slot (holesGaveWay). */
+  const gave = !!(fingerPlan(b) || {}).holesGaveWay;
+  if (gave && (h.why === 'short' || h.why === 'none')) {
+    const room = h.why === 'short' ? `room for ${h.room > 0.05 ? `${mm(h.room)} mm` : 'none'} there, where ` +
+      `a hole needs ${INSERT_SPEC.minDepth} mm` : 'no room there for even one';
+    const there = h.why === 'short' ? 'under' : 'in front of';
+    out.push({ note: true, group: `gave:${h.why}:${b.insert}`,
+      t: `has no holes for ${p.items}: they keep ${there} where its label shelf would be, to leave room for ` +
+         `the finger slot in its back wall, and there is ${room}`,
+      many: (n, names) => `${n} bins have no holes for ${p.items}: they keep ${there} where their label ` +
+        `shelves would be, to leave room for the finger slots in their back walls, and there is ` +
+        `${h.why === 'short' ? 'too little room there' : 'no room there for even one'}: ${names}` });
+    return out;
+  }
   if (h.why === 'short' || h.why === 'none') {
     const under = h.under === 'shelf' ? 'its label shelf' : 'its rim';
     out.push(h.why === 'short'
@@ -3174,6 +3203,12 @@ function insertIssues(b, z) {
         `built with, so they have none: ${names}` });
     return out;
   }
+  if (gave)
+    out.push({ note: true, group: `gave:${b.insert}`,
+      t: `has its holes for ${p.items} kept clear of where its label shelf would be, to leave room for the ` +
+         'finger slot in its back wall',
+      many: (n, names) => `${n} bins have their holes for ${p.items} kept clear of where their label shelves ` +
+        `would be, to leave room for the finger slots in their back walls: ${names}` });
   const divs = !!(b.divX || b.divY), off = [divs ? 'dividers' : '', b.scoop ? 'scoop' : ''].filter(Boolean);
   if (off.length)
     out.push({ note: true, group: `off:${off.join()}`,

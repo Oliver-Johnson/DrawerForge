@@ -7844,9 +7844,9 @@ function cornerMargin(shape, rc, side, edge) {
 }
 /* The label shelf as buildBin builds it, { top, depth, raised }, or null for none: the
    shelf sits at H, or with the note raised on it lower (noteOnShelf). The holes need it
-   to keep in front of it and under it. A finger slot in the back wall takes it away, which
-   buildBin sees to (fingerSlots' shelfOff): this is the shelf as asked, slots aside, so
-   the holes keep where they would be with no slots and a slot never moves them. */
+   to keep in front of it and under it. This is the shelf as asked, slots aside: a finger
+   slot in the back wall takes it away, and fingerSlots then lays the holes out without it
+   where the slot is still built over them, or else keeps them where they are with it. */
 function shelfFor(c, iw, id, H) {
   const eB = c.edges && c.edges.b !== undefined ? c.edges.b : 1;
   if (!(c.label > 0.05 && eB > 0.99)) return null;
@@ -7938,7 +7938,10 @@ function insertPlan(cfg) {
   if (isHalfSize(c)) c.cells = null;
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
-  return insertOf(c) ? floorPlan(c, hw - c.wall, hd - c.wall, c.hUnits * SPEC.unitH).holes : { why: 'off' };
+  if (!insertOf(c)) return { why: 'off' };
+  // a back finger slot takes the shelf away, and fingerSlots says where that leaves them
+  const fingers = fingerSlots(c);
+  return (fingers.floor || floorPlan(c, hw - c.wall, hd - c.wall, c.hUnits * SPEC.unitH)).holes;
 }
 /* Both loops of one tile: the tile's outline and the hole's, sampled on the same rays
    from the hole's centre. A ray goes through every corner of either, so both come out
@@ -8073,10 +8076,10 @@ function dividerSpans(c, n, inner, shelf) {
  *   the scoop         held under a front slot's bottom, as under a lowered front
  *   the label shelf   left off with a back slot, and the note raised on it with it; a side
  *                     slot keeps clear of the shelf's ends, and of the scoop's
- *   holes in floor    laid out as they would be with no slots (floorPlan, with the
- *                     shelf as asked), and each slot stops half a millimetre over the
- *                     block they stand in, so a slot never moves a hole and the block
- *                     never shows in a slot
+ *   holes in floor    each slot stops half a millimetre over the block they stand in, so
+ *                     the block never shows in a slot; with a back slot taking the shelf
+ *                     away they spread into its room, unless that stands them too high
+ *                     for the slot, and then they keep where the shelf would be
  *   dividers          the ones built (dividersBuilt), none on a bin with holes: a slot
  *                     keeps a millimetre off a fixed one, and off the two rails of a
  *                     removable one and the gap between them where its plate stands
@@ -8138,7 +8141,11 @@ function fingerZ(s, x) {
  *             dip), 'holes' (the block of holes leaves too little) or 'narrow' (no
  *             compartment 15 mm across); narrow counts the compartments too narrow for
  *             one, and held is 'holes' when the block held the slots above half way
+ *   floor     floorPlan's { shelf, holes } the slots were settled against, which buildBin
+ *             builds and insertPlan answers with; null where there are none to settle
  *   shelfOff  a back slot is built where a label shelf would have been
+ *   holesGaveWay  and the holes across the floor are laid out as if the shelf were
+ *             there, because laid out without it they stand too high for the slot
  *   scoop     the scoop a front slot holds it to, for buildBin to build, or null;
  *   scoopWas  the radius it would have been built at without the slots, and
  *   scoopNow  the one it is built at, 0 for none
@@ -8147,13 +8154,16 @@ function fingerZ(s, x) {
  *   splits    the extra points for each straight of the wall rings, in roundRect's
  *             order (back, left, front, right), as fractions of its length */
 function fingerSlots(c) {
-  const plan = { n: 0, built: '', sides: {}, shelfOff: false, scoop: null, scoopWas: 0, scoopNow: 0,
-                 area: 0, splits: [[], [], [], []] };
+  const blank = () => ({ n: 0, built: '', sides: {}, floor: null, shelfOff: false, holesGaveWay: false,
+                         scoop: null, scoopWas: 0, scoopNow: 0, area: 0, splits: [[], [], [], []] });
   const asked = FINGER_SIDES.filter((k) => c.fingerSlots && c.fingerSlots[k]);
-  if (!asked.length) return plan;
+  if (!asked.length) return blank();
   const shape = !isFullRect(c) ? 'carved' : builtSolid(c) ? 'solid' : '';
-  for (const k of asked) plan.sides[k] = { why: shape, slots: [], narrow: 0, held: '' };
-  if (shape) return plan;
+  if (shape) {
+    const plan = blank();
+    for (const k of asked) plan.sides[k] = { why: shape, slots: [], narrow: 0, held: '' };
+    return plan;
+  }
 
   const H = c.hUnits * SPEC.unitH, floorZ = floorTop(c);
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
@@ -8164,114 +8174,137 @@ function fingerSlots(c) {
   const rI = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(iw, id) - 0.01));
   // as edgeHeights reads them
   const frac = (k) => Math.max(0, Math.min(1, c.edges && c.edges[k] !== undefined ? c.edges[k] : 1));
-  /* The shelf and the holes as floorPlan settles them, the shelf as asked: a back slot
-     takes it away after (shelfOff), and the holes keep where they would be without it. */
-  const { shelf, holes } = floorPlan(c, iw, id, H), holesOn = !!holes.n;
-  // the dividers as built: removable ones no more than fit, and none with holes
-  const built = holesOn ? { divX: 0, divY: 0 } : dividersBuilt(c);
   const th = FINGER.angle * Math.PI / 180;
   const deepest = (a) => (a - FINGER.round * Math.tan(th / 2)) * Math.tan(th);
   /* Per wall: the outer straight's half-length, the inner one's, the cavity's half-width
-     along it, the dividers built that meet it, the walls at its two ends, and how a point
-     along it is a fraction of its straight, which roundRect runs back and left from + to -. */
+     along it, which dividers meet it, the walls at its two ends, and how a point along it
+     is a fraction of its straight, which roundRect runs back and left from + to -. */
   const SIDE = {
-    f: [hw - rO, iw - rI, iw, built.divX, 'l', 'r', 2, 1],
-    b: [hw - rO, iw - rI, iw, built.divX, 'l', 'r', 0, -1],
-    l: [hd - rO, id - rI, id, built.divY, 'f', 'b', 1, -1],
-    r: [hd - rO, id - rI, id, built.divY, 'f', 'b', 3, 1],
-  };
-  /* One wall, its compartments held to [lo0, hi0] across the cavity: the scoop's and the
-     shelf's ends, for a side wall. Settles plan.sides[k]. */
-  const wall = (k, lo0, hi0) => {
-    const s = plan.sides[k], e = frac(k);
-    if (!s) return;
-    if (!(e > 0)) { s.why = 'open'; return; }
-    const [S, Si, inner, nDiv, kLo, kHi, straight, dir] = SIDE[k];
-    const T = floorZ + e * (H - floorZ);
-    let D = FINGER.share * (T - floorZ);
-    if (D < FINGER.depthMin) { s.why = 'low'; return; }
-    if (holesOn && T - FINGER.clear - holes.top < D) { D = T - FINGER.clear - holes.top; s.held = 'holes'; }
-    if (D < FINGER.depthMin) { s.why = 'holes'; return; }
-    // the ramps where this wall climbs to a taller one (edgeHeights)
-    const ramp = rampLen(2 * S);
-    const lo = -S + (frac(kLo) > e + 1e-9 ? ramp : 0), hi = S - (frac(kHi) > e + 1e-9 ? ramp : 0);
-    /* Between dividers. A removable divider's two rails are one bound: the gap between
-       them is where its plate stands, not a compartment. However deep the rails reach
-       from the wall, they stand on it across their own width, which is what this keeps
-       off. */
-    const gap = c.divRemovable ? 2 * (c.divT / 2 + c.divClr) + 1e-6 : 0;
-    const bounds = [];
-    for (const [a, b] of dividerSpans(c, nDiv, inner)) {
-      const last = bounds[bounds.length - 1];
-      if (last && a - last[1] <= gap) last[1] = b;
-      else bounds.push([a, b]);
-    }
-    const room = [];
-    let from = -inner;
-    for (const [a, b] of bounds) { room.push([from, a]); from = b; }
-    room.push([from, inner]);
-    for (const [a0, b0] of room) {
-      /* On the inner ring's straight, then out to the outer one's: both take the same
-         fractions, and with a wall over 3.35 mm the inner straight is the shorter. */
-      const a = Math.max(a0, lo0, -Si), b = Math.min(b0, hi0, Si);
-      const x0 = (Si > 0 ? Math.max(a * S / Si, lo) : 0) + FINGER.keep;
-      const x1 = (Si > 0 ? Math.min(b * S / Si, hi) : 0) - FINGER.keep;
-      if (!(x1 - x0 >= FINGER.least - 1e-9)) { s.narrow++; continue; }
-      /* In the middle of the compartment, or as near it as the corner, a ramp, the scoop
-         or the shelf allow: the end compartments' middles are near the corners. */
-      const half = Math.min(FINGER.top, x1 - x0) / 2;
-      const mid = Si > 0 ? (a0 + b0) / 2 * S / Si : 0;
-      const at = Math.min(x1 - half, Math.max(x0 + half, mid));
-      const slot = fingerProfile(at, half, T, Math.min(D, deepest(half)));
-      s.slots.push(slot);
-      for (let i = 1; i < slot.prof.length; i++) {
-        const [xa, za] = slot.prof[i - 1], [xb, zb] = slot.prof[i];
-        plan.area += (xb - xa) * ((T - za) + (T - zb)) / 2;
-      }
-      for (const [x] of slot.prof) plan.splits[straight].push(dir > 0 ? (x + S) / (2 * S) : (S - x) / (2 * S));
-    }
-    if (!s.slots.length) s.why = 'narrow';
+    f: [hw - rO, iw - rI, iw, 'divX', 'l', 'r', 2, 1],
+    b: [hw - rO, iw - rI, iw, 'divX', 'l', 'r', 0, -1],
+    l: [hd - rO, id - rI, id, 'divY', 'f', 'b', 1, -1],
+    r: [hd - rO, id - rI, id, 'divY', 'f', 'b', 3, 1],
   };
 
-  wall('f', -Infinity, Infinity);
-  wall('b', -Infinity, Infinity);
-  const front = plan.sides.f && plan.sides.f.slots.length ? plan.sides.f.slots : null;
-  const back = !!(plan.sides.b && plan.sides.b.slots.length);
-  /* The scoop under a front slot's bottom, nine tenths of the way up to it, as it is held
-     under a lowered front wall (buildBin). None is built beside holes across the floor. */
-  const eF = frac('f');
-  let scoop = 0;
-  if (c.scoop > 0.05 && eF > 0 && !holesOn) {
-    plan.scoopWas = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF));
-    scoop = plan.scoopWas;
-    if (front) {
-      const cap = 0.9 * (Math.min(...front.map((s) => s.bottom)) - floorZ);
-      if (cap < c.scoop) { plan.scoop = cap; scoop = Math.min(scoop, cap); }
+  /* The slots against one of floorPlan's answers, `floor`; `shelfAsked` is the label shelf
+     as asked, which a back slot takes away (shelfOff). */
+  const settle = (floor, shelfAsked) => {
+    const plan = blank();
+    plan.floor = floor;
+    for (const k of asked) plan.sides[k] = { why: '', slots: [], narrow: 0, held: '' };
+    const { shelf, holes } = floor, holesOn = !!holes.n;
+    // the dividers as built: removable ones no more than fit, and none with holes
+    const built = holesOn ? { divX: 0, divY: 0 } : dividersBuilt(c);
+    /* One wall, its compartments held to [lo0, hi0] across the cavity: the scoop's and the
+       shelf's ends, for a side wall. Settles plan.sides[k]. */
+    const wall = (k, lo0, hi0) => {
+      const s = plan.sides[k], e = frac(k);
+      if (!s) return;
+      if (!(e > 0)) { s.why = 'open'; return; }
+      const [S, Si, inner, divs, kLo, kHi, straight, dir] = SIDE[k];
+      const T = floorZ + e * (H - floorZ);
+      let D = FINGER.share * (T - floorZ);
+      if (D < FINGER.depthMin) { s.why = 'low'; return; }
+      if (holesOn && T - FINGER.clear - holes.top < D) { D = T - FINGER.clear - holes.top; s.held = 'holes'; }
+      if (D < FINGER.depthMin) { s.why = 'holes'; return; }
+      // the ramps where this wall climbs to a taller one (edgeHeights)
+      const ramp = rampLen(2 * S);
+      const lo = -S + (frac(kLo) > e + 1e-9 ? ramp : 0), hi = S - (frac(kHi) > e + 1e-9 ? ramp : 0);
+      /* Between dividers. A removable divider's two rails are one bound: the gap between
+         them is where its plate stands, not a compartment. However deep the rails reach
+         from the wall, they stand on it across their own width, which is what this keeps
+         off. */
+      const gap = c.divRemovable ? 2 * (c.divT / 2 + c.divClr) + 1e-6 : 0;
+      const bounds = [];
+      for (const [a, b] of dividerSpans(c, built[divs], inner)) {
+        const last = bounds[bounds.length - 1];
+        if (last && a - last[1] <= gap) last[1] = b;
+        else bounds.push([a, b]);
+      }
+      const room = [];
+      let from = -inner;
+      for (const [a, b] of bounds) { room.push([from, a]); from = b; }
+      room.push([from, inner]);
+      for (const [a0, b0] of room) {
+        /* On the inner ring's straight, then out to the outer one's: both take the same
+           fractions, and with a wall over 3.35 mm the inner straight is the shorter. */
+        const a = Math.max(a0, lo0, -Si), b = Math.min(b0, hi0, Si);
+        const x0 = (Si > 0 ? Math.max(a * S / Si, lo) : 0) + FINGER.keep;
+        const x1 = (Si > 0 ? Math.min(b * S / Si, hi) : 0) - FINGER.keep;
+        if (!(x1 - x0 >= FINGER.least - 1e-9)) { s.narrow++; continue; }
+        /* In the middle of the compartment, or as near it as the corner, a ramp, the scoop
+           or the shelf allow: the end compartments' middles are near the corners. */
+        const half = Math.min(FINGER.top, x1 - x0) / 2;
+        const mid = Si > 0 ? (a0 + b0) / 2 * S / Si : 0;
+        const at = Math.min(x1 - half, Math.max(x0 + half, mid));
+        const slot = fingerProfile(at, half, T, Math.min(D, deepest(half)));
+        s.slots.push(slot);
+        for (let i = 1; i < slot.prof.length; i++) {
+          const [xa, za] = slot.prof[i - 1], [xb, zb] = slot.prof[i];
+          plan.area += (xb - xa) * ((T - za) + (T - zb)) / 2;
+        }
+        for (const [x] of slot.prof) plan.splits[straight].push(dir > 0 ? (x + S) / (2 * S) : (S - x) / (2 * S));
+      }
+      if (!s.slots.length) s.why = 'narrow';
+    };
+
+    wall('f', -Infinity, Infinity);
+    wall('b', -Infinity, Infinity);
+    const front = plan.sides.f && plan.sides.f.slots.length ? plan.sides.f.slots : null;
+    const back = !!(plan.sides.b && plan.sides.b.slots.length);
+    /* The scoop under a front slot's bottom, nine tenths of the way up to it, as it is held
+       under a lowered front wall (buildBin). None is built beside holes across the floor. */
+    const eF = frac('f');
+    let scoop = 0;
+    if (c.scoop > 0.05 && eF > 0 && !holesOn) {
+      plan.scoopWas = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF));
+      scoop = plan.scoopWas;
+      if (front) {
+        const cap = 0.9 * (Math.min(...front.map((s) => s.bottom)) - floorZ);
+        if (cap < c.scoop) { plan.scoop = cap; scoop = Math.min(scoop, cap); }
+      }
+      if (!(scoop > 0.05)) scoop = 0;
     }
-    if (!(scoop > 0.05)) scoop = 0;
+    plan.scoopNow = scoop;
+    plan.shelfOff = back && !!shelfAsked;
+    /* A side slot keeps clear of the scoop's ends where the scoop stands higher than half
+       the wall, and of the shelf's, which stand at its top. Half the wall is as deep as the
+       slot goes; one held shallower by the holes or by its own width has its bottom higher,
+       so this keeps it further off the scoop than it needs to be, never nearer. The scoop
+       is a quarter round, so it stands h over the floor at sqrt(r² - (r - h)²) short of
+       its foot. */
+    for (const k of ['l', 'r']) {
+      if (!plan.sides[k]) continue;
+      const h = FINGER.share * frac(k) * (H - floorZ);
+      const sh = scoop > h ? -id + scoop - Math.sqrt(scoop * scoop - (scoop - h) * (scoop - h)) : -Infinity;
+      wall(k, sh, shelf && !back ? id - shelf.depth : Infinity);
+    }
+    for (const k of asked) {
+      const n = plan.sides[k].slots.length;
+      plan.n += n;
+      if (n) plan.built += k;
+    }
+    // with the existing points, sorted and as straightSplits keeps them apart
+    plan.splits = plan.splits.map((l) => l.filter((t) => t > 1e-6 && t < 1 - 1e-6));
+    return plan;
+  };
+
+  /* The shelf and the holes as floorPlan settles them, which decide each other. A back
+     slot takes the shelf away, so with holes asked for they are laid out as they would be
+     with no shelf, as long as the slot is still built over them: a 1x1x4 with AA cells and
+     a 12 mm shelf gets 4, not the 2 that keep in front of a shelf it does not have. Laid
+     out without the shelf they can stand too high for the slot, the row of AAA cells in a
+     1x0.5x3 with an 8 mm shelf, and then they keep where they would be with it
+     (holesGaveWay), which there is nowhere, and the slot is built. */
+  const asIs = floorPlan(c, iw, id, H);
+  if (c.fingerSlots.b && asIs.shelf && insertOf(c)) {
+    const bare = settle(floorPlan(Object.assign({}, c, { label: 0 }), iw, id, H), asIs.shelf);
+    if (bare.sides.b.slots.length) return bare;
+    const plan = settle(asIs, asIs.shelf);
+    plan.holesGaveWay = plan.shelfOff;
+    return plan;
   }
-  plan.scoopNow = scoop;
-  plan.shelfOff = back && !!shelf;
-  /* A side slot keeps clear of the scoop's ends where the scoop stands higher than half
-     the wall, and of the shelf's, which stand at its top. Half the wall is as deep as the
-     slot goes; one held shallower by the holes or by its own width has its bottom higher,
-     so this keeps it further off the scoop than it needs to be, never nearer. The scoop
-     is a quarter round, so it stands h over the floor at sqrt(r² - (r - h)²) short of
-     its foot. */
-  for (const k of ['l', 'r']) {
-    if (!plan.sides[k]) continue;
-    const h = FINGER.share * frac(k) * (H - floorZ);
-    const sh = scoop > h ? -id + scoop - Math.sqrt(scoop * scoop - (scoop - h) * (scoop - h)) : -Infinity;
-    wall(k, sh, shelf && !back ? id - shelf.depth : Infinity);
-  }
-  for (const k of asked) {
-    const n = plan.sides[k].slots.length;
-    plan.n += n;
-    if (n) plan.built += k;
-  }
-  // with the existing points, sorted and as straightSplits keeps them apart
-  plan.splits = plan.splits.map((l) => l.filter((t) => t > 1e-6 && t < 1 - 1e-6));
-  return plan;
+  return settle(asIs, asIs.shelf);
 }
 /* The rings' split lists with the slots' points added, each straight its own list now:
    the slots on the front need not be where the ones at the back are. Both rings still
@@ -8709,8 +8742,8 @@ function buildBin(G, cfg) {
     const eF = c.edges && c.edges.f !== undefined ? c.edges.f : 1;
     const iw = hw - c.wall, id = hd - c.wall, poke = cornersPoke(hw, hd, iw, id, n);
     /* A finger slot in the back wall takes the shelf's place, and the note raised on it
-       with it; the holes keep where they would be with the shelf (fingerSlots). */
-    const asPlanned = floorPlan(c, iw, id, H), holes = asPlanned.holes;
+       with it; fingerSlots has laid the holes out for that (its floor). */
+    const asPlanned = fingers.floor || floorPlan(c, iw, id, H), holes = asPlanned.holes;
     const shelf = fingers.shelfOff ? null : asPlanned.shelf;
     const holesOn = !!holes.n;
     if (c.scoop > 0.05 && eF > 0 && !holesOn) {
@@ -9401,13 +9434,24 @@ function insertHintSay(b) {
   if (h.why === 'carved') return ['Holes need a rectangle, so a carved shape is built without them.', ''];
   const size = `Each hole is ${+h.d.toFixed(2)} mm ${p.shape === 'hex' ? 'across the flats' : 'across'}, ` +
     `the largest ${p.items} with ${+(h.d - p.size).toFixed(2)} mm to spare.`;
-  const under = h.under === 'shelf' ? 'the label shelf' : 'the rim';
+  /* A finger slot in the back wall takes the shelf away, and the holes spread into its
+     room unless that stands them too high for the slot: then they keep clear of where it
+     would be (holesGaveWay), and are said to. */
+  const gave = !!(fingerPlan(b) || {}).holesGaveWay;
+  const why = 'The finger slot in the back wall takes the label shelf away, but laid out in its room the ' +
+    'holes would stand too high for the slot.';
+  const under = h.under === 'shelf' ? (gave ? 'where the label shelf would be' : 'the label shelf') : 'the rim';
   if (h.why === 'short')
     return [`This bin has room for holes ${h.room > 0.05 ? `only ${mm(h.room)} mm deep` : 'no depth at all'} ` +
             `under ${under}, and they need ${S.minDepth} mm, so it has none.`,
-            `A taller bin has room for them${h.shelf ? ', and so has one without a label shelf' : ''}.`];
+            `${gave ? `${why} ` : ''}A taller bin has room for them` +
+            `${h.shelf && !gave ? ', and so has one without a label shelf' : ''}.`];
   if (h.why === 'none')
-    return h.byShelf
+    return gave
+      ? [`The holes keep clear of where the label shelf would be, to leave room for the finger slot in the ` +
+         `back wall, and in front of it there is no room for even one hole for ${p.items}.`,
+         `${why} A shallower shelf has room for them. ${size}`]
+      : h.byShelf
       ? [`The label shelf leaves no room in front of it for even one hole for ${p.items}.`,
          `A shallower shelf, or none, has room for them. ${size}`]
       : [`Not one hole for ${p.items} fits in a bin this size.`, size];
@@ -9424,6 +9468,7 @@ function insertHintSay(b) {
   const off = [b.divX || b.divY ? 'Dividers' : '', b.scoop ? 'the scoop' : ''].filter(Boolean);
   const rest = [
     size,
+    gave ? `They keep clear of where the label shelf would be: ${why[0].toLowerCase()}${why.slice(1)}` : '',
     h.over > 1e-9 && !(h.above > 1e-9) ? `They stop ${mm(-h.above)} mm under the rim, and a bin stacked ` +
       `on this one comes down ${S.seat} mm into it.` : '',
     h.capped ? `${h.asked ? `${mm(want)} mm` : `A third of their length, ${mm(want)} mm,`} is more than ` +
@@ -10005,8 +10050,10 @@ function volumeMm3(c) {
        shelf's 45 degree underside already fills, from its foot up to the block's top: a
        triangle in section, as wide as the shelf. That plastic is the shelf's, so the
        block does not add it again; counted, a 1x1x3 with AAA holes and a 12 mm shelf
-       weighed 26% more block than it has. */
-    const sh = holes.shelf;
+       weighed 26% more block than it has. A finger slot in the back wall leaves the shelf
+       off, and then the block fills the wedge itself, even where the holes keep clear of
+       where the shelf would be (holesGaveWay). */
+    const sh = (fingerPlan(c) || {}).shelfOff ? null : holes.shelf;
     if (sh) {
       const foot = sh.top - (c.labelT || BIN_DEFAULTS.labelT) - sh.depth;
       const lo = Math.max(holes.floor, foot), hi = holes.top;
@@ -12264,6 +12311,21 @@ function insertIssues(b, z) {
     out.push({ note: true, t: `is a carved shape, so its holes for ${p.items} are left off: holes need a rectangle` });
     return out;
   }
+  /* Kept clear of a label shelf the back wall's finger slot takes away, because laid out
+     in its room they would stand too high for the slot (holesGaveWay). */
+  const gave = !!(fingerPlan(b) || {}).holesGaveWay;
+  if (gave && (h.why === 'short' || h.why === 'none')) {
+    const room = h.why === 'short' ? `room for ${h.room > 0.05 ? `${mm(h.room)} mm` : 'none'} there, where ` +
+      `a hole needs ${INSERT_SPEC.minDepth} mm` : 'no room there for even one';
+    const there = h.why === 'short' ? 'under' : 'in front of';
+    out.push({ note: true, group: `gave:${h.why}:${b.insert}`,
+      t: `has no holes for ${p.items}: they keep ${there} where its label shelf would be, to leave room for ` +
+         `the finger slot in its back wall, and there is ${room}`,
+      many: (n, names) => `${n} bins have no holes for ${p.items}: they keep ${there} where their label ` +
+        `shelves would be, to leave room for the finger slots in their back walls, and there is ` +
+        `${h.why === 'short' ? 'too little room there' : 'no room there for even one'}: ${names}` });
+    return out;
+  }
   if (h.why === 'short' || h.why === 'none') {
     const under = h.under === 'shelf' ? 'its label shelf' : 'its rim';
     out.push(h.why === 'short'
@@ -12288,6 +12350,12 @@ function insertIssues(b, z) {
         `built with, so they have none: ${names}` });
     return out;
   }
+  if (gave)
+    out.push({ note: true, group: `gave:${b.insert}`,
+      t: `has its holes for ${p.items} kept clear of where its label shelf would be, to leave room for the ` +
+         'finger slot in its back wall',
+      many: (n, names) => `${n} bins have their holes for ${p.items} kept clear of where their label shelves ` +
+        `would be, to leave room for the finger slots in their back walls: ${names}` });
   const divs = !!(b.divX || b.divY), off = [divs ? 'dividers' : '', b.scoop ? 'scoop' : ''].filter(Boolean);
   if (off.length)
     out.push({ note: true, group: `off:${off.join()}`,
