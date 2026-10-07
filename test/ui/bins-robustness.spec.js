@@ -229,7 +229,7 @@ test('a link asking for more removable dividers than fit opens unchanged, and Ch
   expect(await page.evaluate(() => localStorage.getItem('drawerforge:bins:v1'))).toContain('bl=' + bl);
   await H.setField(page, 'note', 'screws');
   expect(await page.evaluate(() => B()[0].divX)).toBe(30);
-  // a number typed in is held to the limit
+  // a number other than the one it asks for, typed in, is held to the limit
   await H.setField(page, 'divX', 50);
   expect(await page.evaluate(() => B()[0].divX)).toBe(10);
   expect(await notes()).toEqual(['2 bins are built with fewer removable dividers than they ask for, as no more ' +
@@ -331,6 +331,22 @@ test('bins built with the same removable dividers weigh the same, whichever come
   expect(asTen[0]).toMatch(/^1×1×3 · 11 comp \| .* \| 2 \| \d+ g \| /);
   expect(await rows(asks(0, 30) + '_' + asks(1, 10))).toEqual(asTen);
   expect(await rows(asks(0, 10) + '_' + asks(1, 30))).toEqual(asTen);
+});
+
+/* The fields with nothing selected are the next bin drawn, and it is drawn with fixed
+   dividers: the count is taken, Removable is not. Held to the rails of the bin chosen a
+   moment before, a 1x2 asking for 30 removable dividers along, the next bin got 23. */
+test('the next bin drawn takes the dividers asked for, not the removable limit of the last one chosen', async ({ page }) => {
+  const errors = await openAt(page, 'bl=0-0-1-2-3-1.2-1.2-0-30-0-1-1-1-1-0-0-0-0-1-0-15');
+  await settle(page, 600);
+  await H.clickCell(page, 0, 0);
+  await settle(page, 400);
+  expect(await page.inputValue('#divY')).toBe('30');
+  await H.dragCells(page, [3, 0], [3, 1]);
+  await settle(page, 600);
+  const b = await page.evaluate(() => B().map((x) => [x.u, x.v, x.divY, !!x.divRemovable]));
+  expect(b).toEqual([[1, 2, 30, true], [1, 2, 30, false]]);
+  expect(errors).toEqual([]);
 });
 
 test('a bin designed on its own is held to the 50 cells a link carries', async ({ page }) => {

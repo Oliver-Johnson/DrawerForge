@@ -1165,14 +1165,22 @@ function readControls() {
      dividers that fit a 1x1 are the most any of them can be given. */
   const sizes = sel.length > 1 && !scratch ? sel.map((i) => B()[i]) : [t];
   const minU = Math.min(...sizes.map((x) => x.u)), minV = Math.min(...sizes.map((x) => x.v));
-  setBinLimits(minU, minV, t.hUnits, t.wall, t.divRemovable);
+  /* With nothing selected the fields are the next bin drawn, which is drawn with fixed
+     dividers whatever the box says (it takes the count, not Removable), so they are held
+     to what fixed ones allow. Held to the rails, the bin chosen a moment before left its
+     limit behind: after a 1x2 with removable dividers, the next bin drawn got 23 where 30
+     were asked for. */
+  const own = scratch || b;
+  setBinLimits(minU, minV, t.hUnits, t.wall, t.divRemovable && !!own);
   /* A bin asking for more removable dividers than fit keeps asking for them: a link or a
      saved drawer from before the limit followed the rails can ask for 31 on a 1x1, where
      10 fit, and is built with 10 (Checks says so). Selecting it, or changing anything
      else about it, must not rewrite the link, so while the field still shows what the bin
-     asks for, that is kept, held only to the limit the link reader holds it to; a number
-     typed in is held to the field's own. */
-  const own = scratch || b;
+     asks for, that is kept, held only to the limit the link reader holds it to. So is
+     the same number typed in again, and the fixed dividers of a bin whose Removable is
+     ticked: the field shows them above its limit, and the bin is built with as many as fit
+     until a plate or a clearance lets more in. Any other number typed in is held to the
+     field's limit. */
   const divCount = (id, most) => {
     const x = count(id, 0), asked = Math.round(num(id, 0));
     return own && asked > x && asked === own[id] ? Math.min(asked, most) : x;
