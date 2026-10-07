@@ -9,7 +9,7 @@ const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
         unpackBin, binFeet, dividersBuilt, binDividers, dividerPlates, plateLayout, shelfNote, floorPlan, NOTE_CLEAR,
-        insertPlan } = require('../src/bins/bin.js');
+        insertPlan, dividersWhy, railedLimit } = require('../src/bins/bin.js');
 // the label shelf as built, { top, depth, raised }, depth 0 for none: floorPlan's, which buildBin builds
 const shelfAs = (c, iw, id, H) => floorPlan(c, iw, id, H).shelf || { top: H, depth: 0, raised: null };
 const NOTE_TEXT = require('../src/bins/text.js');
@@ -2142,6 +2142,54 @@ console.log('\nremovable dividers: the notches, the cut and the halving slots ar
   console.log('  ' + (fails.length ? `${fails.length} FAILED: ${fails.join('; ')}`
     : `${SET.length} bins, ${probes} probes: notched at every slot, the lip and shelf standing between, ${corners} of ${4 * SET.length} corners whole; plates cut to the scoop and halved where they cross`));
   if (fails.length) bad++;
+}
+
+console.log('\nremovable dividers: the plates a bin lists, and why it has fewer');
+{
+  /* No plates for a bin with no rails to hold them, as buildBin builds none: the engine's
+     dividerPlates listed plain ones for a carved or solid bin asking for removable
+     dividers, and for one with fixed dividers, which only the page kept out. */
+  const carved = [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1], [0, 2], [1, 2]];
+  const NONE = [
+    ['carved', { u: 3, v: 3, hUnits: 3, divX: 1, divY: 1, divRemovable: true, cells: carved }],
+    ['solid', { u: 1, v: 1, hUnits: 3, divX: 2, divRemovable: true, solid: true }],
+    ['floor to the rim', { u: 1, v: 1, hUnits: 2, divX: 2, divRemovable: true, floorT: 20 }],
+    ['fixed dividers', { u: 1, v: 1, hUnits: 3, divX: 2, divY: 1 }],
+  ];
+  const listed = NONE.map(([name, c]) => [name, dividerPlates(G, c).reduce((n, p) => n + p.qty, 0)]).filter(([, n]) => n);
+  const kept = [{ u: 1, v: 1, hUnits: 3, divX: 2, divRemovable: true }, { u: 0.5, v: 1, hUnits: 3, divY: 1, divRemovable: true, cells: [[0, 0]] }]
+    .map((c) => dividerPlates(G, c).reduce((n, p) => n + p.qty, 0));
+  console.log(`  ${'no rails, no plates'.padEnd(22)} ` + (listed.length || kept.some((n) => !n)
+    ? 'FAILED: ' + listed.map(([name, n]) => `${name} lists ${n}`).concat(kept.some((n) => !n) ? ['a bin with rails lists none'] : []).join('; ')
+    : `${NONE.length} bins (${NONE.map(([name]) => name).join(', ')}) list none; with rails, ${kept.join(' and ')}`));
+  if (listed.length || kept.some((n) => !n)) bad++;
+
+  /* Below what the rails allow, a bin is built with fewer along where one more would keep
+     too little plate where they cross or stand on the scoop, or notch the lip too close to
+     its corners (dividersBuilt), and Checks names what stops one more (dividersWhy): both,
+     where both would. It was asked of as many as the rails allow, and named the plates'
+     keep wherever both went wrong there. */
+  const wrong = [], tally = { cross: 0, lipCorners: 0, crossCorners: 0 };
+  let n = 0, both = 0;
+  for (const [u, v] of [[1, 1], [0.5, 0.5], [1, 0.5], [2, 1]]) for (const wall of [0.4, 0.6, 2])
+    for (const hUnits of [1, 2]) for (const floorT of [0.7, 1.2]) for (const scoop of [0, 10]) for (const label of [0, 8])
+      for (const [divT, divClr] of [[1.6, 0.25], [0.8, 0.4], [0.8, 0.1]]) for (const divX of [1, 8, 14]) for (const divY of [1, 5, 10, 20]) {
+        const c = Object.assign({}, BIN_DEFAULTS, { u, v, wall, hUnits, floorT, scoop, label, divT, divClr, divX, divY, divRemovable: true });
+        const built = dividersBuilt(c), top = Math.min(divY, railedLimit(c, 'y').most);
+        if (built.divY >= top) continue;
+        n++;
+        const at = (k) => plateLayout(c, Object.assign({}, built, { divY: k }));
+        const P = at(built.divY + 1), T = at(top);
+        const want = !P.fitsY && !P.corners ? 'crossCorners' : !P.fitsY ? 'cross' : 'lipCorners';
+        const got = dividersWhy(c).divY;
+        if (got !== want) wrong.push(`${u}x${v}x${hUnits} wall ${wall}, ${divX} across and ${divY} along: ${got}, where one more is ${want}`);
+        else tally[want]++;
+        if (!T.fitsY && !T.corners) both++;
+      }
+  console.log(`  ${'what stops one more'.padEnd(22)} ` + (wrong.length ? `${wrong.length} FAILED: ${wrong.slice(0, 4).join('; ')}`
+    : `${n} bins built with fewer along than the rails allow: ${tally.cross} by the plates' keep, ${tally.lipCorners} by the lip's corners, ` +
+      `${tally.crossCorners} by both; ${both} with both wrong at the count the rails allow`));
+  if (wrong.length) bad++;
 }
 
 /* The label shelf's underside runs down at 45 degrees, so the deeper the shelf the

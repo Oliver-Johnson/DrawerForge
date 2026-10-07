@@ -2114,10 +2114,13 @@ function binDividers(cfg) {
   return insertOf(c) && insertPlan(c).n ? { divX: 0, divY: 0 } : dividersBuilt(c);
 }
 /* Why a removable bin is built with fewer dividers than it asks for, along each direction:
-   railedLimit's rule where that set the count ('slots', 'corners', 'lip' or 'shelf'),
-   'cross' when the plates along would keep under PLATE_END where they stand or cross,
-   and 'lipCorners' when the notches would leave the lip too little of its corners
-   (dividersBuilt). Null where it is built with all it asks for. */
+   railedLimit's rule where that set the count ('slots', 'corners', 'lip' or 'shelf');
+   below that, what dividersBuilt stops at, asked of one more than are built, which is
+   what binds: 'cross' when the plates along would keep under PLATE_END where they stand
+   or cross, 'lipCorners' when the notches would leave the lip too little of its corners,
+   and 'crossCorners' when both would. It was asked of as many as the rails allow, and
+   named the plates' keep wherever both went wrong there, whichever stopped one more.
+   Null where it is built with all it asks for. */
 function dividersWhy(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg), built = dividersBuilt(c), out = { divX: null, divY: null };
   if (!c.divRemovable) return out;
@@ -2125,9 +2128,9 @@ function dividersWhy(cfg) {
     const asked = c[key] || 0;
     if (built[key] >= asked) continue;
     const L = railedLimit(c, axis);
-    out[key] = built[key] < Math.min(asked, L.most)
-      ? (plateLayout(c, Object.assign({}, built, { [key]: Math.min(asked, L.most) })).fitsY ? 'lipCorners' : 'cross')
-      : L.by;
+    if (built[key] >= Math.min(asked, L.most)) { out[key] = L.by; continue; }
+    const P = plateLayout(c, Object.assign({}, built, { [key]: built[key] + 1 }));
+    out[key] = !P.fitsY && !P.corners ? 'crossCorners' : !P.fitsY ? 'cross' : 'lipCorners';
   }
   return out;
 }
@@ -2411,8 +2414,13 @@ function dividerPart(G, cfg, axis, k = 1) {
    the plates across, which are all alike, and as many for the plates along as there are
    shapes among them. `ks` are the positions each is for, counting from 1, and `key` is
    its shape, the same for the same plate in any bin. Plates the page would not list,
-   under PLATE_MIN tall or long, are left out, as the page leaves them out. */
+   under PLATE_MIN tall or long, are left out, as the page leaves them out. None at all
+   for a bin without rails to hold them, as buildBin builds none: one with fixed
+   dividers, a solid or carved one, or one whose floor fills it (plateLayout's `railed`).
+   A carved or solid bin asking for removable dividers, and a bin with fixed ones, had
+   plain plates here, which only the page kept out of its lists. */
 function dividerPlates(G, cfg) {
+  if (!plateLayout(cfg, { divX: 0, divY: 0 }).railed) return [];
   const built = binDividers(cfg), out = [];
   for (const [axis, n] of [['y', built.divX], ['x', built.divY]]) {
     const byKey = new Map();

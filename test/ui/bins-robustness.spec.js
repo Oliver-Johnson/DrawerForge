@@ -344,6 +344,47 @@ test('removable plates both ways and over a scoop say how they go in, in Checks,
   expect(errors).toEqual([]);
 });
 
+/* Two bin types can take the same plate standing on the scoop in different slots: a 2x2x6
+   with a 40 mm scoop takes the 35.2 mm one in its 1st slot along with 2 along, and in its
+   2nd with 5, where its 1st takes a 29.2 mm one. The plate is one file, and its row and the
+   README said it was for the 1st slot of both: put there in the second bin it stands about
+   1.9 mm over the lip. They say which slot of which bin, by the bins' files. */
+test('a plate standing on the scoop that two bin types share says which slot of which bin it is for', async ({ page }) => {
+  const pair = 'w=300&d=200&dh=80&bl=' + removable(0, 2, 2, 6, 0, 2, 40, 0) + '_' + removable(2, 2, 2, 6, 0, 5, 40, 0);
+  const errors = await openAt(page, pair);
+  await settle(page, 600);
+  const A = 'bin-2x2x6-0x2div-qty1.stl', Bn = 'bin-2x2x6-0x5div-qty1.stl';
+  const parts = await page.evaluate(() => dividerParts().map((d) => ({ name: dividerName(d), qty: d.qty, how: plateHow(d) })));
+  expect(parts).toEqual([
+    { name: 'divider-80.6x35.8x1.6mm', qty: 4, how: '' },
+    { name: 'divider-80.6x35.2x1.6mm-along-on-scoop', qty: 2,
+      how: `along, stands on the scoop, for the 1st slot from the front of ${A}; the 2nd of ${Bn}` },
+    { name: 'divider-80.6x29.2x1.6mm-along-on-scoop', qty: 1,
+      how: `along, stands on the scoop, for the 1st slot from the front of ${Bn}` },
+  ]);
+  await page.locator('#openExport').click();
+  const rows = await page.$$eval('#exFiles [data-ex="divider"]', (els) => els.map((e) => e.closest('.exrow').textContent));
+  expect(rows.join(' | ')).toContain(`for the 1st slot from the front of ${A}; the 2nd of ${Bn} \u00b7 slides into a 2.10 mm slot`);
+  expect(rows.join(' | ')).toContain(`for the 1st slot from the front of ${Bn} \u00b7 slides into a 2.10 mm slot`);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#exFiles [data-ex="zip"]').click()]);
+  const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
+  // the bins it names are the files beside it
+  expect(Object.keys(zip.files).filter((n) => n.startsWith('bin-')).sort()).toEqual([A, Bn]);
+  expect(await zip.file('README.txt').async('string')).toContain('DIVIDER PLATES:\n' +
+    `    2 x  divider-80.6x35.2x1.6mm-along-on-scoop.stl  (along, stands on the scoop, for the 1st slot from the front of ${A}; the 2nd of ${Bn})\n` +
+    `    1 x  divider-80.6x29.2x1.6mm-along-on-scoop.stl  (along, stands on the scoop, for the 1st slot from the front of ${Bn})\n`);
+  await page.keyboard.press('Escape');
+  // each bin on its own reads as it did, with no bin named
+  for (const [bl, ks] of [[removable(0, 2, 2, 6, 0, 2, 40, 0), ['1st']], [removable(0, 2, 2, 6, 0, 5, 40, 0), ['1st', '2nd']]]) {
+    await page.goto('about:blank');
+    errors.push(...await openAt(page, 'w=300&d=200&dh=80&bl=' + bl));
+    await settle(page, 600);
+    const how = await page.evaluate(() => dividerParts().filter((d) => d.meta.stands).map(plateHow));
+    expect(how.sort()).toEqual(ks.map((k) => `along, stands on the scoop, for the ${k} slot from the front`));
+  }
+  expect(errors).toEqual([]);
+});
+
 /* The label shelf stands over the back of the cavity, and a plate along the depth would
    have to slide in under it: so the plates along stay in front of it. 23 fit a 2x2 by
    their rails, 5 in front of a 12 mm shelf; the link asking for 8 opens unchanged, and
