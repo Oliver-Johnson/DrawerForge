@@ -400,6 +400,11 @@ const DRAWERS = (function () {
     /* Whether the drawer has saved this tool's half since the page's copy `h`, which was
        current with this tool's mark `was`: it holds neither that design nor that save. */
     const movedOn = (d, h, was) => d.marks[o.tool] !== fingerprint(h) && d.marks[o.tool] !== was;
+    /* Whether this page's design `h` is still the save it was last current with, and the
+       drawer has moved on from that save since: another tab of this tool saved into it,
+       and this one has changed nothing. Saved, it would only write the older half back
+       over the newer one, and that tab's change was gone. */
+    const behind = (d, h) => d.marks[o.tool] !== ours && fingerprint(h) === ours;
     /* Replaces the page with design `h`. replaceState and a reload rather than a
        navigation: the design being replaced is not a page you went back from, and the
        back button should not offer it. */
@@ -910,6 +915,7 @@ const DRAWERS = (function () {
         const s = loadAll();
         const d = find(s, attached);
         if (!d) { attached = null; failing = false; savedInto(''); paintBar(); return; }
+        if (behind(d, h)) return;   // nothing of this page's own to save
         d.hash = mergeDesign(d.hash, h, o.owns, base);
         d.marks[o.tool] = fingerprint(h);
         d.saved = Date.now();
@@ -934,11 +940,14 @@ const DRAWERS = (function () {
       handoff(h, link) {
         const s = attached && loadAll();
         const d = s && find(s, attached);
-        if (d) {
+        // `h` is the address for the other page, which can carry more than this one's design
+        if (d && !behind(d, o.design())) {
           d.hash = mergeDesign(d.hash, h, o.owns, base);
           d.saved = Date.now();
           if (saveAll(s)) base = sharedOf(h);
         }
+        /* Behind or not, the note says which save this page's half is: one the drawer has
+           moved on from comes back from the other page as the drawer has it (restore). */
         handOver(d ? d.id : '', h, false, { link, marks: d ? marksFor(ours) : {} });
       },
     };

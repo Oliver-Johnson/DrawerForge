@@ -846,6 +846,60 @@ for (const tool of ['bins', 'plates']) {
   }
 }
 
+/* Two tabs of one tool on one drawer, and the second changes a setting. The first,
+   still showing the drawer as it was and with no change of its own, goes to the other
+   page and back. Leaving, it saved its older half over the second tab's change, and
+   then the second tab's reload, or its page from the back-forward cache, came up on that
+   older half: the change was gone everywhere. A page with nothing new writes nothing
+   back, and the first tab comes back with the drawer as the second left it. */
+for (const tool of ['bins', 'plates']) {
+  const ready = tool === 'bins' ? binsReady : platesReady;
+  const [field, key, older, newer] = tool === 'bins' ? ['gap', 'bgap', '6', '7']
+    : ['connector', 'cn', 'dovetail', 'hclip'];
+  const set = (p, v) => (tool === 'bins' ? H.setField(p, field, v) : p.selectOption('#' + field, v));
+  for (const cache of [false, true]) {
+    test(`a ${tool} tab with nothing new going to the other page keeps another tab's change` +
+      (cache ? ', from the back-forward cache' : ''), async ({ page, context }) => {
+      const errors = await openPlates(page);
+      if (tool === 'bins') await toBins(page);
+      await set(page, older);
+      await settle(page);
+      await saveAs(page, 'Kitchen');
+      await settle(page);
+
+      const other = await context.newPage();
+      other.on('pageerror', (e) => errors.push(String(e)));
+      await other.goto(base + (tool === 'bins' ? 'bins/' : ''));
+      await ready(other);
+      await expect(other.locator('#drawerName')).toHaveText('Kitchen');
+      await set(other, newer);
+      await expect.poll(() => stored(other).then((s) => s.Kitchen[key]),
+        { message: 'the second tab\'s change saved', timeout: 20000 }).toBe(newer);
+
+      // the first tab still shows the older value, and goes across and back
+      expect(await page.inputValue('#' + field)).toBe(older);
+      if (tool === 'bins') { await toPlates(page); await toBins(page); }
+      else { await toBins(page); await toPlates(page); }
+      await expect.poll(() => page.inputValue('#' + field).catch(() => ''),
+        { message: 'the first tab comes back with the drawer as it is', timeout: 20000 }).toBe(newer);
+      await ready(page);
+      await settle(page);
+      expect((await stored(page)).Kitchen[key], 'the drawer keeps the change').toBe(newer);
+
+      if (cache) {
+        await other.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+      } else await other.reload();
+      await expect.poll(() => other.inputValue('#' + field).catch(() => ''),
+        { message: 'the second tab still has its change', timeout: 20000 }).toBe(newer);
+      await ready(other);
+      await expect(other.locator('#drawerName')).toHaveText('Kitchen');
+      await settle(other);
+      expect((await stored(other)).Kitchen[key], 'and so does the drawer').toBe(newer);
+      expect(errors).toEqual([]);
+    });
+  }
+}
+
 test('export, clear the browser, import: the same design comes back', async ({ page }) => {
   const errors = await openPlates(page);
   await H.setField(page, 'drawerW', '412');
