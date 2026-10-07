@@ -15,6 +15,8 @@ const { test, expect } = require('@playwright/test');
 const H = require('./helpers.js');
 
 const settle = (page) => page.waitForTimeout(300);
+// said under the map for a press that lands a drawer size, which redraws the map under it
+const GRID_MOVED = 'The drawer changed size. Press again.';
 // one bin, as packBin writes it, with everything after the size left at the defaults
 const bin = (x, y, u, v, h = 3, feet = 0) =>
   [x, y, u, v, h, 1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 15].concat(feet ? [feet] : []).join('-');
@@ -624,12 +626,6 @@ test('a reason under the map stays on the front marker\'s line, at any window si
   await page.setViewportSize({ width: 1366, height: 768 });
   await openAt(page, hash);
   await select(page, 1);
-  /* Past the save select() set off, 400 ms on, before the drag. Arriving on a link with
-     another layout saved, the page shows the 43 px "set aside" line above the map until
-     a save finds the design changed; landing in the drag, after its first step, that
-     save took the line away and the map moved up under the pointer, and the bin came
-     out 1.5 x 1 now and then. */
-  await page.waitForTimeout(500);
   const g = await gripPoint(page, 'rb');
   const to = await slotHere(page, 8, 9);
   await page.mouse.move(g.x, g.y);
@@ -813,6 +809,37 @@ test('a size typed a moment before a press elsewhere still goes to the bin it wa
   }
 });
 
+/* A press that grabs another bin draws the map and refreshes the page for the bin it
+   selects, and landing the edit drew them both a moment before: the same pass twice, at
+   about 40 ms a refresh on four layers of 63 bins. The press now draws the landed edit
+   with its own pass. The height still goes to the bin it was typed for, the press still
+   selects the other, and the page is drawn for both, once. Counted from the press to its
+   release, which has a pass of its own. */
+test('a height typed a moment before a press on another bin goes to its bin, and the press draws once', async ({ page }) => {
+  for (let tries = 1; ; tries++) {
+    await openAt(page, 'bl=' + bin(0, 0, 1, 1) + '_' + bin(2, 0, 1, 1));
+    await select(page, 0);
+    await page.evaluate(() => {
+      const pass = window.refresh;
+      window.__refreshed = null;
+      let n = 0;
+      window.refresh = function () { n++; return pass.apply(this, arguments); };
+      addEventListener('pointerdown', () => { n = 0; }, { capture: true, once: true });
+      addEventListener('pointerup', () => { window.__refreshed = n; }, { capture: true, once: true });
+    });
+    if (await typeAndPress(page, 'hUnits', '4', () => H.cellPoint(page, 2, 0))) break;
+    expect(tries, 'pressed while the 4 waited for its pass').toBeLessThan(3);
+  }
+  await settle(page);
+  expect(await page.evaluate(() => ({
+    heights: B().map((b) => b.hUnits), selected, field: $('hUnits').value,
+    grips: [...document.querySelectorAll('#fillmap .grip')].length,
+    tab: $('layerTabs').textContent, types: types().map((t) => typeName(t)).sort(),
+    refreshed: window.__refreshed,
+  }))).toEqual({ heights: [4, 3], selected: 1, field: '3', grips: 4, tab: 'Layer 1 · 2',
+                 types: ['bin-1x1x3-qty1', 'bin-1x1x4-qty1'], refreshed: 1 });
+});
+
 /* The line under the map about a carved shape made half-size is about a bin that is
    half-size. Pulled back to a whole size in the same drag, the bin is a plain 2 x 2 and
    the line went on saying a half-size bin cannot be carved. */
@@ -841,7 +868,8 @@ test('the carved-shape line goes once the bin is whole-size again', async ({ pag
    selected nothing and threw, and a depth threw at a row it has not got. Only the fields
    were read, so the map stayed drawn for the old grid, and the address and the saved
    drawer kept the old size. The edit lands now with its whole pass, and a press aimed at
-   a map that has gone places nothing; the next one goes where it is pressed. */
+   a map that has gone places nothing, and says so under the map, where before the edit
+   landed first it made a bin; the next one goes where it is pressed. */
 for (const [size, field, value, cell, cells, key, next] of [
   ['width', 'drawerW', 120, [5, 5], [2, 9], 'w=120', [1, 3]],
   ['depth', 'drawerD', 200, [5, 8], [7, 4], 'd=200', [0, 2]]]) {
@@ -862,26 +890,77 @@ for (const [size, field, value, cell, cells, key, next] of [
       bins: B().map((b) => [b.x, b.y, b.u, b.v]) }), key);
     expect(r, `${value} typed, and the map pressed`)
       .toEqual({ grid: cells, drawn: cells, saved: true, bins: [[0, 0, 1, 1]] });
+    await expect(page.locator('#stepWhy'), 'and why').toHaveText(GRID_MOVED);
     await H.clickCell(page, ...next);
     expect(await binsNow(page), 'the next press').toEqual([[0, 0, 1, 1], [...next, 1, 1]]);
+    await expect(page.locator('#stepWhy'), 'which takes the reason away').toHaveText('');
   });
 }
+
+/* The reason a press was not taken is said in the one line under the map (mapSay), and
+   fits it on a 320 px phone. The press is over as it is said, so any pass after it takes
+   it away, an edit of anything as well as the next press: left to the pass after next,
+   as a refusal in a drag is, it would stay through an edit with nothing to do with it. */
+test('a press lost to a drawer size says why in a line a phone has room for, until the next pass', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  for (let tries = 1; ; tries++) {
+    await openAt(page, 'bl=' + bin(0, 0, 1, 1));
+    await page.click('#s-drawer .ph button');
+    if (await typeAndPress(page, 'drawerW', '120', () => H.cellPoint(page, 5, 5))) break;
+    expect(tries, 'pressed while the 120 waited for its pass').toBeLessThan(3);
+  }
+  const why = page.locator('#stepWhy');
+  await expect(why).toHaveText(GRID_MOVED);
+  await page.setViewportSize({ width: 320, height: 640 });
+  await settle(page);
+  expect(await page.evaluate(() => { const w = $('stepWhy'); return w.scrollWidth <= w.clientWidth; }),
+    'said in full on one line').toBe(true);
+  // the height for the next bin drawn: an edit that is nothing to do with the press
+  await H.setField(page, 'hUnits', 4);
+  await expect(why).toHaveText('');
+});
 
 /* The map card's title is never cut. It was let give way to the Steps switch so that the
    heading never made the card wider than the map, which cut it to "DRAWER LAYO…" in every
    drawer under 7 columns, and in a 7-column one wherever the window brings the map to its
    40 px cells. Now the card is as wide as the whole title and the switch need. Checked
    at the window sizes it was cut at, from a first visit's drawer, a deep 7-column one and
-   a narrow one, in this machine's font and in the wider DejaVu Sans. */
+   a narrow one, in this machine's font, in the wider DejaVu Sans and in Liberation Sans,
+   which has Arial's widths. Each of those two only where it is not the font this machine
+   draws the page in already, as DejaVu Sans is on many Linux machines: there the pass in
+   it was the first pass again, and only one font was tried. */
 test('the map card\'s title is whole beside the Steps switch, whatever the drawer and window', async ({ page }) => {
   test.setTimeout(120000);
   const sizes = [[1281, 680], [1366, 600], [1366, 657], [1366, 700], [1366, 768], [1536, 730], [1920, 1080]];
+  // the title's width in a font, as the heading draws it: null is this machine's own
+  const titleIn = (font) => page.evaluate((f) => {
+    const h3 = document.querySelector('#s-layout h3'), cs = getComputedStyle(h3);
+    const s = document.createElement('span');
+    s.textContent = h3.textContent;
+    Object.assign(s.style, { position: 'absolute', whiteSpace: 'nowrap', fontSize: cs.fontSize,
+      fontWeight: cs.fontWeight, letterSpacing: cs.letterSpacing, textTransform: cs.textTransform,
+      fontFamily: f ? `'${f}'` : cs.fontFamily });
+    document.body.appendChild(s);
+    const w = s.getBoundingClientRect().width;
+    s.remove();
+    return w;
+  }, font);
+  /* The fonts are found on the first visit's own page, not on a page opened for them
+     first: a second visit picks up the layout the first left and says so above the map,
+     which is 42 px the first visit does not have, and took the coverage bar out of view. */
+  let fonts = null;
   for (const [drawer, hash, barInView] of [['the first visit\'s drawer', '', true],
                                           ['a deep 7-column drawer', 'w=306&d=600', false],
                                           ['a 150 mm drawer', 'w=150&d=380', true]]) {
     await page.setViewportSize({ width: 1366, height: 768 });
     await openAt(page, hash);
-    for (const font of [null, 'DejaVu Sans']) {
+    if (!fonts) {
+      const own = await titleIn(null);
+      fonts = [null];
+      for (const f of ['DejaVu Sans', 'Liberation Sans']) if (Math.abs(await titleIn(f) - own) > 0.01) fonts.push(f);
+      expect(fonts.length, 'a font this machine does not draw the page in').toBeGreaterThan(1);
+    }
+    for (const font of fonts) {
       if (font) await page.evaluate((f) => { document.documentElement.style.setProperty('--sans', `'${f}'`); }, font);
       for (const [w, h] of sizes) {
         await page.setViewportSize({ width: w, height: h });

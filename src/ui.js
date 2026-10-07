@@ -2201,12 +2201,38 @@ function showSetAside(msg, canPutBack, canTry) {
 $('putBack').addEventListener('click', putBack);
 $('tryAnyway').addEventListener('click', tryAnyway);
 
+/* Not while a press on the cut map is held: the save waits for the release. On a link
+   that set a layout aside, the first save to find the design changed takes the
+   set-aside line above the map away (below), and the map goes up 43 px. A cut is made
+   by a click, which the browser gives the grid line only when the press and the release
+   are both on it, so a line pressed a moment after the click before it, and held over
+   that click's save, was let go 43 px from where it was pressed and the click went
+   nowhere. The save is the one thing that runs on a clock while a press is held, so
+   holding it holds all a save changes above the map, as on the bins page. mapHeld runs
+   from a press on the map to its release, wherever that is; a save that came due in
+   between is set going again by the release (saveHeld). */
+let mapHeld = false, saveHeld = false;
 function rememberState() {
   if (!hashReady) return;
   clearTimeout(hashSaveT);
   addEventListener('beforeunload', dropSave);
-  hashSaveT = setTimeout(saveNow, 400);
+  hashSaveT = setTimeout(() => { if (mapHeld) saveHeld = true; else saveNow(); }, 400);
 }
+$('cutmap').addEventListener('pointerdown', () => { mapHeld = true; });
+const letGoOfMap = () => {
+  if (!mapHeld) return;
+  mapHeld = false;
+  if (saveHeld) { saveHeld = false; rememberState(); }
+};
+/* On the window, so that a release off the map counts too. Let go on a grid line, the
+   click that follows is an edit, and sets the save going again of itself. */
+addEventListener('pointerup', letGoOfMap, true);
+addEventListener('pointercancel', letGoOfMap, true);
+/* A release the page never hears of, let go in another window after an alt-tab, left
+   the map held and every save after it waiting, keyboard edits included, until the next
+   release somewhere on the page. A pointer that moves with no button down is not
+   holding anything. */
+addEventListener('pointermove', (e) => { if (!e.buttons) letGoOfMap(); }, true);
 function saveNow() {
   clearTimeout(hashSaveT);
   removeEventListener('beforeunload', dropSave);
