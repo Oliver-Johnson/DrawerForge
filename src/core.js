@@ -1627,10 +1627,17 @@ function triangulateRing(outer, inner) {
 /* The region's outline with every point the strip's edges need: where a side of `open`
    crosses it, and a corner of `open` it passes within `tol` of. A vertex within `tol` of a
    side is moved onto it, so no two points of this shell are closer than the edge-matching
-   tolerance anyone reading the mesh uses (1e-3 in checkManifold). It moves the outline
-   by no more than that, inside this shell only: the margin's region beside the strip
-   starts at least a hundredth past the strip's side (clearCut), so it has none of the
-   vertices moved. */
+   tolerance anyone reading the mesh uses (1e-3 in checkManifold).
+
+   And a vertex within ten `tol` of a corner the outline runs through is moved onto the
+   corner itself. Without that, the arc's next vertex one or two thousandths past the
+   corner went onto the side's line beyond it, the outline ran out along that line and
+   the strip's underside piece came back up it: a needle of no width, which earTriangulate
+   dropped a triangle of, a hole in the bed face (0.1 mm margins beside 2.08 mm ones by a
+   3.08 mm corner). Three and six `tol` still left some. So the outline moves by up to
+   ten `tol` here, a hundredth, and by `tol` elsewhere, inside this shell only: the
+   margin's region beside the strip starts more than a hundredth past the strip's side
+   (clearCut), so it has none of the vertices moved. */
 function openSplit(loop, open, tol) {
   let C = loop.map((p) => [p[0], p[1]]);
   const corners = [];
@@ -1650,6 +1657,8 @@ function openSplit(loop, open, tol) {
   }
   const lines = [[0, open[0]], [1, open[1]], [0, open[2]], [1, open[3]]].filter(([, c]) => isFinite(c));
   for (const [k, c] of lines) for (const p of C) if (Math.abs(p[k] - c) <= tol) p[k] = c;
+  for (const q of corners)
+    for (const p of C) if (Math.hypot(p[0] - q[0], p[1] - q[1]) <= 10 * tol) { p[0] = q[0]; p[1] = q[1]; }
   for (const [k, c] of lines) {
     const out = [];
     for (let i = 0; i < C.length; i++) {

@@ -210,6 +210,16 @@ const CASES = [
   { name: 'skeleton, cut a hair', drawerW: 85.25, drawerD: 85.25, mLeft: 0.417,
     mRight: 0.833, mFront: 0.417, mBack: 0.833, outerRadius: 6, connector: 'none',
     plateStyle: 'skeleton', arcSegs: 6 },
+  /* The corner of what a skeleton cell hollows a thousandth or two inside the corner arc,
+     the arc's next vertex that far past it: a needle of no width in the strip's underside
+     and 12 open edges in the bed face of each. See openSplit, and the section on the
+     hollow's corner further down, which sweeps the family. */
+  { name: 'skeleton, needle 3.08', drawerW: 84.2, drawerD: 88.16, mLeft: 0.1, mRight: 0.1,
+    mFront: 2.08, mBack: 2.08, outerRadius: 3.08, connector: 'none', plateStyle: 'skeleton',
+    arcSegs: 6 },
+  { name: 'skeleton, needle 4', drawerW: 84.29, drawerD: 89.43, mLeft: 0.145, mRight: 0.145,
+    mFront: 2.715, mBack: 2.715, outerRadius: 4, connector: 'none', plateStyle: 'skeleton',
+    arcSegs: 6 },
 
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 
@@ -1424,6 +1434,64 @@ console.log('\na margin of any width beside a corner:');
   console.log(`  cross-sections of ${Object.keys(sums).length} rows of plates, at z ${ZS.join(', ')}: ` +
               (moved.length ? `${moved.length} CHANGED` : 'each the shape it was before the cuts could move'));
   bad += moved.length;
+}
+
+/* A skeleton cell's hollow with its corner on the corner arc.
+ *
+ * Beside a moved cut a skeleton cell hollows only as far as the margin was cut before
+ * (the section above), and where that corner of the hollow lands on the plate's corner
+ * arc, openSplit puts it into the outline. A corner a thousandth or two inside the arc,
+ * with the arc's next vertex that far past it on the hollow's side line, left a needle of
+ * no width in the strip's underside and a hole in the bed face: 0.1 mm margins beside
+ * 2.08 mm ones by a 3.08 mm corner had 12 open edges, and 62 of the 686 plates here had
+ * holes. Every margin row above missed it, because it takes the two margins together to
+ * put the corner there.
+ *
+ * So margins chosen to put that corner on the arc: on each of its ten segments, at a
+ * vertex and 0.4% of the segment either side of one, rounded to a thousandth as the page's
+ * fields are, beside corners from 1 to 4.88 mm, both ways round. Every one watertight,
+ * and the shape what main built, to within 0.004 mm² a plate summed over them all: where
+ * the arc pinches the strip at that corner the hollow's corner is cut off a hair, and the
+ * outline moves a hundredth at most (openSplit). */
+console.log('\na skeleton cell\'s hollow with its corner on the arc:');
+{
+  const BLOAT = 0.05, NARC = 10, ZS = [0.137, 1.3, 3.1], DY = 0.02;
+  const WAS = [188938.601, 190857.982, 285277.342];   // main at 21b1dc4
+  const radii = Array.from({ length: 33 }, (_, i) => Math.round((1 + i * 0.12) * 100) / 100).concat(4.88);
+  const designs = [], seen = new Set();
+  for (const r of radii)
+    for (let k = 0; k < NARC; k++)
+      for (const t of [0, 0.004, 0.996]) {
+        // the arc as buildPiece draws it, about the front left corner
+        const a0 = (180 + 90 * k / NARC) * Math.PI / 180, a1 = (180 + 90 * (k + 1) / NARC) * Math.PI / 180;
+        const x = r + r * Math.cos(a0) + t * r * (Math.cos(a1) - Math.cos(a0));
+        const y = r + r * Math.sin(a0) + t * r * (Math.sin(a1) - Math.sin(a0));
+        const m = Math.round((x - BLOAT) * 1000) / 1000, f = Math.round((y - BLOAT) * 1000) / 1000;
+        if (m <= 0.011 || f <= 0.011) continue;
+        for (const [ml, mf] of [[m, f], [f, m]]) {
+          if (seen.has(`${r} ${ml} ${mf}`)) continue;
+          seen.add(`${r} ${ml} ${mf}`);
+          designs.push({ outerRadius: r, mLeft: ml, mRight: ml, mFront: mf, mBack: mf,
+                         drawerW: Math.round((42 + 2 * ml) * 1000) / 1000,
+                         drawerD: Math.round((42 + 2 * mf) * 1000) / 1000 });
+        }
+      }
+  const holed = [], sums = ZS.map(() => 0);
+  for (const d of designs) {
+    const r = buildAll({ ...d, connector: 'none', plateStyle: 'skeleton' });
+    if (r.bad) holed.push(`${d.mLeft}/${d.mFront} mm by ${d.outerRadius}: ${leakText(r)}`);
+    ZS.forEach((z, k) => { sums[k] += sectionArea(r.pieces[0], z, DY); });
+  }
+  const off = sums.map((s, k) => Math.abs(s - WAS[k]));
+  const changed = off.some((o) => o > 0.004 * designs.length);
+  console.log(`  ${designs.length} plates: ` +
+              (holed.length ? `NOT CLEAN: ${holed.slice(0, 6).join('; ')}` +
+                              (holed.length > 6 ? ` and ${holed.length - 6} more` : '')
+                            : 'every one watertight') +
+              `; cross-sections at z ${ZS.join(', ')} sum to [${sums.map((s) => s.toFixed(3)).join(', ')}] mm², ` +
+              (changed ? `NOT [${WAS.join(', ')}] — THE PLATES CHANGED SHAPE`
+                       : `within ${(0.004 * designs.length).toFixed(2)} of main's`));
+  bad += holed.length + (changed ? 1 : 0);
 }
 
 /* The limits the page enforces, built at their ends.
