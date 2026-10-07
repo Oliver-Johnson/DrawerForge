@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const G = require('../src/core.js');
-const { buildBin, binVolume, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
+const { buildBin, binVolume, binHeights, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
         unpackBin, binFeet, dividersBuilt, shelfNote, NOTE_CLEAR } = require('../src/bins/bin.js');
 const NOTE_TEXT = require('../src/bins/text.js');
@@ -2064,6 +2064,9 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
     ['1x1x3, 0.4 mm walls, 5 x 3 removable', { u: 1, v: 1, hUnits: 3, wall: 0.4, divX: 5, divY: 3, divRemovable: true }],
     ['3x2x6, 5 mm walls', { u: 3, v: 2, hUnits: 6, wall: 5 }],
     ['2x2x3 solid, asking for dividers', { u: 2, v: 2, hUnits: 3, solid: true, divX: 2, divY: 1 }],
+    ['1x1x1, its floor filling it, asking too', { u: 1, v: 1, hUnits: 1, floorT: 3, divX: 2, divRemovable: true }],
+    ['carved L, walls lowered, asking too', { u: 2, v: 2, hUnits: 6, cells: L3, divX: 2, divY: 1,
+                                              edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 } }],
   ];
   const off = [];
   for (const [name, cfg] of CASES) {
@@ -2073,17 +2076,29 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
                 `  ${ratio.toFixed(3)}${Math.abs(ratio - 1) > TOL ? '  OFF' : ''}`);
     if (Math.abs(ratio - 1) > TOL) off.push(name);
   }
-  /* And what buildBin leaves off is not weighed, nor counted anywhere: a carved shape or a
-     solid block asking for dividers is built with none (dividersBuilt), which the page's
-     rows, names and README go by. */
-  const none = CASES.filter(([, c]) => c.cells || c.solid)
+  /* And what buildBin leaves off is not weighed, nor counted anywhere: a carved shape, or a
+     bin built as one block, solid or with a floor that fills it (builtSolid), asking for
+     dividers is built with none (dividersBuilt), which the page's rows, names, README and
+     Checks go by. Nor does it stand any taller for them: the height it is quoted at, and
+     checked against the bed and the stack by, is the one it has without them, which for
+     all three is its full height, its walls standing to it whatever the edges say. */
+  const oneBlock = (c) => c.solid || SPEC.footH + (c.floorT || 0) >= c.hUnits * SPEC.unitH - 0.2;
+  const shaped = CASES.filter(([, c]) => c.cells || oneBlock(c));
+  const none = shaped
     .filter(([, c]) => dividersBuilt(c).divX || dividersBuilt(c).divY || binVolume(c).parts.dividers);
+  const taller = shaped.filter(([, c]) => {
+    const asked = binHeights(c), plain = binHeights(Object.assign({}, c, { divX: 0, divY: 0 }));
+    return asked.top !== plain.top || asked.inside !== plain.inside || asked.top !== c.hUnits * SPEC.unitH;
+  });
   console.log(`  within ${TOL * 100}% of what the mesh encloses: ` +
               (off.length ? `${off.length} OFF: ${off.join('; ')}` : `all ${CASES.length}`));
-  console.log(`  carved and solid bins built with no dividers: ` +
+  console.log(`  carved and one-block bins built with no dividers: ` +
               (none.length ? 'COUNTED: ' + none.map(([n]) => n).join('; ') : 'none counted'));
+  console.log(`  and standing as tall as without them: ` +
+              (taller.length ? 'TALLER: ' + taller.map(([n]) => n).join('; ') : `all ${shaped.length}, at their full height`));
   if (off.length) bad++;
   if (none.length) bad++;
+  if (taller.length) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');

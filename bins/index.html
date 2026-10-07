@@ -11550,11 +11550,15 @@ function binIssues(b, k, claims) {
      the two stopped it. A design from before the fields held them there can ask for 31
      on a 1x1, where 10 fit at the usual plate and clearance. Its link keeps asking, so a
      thinner plate or a tighter clearance builds more without it being edited. A whole
-     drawer of such bins says it once (warnings), once for each reason. */
+     drawer of such bins says it once (warnings), once for each reason.
+     Not of a bin built as one block, solid or with a floor that fills it, nor of a carved
+     one: those have no rails at all (dividersBuilt), for want of a cavity rather than of
+     room for slots. A 1x1x1 with a 3 mm floor asking for two was said to be built with
+     none "as none leave every slot room", which was not why. */
   const d = builtDivs(b);
+  const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
   const short = [['divX', 'across', 'x'], ['divY', 'along', 'y']].filter(([k]) => d[k] < (b[k] || 0));
-  if (b.divRemovable && !b.solid && !isCarved(b) && short.length) {
-    const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
+  if (b.divRemovable && !builtSolid(cfg) && !isCarved(b) && short.length) {
     const rules = new Set(short.map(([, , ax]) => railedLimit(cfg, ax).by));
     /* 'lone': room for one divider's slot and a rail either side, but not for the rails
        the other way beside it, which are kept room for whether or not it has any, so
