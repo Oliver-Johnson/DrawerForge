@@ -9392,11 +9392,11 @@ const fingerText = (b) => {
    the floor kept clear of it all the same (holesGaveWay): then how deep it would have
    been is where they are. A bin with no slots is keyed and named by what it asks for, as
    it always was. */
-const scoopBuilt = (b) => {
+const scoopAsBuilt = (b) => {
   const p = fingerPlan(b);
   return p && p.scoop !== null ? +p.scoopNow.toFixed(3) : b.scoop;
 };
-const labelBuilt = (b) => {
+const labelAsBuilt = (b) => {
   const p = fingerPlan(b);
   return p && p.shelfOff && !(p.holesGaveWay && holesIn(b)) ? 0 : b.label;
 };
@@ -9690,7 +9690,7 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
    /* A solid block has no cavity for a scoop or a shelf (buildBin builds neither), so
       a solid with one is the same part as a solid without. Both as built: a finger slot
       can hold the one and take the other away. */
-   (scoopBuilt(b) && !holesIn(b) ? `-s${scoopBuilt(b)}` : '') + (labelBuilt(b) ? `-L${labelBuilt(b)}` : '')) +
+   (scoopAsBuilt(b) && !holesIn(b) ? `-s${scoopAsBuilt(b)}` : '') + (labelAsBuilt(b) ? `-L${labelAsBuilt(b)}` : '')) +
   // a mask covering every cell (a hand-written link can say so) is no shape at all
   (maskBits(b) ? `-c${maskBits(b)}` : '') +
   /* A holed bin is a different part from the plain one, and from one holed for another
@@ -13628,10 +13628,10 @@ const VARIANT_TAGS = [
   // a bin with holes across its floor is built without its scoop and dividers (holesIn)
   // the scoop and the shelf as built: a finger slot can hold the one and take the other
   (b) => {
-    const s = scoopBuilt(b);
+    const s = scoopAsBuilt(b);
     return !b.solid && s && !holesIn(b) ? `scoop${s === b.scoop ? s : +s.toFixed(2)}` : '';
   },
-  (b) => (!b.solid && labelBuilt(b) ? `label${labelBuilt(b)}` : ''),
+  (b) => (!b.solid && labelAsBuilt(b) ? `label${labelAsBuilt(b)}` : ''),
   (b) => (!b.solid && b.divRemovable && (builtDivs(b).divX || builtDivs(b).divY) ? 'loose-dividers' : ''),
   // two bins holed for the same thing to different depths
   (b) => { const h = holesIn(b); return h ? `depth${+h.depth.toFixed(1)}` : ''; },
