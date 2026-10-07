@@ -392,6 +392,12 @@ const CASES = [
     fingerSlots: { b: true }, slots: { b: 1 }, noNote: 'slot' },
   { name: '3x2x5-slot-railed', u: 3, v: 2, hUnits: 5, divX: 2, divY: 1, divRemovable: true,
     fingerSlots: { f: true, b: true, l: true, r: true }, slots: { f: 3, b: 3, l: 2, r: 2 } },
+  /* Compartments between the dividers as built: two removable ones asked for, but at a
+     10 mm wall a half cell deep the plate would have no length (railedLimit's 'length'),
+     so none is built and each wall has one compartment, and one slot. Fixed ones there
+     would leave three, each too narrow for one. */
+  { name: '1x0.5x4-slot-no-rails', u: 1, v: 0.5, hUnits: 4, wall: 10, divX: 2, divRemovable: true,
+    fingerSlots: { f: true, b: true }, slots: { f: 1, b: 1 } },
   // a 12 mm scoop stands 6 mm over a 3-unit slot's bottom: the slot holds it under
   { name: '2x1x3-slot-scoop', u: 2, v: 1, hUnits: 3, scoop: 12, fingerSlots: { f: true }, slots: { f: 1 } },
   { name: '1x1x6-slot-scoop', u: 1, v: 1, hUnits: 6, scoop: 20, label: 12,
