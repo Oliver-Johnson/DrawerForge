@@ -373,8 +373,11 @@ test.describe('the print time', () => {
      time of three, as if it were the whole job. */
   test('baseplates: with a piece too big for the bed, the time says it is for the plates that fit', async ({ page }) => {
     page.__errors = await H.openPlates(page);
+    /* A new hash on the open page is a same-document navigation, which the page answers
+       by reloading itself, so the wait below runs on in the new document, and there it
+       can look before the page's script has defined printPlan at all. */
     await page.goto(H.PLATES_URL + '#w=330&d=330&bw=220&bd=180&mm=custom&ml=5&mr=0&mf=5&mb=0&cn=puzzle&v=2');
-    await page.waitForFunction(() => printPlan && printPlan.over.length > 0);
+    await page.waitForFunction(() => typeof printPlan !== 'undefined' && printPlan && printPlan.over.length > 0);
     const f = await platesFigures(page);
     expect(f.summary).toMatch(/^In all: .* of printing on a standard printer for the plates that fit \(a rough/);
     expect(f.dialog).toMatch(/roughly .* of printing on a standard printer for the plates that fit \(/);
