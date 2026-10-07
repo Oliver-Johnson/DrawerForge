@@ -7750,11 +7750,23 @@ const INSERT_SPEC = {
   lipClear: 0.25,       // and inside the lip's opening, when there is a lip
   sides: 36,            // facets of a round hole
   headroom: 0.5,        // the block stops this far under the rim, or the shelf's front edge
+  /* A bin stacked on this one comes down this far under H, where its foot meets the lip
+     (stack-check.js measures it), so an item reaching higher is in its way: that is what
+     "below the rim" is measured to, for the units it needs and for Checks. */
+  seat: 0.25,
   minDepth: 3,          // shallower than this a hole holds nothing upright, so none is built
   autoMin: 5,           // the automatic depth, a third of the item, is never less than this
   depthMin: 1,          // nor a depth someone typed
   clr: { min: -0.3, max: 1 },   // the Hole clearance field's limits, held here as well
 };
+/* The most holes one bin is built with. Each is a tile of its own, some 200 triangles for
+   a round hole, so the count is what the build costs: a link could ask for a 47 x 47 tray
+   of AAA holes, 9.6 million triangles, 13 s and 4.2 GB in Node. At the most, a 13 x 13 of
+   AAA (1,936) is 730,000 triangles, 1 s and 280 MB, and a 9 x 9 of hex bits (1,927), the
+   largest square a 400 mm bed prints, 210,000 and 0.4 s. Past it a bin gets none
+   (holeLayout's 'many'), from every way in, and the page says so; the page holds a whole
+   layout to the same count (holdHoles in bins/ui.js), as it does raised notes. */
+const HOLES_MAX = 2000;
 /* A hole of `d` across, at the origin, CCW, with what the layout and the estimate need to
    know of it. Round holes are faceted outside the nominal size, every facet a tangent of
    the circle, so a hole is never tighter than it says. A hex has its flats left and right,
@@ -7781,6 +7793,28 @@ function spreadHoles(span, b, lo, hi) {
   const n = room < b - 1e-9 ? 0 : Math.floor((room + W) / (b + W) + 1e-9);
   const step = n > 1 ? (room - b) / (n - 1) : 0;
   return Array.from({ length: n }, (_, k) => (n > 1 ? lo + b / 2 + k * step : lo + room / 2));
+}
+/* The margin from the walls a hole keeps, `side`, measured square to the straight walls,
+   grown where that would bring a corner hole nearer than `edge` to the cavity's rounded
+   corner, an arc of `rc`. Only a hex in a thin-walled bin without a lip comes that close:
+   at a 0.4 mm wall and 0.8 mm from both walls a corner of one is 0.72 mm from the arc. A
+   corner hole sits against both margins, so its outline is measured from the arc's centre
+   (the farthest point of a straight edge is one of its ends), and only where it is in the
+   arc's quarter: elsewhere the straight walls are nearer, and `side` already keeps those. */
+function cornerMargin(shape, rc, side, edge) {
+  const clear = (m) => {
+    const ox = rc - m - shape.bx / 2, oy = rc - m - shape.by / 2;
+    let least = Infinity;
+    for (const [x, y] of shape.pts) {
+      const dx = ox + x, dy = oy + y;
+      if (dx > 0 && dy > 0) least = Math.min(least, rc - Math.hypot(dx, dy));
+    }
+    return least;
+  };
+  if (clear(side) >= edge - 1e-9) return side;
+  let lo = side, hi = side + rc;                   // by then none of it is in the quarter
+  for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (clear(m) >= edge) hi = m; else lo = m; }
+  return hi;
 }
 /* The label shelf as buildBin builds it, { top, depth, raised }, or null for none: the
    shelf sits at H, or with the note raised on it lower (noteOnShelf). The holes need it
@@ -7824,14 +7858,18 @@ function floorPlan(c, iw, id, H) {
 }
 /* Where the holes go in a bin settled as buildBin settles it, and how deep they are, or
    why there are none. `why` is 'off' (none asked for), 'carved', 'solid', 'short' (under
-   minDepth of room above the floor) or 'none' (not one fits), and '' when they are built.
+   minDepth of room above the floor), 'none' (not one fits) or 'many' (more than
+   HOLES_MAX would, `count` of them), and '' when they are built.
    Every answer but 'off' carries the preset `p` and the hole's width `d`; from 'short'
-   on, also `floor` (what an item stands on), `room` (the deepest the block may be),
-   `units` (the fewest that keep an item under the rim, H) and `above` (how far one stands
-   over it, negative when it is under). Built: `n` holes, at `xs` by `ys`, `depth` deep,
-   the block's `top`, and whether the depth was typed (`asked`) and cut to the room
-   (`capped`). `shelf` is the label shelf they keep clear of, shelfFor's answer, settled
-   as floorPlan settles it. */
+   on, also `floor` (what an item stands on), `room` (the deepest the block may be) and
+   `under`, what holds the room down: 'rim', or 'shelf' when the label shelf is lower;
+   `units` (the fewest that keep an item clear of a bin stacked on this one, which comes
+   down INSERT_SPEC.seat under H), `above` (how far one stands over the rim, H, negative
+   when it is under) and `over` (how far into a stacked bin's way: over the rim less the
+   seat). 'none' says whether the shelf is what left no room (`byShelf`). Built: `n` holes,
+   at `xs` by `ys`, `depth` deep, the block's `top`, and whether the depth was typed
+   (`asked`) and cut to the room (`capped`). `shelf` is the label shelf they keep clear
+   of, shelfFor's answer, settled as floorPlan settles it. */
 function holeLayout(c, iw, id, H, shelf) {
   const p = Number.isInteger(+c.insert) ? INSERTS[+c.insert] || null : null;
   if (!p) return { why: 'off' };
@@ -7843,15 +7881,21 @@ function holeLayout(c, iw, id, H, shelf) {
   const shape = holeShape(p.shape, d);
   const floor = floorTop(c) + BLOAT;
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) => c.edges[k] === undefined || c.edges[k] >= 1);
-  const side = c.lip && allFull ? Math.max(S.edge, LIP[0][1] - c.wall + S.lipClear) : S.edge;
+  const side = cornerMargin(shape, Math.max(0.4, SPEC.r - c.wall),
+    c.lip && allFull ? Math.max(S.edge, LIP[0][1] - c.wall + S.lipClear) : S.edge, S.edge);
   const back = Math.max(side, shelf ? shelf.depth + S.edge : 0);
   const xs = spreadHoles(2 * iw, shape.bx, side, side).map((x) => x - iw);
   const ys = spreadHoles(2 * id, shape.by, side, back).map((y) => y - id);
-  const top = Math.min(H, shelf ? shelf.top - c.labelT : Infinity) - S.headroom;
-  const out = { p, d, shape, floor, room: top - floor, shelf,
-                units: Math.ceil((floor + p.len) / SPEC.unitH - 1e-9), above: floor + p.len - H };
+  const lid = shelf ? shelf.top - c.labelT : Infinity;
+  const top = Math.min(H, lid) - S.headroom;
+  const out = { p, d, shape, floor, room: top - floor, under: lid < H ? 'shelf' : 'rim', shelf,
+                units: Math.ceil((floor + p.len + S.seat) / SPEC.unitH - 1e-9),
+                above: floor + p.len - H, over: floor + p.len - (H - S.seat) };
   if (out.room < S.minDepth) return Object.assign(out, { why: 'short' });
-  if (!xs.length || !ys.length) return Object.assign(out, { why: 'none' });
+  if (!xs.length || !ys.length)
+    return Object.assign(out, { why: 'none', byShelf: !!xs.length && back > side &&
+      spreadHoles(2 * id, shape.by, side, side).length > 0 });
+  if (xs.length * ys.length > HOLES_MAX) return Object.assign(out, { why: 'many', count: xs.length * ys.length });
   const asked = isFinite(c.insertDepth) && c.insertDepth > 0;
   const want = asked ? Math.max(S.depthMin, +c.insertDepth) : Math.max(S.autoMin, p.len / 3);
   const depth = Math.min(out.room, want);
@@ -7900,24 +7944,34 @@ function tileLoops(tile, hole, cx, cy) {
   return { outer: angs.map((a) => hit(tile, a)), inner: angs.map((a) => hit(hole, a)) };
 }
 /* The block, one tile per hole of a holeLayout, from a BLOAT under the floor slab's top
-   to the block's top. */
-function holeTiles(G, c, h, iw, id) {
-  const rc = Math.max(0.4, SPEC.r - c.wall), polys = [];
+   to the block's top, added to `polys` one by one: a big tray is hundreds of thousands
+   of polygons, past what a spread into push() can pass as arguments (a 7 x 7 tray of AAA
+   holes threw).
+   Each tile reaches past halfway to its neighbours, and out past the cavity's outline,
+   by its own overlap, and neighbours' differ: a BLOAT, or 0.6 of one, in a checkerboard.
+   With one overlap for all, the tiles of a row shared their top and bottom lines, so a
+   corner of each lay on its neighbour's edge, where the neighbour has a point wherever
+   one of its rays lands; one landing within a micron of the corner made the two one
+   vertex and left edges open (10 on a 1.5 x 1 with 10 mm walls). The tiles at the walls
+   shared the cavity's outline the same way. Now no tile's corner is on another's line:
+   the nearest is 0.02 mm off it. */
+function holeTiles(G, c, h, iw, id, polys) {
+  const rc = Math.max(0.4, SPEC.r - c.wall), BL = [BLOAT, 0.6 * BLOAT];
   // points on the corner arcs only: see the block comment for why not on the straights
-  const cav = roundRect(iw + BLOAT, id + BLOAT, rc + BLOAT, c.arcSegs || 12, [[], [], [], []]);
-  // each tile's span: halfway to the next centre and a BLOAT past it, the cavity at the ends
-  const spans = (cs) => cs.map((v, k) => [k ? (cs[k - 1] + v) / 2 - BLOAT : null,
-                                          k < cs.length - 1 ? (v + cs[k + 1]) / 2 + BLOAT : null]);
-  const sx = spans(h.xs), sy = spans(h.ys);
+  const cav = BL.map((b) => roundRect(iw + b, id + b, rc + b, c.arcSegs || 12, [[], [], [], []]));
+  // a tile's span: halfway to the next centre and its overlap past it, the cavity at the ends
+  const span = (cs, k, b) => [k ? (cs[k - 1] + cs[k]) / 2 - b : null,
+                              k < cs.length - 1 ? (cs[k] + cs[k + 1]) / 2 + b : null];
   h.xs.forEach((cx, i) => h.ys.forEach((cy, j) => {
-    let tile = cav;
-    const [x0, x1] = sx[i], [y0, y1] = sy[j];
+    const q = (i + j) % 2, b = BL[q];
+    let tile = cav[q];
+    const [x0, x1] = span(h.xs, i, b), [y0, y1] = span(h.ys, j, b);
     if (x0 !== null) tile = clipHalf(tile, -1, 0, -x0);
     if (x1 !== null) tile = clipHalf(tile, 1, 0, x1);
     if (y0 !== null) tile = clipHalf(tile, 0, -1, -y0);
     if (y1 !== null) tile = clipHalf(tile, 0, 1, y1);
     const { outer, inner } = tileLoops(tile, h.shape.pts.map(([x, y]) => [x + cx, y + cy]), cx, cy);
-    polys.push(...wallRing(G, outer, inner, h.floor - 2 * BLOAT, h.top));
+    for (const p of wallRing(G, outer, inner, h.floor - 2 * BLOAT, h.top)) polys.push(p);
   }));
   return polys;
 }
@@ -8326,7 +8380,7 @@ function buildBin(G, cfg) {
         polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT));
 
     // the holes, last, so a bin without them is every shell it was, in the order it was
-    if (holesOn) { polys.push(...holeTiles(G, c, holes, iw, id)); holesBuilt = holes.n; }
+    if (holesOn) { holeTiles(G, c, holes, iw, id, polys); holesBuilt = holes.n; }
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */
@@ -8563,10 +8617,17 @@ function unpackBin(t) {
            done: !!p[17], divRemovable: !!p[18],
            lid: !!p[19], lidSides: lidSidesFrom(p[20]), ...feetFrom(p[21]),
            labelMode: countAt(p, 22, 0, 0, 1),
-           /* the presets there are, and no deeper than the bin is tall: the block stops
-              under the rim whatever is asked, so deeper builds the same part */
-           insert: countAt(p, 23, 0, 0, INSERTS.length - 1), insertDepth: numAt(p, 24, 0, H) };
+           /* one of the presets there are, and no deeper than the bin is tall: the block
+              stops under the rim whatever is asked, so deeper builds the same part */
+           insert: presetAt(p, 23), insertDepth: numAt(p, 24, 0, H) };
 }
+/* A preset this page has, or none. Held to the last one, a 5th from a later page opened
+   here as hex bits and was written back as them; read as none, it is a bin without
+   holes, whose link drops the two fields as any bin's without holes does. */
+const presetAt = (p, i) => {
+  const k = isFinite(p[i]) ? Math.round(p[i]) : 0;
+  return k > 0 && INSERTS[k] ? k : 0;
+};
 const packLayers = (layers) =>
   layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);
 const unpackLayers = (s) => (s || '').split(SEP.layer)
@@ -8579,7 +8640,7 @@ if (typeof module !== 'undefined') {
     isHalfSize, binFeet, feetHolesOff,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers, LINK_MAX, shelfNote, NOTE_CLEAR,
-    INSERTS, INSERT_SPEC, insertPlan };
+    INSERTS, INSERT_SPEC, HOLES_MAX, insertPlan };
 }
 </script>
 <script>/* SPDX-License-Identifier: AGPL-3.0-or-later
@@ -8642,6 +8703,8 @@ let pendingScratch = null;  // a packed loose bin from the hash
 let pendingScratchNote = null;  // ...and its note, which travels beside it (bsn)
 let noteHeld = new WeakSet();   // bins whose raised note is past RAISED_MAX (holdNotes)
 let notesOver = 0;              // ...and how many different notes that is
+let insertHeld = new WeakSet(); // bins whose holes are past HOLES_MAX for the layout (holdHoles)
+let holesOver = { used: 0, kinds: 0, holes: 0 };   // ...what was built, and what was not
 const geoCache = new Map();
 
 const B = () => layers[cur].bins;
@@ -8754,8 +8817,10 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          /* the note goes in only to be raised on the shelf (labelMode 1),
                             and not past the most one layout raises (holdNotes) */
                          labelMode: noteHeld.has(b) ? 0 : b.labelMode, note: b.note,
-                         // holes across the floor are per bin, their clearance the page's
-                         insert: b.insert, insertDepth: b.insertDepth, holeClr: state.holeClr,
+                         /* holes across the floor are per bin, their clearance the page's,
+                            and not past the most one layout builds (holdHoles) */
+                         insert: insertHeld.has(b) ? 0 : b.insert, insertDepth: b.insertDepth,
+                         holeClr: state.holeClr,
                          arcSegs: state.arcSegs });
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
@@ -8799,29 +8864,90 @@ const insertKey = (b) => {
    rest for behind "more". Written with textContent, through DF.hint, like the note's. `b`
    is the bin the panel shows, or the settings for new bins. */
 function insertHintSay(b) {
-  const h = insertPlan(binCfg(b)), S = INSERT_SPEC, mm = (x) => +x.toFixed(1);
+  const S = INSERT_SPEC, mm = (x) => +x.toFixed(1);
+  /* Held for its own count, or after one that was: the first holes are the first in the
+     layout, so a few that would fit after a kind that did not are held as well. */
+  if (insertHeld.has(b)) {
+    const n = insertPlan(Object.assign(binCfg(b), { insert: b.insert })).n;
+    return [holesOver.used + n > HOLES_MAX
+      ? `This layout already builds ${holesOver.used} holes across other bins' floors, and this bin's ` +
+        `${n} would take it past the ${HOLES_MAX} one layout builds, so it is built without them.`
+      : `Bins before this one in the layout already ask for more holes than the ${HOLES_MAX} one layout ` +
+        `builds, so this bin is built without its ${plural(n, 'hole')}.`,
+    'Set some of the others to Nothing, or print some bins as a layout of their own.'];
+  }
+  const h = insertPlan(binCfg(b));
   if (h.why === 'off' || h.why === 'solid') return ['', ''];
   const p = h.p;
   if (h.why === 'carved') return ['Holes need a rectangle, so a carved shape is built without them.', ''];
   const size = `Each hole is ${+h.d.toFixed(2)} mm ${p.shape === 'hex' ? 'across the flats' : 'across'}, ` +
     `the largest ${p.items} with ${+(h.d - p.size).toFixed(2)} mm to spare.`;
+  const under = h.under === 'shelf' ? 'the label shelf' : 'the rim';
   if (h.why === 'short')
-    return [`This bin has room for holes ${h.room > 0.05 ? `only ${mm(h.room)} mm deep` : 'no depth at all'}, ` +
-            `and they need ${S.minDepth} mm, so it has none.`,
+    return [`This bin has room for holes ${h.room > 0.05 ? `only ${mm(h.room)} mm deep` : 'no depth at all'} ` +
+            `under ${under}, and they need ${S.minDepth} mm, so it has none.`,
             `A taller bin has room for them${h.shelf ? ', and so has one without a label shelf' : ''}.`];
-  if (h.why === 'none') return [`Not one hole for ${p.items} fits in a bin this size.`, size];
+  if (h.why === 'none')
+    return h.byShelf
+      ? [`The label shelf leaves no room in front of it for even one hole for ${p.items}.`,
+         `A shallower shelf, or none, has room for them. ${size}`]
+      : [`Not one hole for ${p.items} fits in a bin this size.`, size];
+  if (h.why === 'many')
+    return [`A bin this size would have ${h.count} holes for ${p.items}, more than the ${HOLES_MAX} one bin ` +
+            'is built with, so it has none.', `Smaller bins have fewer: each is built with up to ${HOLES_MAX}. ${size}`];
   const want = h.asked ? +b.insertDepth : Math.max(S.autoMin, p.len / 3);
+  /* Below the rim is under where a bin stacked on this one comes down, S.seat under it.
+     Items stopping between the two are under the rim and still in that bin's way, so
+     they are said to need the taller bin, and the rest says why. */
   const lead = `${plural(h.n, 'hole')}, ${mm(h.depth)} mm deep. ${p.say} are ${p.len} mm long, ` +
-    (h.above > 1e-9 ? `so this bin needs ${plural(h.units, 'unit')} to keep them below the rim.`
+    (h.over > 1e-9 ? `so this bin needs ${plural(h.units, 'unit')} to keep them below the rim.`
       : 'so they stay below the rim.');
+  const off = [b.divX || b.divY ? 'Dividers' : '', b.scoop ? 'the scoop' : ''].filter(Boolean);
   const rest = [
     size,
+    h.over > 1e-9 && !(h.above > 1e-9) ? `They stop ${mm(-h.above)} mm under the rim, and a bin stacked ` +
+      `on this one comes down ${S.seat} mm into it.` : '',
     h.capped ? `${h.asked ? `${mm(want)} mm` : `A third of their length, ${mm(want)} mm,`} is more than ` +
-      `this bin has room for, so the holes stop ${S.headroom} mm under ${h.shelf ? 'the label shelf' : 'the rim'}.`
+      `this bin has room for, so the holes stop ${S.headroom} mm under ${under}.`
       : !h.asked ? `Left blank, the depth is a third of their length, at least ${S.autoMin} mm.` : '',
-    b.divX || b.divY || b.scoop ? 'Dividers and the scoop are left off a bin with holes.' : '',
+    off.length ? `${off.length > 1 ? 'Dividers and the scoop are' : off[0] === 'Dividers' ? 'Dividers are'
+      : 'The scoop is'} left off a bin with holes.` : '',
   ].filter(Boolean).join(' ');
   return [lead, rest];
+}
+/* The most holes one layout builds, over its different parts in layout order, as
+   holdNotes holds raised notes: a bin is built from its part, so two alike cost one
+   build. Every bin can have up to HOLES_MAX (bin.js), and a drawer of different ones
+   could ask for them all at once; past the count, a bin whose part is not among the
+   first is built without holes, keeps its setting so the link and the saved drawer still
+   say what was asked, and Checks says so. In layout order and no further: once one kind
+   is held, so is every new kind after it, so "the first" means the first. Worked out at
+   the start of every pass, after holdNotes, whose held notes are in a part's key. */
+function holdHoles() {
+  insertHeld = new WeakSet();
+  const seen = new Map();
+  let used = 0, full = false, kinds = 0, holes = 0;
+  for (const L of layers) for (const b of L.bins) {
+    const h = holesIn(b);
+    if (!h) continue;
+    const k = typeKey(b);
+    if (!seen.has(k)) {
+      const ok = !full && used + h.n <= HOLES_MAX;
+      if (ok) used += h.n; else { full = true; kinds++; holes += h.n; }
+      seen.set(k, ok);
+    }
+    if (!seen.get(k)) insertHeld.add(b);
+  }
+  holesOver = { used, kinds, holes };
+}
+/* How a bin carries what stands on it, from its base: `pitch`, where the bin stacked on
+   it stands, its height H, or higher when what stands in its holes reaches past where
+   that bin comes down (INSERT_SPEC.seat under H), since it then rests on them; its
+   height `H`, and `items`, the top of those items, 0 for none. For stackHeight and
+   support, which add them up a column at a time. */
+function binReach(b) {
+  const H = b.hUnits * SPEC.unitH, h = holesIn(b), items = h ? h.floor + h.p.len : 0;
+  return { H, items, pitch: h ? Math.max(H, items + INSERT_SPEC.seat) : H };
 }
 /* ---------- the note, raised on the label shelf ----------------------------
    A bin set to it (labelMode 1) prints its note in raised letters on its label shelf:
@@ -9032,12 +9158,13 @@ function support(k) {
   const top = Array.from({ length: D }, () => new Array(W).fill(0));
   const ok = Array.from({ length: D }, () => new Array(W).fill(true));
   for (let L = 0; L < k; L++) {
-    const occ = occupancyOf(L);
+    // each bin's once: on what stands in its holes, if that is higher (binReach)
+    const occ = occupancyOf(L), pitch = layers[L].bins.map((b) => binReach(b).pitch);
     for (let y = 0; y < D; y++)
       for (let x = 0; x < W; x++) {
         const i = occ[y][x];
         if (i === -1) ok[y][x] = false;
-        else top[y][x] += layers[L].bins[i].hUnits * SPEC.unitH;
+        else top[y][x] += pitch[i];
       }
   }
   return { top, ok };
@@ -9331,6 +9458,17 @@ function volumeMm3(c) {
     const rI = Math.max(0.4, SPEC.r - wall);
     const top = Math.max(0, areaRR(hwI, hdI, rI) - holes.n * holes.shape.area);
     blockRaw = top * holes.depth;
+    /* Under a label shelf the block runs on to the back wall, through the wedge the
+       shelf's 45 degree underside already fills, from its foot up to the block's top: a
+       triangle in section, as wide as the shelf. That plastic is the shelf's, so the
+       block does not add it again; counted, a 1x1x3 with AAA holes and a 12 mm shelf
+       weighed 26% more block than it has. */
+    const sh = holes.shelf;
+    if (sh) {
+      const foot = sh.top - (c.labelT || BIN_DEFAULTS.labelT) - sh.depth;
+      const lo = Math.max(holes.floor, foot), hi = holes.top;
+      if (hi > lo) blockRaw = Math.max(0, blockRaw - ((hi - foot) ** 2 - (lo - foot) ** 2) / 2 * 2 * hwI);
+    }
     const shell = (perimRR(hwI, hdI, rI) + holes.n * holes.shape.perim) * SHELL_T * holes.depth + top * SKIN_T;
     blockFil = Math.min(blockRaw, shell + infill * Math.max(0, blockRaw - shell));
   }
@@ -10020,7 +10158,7 @@ function readControls() {
   /* The note raised on the shelf: the menu sits with the shelf it prints on, the hint
      under the note it describes, saying what will print. A solid block has no shelf. */
   $('labelModeRow').style.display = t.solid ? 'none' : '';
-  holdNotes();
+  holdNotes(); holdHoles();
   const raise = t.labelMode === 1 && !t.solid;
   $('noteHint').style.display = raise ? '' : 'none';
   /* Emptied, not only hidden, once nothing is raised: the note's field is described by
@@ -10040,7 +10178,9 @@ function readControls() {
   $('insertDepthRow').style.display = ins ? '' : 'none';
   $('holeClrHint').style.display = ins ? '' : 'none';
   $('insertHint').style.display = ins ? '' : 'none';
-  if (ins) {
+  // emptied once there are none, as the note's is, since the menu is still described by it
+  if (!ins) $('insertHint').textContent = '';
+  else {
     const [lead, rest] = insertHintSay(holed);
     if (rest) DF.hint($('insertHint'), lead, rest);
     else $('insertHint').textContent = lead;
@@ -11324,11 +11464,12 @@ function binIssues(b, k, claims) {
     // two beams. What it cannot do is rest on one side only, or on nothing.
     // Counted in half slots, and measured in cells from the bin's own corner.
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, any = false;
-    const X = slot(b.x), Y = slot(b.y);
+    const X = slot(b.x), Y = slot(b.y), under = new Set();
     for (let j = 0; j < slot(b.v); j++)
       for (let i = 0; i < slot(b.u); i++) {
         if (occB[Y + j][X + i] === -1) continue;
         any = true;
+        under.add(occB[Y + j][X + i]);
         x0 = Math.min(x0, i / 2); x1 = Math.max(x1, (i + 1) / 2);
         y0 = Math.min(y0, j / 2); y1 = Math.max(y1, (j + 1) / 2);
       }
@@ -11363,6 +11504,16 @@ function binIssues(b, k, claims) {
         if (!allFullEdges(bb))
           out.push('the bin below has a lowered wall, so it has no stacking lip to sit on');
       }
+    }
+    /* What stands in the holes of a bin below, past where this one comes down onto its
+       lip (binReach): it stands on them instead, higher than its layer, with nothing to
+       hold it. Said whatever else holds it up or does not. */
+    for (const i of under) {
+      const bb = layers[k - 1].bins[i], h = bb && holesIn(bb);
+      if (h && h.over > 1e-9)
+        out.push(`stands on the ${h.p.items} in the ${bb.u}×${bb.v} bin below, ${+h.over.toFixed(1)} mm ` +
+          `higher than that bin's lip would hold it, so nothing keeps it in place; at ` +
+          `${plural(h.units, 'unit')} that bin keeps them below its rim`);
     }
   }
   /* Bins print upright, so height is a bed constraint too — and an easy one to miss,
@@ -11484,12 +11635,27 @@ function insertIssues(b, z) {
     return out;
   }
   if (h.why === 'short' || h.why === 'none') {
+    const under = h.under === 'shelf' ? 'its label shelf' : 'its rim';
     out.push(h.why === 'short'
-      ? { note: true, group: `short:${b.insert}`, t: `is too short for holes for ${p.items}, so it has none: ` +
-          `it has room for ${h.room > 0.05 ? `${mm(h.room)} mm` : 'none'} under its rim, and a hole needs ${INSERT_SPEC.minDepth} mm`,
+      ? { note: true, group: `short:${b.insert}:${h.under}`, t: `is too short for holes for ${p.items}, so it has none: ` +
+          `it has room for ${h.room > 0.05 ? `${mm(h.room)} mm` : 'none'} under ${under}, and a hole needs ${INSERT_SPEC.minDepth} mm`,
           many: (n, names) => `${n} bins are too short for holes for ${p.items}, so they have none: ${names}` }
-      : { note: true, group: `none:${b.insert}`, t: `is too small for even one hole for ${p.items}, so it has none`,
-          many: (n, names) => `${n} bins are too small for even one hole for ${p.items}, so they have none: ${names}` });
+      : h.byShelf
+        ? { note: true, group: `noroom:${b.insert}`, t: `has a label shelf too deep to leave room in front of it for ` +
+            `even one hole for ${p.items}, so it has none`,
+            many: (n, names) => `${n} bins have label shelves too deep to leave room in front of them for even ` +
+              `one hole for ${p.items}, so they have none: ${names}` }
+        : { note: true, group: `none:${b.insert}`, t: `is too small for even one hole for ${p.items}, so it has none`,
+            many: (n, names) => `${n} bins are too small for even one hole for ${p.items}, so they have none: ${names}` });
+    return out;
+  }
+  /* More than one bin is built with (HOLES_MAX in bin.js): a fault, as the most notes one
+     layout raises is, since what was asked for is not built. */
+  if (h.why === 'many') {
+    out.push({ err: true, group: `many:${b.insert}`, t: `would have ${h.count} holes for ${p.items}, more than ` +
+        `the ${HOLES_MAX} one bin is built with, so it has none`,
+      many: (n, names) => `${n} bins would have more holes for ${p.items} than the ${HOLES_MAX} one bin is ` +
+        `built with, so they have none: ${names}` });
     return out;
   }
   const divs = !!(b.divX || b.divY), off = [divs ? 'dividers' : '', b.scoop ? 'scoop' : ''].filter(Boolean);
@@ -11498,15 +11664,20 @@ function insertIssues(b, z) {
       t: `has holes for ${p.items}, so its ${off.join(' and ')} ${divs ? 'are' : 'is'} left off`,
       many: (n, names) => `${n} bins have holes across their floors, so their ` +
         `${divs ? 'dividers' : ''}${off.length > 1 ? ' and ' : ''}${b.scoop ? 'scoops' : ''} are left off: ${names}` });
-  /* Above the rim is above where the bin above stands, and where a lid sits. A bin with
-     a lowered wall has no lip for either, so it is only worth saying of one that has. */
-  if (h.above > 1e-9 && allFullEdges(b)) {
-    const lid = !!b.lid && lidFits(b);
-    out.push({ note: true, group: `above:${b.insert}:${h.units}:${lid}`,
-      t: `has ${p.items} standing ${mm(h.above)} mm above its rim, so nothing can stack on it` +
+  /* Past where a bin stacked on this one comes down, INSERT_SPEC.seat under the rim, the
+     items are in its way, and in a lid's. Most stand above the rim, and are said to; the
+     few that stop between the two are said to reach just under it. A bin with a lowered
+     wall has no lip for either, so it is only worth saying of one that has. */
+  if (h.over > 1e-9 && allFullEdges(b)) {
+    const lid = !!b.lid && lidFits(b), up = h.above > 1e-9;
+    const stand = up ? `standing ${mm(h.above)} mm above its rim` : `reaching to ${mm(-h.above)} mm under ` +
+      `its rim, where a bin stacked on it comes ${INSERT_SPEC.seat} mm down`;
+    out.push({ note: true, group: `above:${b.insert}:${h.units}:${lid}:${up}`,
+      t: `has ${p.items} ${stand}, so nothing can stack on it` +
          `${lid ? ' and its lid will not go on' : ''}; at ${plural(h.units, 'unit')} they stay below the rim`,
-      many: (n, names) => `${n} bins have ${p.items} standing above their rims, so nothing can stack on ` +
-        `them${lid ? ' and their lids will not go on' : ''}: ${names}. At ${plural(h.units, 'unit')} they stay below the rim` });
+      many: (n, names) => `${n} bins have ${p.items} standing ${up ? 'above their rims' : 'just under their rims'}, ` +
+        `so nothing can stack on them${lid ? ' and their lids will not go on' : ''}: ${names}. ` +
+        `At ${plural(h.units, 'unit')} they stay below the rim` });
   }
   if (z !== null) {
     const reach = z + h.floor + p.len, avail = grid().avail;
@@ -11523,17 +11694,25 @@ function stackHeight() {
   /* Each layer's occupancy once, not once per cell: rebuilt inside the cell loop it was
      cells squared times layers, 4.2 s a redraw on a 100 × 100 grid of five layers. */
   const occs = layers.map((_, L) => occupancyOf(L));
+  /* A bin stacked on one whose holes hold things standing past where it comes down
+     rests on them, and things standing in the top bin's holes can be the highest of all
+     (binReach): an AA bin of 3 units with a 3-unit bin on it was counted 46.0 mm where
+     the stack is 81.7. Without them each layer is its height, and the top its lip. */
+  const reach = layers.map((L) => L.bins.map(binReach));
   let top = 0;
   for (let y = 0; y < 2 * g.ny; y++)          // every half slot: see slotsOf
     for (let x = 0; x < 2 * g.nx; x++) {
-      let h = 0;
+      let h = 0, t = 0;
       for (let L = 0; L < layers.length; L++) {
         const i = occs[L][y][x];
-        if (i !== -1) h += layers[L].bins[i].hUnits * SPEC.unitH;
+        if (i === -1) continue;
+        const r = reach[L][i];
+        t = Math.max(t, h + r.H + LIP_H, r.items ? h + r.items : 0);
+        h += r.pitch;
       }
-      if (h > top) top = h;
+      if (t > top) top = t;
     }
-  return top ? top + LIP_H : 0;
+  return top;
 }
 function warnings() {
   const g = grid(), out = [];
@@ -11555,6 +11734,9 @@ function warnings() {
   // the most different notes one layout raises (holdNotes), said the way the drawer's is
   if (notesOver)
     out.push({ err: true, t: `${RAISED_MAX + notesOver} different notes are set to print raised on label shelves, more than the ${RAISED_MAX} one layout prints, so the bins with the ${plural(notesOver, 'note')} after the first ${RAISED_MAX} print plain. Set some to Nothing; print a layout this labelled in parts.` });
+  // and the most holes one layout builds (holdHoles), said the same way
+  if (holesOver.kinds)
+    out.push({ err: true, t: `${holesOver.used + holesOver.holes} holes are set across the floors of different bins, more than the ${HOLES_MAX} one layout builds, so the bins of the ${plural(holesOver.kinds, 'kind')} after the first ${holesOver.used} holes are built without them. Set some to Nothing; print a layout with this many holes in parts.` });
   /* Custom margins can leave the drawer no room for a cell. The Baseplates page builds
      nothing from a design like that, and says why; this page drew its one cell anyway,
      because grid() never draws fewer, and said nothing, so the design looked sound here
@@ -11622,13 +11804,15 @@ function warnings() {
       `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}. On a standard ` +
       'baseplate the bins beside each one hold it in place; on its own one can slide about 21 mm in its socket.' });
   }
+  // each said once, a fault when what was asked is not built (insertIssues' 'many')
   for (const list of groups.values()) {
-    if (list.length === 1) { out.push({ note: true, t: `${where(list[0].b, list[0].k)}: ${list[0].it.t}.` }); continue; }
+    const say = (t) => (list[0].it.err ? { err: true, t } : { note: true, t });
+    if (list.length === 1) { out.push(say(`${where(list[0].b, list[0].k)}: ${list[0].it.t}.`)); continue; }
     const named = list.slice(0, 3).map(({ b, k }) =>
       `the ${b.u}×${b.v} on layer ${k + 1} at column ${b.x + 1} row ${b.y + 1}`);
     if (list.length > 3) named.push(`${list.length - 3} more`);
-    out.push({ note: true, t: list[0].it.many(list.length,
-      `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`) + '.' });
+    out.push(say(list[0].it.many(list.length,
+      `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`) + '.'));
   }
 
   if (!allBins().length)
@@ -11790,7 +11974,7 @@ function types() {
   return [...m.values()].sort((a, b) => b.qty - a.qty);
 }
 function refresh() {
-  holdNotes();
+  holdNotes(); holdHoles();
   const g = grid();
   // the tallest bin is capped by the drawer OR the printer's Z, whichever bites first
   const zUnits = Math.max(1, Math.floor((state.bedH - LIP_H) / SPEC.unitH));
