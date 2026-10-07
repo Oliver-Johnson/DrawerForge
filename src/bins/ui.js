@@ -1367,6 +1367,10 @@ function sizeSay(t) {
    with room to spare, as WHOLE_ON_WHOLE does. */
 const SHAPE_DROPPED = 'A half-size bin cannot keep a carved shape, so this one is a plain rectangle now. Undo brings the shape back.';
 const SHAPE_DROPPED_MAP = 'A half-size bin cannot be carved.';
+/* A press on the map that lands a drawer size typed a moment before is not taken: the
+   map is drawn again for the new grid under the pointer (initMap). Said under the map,
+   since a press that does nothing looks lost; one line on a 320 px phone. */
+const GRID_MOVED = 'The drawer changed size. Press again.';
 const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
 
 /* Width and Depth while they are being typed into. A size refused under the caret was
@@ -1870,6 +1874,11 @@ function initMap() {
     mapSay('');
     if (landed && (grid().nx !== was.nx || grid().ny !== was.ny)) {
       drawLanded();
+      /* Said, or the press looks lost: the same press made a bin before the edit landed
+         first. The press is over as it is said, so the next pass of any kind takes it
+         away, not only the next press on the map (mapSay). */
+      mapSay(GRID_MOVED);
+      stepSaid = false;
       return;
     }
     const c = cellFromEvent(e);

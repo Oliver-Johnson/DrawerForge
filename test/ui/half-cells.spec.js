@@ -15,6 +15,8 @@ const { test, expect } = require('@playwright/test');
 const H = require('./helpers.js');
 
 const settle = (page) => page.waitForTimeout(300);
+// said under the map for a press that lands a drawer size, which redraws the map under it
+const GRID_MOVED = 'The drawer changed size. Press again.';
 // one bin, as packBin writes it, with everything after the size left at the defaults
 const bin = (x, y, u, v, h = 3, feet = 0) =>
   [x, y, u, v, h, 1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 15].concat(feet ? [feet] : []).join('-');
@@ -866,7 +868,8 @@ test('the carved-shape line goes once the bin is whole-size again', async ({ pag
    selected nothing and threw, and a depth threw at a row it has not got. Only the fields
    were read, so the map stayed drawn for the old grid, and the address and the saved
    drawer kept the old size. The edit lands now with its whole pass, and a press aimed at
-   a map that has gone places nothing; the next one goes where it is pressed. */
+   a map that has gone places nothing, and says so under the map, where before the edit
+   landed first it made a bin; the next one goes where it is pressed. */
 for (const [size, field, value, cell, cells, key, next] of [
   ['width', 'drawerW', 120, [5, 5], [2, 9], 'w=120', [1, 3]],
   ['depth', 'drawerD', 200, [5, 8], [7, 4], 'd=200', [0, 2]]]) {
@@ -887,10 +890,35 @@ for (const [size, field, value, cell, cells, key, next] of [
       bins: B().map((b) => [b.x, b.y, b.u, b.v]) }), key);
     expect(r, `${value} typed, and the map pressed`)
       .toEqual({ grid: cells, drawn: cells, saved: true, bins: [[0, 0, 1, 1]] });
+    await expect(page.locator('#stepWhy'), 'and why').toHaveText(GRID_MOVED);
     await H.clickCell(page, ...next);
     expect(await binsNow(page), 'the next press').toEqual([[0, 0, 1, 1], [...next, 1, 1]]);
+    await expect(page.locator('#stepWhy'), 'which takes the reason away').toHaveText('');
   });
 }
+
+/* The reason a press was not taken is said in the one line under the map (mapSay), and
+   fits it on a 320 px phone. The press is over as it is said, so any pass after it takes
+   it away, an edit of anything as well as the next press: left to the pass after next,
+   as a refusal in a drag is, it would stay through an edit with nothing to do with it. */
+test('a press lost to a drawer size says why in a line a phone has room for, until the next pass', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  for (let tries = 1; ; tries++) {
+    await openAt(page, 'bl=' + bin(0, 0, 1, 1));
+    await page.click('#s-drawer .ph button');
+    if (await typeAndPress(page, 'drawerW', '120', () => H.cellPoint(page, 5, 5))) break;
+    expect(tries, 'pressed while the 120 waited for its pass').toBeLessThan(3);
+  }
+  const why = page.locator('#stepWhy');
+  await expect(why).toHaveText(GRID_MOVED);
+  await page.setViewportSize({ width: 320, height: 640 });
+  await settle(page);
+  expect(await page.evaluate(() => { const w = $('stepWhy'); return w.scrollWidth <= w.clientWidth; }),
+    'said in full on one line').toBe(true);
+  // the height for the next bin drawn: an edit that is nothing to do with the press
+  await H.setField(page, 'hUnits', 4);
+  await expect(why).toHaveText('');
+});
 
 /* The map card's title is never cut. It was let give way to the Steps switch so that the
    heading never made the card wider than the map, which cut it to "DRAWER LAYO…" in every
