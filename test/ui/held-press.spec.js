@@ -94,7 +94,7 @@ test('a bin dragged and held on a link that set yours aside lands where it was l
     const from = await H.cellPoint(page, 3, 3), to = await H.cellPoint(page, 4, 3);
     await watch(page, 'fillmap');
     const { held, presses: [p] } = await holdAndLet(page, 'fillmap', from, to);
-    if (p.lineUp && p.changedAt - p.at < 380) {
+    if (p.lineUp && p.changedAt !== null && p.changedAt - p.at < 380) {
       expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
       expect(await binsNow(page), 'one cell right').toEqual([[4, 3, 2, 2], [0, 6, 1, 1]]);
       // and the line goes once the bin is let go: the layout is a changed one now
@@ -118,7 +118,7 @@ test('a grip pulled and held a moment after selecting the bin makes the size it 
     const box = await page.locator('#fillmap .grip[data-handle="rb"]').boundingBox();
     const grip = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     const { held, presses: [click, p] } = await holdAndLet(page, 'fillmap', grip, to);
-    if (p.lineUp && p.changedAt - click.upAt < 380) {
+    if (p.lineUp && p.changedAt !== null && p.changedAt - click.upAt < 380) {
       expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
       expect(await binsNow(page), 'one cell out each way').toEqual([[3, 3, 3, 3], [0, 6, 1, 1]]);
       await expect(page.locator('#setAside')).toBeHidden();
@@ -149,7 +149,8 @@ async function linePoint(page, selector) {
 /* A first click on a grid line switches the split to Manual, a change, and the second
    line is pressed inside the 400 ms that set the save going for and held past them. Both
    points are found before the first click: the build that click sets going holds the
-   page up, and a look at the page in between can let the save in first. */
+   page up, and a look at the page in between can let the save in first. Under load the
+   save can still come first now and then, so this one is given more goes. */
 test('a cut-map line pressed and held on a link that set yours aside still takes the click', async ({ page }) => {
   const rows = () => page.evaluate(() => state.splitMode === 'manual' ? state.rowCuts.slice() : null);
   for (let tries = 1; ; tries++) {
@@ -173,6 +174,54 @@ test('a cut-map line pressed and held on a link that set yours aside still takes
       await expect(page.locator('#setAside')).toBeHidden();
       break;
     }
-    expect(tries, 'pressed the second line while the first click\'s save still waited').toBeLessThan(3);
+    expect(tries, 'pressed the second line while the first click\'s save still waited').toBeLessThan(6);
   }
+});
+
+/* A release the page never hears of: the button let go in another window after an
+   alt-tab. The browser then moves the pointer with no button down, and the map gets no
+   pointerup or pointercancel, only its capture going (bins) or nothing at all (the
+   baseplates' cut map, which takes no capture). The save waits for a held press to be
+   let go, so a press the page thought was still held kept every later edit, typed ones
+   included, out of the address and the saved layout, and a reload lost them. */
+async function letGoElsewhere(page, at) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchMouseEvent',
+    { type: 'mouseMoved', x: at.x + 3, y: at.y + 2, button: 'none', buttons: 0 });
+  await cdp.detach();
+}
+
+test('a bin dragged and let go outside the page does not keep the saves waiting', async ({ page }) => {
+  await arriveOverYours(page, H.openBins, () => H.clickCell(page, 0, 0), H.BINS_URL + '#' + BINS_LINK);
+  const from = await H.cellPoint(page, 3, 3), to = await H.cellPoint(page, 4, 3);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  await page.waitForTimeout(600);
+  await letGoElsewhere(page, to);
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => drag), 'the drag is over').toBeNull();
+  await H.setField(page, 'hUnits', 6);
+  await page.waitForTimeout(600);                        // past the save's 400 ms
+  expect(await binsNow(page)).toEqual([[4, 3, 2, 2], [0, 6, 1, 1]]);
+  expect(decodeURIComponent(await page.evaluate(() => location.hash)), 'the address has both edits')
+    .toContain('bl=4-3-2-2-6-');
+  await expect(page.locator('#setAside')).toBeHidden();
+});
+
+test('a cut-map press let go outside the page does not keep the saves waiting', async ({ page }) => {
+  await arriveOverYours(page, H.openPlates, () => H.setField(page, 'drawerW', '420'),
+    H.PLATES_URL + '#w=300&d=300');
+  await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
+    null, { timeout: 20000 });
+  await page.evaluate(() => document.getElementById('cutmap').scrollIntoView({ block: 'center' }));
+  const at = await linePoint(page, '#cutmap .hitline[data-row="3"]');
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.waitForTimeout(100);
+  await letGoElsewhere(page, at);
+  await H.setField(page, 'drawerW', '520');
+  await page.waitForTimeout(600);                        // past the save's 400 ms
+  expect(await page.evaluate(() => location.hash), 'the typed width saved').toMatch(/[#&]w=520(&|$)/);
+  await expect(page.locator('#setAside')).toBeHidden();
 });

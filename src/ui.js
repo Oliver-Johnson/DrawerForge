@@ -2177,6 +2177,11 @@ const letGoOfMap = () => {
    click that follows is an edit, and sets the save going again of itself. */
 addEventListener('pointerup', letGoOfMap, true);
 addEventListener('pointercancel', letGoOfMap, true);
+/* A release the page never hears of, let go in another window after an alt-tab, left
+   the map held and every save after it waiting, keyboard edits included, until the next
+   release somewhere on the page. A pointer that moves with no button down is not
+   holding anything. */
+addEventListener('pointermove', (e) => { if (!e.buttons) letGoOfMap(); }, true);
 function saveNow() {
   clearTimeout(hashSaveT);
   removeEventListener('beforeunload', dropSave);

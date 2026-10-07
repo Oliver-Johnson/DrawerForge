@@ -2092,6 +2092,14 @@ function initMap() {
   /* and a sheet kept up for a drag that never finished goes the way a release over
      nothing would put it */
   svg.addEventListener('pointercancel', () => { drag = null; applySheet(); drawMap(); refresh(); });
+  /* and so does one whose release never reaches the page: let go in another window after
+     an alt-tab, the map gets neither of the two above, only the capture going. The drag
+     stayed on, the bin followed a pointer with no button held, and since the save waits
+     for a press to be let go, nothing more was saved until the next press on the map.
+     After an ordinary release or cancel the drag is already over and this does nothing. */
+  svg.addEventListener('lostpointercapture', () => {
+    if (drag) { drag = null; applySheet(); drawMap(); refresh(); }
+  });
 }
 
 /* ---------- actions ------------------------------------------------------- */
