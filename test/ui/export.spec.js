@@ -414,7 +414,9 @@ test('half-size bins download under their own sizes, with no holes they cannot h
    should, then put in the digests this prints. One did: the plain 2x1x3 and the one with
    lowered walls shared the name "bin-2x1x3-qty1.stl", so the ZIP held only the second.
    Each now has its own file, and the page before half sizes, with that change, gives
-   these same digests. */
+   these same digests. And the README's weight and times moved when a bin with removable
+   dividers stopped being weighed as if they were walls: the 2x2x3 with one each way
+   weighs its rails, so the total is 369 g, not 373, and nothing else in it changed. */
 test('a link from before half sizes downloads the same files, byte for byte', async ({ page }) => {
   const crypto = require('crypto');
   const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
@@ -440,7 +442,7 @@ test('a link from before half sizes downloads the same files, byte for byte', as
   }
   got.link = sha(await page.evaluate(() => descString()));
   expect(got).toEqual({
-    'README.txt': 'ccd56de89186e081',
+    'README.txt': 'ee8088678d951284',
     'bin-2x1x3-low-f50-l25-qty1.stl': '4f879f2b46d2fef3',
     'bin-2x1x3-qty1.stl': '1d5dddd4cc82d4d4',
     'bin-2x1x4-qty1.stl': '4b028774e7cab92a',
