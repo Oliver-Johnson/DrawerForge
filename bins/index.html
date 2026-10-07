@@ -330,6 +330,9 @@ html.fold :is(#s-printer,#s-split,#s-conn,#s-mag) .caret{transform:rotate(-90deg
    stay small because they are signposts, not reading. */
 label.f{display:grid;gap:4px;font-size:12px;color:var(--dim)}
 label.f b{font-weight:500}
+/* toggles under one name, which reads as a field's does: the bins page's finger slots */
+.togs{display:grid;gap:6px}
+.togs>b{font-size:12px;font-weight:500;color:var(--dim)}
 input,select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
   border-radius:5px;padding:7px 8px;font-family:var(--mono);font-size:13px;width:100%}
 input:focus,select:focus{outline:1px solid var(--cyan);border-color:var(--cyan)}
@@ -1299,8 +1302,8 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
     <!-- Finger slots, a dip in the top of a wall, per wall like the menus above and laid
          out as they are. What a bin gets, and what makes way for one, is said in Checks:
          the hint only says what a slot is. -->
-    <div id="fingerRow" role="group" aria-labelledby="fingerLabel" style="display:grid;gap:6px">
-      <b id="fingerLabel" style="font-size:12px;font-weight:500;color:var(--dim)">Finger slot:</b>
+    <div id="fingerRow" class="togs" role="group" aria-labelledby="fingerLabel">
+      <b id="fingerLabel">Finger slot:</b>
       <div class="row">
         <label class="tog"><input id="fingerF" type="checkbox" aria-describedby="fingerHint"> Front</label>
         <label class="tog"><input id="fingerB" type="checkbox" aria-describedby="fingerHint"> Back</label>
@@ -10723,7 +10726,7 @@ function readControls() {
   $('edgeRowA').style.display = t.solid ? 'none' : '';
   $('edgeRowB').style.display = t.solid ? 'none' : '';
   $('edgeHint').style.display = t.solid ? 'none' : '';
-  $('fingerRow').style.display = t.solid ? 'none' : 'grid';
+  $('fingerRow').style.display = t.solid ? 'none' : '';
   $('fingerHint').style.display = t.solid ? 'none' : '';
   $('featureRow').style.display = t.solid ? 'none' : '';
   $('featureHint').style.display = t.solid ? 'none' : '';

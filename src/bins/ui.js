@@ -1615,7 +1615,7 @@ function readControls() {
   $('edgeRowA').style.display = t.solid ? 'none' : '';
   $('edgeRowB').style.display = t.solid ? 'none' : '';
   $('edgeHint').style.display = t.solid ? 'none' : '';
-  $('fingerRow').style.display = t.solid ? 'none' : 'grid';
+  $('fingerRow').style.display = t.solid ? 'none' : '';
   $('fingerHint').style.display = t.solid ? 'none' : '';
   $('featureRow').style.display = t.solid ? 'none' : '';
   $('featureHint').style.display = t.solid ? 'none' : '';
