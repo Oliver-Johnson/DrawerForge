@@ -1330,14 +1330,15 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
  * thin plate and little clearance is inside the corner's radius: 1.8 mm out at 0.8 mm
  * and 0.1, where the corner's radius is up to 3.35. Its plate spans to the clearance
  * from the side walls, so its corner stood up to 0.26 mm into the wall at smoothness 8,
- * and the plate could not go in. The rails reach a rail's depth along that plate's end
- * (see reach in buildBin), and the face of the slot on the end wall's side is a
- * clearance nearer the corner than the plate is: where the corner cuts that face short
- * of the plate's end, the end sits less than a rail's depth in its rail. So the count
- * comes down until that face, at the end of the plate's span, is inside the cavity's
- * outline as built, chords and all, or on it. The plate's own corner, between that face
- * and the middle, is then inside too. Fewer dividers rather than end plates cut to the
- * corner, because every plate is then the same part, and goes in any slot.
+ * and the plate could not go in. Held only to having the plate's corner inside the
+ * outline, it went in with next to no clearance at its corner: 0.0014 mm of the 0.1
+ * asked, across the plate, on a 2x1 with a 1.2 mm wall and 35 across. So the count
+ * comes down until the slot's face on the end wall's side, at the end of the plate's
+ * span, is inside the cavity's outline as built, chords and all, or on it: the whole
+ * slot is then clear of the corner, and the plate keeps the clearance asked for across
+ * it at its corner, as along the rest of the slot (0.134 mm at the 33 that bin is built
+ * with). Fewer dividers rather than end plates cut to the corner, because every plate
+ * is then the same part, and goes in any slot.
  *
  * And none at all where the clearance at the plate's two ends takes the whole cavity:
  * a 1x0.5 with a 9.5 mm wall and 1 mm clearance listed a plate -0.5 mm long, and at a

@@ -326,15 +326,16 @@ test('Checks says it is the rounded corners when they hold a bin to fewer remova
     .filter((t) => t.includes('removable dividers'));
   expect(await page.evaluate(() => dividerParts().reduce((n, d) => n + d.qty, 0))).toBe(12);
   expect(await notes()).toEqual(['Layer 1, the 1×1 bin at column 1 row 1: is built with 12 removable dividers ' +
-    'across, not the 17 it asks for, as more would stand the end ones in the bin\'s rounded corners, where the ' +
-    'rails cannot hold them, with a 0.8 mm plate at 0.1 mm clearance.']);
+    'across, not the 17 it asks for, as more would stand the end ones so far into the bin\'s rounded corners ' +
+    'that a plate would lose the clearance at its corner, with a 0.8 mm plate at 0.1 mm clearance.']);
   // and said once for several, for that reason
   await page.goto('about:blank');
   await openAt(page, 'bl=' + [0, 1].map((x) => asks(x, 17)).join('_') + '&bdt=0.8&bdc=0.1');
   await settle(page, 600);
   expect(await notes()).toEqual(['2 bins are built with fewer removable dividers than they ask for, as more ' +
-    'would stand the end ones in their rounded corners, where the rails cannot hold them, with a 0.8 mm plate ' +
-    'at 0.1 mm clearance: the 1×1 on layer 1 at column 1 row 1 and the 1×1 on layer 1 at column 2 row 1.']);
+    'would stand the end ones so far into their rounded corners that a plate would lose the clearance at its ' +
+    'corner, with a 0.8 mm plate at 0.1 mm clearance: the 1×1 on layer 1 at column 1 row 1 and the 1×1 on ' +
+    'layer 1 at column 2 row 1.']);
   expect(errors).toEqual([]);
 });
 
