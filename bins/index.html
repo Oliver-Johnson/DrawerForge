@@ -6082,9 +6082,15 @@ function noteCut(text, W, Hh) {
    The band is where plastic may go, so the strokes' centre lines are fitted NOTE_INK
    inside it: fitted to the band itself, a letter at its edge reached half a stroke past
    it, under the lip at the back and to a tenth of a millimetre from the shelf's front.
-   Returns { lines, cap, cut, segs }: the lines as printed, the cap height in mm, whether
-   anything was cut, and every stroke as a list of [x, y] points in mm. A cut note on a
-   shelf too shallow even for one line 3 mm tall is smaller than 3 mm, and `cap` says so. */
+   Returns { lines, cap, cut, segs, readable }: the lines as printed, the cap height in
+   mm, whether anything was cut, every stroke as a list of [x, y] points in mm, and
+   whether the band has room for the note at these rules. A cut note on a shelf too
+   shallow even for one line 3 mm tall is smaller than 3 mm, and `cap` says so; that is
+   the shelf's depth, and still readable. A band too NARROW is not: when not even the
+   ellipsis goes in at the size the depth allows, nothing could be cut to fit, and the
+   letters come out as small as the width makes them; and when all that goes in is the
+   ellipsis, none of the note is there. A shelf the width of a bin is never that narrow;
+   the spaces between dividers can be (noteOnShelf). */
 const noteFits = new Map();
 function noteFit(text, outer) {
   const k = [text, outer.x0, outer.x1, outer.y0, outer.y1].join('|');
@@ -6123,7 +6129,10 @@ function noteFit(text, outer) {
     for (const st of lay.strokes) segs.push(st.map(([x, y]) => [x0 + x * s, yTop - (y - lay.top) * s]));
     yTop -= (lay.span + gap) * s;
   }
-  const out = { lines: best.lays.map((l) => l.text), cap: s * NOTE_CAP_U, cut: best.cut, segs };
+  const sDepth = Math.min(sMin, Hh / noteLine(text).span);
+  const none = best.cut && best.lays.every((l) => l.text === '' || l.text === NOTE_ELLIPSIS);
+  const out = { lines: best.lays.map((l) => l.text), cap: s * NOTE_CAP_U, cut: best.cut, segs,
+                readable: !none && s >= sDepth - 1e-9 };
   if (noteFits.size > 500) noteFits.clear();
   noteFits.set(k, out);
   return out;
@@ -6223,10 +6232,13 @@ function noteShells(G, segs, z0, z1) {
 
 /* ---------- names --------------------------------------------------------- */
 
-/* Eight hex digits that stand for the printed note wherever the note itself must not go:
-   in the part's key, which becomes the object name in a 3MF. FNV-1a, 32 bits: two
-   different notes in one drawer sharing a key would share a part, and at 32 bits that
-   is a chance in a few hundred million for a drawer of a hundred notes. */
+/* Eight hex digits (FNV-1a, 32 bits) that name a printed note in a file name when the
+   note has nothing noteSlug can spell. Only a name: two notes that hash alike still
+   download as two files, since typeNames numbers a clash apart. It is not what tells
+   one part from another. It was, in the part's key, and two notes sharing a key share a
+   part, so one bin printed the other's letters: in a drawer of a hundred notes that is
+   about one drawer in 868,000, not the chance in a few hundred million this said. The
+   key now carries the printed lines themselves (noteKey in ui.js). */
 function noteHash(text) {
   let h = 0x811c9dc5;
   const s = String(text);
@@ -6523,32 +6535,71 @@ function labelRounded(G, hwI, hdI, wall, H, depth, t, n) {
 
 /* The note raised on the label shelf (labelMode 1).
  *
- * The shelf is what a bin stacked on this one rests on: its feet come down at H, which
- * is where the shelf's top is. Letters standing on it there would hold that bin up and
- * be crushed by it. So with letters on it the shelf drops to H - 1.0, and they stand
- * 0.6 on it and top out at H - 0.4, under anything that comes down at H. Without letters
- * nothing moves: every other bin is built exactly as it was.
+ * A bin stacked on this one comes down into its lip until the chamfers of its feet meet
+ * the lip's, 0.25 mm below H (the spec's clearance, on 45 degree faces: stack-check.js),
+ * unless something stops it first, and a shelf with its top at H does. Letters standing
+ * on a shelf there would hold that bin up and be crushed by it. So with letters on it
+ * the shelf drops to H - 1.0, and they stand 0.6 on it and top out at H - 0.4: 0.15 mm
+ * under the feet of a bin seated above. Without letters nothing moves: every other bin
+ * is built exactly as it was.
  *
  * The letters go where they can be read from above. At the back and the sides that is
  * clear of the stacking lip, whose chamfer leans in over the shelf to 2.70 from the
  * outside at H: the band stops there, which at the letters' top, 0.4 lower, is 0.4 clear
  * of the chamfer too. At the front they keep 0.6 off the shelf's edge.
  *
+ * Dividers stand from the floor to H, through the shelf and anything on it (buildBin), so
+ * the letters keep 0.4 off each one that crosses the band: a fixed divider is a wall
+ * thick, and a removable one has a rail each side of the slot its plate slides down,
+ * which is where the plate goes too. They go in the widest space left across the shelf
+ * and, where dividers the other way cross it, the deepest from front to back. A space
+ * that will not take the note at the usual sizes (noteFit's readable) takes nothing. The
+ * walls alone leave one that narrow only on a half-size bin with walls past about 6.5 mm,
+ * where letters came out half a millimetre tall.
+ *
  * `footAt` is how low the shelf's slope may reach, which buildBin works out. Returns what
  * goes on the shelf: { why } with why 'off' when no note was asked for, 'empty' when
- * nothing in it prints and 'shallow' when the lowered shelf is under 6 mm deep (with its
- * depth); otherwise { why: '', top, depth, text, fit }, `fit` being noteFit's answer. */
+ * nothing in it prints, 'shallow' when the lowered shelf is under 6 mm deep (with its
+ * depth, and `by`: 'asked' for a shelf asked for that shallow, 'inside' for one held to
+ * 0.8 of the inside's depth, 'height' for one held to the room above the floor),
+ * 'dividers' when the dividers leave no space the note fits and 'narrow' when the walls
+ * do (both with its depth); otherwise { why: '', top, depth, text, fit, divided }, `fit`
+ * being noteFit's answer and `divided` whether dividers narrowed the space it was fitted
+ * to. */
 const NOTE_CLEAR = 0.4;      // letters stop this far under H
+const NOTE_DIV_CLEAR = 0.4;  // ...and this far off a divider, its rails or its plate's slot
 function noteOnShelf(c, iw, id, H, footAt) {
   if (+c.labelMode !== 1) return { why: 'off' };
   const text = NOTE_TEXT.notePrintable(c.note).text;
   if (!text) return { why: 'empty' };
   const S = NOTE_TEXT.NOTE_SPEC, top = H - NOTE_CLEAR - S.relief;
-  const depth = Math.min(c.label, id * 0.8, top - c.labelT - footAt);
-  if (!(depth >= S.shelfMin)) return { why: 'shallow', depth: Math.max(0, depth) };
+  const inside = id * 0.8, room = top - c.labelT - footAt;
+  const depth = Math.min(c.label, inside, room);
+  if (!(depth >= S.shelfMin))
+    return { why: 'shallow', depth: Math.max(0, depth),
+             by: depth === c.label ? 'asked' : depth === inside ? 'inside' : 'height' };
   const m = Math.max(0.5, LIP[0][1] - c.wall);
-  const band = { x0: -iw + m, x1: iw - m, y0: id - depth + S.front, y1: id - m };
-  return { why: '', top, depth, text, fit: NOTE_TEXT.noteFit(text, band) };
+  /* The widest stretch of lo..hi clear of n dividers spread across -inner..inner as
+     buildBin spreads them, `half` either side of each centre line, the first of equals;
+     null when nothing is left. `divided` says whether any of them crossed it. */
+  const half = (c.divRemovable ? c.divT / 2 + c.divClr + RAIL_T : c.wall / 2) + NOTE_DIV_CLEAR;
+  let divided = false;
+  const widest = (lo, hi, n, inner) => {
+    let gaps = [[lo, hi]];
+    for (let k = 1; k <= n; k++) {
+      const p = -inner + (2 * inner) * k / (n + 1), a = p - half, b = p + half;
+      if (b <= lo || a >= hi) continue;
+      divided = true;
+      gaps = gaps.flatMap(([u, v]) => [[u, Math.min(v, a)], [Math.max(u, b), v]])
+        .filter(([u, v]) => v - u > 1e-9);
+    }
+    return gaps.reduce((w, g) => (!w || g[1] - g[0] > w[1] - w[0] + 1e-9 ? g : w), null);
+  };
+  const xs = widest(-iw + m, iw - m, c.divX, iw), ys = widest(id - depth + S.front, id - m, c.divY, id);
+  if (!xs || !ys) return { why: 'dividers', depth };
+  const fit = NOTE_TEXT.noteFit(text, { x0: xs[0], x1: xs[1], y0: ys[0], y1: ys[1] });
+  if (!fit.readable) return { why: divided ? 'dividers' : 'narrow', depth };
+  return { why: '', top, depth, text, fit, divided };
 }
 
 /* Stacking lip.
@@ -8292,6 +8343,9 @@ let hashExtras = {};
 let pendingNotes = null;
 let pendingFocus = null;    // "layer.index" from the hash, applied once the layout exists
 let pendingScratch = null;  // a packed loose bin from the hash
+let pendingScratchNote = null;  // ...and its note, which travels beside it (bsn)
+let noteHeld = new WeakSet();   // bins whose raised note is past RAISED_MAX (holdNotes)
+let notesOver = 0;              // ...and how many different notes that is
 const geoCache = new Map();
 
 const B = () => layers[cur].bins;
@@ -8401,8 +8455,9 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          // holes in the feet are per bin, the magnet they fit is the page's
                          magnets: b.magnets, screws: b.screws, holesEvery: b.holesEvery,
                          magnetD: state.magnetD, magnetH: state.magnetH,
-                         // the note goes in only to be raised on the shelf (labelMode 1)
-                         labelMode: b.labelMode, note: b.note,
+                         /* the note goes in only to be raised on the shelf (labelMode 1),
+                            and not past the most one layout raises (holdNotes) */
+                         labelMode: noteHeld.has(b) ? 0 : b.labelMode, note: b.note,
                          arcSegs: state.arcSegs });
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
@@ -8424,19 +8479,52 @@ const holesText = (b) => {
 /* ---------- the note, raised on the label shelf ----------------------------
    A bin set to it (labelMode 1) prints its note in raised letters on its label shelf:
    bin.js decides where and whether, text.js which letters and how big. */
+/* How many different notes one layout prints raised. Each is a part of its own, built
+   and held in memory like any other, so a link could ask for as many as it has bins: 256
+   took the page to 1.3 GB and 20 s to load. A hundred is a 10 x 10 drawer of 1x1 bins
+   each with its own label. Past it, a bin whose note is not among the first hundred,
+   layer by layer and bin by bin, prints plain, and Checks says so, as it does for a
+   drawer past the most this tool lays out; the bins keep the setting, so the link and
+   the saved drawer still say what was asked. A loose bin is one bin, and never held. */
+const RAISED_MAX = 100;
+/* Which bins are past it, worked out afresh at the start of every pass that reads or
+   draws the layout (readControls, refresh), since anything can have changed a note or
+   the order: an edit, Undo, a link. Once per pass, not per bin: per bin it was the whole
+   layout for every raised bin in it. */
+function holdNotes() {
+  noteHeld = new WeakSet();
+  const allowed = new Set(), held = new Set();
+  for (const L of layers) for (const b of L.bins) {
+    if (+b.labelMode !== 1 || !b.note) continue;
+    const t = notePrintable(b.note).text;
+    if (!t) continue;
+    if (!allowed.has(t) && !held.has(t)) (allowed.size < RAISED_MAX ? allowed : held).add(t);
+    if (held.has(t)) noteHeld.add(b);
+  }
+  notesOver = held.size;
+}
 /* What a bin prints on its shelf, shelfNote's answer, or null when it prints nothing
    there. Only a bin set to raise its note can print one, so every other bin is answered
    without working anything out. */
 const printedNote = (b) => {
-  if (+b.labelMode !== 1 || !b.note) return null;
+  if (+b.labelMode !== 1 || !b.note || noteHeld.has(b)) return null;
   const s = shelfNote(binCfg(b));
   return s.fit ? s : null;
 };
 /* A bin printing its note is a part of its own: two with different notes are two
-   parts, and two whose letters come out the same are one. The key carries a hash of
-   the lines as printed, never the note itself: the key is the object's name in a 3MF,
-   and a note is whatever someone typed. */
-const noteKey = (b) => { const p = printedNote(b); return p ? '-n' + noteHash(p.fit.lines.join('\n')) : ''; };
+   parts, and two whose letters come out the same are one. So the key carries the lines
+   as printed, and the size, which a note cut short takes from the whole of it: exactly,
+   since two notes sharing a key share a part, and one bin would print the other's
+   letters. It used to carry a 32-bit hash of them, where two notes in a hundred
+   matched about once in 868,000 drawers. Written as the code of each character in hex,
+   never as the note itself: the key is the object's name in a 3MF and goes into the
+   download table's markup, and a note is whatever someone typed. */
+const noteKey = (b) => {
+  const p = printedNote(b);
+  if (!p) return '';
+  const hex = [...p.fit.lines.join('\n')].map((c) => c.codePointAt(0).toString(16).padStart(4, '0')).join('');
+  return `-n${hex}.${+p.fit.cap.toFixed(6)}`;
+};
 /* A character the font cannot draw, as the hint and Checks name it: itself, or its code
    point when it is one nobody could see — a control, or a space of some other kind —
    so a sentence never names a blank. */
@@ -8455,6 +8543,9 @@ const leftOff = (list) => `${charList(list)} cannot print, so ${list.length > 1 
    showing, or nothing when it is the settings for new bins, which start with no note. */
 function noteHintSay(b) {
   if (!b) return ['New bins print their note raised on the label shelf, once you give each one a note.', ''];
+  if (noteHeld.has(b))
+    return [`This layout already raises ${RAISED_MAX} other notes, the most one layout prints, ` +
+            'so this one prints plain.', 'Set some of the others to Nothing, or print some bins as a layout of their own.'];
   const s = shelfNote(binCfg(b)), S = NOTE_SPEC, mm = (x) => +x.toFixed(1);
   const many = s.dropped.length > 3;
   const off = !s.dropped.length ? ''
@@ -8464,23 +8555,36 @@ function noteHintSay(b) {
   if (s.why === '') {
     const f = s.fit;
     return [`Prints ${mm(f.cap)} mm tall on ${f.lines.length > 1 ? 'two lines' : 'one line'}` +
-            `${f.cut ? ', cut short to fit' : ''}.${off}`,
+            `${s.divided ? ', between the dividers' : ''}${f.cut ? ', cut short to fit' : ''}.${off}`,
             rest(f.cut ? `It reads \u201c${f.lines.join(' / ')}\u201d: a wider bin, a deeper shelf or a shorter note fits more.` : '',
+                 s.divided ? 'The dividers stand through the shelf, so the letters go in the widest space between them.' : '',
                  f.cap < S.capMin - 1e-9 ? `That is under the ${S.capMin} mm that stays readable; a deeper shelf has room for bigger letters.` : '',
                  offMore)];
   }
+  if (s.why === 'dividers')
+    return ['The dividers leave no space on the label shelf wide enough for the note, so nothing prints.' + off,
+            rest('They stand through the shelf, and the letters keep clear of each one. Fewer dividers, a bigger bin or a shorter note leaves room.', offMore)];
+  if (s.why === 'narrow')
+    return ['The walls leave the label shelf too narrow for the note, so nothing prints.' + off,
+            rest('Thinner walls or a wider bin leaves room.', offMore)];
   if (s.why === 'empty')
     return !(b.note || '').trim()
       ? ['Type what goes in it above, and it prints raised on the label shelf.', '']
       : ['Nothing in this note can print, so the shelf stays plain.',
          `The letters are A to Z and a to z without accents, the digits, the punctuation on a ` +
          `keyboard, and \u00b5 \u03a9 \u00b0 \u00b1 \u00d7 \u00d8. ${charList(s.dropped)} ${s.dropped.length > 1 ? 'are' : 'is'} not among them.`];
+  /* Which limit held the shelf (noteOnShelf's `by`) is what to change: the depth asked
+     for, the inside's own depth, or the height. Said as the height, a 1 x 0.5 bin six
+     units tall with 3 mm walls was told a taller bin had room for a deeper shelf. */
   if (s.why === 'shallow')
-    return [(b.label < S.shelfMin
+    return [(s.by === 'asked'
       ? `The label shelf is ${mm(b.label)} mm deep, and letters need ${S.shelfMin} mm, so nothing prints.`
+      : s.by === 'inside' ? `A shelf takes at most 80% of the inside's depth, ${mm(s.depth)} mm here, and letters need ${S.shelfMin} mm, so nothing prints.`
       : s.depth < 0.05 ? 'A bin this short has no room under its rim for a shelf to print on, so nothing prints.'
       : `A bin this tall has room under its rim for a shelf ${mm(s.depth)} mm deep, and letters need ${S.shelfMin} mm, so nothing prints.`) + off,
-      rest(b.label < S.shelfMin ? '' : 'The shelf slopes down to the wall at 45 degrees, so its depth is held to the room above the floor. A taller bin has room for a deeper one.', offMore)];
+      rest(s.by === 'asked' ? ''
+        : s.by === 'inside' ? 'A bin deeper from front to back, or with thinner walls, has room for a deeper shelf.'
+        : 'The shelf slopes down to the wall at 45 degrees, so its depth is held to the room above the floor. A taller bin has room for a deeper one.', offMore)];
   return [{
     noshelf: 'Give it a label shelf above, and the note prints raised on it.',
     carved: 'A carved shape has no label shelf, so the note does not print.',
@@ -9474,9 +9578,14 @@ function readControls() {
   /* The note raised on the shelf: the menu sits with the shelf it prints on, the hint
      under the note it describes, saying what will print. A solid block has no shelf. */
   $('labelModeRow').style.display = t.solid ? 'none' : '';
+  holdNotes();
   const raise = t.labelMode === 1 && !t.solid;
   $('noteHint').style.display = raise ? '' : 'none';
-  if (raise) {
+  /* Emptied, not only hidden, once nothing is raised: the note's field is described by
+     it, and a hidden description is still read out, so the field went on saying
+     "Prints 4.5 mm tall on one line." after the note was set back to Nothing. */
+  if (!raise) $('noteHint').textContent = '';
+  else {
     const [lead, rest] = noteHintSay(target);
     if (rest) DF.hint($('noteHint'), lead, rest);
     else $('noteHint').textContent = lead;
@@ -10849,6 +10958,9 @@ function binIssues(b, k, claims) {
     if (s.why === 'noshelf' || s.why === 'back')
       out.push({ note: true, t: 'is set to print its note on its label shelf, but ' +
         (s.why === 'back' ? 'its back wall is lowered, so it has none' : 'it has none') });
+    if (s.why === 'dividers' || s.why === 'narrow')
+      out.push({ note: true, t: `has ${s.why === 'dividers' ? 'dividers across its label shelf too close together'
+        : 'walls too thick'} for its note to fit between them, so its note is not printed` });
   }
   return out;
 }
@@ -10888,6 +11000,9 @@ function warnings() {
   }
   if (drawerAsked.w > DRAWER_MAX || drawerAsked.d > DRAWER_MAX)
     out.push({ err: true, t: `A ${drawerAsked.w} × ${drawerAsked.d} mm drawer is bigger than the ${DRAWER_MAX} mm a side this tool lays out, so it is drawn as ${state.drawerW} × ${state.drawerD} mm — a ${g.nx} × ${g.ny} grid. Check the drawer size; split a drawer that really is this big into parts.` });
+  // the most different notes one layout raises (holdNotes), said the way the drawer's is
+  if (notesOver)
+    out.push({ err: true, t: `${RAISED_MAX + notesOver} different notes are set to print raised on label shelves, more than the ${RAISED_MAX} one layout prints, so the bins with the ${plural(notesOver, 'note')} after the first ${RAISED_MAX} print plain. Set some to Nothing; print a layout this labelled in parts.` });
   /* Custom margins can leave the drawer no room for a cell. The Baseplates page builds
      nothing from a design like that, and says why; this page drew its one cell anyway,
      because grid() never draws fewer, and said nothing, so the design looked sound here
@@ -11105,6 +11220,7 @@ function types() {
   return [...m.values()].sort((a, b) => b.qty - a.qty);
 }
 function refresh() {
+  holdNotes();
   const g = grid();
   // the tallest bin is capped by the drawer OR the printer's Z, whichever bites first
   const zUnits = Math.max(1, Math.floor((state.bedH - LIP_H) / SPEC.unitH));
@@ -11983,6 +12099,12 @@ function layoutReadme() {
     L.push(`Size: ${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip`);
     if (b.divX || b.divY) L.push(`Compartments: ${(b.divX + 1) * (b.divY + 1)}` +
       (b.divRemovable ? '  (removable divider plates, printed loose)' : ''));
+    /* The note raised on its shelf, as it prints: the lines it comes out as, which a note
+       cut short or left partly off is not the same as the note above. */
+    const raised = printedNote(b);
+    if (raised) L.push(`Raised note: “${raised.fit.lines.join(' / ')}” on the label shelf, ` +
+      `${+raised.fit.cap.toFixed(1)} mm letters on ${raised.fit.lines.length > 1 ? 'two lines' : 'one line'}` +
+      (raised.fit.cut ? ', cut short to fit' : '') + '.');
     if (b.lid && lidFits(b)) L.push('Lid: yes — prints upside down, no supports.');
     L.push(...holesReadme([{ b, qty: 1 }]));
     const job = jobEstimate();
@@ -12015,6 +12137,8 @@ function layoutReadme() {
     L.push(`  ${String(t.qty).padStart(3)} x  ${t.b.u}x${t.b.v}x${t.b.hUnits}` +
       `  (${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip)` +
       `${t.b.solid ? '  solid' : ''}${t.b.divX || t.b.divY ? `  ${(t.b.divX + 1) * (t.b.divY + 1)} compartments` : ''}` +
+      // a part of its own, with its note in letters on the shelf
+      `${printedNote(t.b) ? '  note raised on the shelf' : ''}` +
       // the README is read beside a pile of printed parts, which is exactly when
       // "1x1x3" stops being enough to tell them apart
       `${t.notes && t.notes.length ? `  — ${t.notes.join(', ')}` : ''}` +
@@ -12504,8 +12628,15 @@ function descriptor() {
      So it travels in the link the README carries too. Packed with the same packBin the
      layers use — one serialisation to keep right rather than a second that can
      disagree with it, and hash-roundtrip.js already proves that one. */
-  if (scratch) o.bs = packLayers([{ bins: [scratch] }]);
-  else if (focused && fBin()) o.bf = `${cur}.${selected}`;
+  if (scratch) {
+    o.bs = packLayers([{ bins: [scratch] }]);
+    /* Its note beside it, as bnotes carries the layers' below, since packBin carries no
+       note. Without it a loose bin's note was never saved: a reload, a saved drawer and
+       the README's link all came back without it, and one raised on the shelf came back
+       a plain bin under another name. Written only when there is a note, so a loose bin
+       without one has the link it always had. */
+    if (scratch.note) o.bsn = scratch.note;
+  } else if (focused && fBin()) o.bf = `${cur}.${selected}`;
   o.bl = packLayers(layers);
   o.bseg = state.arcSegs;
   o.bdt = state.divT; o.bdc = state.divClr;
@@ -12783,6 +12914,7 @@ function loadFromHash(src) {
     if (k === 'bnotes') { pendingNotes = val; continue; }
     if (k === 'bf') { pendingFocus = val; continue; }
     if (k === 'bs') { pendingScratch = val; continue; }
+    if (k === 'bsn') { pendingScratchNote = val; continue; }
     if (k === 'pr') continue;             // applied below, once the bed is in
     // not Object.hasOwn, which Safari only has from 15.4
     const id = Object.prototype.hasOwnProperty.call(KEYS, k) ? KEYS[k] : '';
@@ -12813,7 +12945,7 @@ function loadFromHash(src) {
    ones loadFromHash above takes for itself rather than parking in hashExtras, so if one is
    added there it belongs here too. */
 const BINS_OWN = new Set(['v', ...Object.keys(KEYS), 'pr', 'dv', 'bl', 'bseg', 'bdt', 'bdc',
-                          'bmd', 'bmh', 'bnotes', 'bf', 'bs']);
+                          'bmd', 'bmh', 'bnotes', 'bf', 'bs', 'bsn']);
 const drawers = DRAWERS.create({
   tool: 'bins',
   owns: (k) => BINS_OWN.has(k),
@@ -13053,7 +13185,7 @@ halfSteps = readKey(STEPS_KEY) === 'half';
    are left out always: how the design is looked at is not what it is. */
 // the drawer, the bed and its printer, and the infill: drawers.js keeps the same list
 const SHARED_KEYS = new Set([...DRAWERS.SHARED].filter((k) => k !== 'v'));
-const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bseg', 'bdt', 'bdc', 'bmd', 'bmh', 'bnotes']
+const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bsn', 'bseg', 'bdt', 'bdc', 'bmd', 'bmh', 'bnotes']
   .filter((k) => k !== 'ph' && !VIEW_KEYS.includes(k));
 function sameDesign(a, b, skip = []) {
   const p = parseHash(a), q = parseHash(b);
@@ -13156,6 +13288,8 @@ if (pendingScratch) {
   const ls = unpackLayers(pendingScratch);
   const b = ls[0] && ls[0].bins[0];
   if (b) {
+    // its note, cleaned as a layer's is (cleanNote): one short line, whatever the link says
+    if (pendingScratchNote !== null) b.note = cleanNote(pendingScratchNote);
     scratch = b;
     focused = true;
     frameBin();
