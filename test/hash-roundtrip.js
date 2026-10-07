@@ -177,6 +177,43 @@ console.log('\nholes in the feet');
   if (misread.length) bad++;
 }
 
+/* What the label shelf carries rides in field 23: 0 nothing, 1 the note raised on it,
+   and 2 kept for a label slot, which reads as 1 until there is one. It is written only
+   for a bin that has it set, so every link and saved drawer from before it has 21 or 22
+   fields, reads as nothing on the shelf and packs back to the same text. One with the
+   note raised and no holes writes its 22nd field as a 0, which reads as no holes. The
+   note itself is not in the bin's fields: it rides in bnotes, as it always has. */
+console.log('\nwhat the label shelf carries');
+{
+  const plain = packBin(bin({ label: 12 })), holed = packBin(bin({ label: 12, magnets: true }));
+  const olds = [plain, holed, packBin(bin({ label: 12, labelMode: 0 }))];
+  const rewritten = olds.filter((p) => {
+    const b = unpackBin(p);
+    return b.labelMode !== 0 || packBin(b) !== p || p.split('-').length > 22;
+  });
+  console.log(`  a link from before reads as nothing on it ${rewritten.length ? 'WRONG: ' + rewritten.join(', ') : 'and packs as it was, byte for byte'}`);
+  if (rewritten.length) bad++;
+
+  const raised = packBin(bin({ label: 12, labelMode: 1 })), rf = raised.split('-'), rb = unpackBin(raised);
+  const raisedOk = rf.length === 23 && rf[21] === '0' && rf[22] === '1' && rb.labelMode === 1 &&
+    !rb.magnets && !rb.screws && !rb.holesEvery && packBin(rb) === raised;
+  console.log(`  the note raised survives the trip      ${raisedOk ? 'intact, 23 fields' : 'LOST: ' + raised}`);
+  if (!raisedOk) bad++;
+  const both = packBin(bin({ label: 12, labelMode: 1, magnets: true, screws: true })), bb = unpackBin(both);
+  const bothOk = both.split('-').length === 23 && bb.labelMode === 1 && bb.magnets && bb.screws && !bb.holesEvery;
+  console.log(`  and beside holes in the feet           ${bothOk ? 'intact' : 'LOST: ' + both}`);
+  if (!bothOk) bad++;
+
+  // anything else in the field is held to 0 to 1: the slot's 2 as the note, junk as nothing
+  const at = (j) => unpackBin(rf.slice(0, 22).concat([j]).join('-')).labelMode;
+  const WANT = [['2', 1], ['9', 1], ['1e9', 1], ['0.6', 1], ['0.4', 0], ['NaN', 0], ['abc', 0],
+                ['Infinity', 0], ['', 0]];
+  const misread = WANT.filter(([j, want]) => at(j) !== want).map(([j, want]) => `${j || '(empty)'} as ${at(j)}, not ${want}`);
+  console.log(`  anything else is held to 0 or 1        ` +
+              (misread.length ? 'MISREAD: ' + misread.join(', ') : `${WANT.length} values, each where it belongs`));
+  if (misread.length) bad++;
+}
+
 /* Half-size bins ride in the same four fields as every bin's size and position, counted
    in cells as always and now allowed to end in .5, so the format did not grow. What a
    link from before held was whole, and a whole number reads as it always did. A whole

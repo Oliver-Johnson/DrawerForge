@@ -35,6 +35,7 @@ another device.
 - **Multiple layers** — stack bins on bins, as many layers as fit. The layer below is ghosted for alignment, and checks catch the ways a real stack fails: overhanging an empty cell, spanning bins of different heights (it would rock), or a footprint mismatch the lip can't locate
 - **Per-edge walls** — each of the four walls can be full, two thirds, half, a low retaining lip, or fully open. An open front makes a bin you can reach into; all four open makes a **flat tray or lid**
 - **Dividers** in both directions, solid blocks, and adjustable wall and floor thickness
+- **Raised notes** — a bin's note printed in raised letters on its label shelf, sized to the shelf, clear of its dividers and under the bin stacked on it. The page says how it will read before you print, and what it cannot print
 - **Magnet and screw holes** in the feet, lined up with the baseplate's: press-fit magnet pockets, and M3 screw holes that bridge over them so they print without supports, at the bin's outer corners or under every cell. The README says how many magnets and screws to buy
 - **Stacking lips** built to spec, so bins stack on each other and on any spec baseplate
 - **See the drawer** — an optional translucent shell around the preview at the drawer's inside dimensions, with the front panel at its own height, so you can judge whether the bins suit the drawer before printing any of them. It changes nothing you download
