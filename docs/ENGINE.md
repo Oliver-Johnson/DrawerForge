@@ -456,7 +456,8 @@ Two things the checks must **not** treat as defects, and do not:
   case.
 
 Two orientation defects are quarantined by name rather than fixed, on the same terms as
-the leaks:
+the leaks. The plate audit holds its one to its size on file, piece by piece, so a
+quarantine for a few folds cannot wave through more:
 
 - **The carved bins' reflex fillet**, in `test/bin-audit.js`. One inside-out closed shell
   of 212 triangles per reflex corner, −214.259 mm³ (−282.322 on the taller `bigL-5x4`), so
@@ -465,9 +466,10 @@ the leaks:
   reversed, which only traces anticlockwise while `outer` is the larger radius. Convex
   corners pass `[CR, CR - t]` and are right; the reflex fillet passes `[CR, CR + t + OVER]`
   and reverses the loop, with nothing downstream renormalising it.
-- **The top-inserted wall cup for the puzzle key**, in `test/plate-audit.js`. 14 coplanar
-  slivers of about 1e-4 mm² on 2 of the 4 pieces at arcSegs 12, and **none at the arcSegs 6
-  the tool ships**. It is the only key housing whose cutter crosses the socket's *corner*
+- **The top-inserted wall cup for the puzzle key**, in `test/plate-audit.js`. 12 coplanar
+  slivers of about 1e-4 mm² on 3 of the 4 pieces at arcSegs 12 (14 before dented faces
+  were fanned from a point that sees them, below), and **none at the arcSegs 6 the tool
+  ships**. It is the only key housing whose cutter crosses the socket's *corner*
   cone: a key site is where four cells meet, the wall mount puts the pocket in the rim
   rather than in a floor pad, and top insert runs the cutter from below the pocket floor up
   past the plate top. A lobe arc and a cone arc then cross at a shallow angle, and both are
@@ -480,6 +482,20 @@ the leaks:
   tiles went from 8 mm deep to 10 — because a top-insert cup's wall needs the room — and
   the cutter's planes now graze the tile's corner arc somewhere else. Nothing in
   `csgSubtract` changed. If it comes back, that is what it is.
+
+One kind of fold is fixed rather than quarantined. Where `healCsgSeams` welds a vertex
+onto its group it can land a thousandth or two across the line of its neighbours, and the
+face it mends comes out with a dent too small to see. Fanned from its first corner, or
+from its average, one sliver of the fan turns against the face: three coplanar folds by a
+puzzle notch, in the bottom face beside a mounting pocket, or in the side of a puzzle
+tab. Such a face is now fanned from the first point whose fan turns nothing back (its
+average, then each of its corners, skipping a corner that would lay a triangle of no
+area along a straight run), and failing all of them is cut into ears in its own plane.
+Only a face whose fan would have folded is touched, so every plate without one is the
+same bytes as before.
+Over 960 designs of eight joints (five pitches, four clearances, rows and quads, three
+corner radii) main has 528 folds on 134 pieces and this has none; over 1,200 random
+puzzle designs, 2 pieces of 4,686 fold, one fold each, as they do on main.
 
 A warning about writing checks for this file. The rim-cap check originally asserted two
 things and claimed they were complementary: no triangle inverted, and the signed areas
@@ -541,4 +557,13 @@ currently installed):
   corner of a cutter's wall is crossed by the two sides meeting there a couple of
   thousandths apart, `healCsgSeams` welds the two crossings, and the sliver of floor
   between them and the corner goes. One cell with magnets from below was quarantined for
-  that until `fanCentre` moved the fan off any spoke so close.
+  that until `fanCentre` moved the fan off any spoke so close. That is not the only way
+  in: two of a cutter's sides, carried across the cell as planes by the BSP, can cross a
+  spoke 0.031 mm apart, or a weld on the pocket's ceiling can land a hair past
+  `healCsgSeams`' tolerance, and the same sliver goes. So `healCsgSeams` says when its
+  result is still open (`.open` on what it returns), and `buildPiece` cuts that cell's
+  pockets again: the cutters in the other order, the cell's faces in the other order,
+  both, and then the cutters turned a 28th of a turn. A cell that closes first time,
+  nearly every one, is built exactly as before. Over 3,893 random mount designs (magnets,
+  screws or both, from below or above, 42 or 50 mm, one to three cells each way, random
+  margins and corners) none is left open, where main leaves 30.

@@ -104,13 +104,15 @@ const CASES = [
      arc and a cone arc cross at a shallow angle and csgSubtract dices the crossing into
      slivers a few microns wide, of which healCsgSeams folds a handful — the class
      ENGINE.md records under the puzzle notch ceiling, and the same one the puzzle fit
-     coupon is quarantined for further down. 14 coplanar folds, 1e-4 mm² each, on 2 of the
-     4 pieces at arcSegs 12; ZERO at the arcSegs 6 the tool ships. Chasing it means either
-     retuning healCsgSeams, which is load-bearing for everything else, or moving the lobe,
-     which moves the joint. */
+     coupon is quarantined for further down. 12 coplanar folds, 1e-4 mm² each, on 3 of the
+     4 pieces at arcSegs 12, held to the 4, 6 and 2 each has (14 on main, 5, 7 and 2 on
+     the same three, before healCsgSeams fanned a dented face from a point that sees all
+     of it); ZERO at the arcSegs 6 the tool ships. Chasing it means either retuning
+     healCsgSeams, which is load-bearing for everything else, or moving the lobe, which
+     moves the joint. */
   { name: '9x9 puzzlekey wall top', drawerW: 400, drawerD: 400, connector: 'puzzlekey',
     keyType: 'puzzlekey', keyMount: 'wall', keyInsert: 'top', opens: true,
-    oriQuarantine: 'lobe arc crosses the socket corner cone' },
+    oriQuarantine: 'lobe arc crosses the socket corner cone', oriWorst: { A1: 4, A2: 6, B2: 2 } },
   { name: '9x9 snap wall top', drawerW: 400, drawerD: 400, connector: 'snap',
     keyType: 'snap', keyMount: 'wall', keyInsert: 'top', opens: true },
   /* The same housing over a floor pad rather than a wall, so the pocket sits 2.8 mm
@@ -203,6 +205,31 @@ const CASES = [
   { name: 'puzzle, four margins', pitch: 20, drawerW: 80.25, drawerD: 60.55, mLeft: 0.05,
     mRight: 0.2, mFront: 0.4, mBack: 0.15, connector: 'puzzle', outerRadius: 4,
     bedW: 50, bedD: 50, arcSegs: 6 },
+  /* Watertight, and folded until healCsgSeams fanned a dented face from a point that sees
+     all of it. Where it puts a vertex back into an edge it sits a thousandth or two off,
+     the face it mends comes out with a dent too small to see, and the fan from the face's
+     first corner, or from its average, turned a sliver across the dent the wrong way:
+     three coplanar folds on a piece, where main had edges used four times or nothing
+     wrong at all. In the bed face by a puzzle notch on two pieces of the first two, which
+     were pinned here as known; on one of the third, a 55 mm bed's split; and in the side
+     of a tab on one of the fourth, which has four margins. It is not the puzzle's: the
+     dent comes wherever the weld has to reach, the bottom face by a mounting pocket
+     among them (see the mounting cases below). Each is now held to no fold on any piece.
+     Over 1,200 random puzzle designs, 4,686 pieces, 143 pieces folded before and 2 do
+     now, both on one design, with the one fold each that they have on main. */
+  { name: 'puzzle 30 rows', pitch: 30, drawerW: 90, drawerD: 90, splitMode: 'manual',
+    rowCuts: [1, 2], colCuts: [[], [], []], connector: 'puzzle', outerRadius: 4, arcSegs: 6,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.2 } },
+  { name: 'puzzle 20 quads', pitch: 20, drawerW: 80, drawerD: 80, splitMode: 'manual',
+    rowCuts: [2], colCuts: [[2], [2]], connector: 'puzzle', outerRadius: 0, arcSegs: 6,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 } },
+  { name: 'puzzle 22, 55 bed', pitch: 22, drawerW: 88.3, drawerD: 66.3, marginMode: 'auto',
+    bedW: 55, bedD: 55, splitMode: 'plates', connector: 'puzzle', outerRadius: 4, arcSegs: 6,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.1 } },
+  { name: 'puzzle 18, a tab side', pitch: 18, drawerW: 54.7, drawerD: 55.3, mLeft: 0.2,
+    mRight: 0.5, mFront: 0.3, mBack: 1, splitMode: 'manual', rowCuts: [1, 2],
+    colCuts: [[], [], []], connector: 'puzzle', outerRadius: 4, arcSegs: 6,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.1 } },
   /* A skeleton plate whose far cuts moved half a thousandth, clear of a vertex 0.0995 mm
      from them, so the strip its cells keep solid where the margin was ended a hair from
      the margin's own region: four edges each used four times. A cut that moves now moves
@@ -236,6 +263,28 @@ const CASES = [
   { name: 'screws, joined margins', drawerW: 84.24, drawerD: 84.24, mLeft: 0.08, mRight: 0.16,
     mFront: 0.08, mBack: 0.16, outerRadius: 4.88, magnets: true, screws: true, connector: 'none',
     arcSegs: 6 },
+  /* And where fanCentre does not reach. Two sides of a cutter, carried across the cell
+     as planes by the BSP, cross a spoke of the cap 0.031 mm apart, or the pocket's
+     ceiling is welded a hair past healCsgSeams' tolerance, and the same sliver goes:
+     three or six open edges at the rim of a pocket, on three plates that were closed on
+     main until joined margins moved their cuts. Moving the fan's centre closed the first
+     at every offset tried, the second at some and the third at none, so buildPiece now
+     cuts a cell's pockets again when healCsgSeams says they came out open (see the
+     fastener cut there). The fourth was closed and folded: three coplanar folds where a
+     weld dented the bottom face and the fan from its first corner turned a sliver back
+     (see the dented faces in healCsgSeams). */
+  { name: 'magnets 50, joined', pitch: 50, drawerW: 50.47, drawerD: 102.19, mLeft: 0,
+    mRight: 0.47, mFront: 1.13, mBack: 1.06, outerRadius: 6, magnets: true, connector: 'none',
+    arcSegs: 6 },
+  { name: 'from above 50, joined', pitch: 50, drawerW: 150.66, drawerD: 152.11, mLeft: 0.66,
+    mRight: 0, mFront: 0.64, mBack: 1.47, outerRadius: 3, magnets: true, magnetSide: 'top',
+    screws: true, connector: 'none', arcSegs: 6 },
+  { name: '10 mm magnets, joined', drawerW: 42.64, drawerD: 126.99, mLeft: 0.64, mRight: 0,
+    mFront: 0.19, mBack: 0.8, outerRadius: 5.75, magnets: true, magnetD: 10, connector: 'none',
+    arcSegs: 6 },
+  { name: 'screws, two sides joined', drawerW: 84.59, drawerD: 84.58, mLeft: 0.59, mRight: 0,
+    mFront: 0.58, mBack: 0, outerRadius: 6, magnets: true, screws: true, connector: 'none',
+    arcSegs: 6 },
 
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 
@@ -248,23 +297,6 @@ const CASES = [
     baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
   { name: '3x3 bosses+screws', drawerW: 126, drawerD: 126, screws: true,
     baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
-  /* Watertight, and folded. Where healCsgSeams puts a vertex back into an edge it sits a
-     thousandth or two off, the face it mends comes out with a dent too small to see, and
-     the fan polysToTriangles lays over it from the face's first corner turns a sliver
-     across the dent the wrong way: three coplanar folds in the bed face by a puzzle
-     notch, in the two narrow pieces of the first and on two pieces of the second, where
-     main had edges used four times or nothing wrong at all. It is not the puzzle's: the
-     dent comes wherever the weld has to reach. Fanning such a face from the dent's own
-     corner clears all of these and folds six dovetail plates in a sweep of 960 that had
-     none; fanning it from its average clears the first and not the second. Triangulating
-     a dented face properly is a change to healCsgSeams, which every plate and bin leans
-     on, so they are pinned here until it is made. */
-  { name: 'puzzle 30 rows, folded', pitch: 30, drawerW: 90, drawerD: 90, splitMode: 'manual',
-    rowCuts: [1, 2], colCuts: [[], [], []], connector: 'puzzle', outerRadius: 4, arcSegs: 6,
-    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.2 }, oriQuarantine: 'a sliver fanned across a dent the weld left' },
-  { name: 'puzzle 20 quads, folded', pitch: 20, drawerW: 80, drawerD: 80, splitMode: 'manual',
-    rowCuts: [2], colCuts: [[2], [2]], connector: 'puzzle', outerRadius: 0, arcSegs: 6,
-    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 }, oriQuarantine: 'a sliver fanned across a dent the weld left' },
   /* The bosses with half cells, which add nothing: the loop builds the case again as
      solid margin and requires the same edges used the same number of times. The bosses
      sit on whole cells, so the strips do not meet them. */
@@ -355,13 +387,24 @@ for (const cs of CASES) {
   /* Orientation gets its own quarantine key. The two questions are independent — a case
      can be watertight and folded, or leak and be perfectly wound — so one flag covering
      both would excuse a defect nobody had looked at. */
+  /* And it is held to the size on file, piece by piece, as `worst` holds a leak: folds on
+     any piece past its `oriWorst`, on a piece with none on file, or a defect of any other
+     kind fail it. Without that a quarantine for a few folds on two pieces waved through
+     any number on all of them. */
   if (oriBad.length || cs.oriQuarantine) {
+    const past = !cs.oriQuarantine ? []
+      : !cs.oriWorst ? ['NO SIZE ON FILE']
+      : oris.map((o, i) => [L.pieces[i].id, o])
+          .filter(([id, o]) => o.folds > (cs.oriWorst[id] || 0) || o.inverted.length || o.wind)
+          .map(([id, o]) => `${id}: ${orientationNote(o)}`);
     const oriNote = cs.oriQuarantine
-      ? (oriBad.length ? `  known: ${cs.oriQuarantine}` : '  NOW CLEAN — take it out of quarantine')
+      ? (!oriBad.length ? '  NOW CLEAN — take it out of quarantine'
+         : past.length ? `  WORSE than on file (${past.join('; ')}) for: ${cs.oriQuarantine}`
+         : `  known: ${cs.oriQuarantine}`)
       : '';
     console.log(`${''.padEnd(24)} ${oriBad.length}/${pieces.length} pieces: ` +
                 `${oriBad.length ? orientationNote(oriBad[0]) : 'oriented'}${oriNote}`);
-    if (cs.oriQuarantine ? !oriBad.length : true) bad++;
+    if (cs.oriQuarantine ? !oriBad.length || past.length : true) bad++;
   }
 
   /* Watertight is not the same as built. A top-insert plate with the pocket never cut and

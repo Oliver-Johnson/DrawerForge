@@ -437,11 +437,52 @@ function healCsgSeams(polys) {
    * input here is convex), so the average is strictly interior. Every boundary edge is
    * still used exactly once and every spoke exactly twice, which is the whole point.
    * The sub-triangles inherit the parent plane rather than deriving one from three
-   * nearly-collinear points. */
+   * nearly-collinear points.
+   *
+   * Convex is not quite what a weld leaves, though. Moving a vertex a thousandth or two
+   * onto its group can put it just across the line of its neighbours: a dent too small
+   * to see, and a face that is not flat by the test below, so it goes out as it is. Fan
+   * that from its first corner and one sliver can turn against the face, which a slicer
+   * sees as a coplanar fold (a mounting pocket's side extended across a bottom face full
+   * of seam vertices; a puzzle notch's ceiling). So a mended face whose first-corner fan
+   * would turn a triangle backwards is fanned from the first point that turns none: its
+   * vertex average, as a flat face is, and failing that one of its own corners. A flat
+   * face can be dented too, and then its average can turn a sliver back (the side of a
+   * puzzle tab at 18 mm, where a corner sits a few microns in from its neighbours): it
+   * is fanned from a corner that turns none and lays no triangle of nothing along the
+   * straight run, when it has one. A face with no such point (a dent between two
+   * straight runs, in the bottom face beside a screw hole) is cut into ears in its own
+   * plane by earTriangulate, which lays no triangle across a dent or along a straight
+   * run. A face whose fan already lies right is left exactly as it was, and so is every
+   * plate with no such face. */
+  const turnsBack = (a, vs, k0, nn) => {
+    const n = vs.length;
+    for (let i = 0; i < n; i++) {
+      const b = vs[(k0 + i) % n], d = vs[(k0 + i + 1) % n];
+      if (b === a || d === a) continue;
+      if (V.dot(V.cross(V.sub(b, a), V.sub(d, a)), nn) < -1e-10) return true;
+    }
+    return false;
+  };
+  // the face cut into ears in its own plane, every one turned its way and none of them
+  // empty; null when that cannot be done, and the face goes out as before
+  const clipEars = (vs, nn) => {
+    const n = vs.length, m = nn.map(Math.abs);
+    const ax = m[0] > m[1] ? (m[0] > m[2] ? 0 : 2) : (m[1] > m[2] ? 1 : 2);
+    const { pts, tris } = earTriangulate(vs.map((v, i) => [v[(ax + 1) % 3], v[(ax + 2) % 3], i]));
+    if (tris.length !== n - 2) return null;
+    const ts = tris.map((t) => t.map((j) => vs[pts[j][2]]));
+    const turns = ts.map((t) => {
+      const c = V.cross(V.sub(t[1], t[0]), V.sub(t[2], t[0]));
+      return V.dot(c, c) < 1e-18 ? 0 : Math.sign(V.dot(c, nn));
+    });
+    if (!turns.every((s) => s && s === turns[0])) return null;
+    return turns[0] > 0 ? ts : ts.map((t) => [t[0], t[2], t[1]]);
+  };
   const out = [];
   for (let fi = 0; fi < faces.length; fi++) {
     const f = faces[fi], n = f.length, vs = f.map((i) => verts[i]);
-    let flat = false;
+    let flat = false, from = 0;
     if (dirty[fi])
       for (let i = 0; i < n && !flat; i++) {
         const u = V.sub(vs[(i + 1) % n], vs[i]);
@@ -449,12 +490,53 @@ function healCsgSeams(polys) {
         const c = V.cross(u, w);
         if (V.dot(c, c) < 1e-18) flat = true;
       }
-    if (!flat) { out.push({ verts: vs, plane: planes[fi] }); continue; }
-    const c = [0, 0, 0];
-    for (const v of vs) { c[0] += v[0]/n; c[1] += v[1]/n; c[2] += v[2]/n; }
+    const average = () => {
+      const c = [0, 0, 0];
+      for (const v of vs) { c[0] += v[0]/n; c[1] += v[1]/n; c[2] += v[2]/n; }
+      return c;
+    };
+    const nn = planes[fi].n;
+    let ears = null;
+    if (dirty[fi] && !flat && turnsBack(vs[0], vs, 0, nn)) {
+      if (!turnsBack(average(), vs, 0, nn)) flat = true;
+      else {
+        for (let k = 1; k < n && !from; k++) if (!turnsBack(vs[k], vs, k, nn)) from = k;
+        if (!from) ears = clipEars(vs, nn);
+      }
+    } else if (flat && turnsBack(average(), vs, 0, nn)) {
+      // a flat face with a dent the average cannot see past: a corner that sees all of it
+      // and makes no triangle of nothing, if it has one
+      for (let k = 0; k < n && flat; k++) {
+        if (turnsBack(vs[k], vs, k, nn)) continue;
+        let thin = false;
+        for (let i = 1; i < n - 1 && !thin; i++) {
+          const c = V.cross(V.sub(vs[(k + i) % n], vs[k]), V.sub(vs[(k + i + 1) % n], vs[k]));
+          thin = V.dot(c, c) < 1e-18;
+        }
+        if (!thin) { flat = false; from = k; }
+      }
+      if (flat) ears = clipEars(vs, nn);
+    }
+    if (ears) { for (const t of ears) out.push({ verts: t, plane: planes[fi] }); continue; }
+    if (!flat) { out.push({ verts: from ? vs.slice(from).concat(vs.slice(0, from)) : vs, plane: planes[fi] }); continue; }
+    const c = average();
     for (let i = 0; i < n; i++)
       out.push({ verts: [c, vs[i], vs[(i + 1) % n]], plane: planes[fi] });
   }
+  /* And whether the result is closed: a polygon edge not used exactly twice is a hole the
+     repairs above could not close. Counted on the ids already to hand, so it costs a pass
+     over the edges; buildPiece reads it to cut a cell's mounting pockets again when they
+     come out open (see the fastener cut there). */
+  const use = new Map();
+  for (const f of faces)
+    for (let i = 0; i < f.length; i++) {
+      const a = f[i], b = f[(i + 1) % f.length];
+      const k = a < b ? a * EKEY + b : b * EKEY + a;
+      use.set(k, (use.get(k) || 0) + 1);
+    }
+  let open = 0;
+  for (const u of use.values()) if (u !== 2) open++;
+  out.open = open;
   return out;
 }
 
@@ -2320,6 +2402,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
   // one cutter for every mounting site on the piece, built once and moved into place
   const cellFastener = ((cfg.magnets || cfg.screws) && solidBase)
     ? fastenerCutter(cfg, pad - cfg.magnetH, pad + 0.02, H + 0.5) : null;
+  // the same cutter turned a 28th of a turn, half a facet of its 14-sided bores, for a
+  // cell whose pockets come out open the first time (see the fastener cut below); built
+  // the first time one does
+  let turned = null;
+  const turnedFastener = () => turned || (turned = cellFastener.map((p) => {
+    const ca = Math.cos(Math.PI/14), sa = Math.sin(Math.PI/14);
+    const turn = (v) => [v[0]*ca - v[1]*sa, v[0]*sa + v[1]*ca, v[2]];
+    return { verts: p.verts.map(turn), plane: { n: turn(p.plane.n), w: p.plane.w } };
+  }));
   // the corners of its walls where they stand on the bottom face, about its axis (fanCentre)
   const fastenerFoot = [];
   if (cellFastener) {
@@ -2671,12 +2762,45 @@ function buildPiece(cfg, layout, piece, onStatus) {
          a plate with magnets does not look short of holes by mistake. The corner bosses
          below are laid out over the whole cells only, so half cells get none of those
          either. */
-      if (cellFastener && !halfX && !halfY) {
-        const off = cfg.holeOffset;
+      const fasteners = (cutter) => {
+        const out = [], off = cfg.holeOffset;
         for (const sx of [-1, 1]) for (const sy of [-1, 1])
-          cuts.fastener.push(...movePolys(cellFastener, cx + sx*off, cy + sy*off));
+          out.push(...movePolys(cutter, cx + sx*off, cy + sy*off));
+        return out;
+      };
+      if (cellFastener && !halfX && !halfY) cuts.fastener = fasteners(cellFastener);
+      for (const [kind, cut] of Object.entries(cuts)) {
+        if (!cut.length) continue;
+        let next = csgSubtract(region, cut);
+        /* The mounting pockets' last few open edges, cut again. Where two of the
+           cutters' side planes, extended across the cell by the BSP, cross a bottom-cap
+           spoke or the pocket's ceiling a couple of thousandths from where something
+           else crosses it, the repair can lose the sliver between them: three or six
+           open edges by a pocket, on a few plates in a thousand (8 of 3,893 random
+           mount designs before this, 30 on main), a lottery on the margins, the corner
+           radius and the magnet size (fanCentre takes the commonest case, a spoke past
+           a cutter's own corner, before it happens; none of the 3,893 is open now).
+           healCsgSeams says when its result is still open, and then the same cut is
+           taken again: the cutters in the other order, the cell's faces in the other
+           order, both, and last the cutters turned a 28th of a turn about their axes.
+           The first three are the same solids handed to the BSP in another order, which
+           builds other trees and so other splits; the last is the same pocket with the
+           corners of its 14-sided bores where their flats were, the same circle inside
+           each for the magnet or screw head to sit against. The first closed result is
+           kept; a cell that comes out closed first time, which is nearly every one, is
+           built exactly as before. */
+        if (next.open && kind === 'fastener') {
+          const tries = [() => csgSubtract(region, cut.slice().reverse()),
+                         () => csgSubtract(region.slice().reverse(), cut),
+                         () => csgSubtract(region.slice().reverse(), cut.slice().reverse()),
+                         () => csgSubtract(region, fasteners(turnedFastener()))];
+          for (const t of tries) {
+            const again = t();
+            if (!again.open) { next = again; break; }
+          }
+        }
+        region = next;
       }
-      for (const cut of Object.values(cuts)) if (cut.length) region = csgSubtract(region, cut);
       shells.push(region);
       done++;
       if (onStatus && done % 8 === 0) onStatus(`cells ${done}`);
