@@ -2578,7 +2578,12 @@ function binVolume(cfg, infill) {
   /* The walls, from the slab's top up: to H all round, or on a rectangle to each wall's
      own height (edgeHeights), the straight runs at their own and each corner at the
      taller of its two, a lower wall rising to a taller neighbour over rampLen of it. A
-     carved shape's walls are full height, and its reflex corners are filleted. */
+     carved shape's walls are full height, and its reflex corners are filleted.
+     A straight is the band wallRing builds between the outer straight and the inner one,
+     their vertices paired at the same fractions along each: a rectangle while the
+     cavity's corner shares the outer corner's centre (walls up to SPEC.r - 0.4), and past
+     that, where the cavity's corner stays at 0.4 mm, a trapezoid, longer outside than in.
+     A ramp spans the same fraction of both, so it is weighed at the band's mean width. */
   const hFull = H - slabTop;
   const ring = outer - areaIn(wall);
   let walls = ring * hFull;
@@ -2587,13 +2592,15 @@ function binVolume(cfg, infill) {
     const tall = (f) => Math.max(0, f * (H - floorZ) - BLOAT);
     const run = { f: 2 * (hwO - SPEC.r), b: 2 * (hwO - SPEC.r), l: 2 * (hdO - SPEC.r), r: 2 * (hdO - SPEC.r) };
     const ends = { f: ['l', 'r'], b: ['l', 'r'], l: ['f', 'b'], r: ['f', 'b'] };
-    const corner = (ring - wall * (run.f + run.b + run.l + run.r)) / 4;
+    const inset = 2 * (wall + Math.max(0.4, SPEC.r - wall) - SPEC.r);   // how much shorter inside
+    const band = (k) => wall * (run[k] + Math.max(0, run[k] - inset)) / 2;
+    const corner = (ring - band('f') - band('b') - band('l') - band('r')) / 4;
     walls = 0;
     for (const k of ['f', 'b', 'l', 'r']) {
-      walls += wall * run[k] * tall(frac(k));
+      walls += band(k) * tall(frac(k));
       for (const o of ends[k]) {
         const rise = tall(frac(o)) - tall(frac(k));
-        if (rise > 0) walls += wall * rise * rampLen(run[k]) / 2;
+        if (rise > 0 && run[k] > 0) walls += band(k) / run[k] * rise * rampLen(run[k]) / 2;
       }
     }
     for (const [a, b] of [['f', 'l'], ['f', 'r'], ['b', 'l'], ['b', 'r']])

@@ -2098,8 +2098,10 @@ console.log('\nnotes raised on the label shelf');
  * left in. Against what the mesh encloses, a 2x2x3 with an 8 mm scoop and a 12 mm shelf
  * came to 0.890 of it, a 2.5x0.5x3 with them 0.746, a 0.5x0.5x3 plain 0.927 (its lip
  * weighed as 297 mm³ where it is 555), and an L of three cells with fixed dividers
- * 1.246. Over 1375 bins, whole, half and carved, walls 0.4 to 5 mm, with and without
- * all of those, it ranged from 0.571 to 1.525; it ranges from 0.991 to 1.012 now. */
+ * 1.246. Over 3157 bins, whole, half and carved, walls 0.4 to 10 mm, with and without
+ * all of those, holes across the floor and edges lowered and open among them, it ranged
+ * from 0.483 to 1.555; it ranges from 0.995 to 1.008 now, and 800 more drawn as the 40
+ * below are from 0.994 to 1.006. */
 console.log('\nwhat a bin weighs is the plastic it is built of');
 {
   const { enclosedVolume } = require('./enclosed-volume.js');
@@ -2125,6 +2127,17 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
     ['2x2x6, 18650 holes, scoop, dividers', { u: 2, v: 2, hUnits: 6, insert: 3, scoop: 8, divX: 2, divY: 1 }],
     ['carved L, walls lowered, asking too', { u: 2, v: 2, hUnits: 6, cells: L3, divX: 2, divY: 1,
                                               edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 } }],
+    /* Walls past 3.35 mm, lowered: the cavity's corner stops shrinking at 0.4 mm there,
+       so each straight wall is a trapezoid, longer outside than in. Weighed as long
+       inside as out, the first was 0.896 of its plastic. */
+    ['1x1x12, 10 mm walls, open front and back', { u: 1, v: 1, hUnits: 12, wall: 10, edges: { f: 0, b: 0, l: 1, r: 1 } }],
+    ['1x1x6, 6.5 mm walls, open front', { u: 1, v: 1, hUnits: 6, wall: 6.5, edges: { f: 0, b: 1, l: 1, r: 1 } }],
+    ['2x1x6, 5 mm walls, open front and back', { u: 2, v: 1, hUnits: 6, wall: 5, edges: { f: 0, b: 0, l: 1, r: 1 } }],
+    ['3x2x3, 7.5 mm walls, front half, scoop', { u: 3, v: 2, hUnits: 3, wall: 7.5, scoop: 8, edges: { f: 0.5, b: 1, l: 1, r: 1 } }],
+    /* Rails in the lip's chamfer: the most of them, on the thinnest wall, where the
+       chamfer is deepest. Counted in the lip and in the rails, this was 1.015. */
+    ['1x1x2, 0.4 mm walls, 9 x 9 removable', { u: 1, v: 1, hUnits: 2, wall: 0.4, divX: 9, divY: 9, divRemovable: true,
+                                               divT: 0.8, divClr: 0 }],
   ];
   const off = [];
   for (const [name, cfg] of CASES) {
@@ -2134,6 +2147,49 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
                 `  ${ratio.toFixed(3)}${Math.abs(ratio - 1) > TOL ? '  OFF' : ''}`);
     if (Math.abs(ratio - 1) > TOL) off.push(name);
   }
+  /* And bins drawn at random, the same ones every run (a fixed seed): whole, half and
+     carved, walls 0.4 to 10 mm, edges lowered and open, a scoop, a label shelf with and
+     without its note raised, fixed and removable dividers at any plate and clearance,
+     holes in the feet and across the floor, thick floors, no lip. The dividers are held
+     to what fits, as a link holds them (unpackBin): more than that are thicker together
+     than the cavity is deep, which neither the fields nor a link can ask for. Each new
+     term in binVolume, or each change to how buildBin builds a part, meets a few dozen
+     bins here that nobody picked for it. */
+  const seeded = (seed) => () => {               // mulberry32
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const SEED = 56, DRAWN = 40, rnd = seeded(SEED);
+  const pick = (list) => list[Math.floor(rnd() * list.length)], chance = (p) => rnd() < p;
+  const SHAPES = [{ u: 0.5, v: 0.5 }, { u: 1, v: 0.5 }, { u: 1, v: 1 }, { u: 1.5, v: 1 }, { u: 2, v: 1 },
+                  { u: 1, v: 1.5 }, { u: 2, v: 2, cells: L3 }];
+  const drawn = [];
+  let lo = Infinity, hi = 0;
+  for (let i = 0; i < DRAWN; i++) {
+    const c = { ...pick(SHAPES), hUnits: 1 + Math.floor(rnd() * 6) };
+    c.wall = Math.round((chance(0.5) ? 0.4 + rnd() * 2.95 : 3.35 + rnd() * 6.65) * 10) / 10;
+    if (chance(0.4)) c.edges = { f: pick([0, 0.25, 0.5, 0.66, 1]), b: pick([0, 0.5, 0.66, 1, 1]),
+                                 l: pick([0.25, 0.5, 1, 1]), r: pick([0, 0.66, 1, 1]) };
+    if (chance(0.4)) c.scoop = pick([4, 8, 12, 15]);
+    if (chance(0.4)) { c.label = pick([6, 12, 20]); if (chance(0.5)) Object.assign(c, NOTE); }
+    if (chance(0.5)) {
+      const held = unpackBin(`0-0-${c.u}-${c.v}-${c.hUnits}-${c.wall}-1.2-${Math.floor(rnd() * 5)}-${Math.floor(rnd() * 4)}`);
+      Object.assign(c, { divX: held.divX, divY: held.divY });
+      if (chance(0.5)) Object.assign(c, { divRemovable: true, divT: pick([0.8, 1.2, 1.6, 2.4]), divClr: pick([0, 0.15, 0.25, 0.5]) });
+    }
+    if (chance(0.2)) Object.assign(c, { magnets: true, screws: chance(0.5) });
+    if (chance(0.2)) c.insert = 1 + Math.floor(rnd() * 4);
+    if (chance(0.1)) c.floorT = pick([2, 3, 6]);
+    if (chance(0.1)) c.lip = false;
+    const ratio = binVolume(c, 0.15).raw / enclosedVolume(buildBin(G, Object.assign({}, c)).polys);
+    lo = Math.min(lo, ratio); hi = Math.max(hi, ratio);
+    if (Math.abs(ratio - 1) > TOL) drawn.push(`${ratio.toFixed(3)} ${JSON.stringify(c)}`);
+  }
+  console.log(`  ${DRAWN} drawn at random (seed ${SEED}), from ${lo.toFixed(3)} to ${hi.toFixed(3)}` +
+              (drawn.length ? `: ${drawn.length} OFF: ${drawn.join('; ')}` : ''));
+  if (drawn.length) bad++;
   /* And what buildBin leaves off is not weighed, nor counted anywhere: a carved shape, or a
      bin built as one block, solid or with a floor that fills it (builtSolid), asking for
      dividers is built with none (dividersBuilt), which the page's rows, names, README and
