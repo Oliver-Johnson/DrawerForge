@@ -236,6 +236,40 @@ test('a link asking for more removable dividers than fit opens unchanged, and Ch
   expect(errors).toEqual([]);
 });
 
+/* Half a cell across leaves 18.1 mm inside at a 1.2 mm wall: room for 4 slots and their
+   rails at the usual plate, where one wall a divider allows 14. A cell and a half, 17. */
+test('half-size bins are held to the removable dividers that fit them, and Checks names them', async ({ page }) => {
+  const asks = (x, u, n) => `${x}-0-${u}-1-3-1.2-1.2-${n}-0-0-1-1-1-1-0-0-0-0-1-0-15`;
+  const bl = asks(0, 0.5, 10) + '_' + asks(1, 1.5, 30);
+  const errors = await openAt(page, 'bl=' + bl);
+  await settle(page, 600);
+  const link = () => page.evaluate(() => location.hash);
+  const before = await link();
+  expect(before).toContain('bl=' + bl);
+  expect(await page.evaluate(() => B().map((b) => [b.u, b.divX]))).toEqual([[0.5, 10], [1.5, 30]]);
+  expect(await page.evaluate(() => dividerParts().reduce((n, d) => n + d.qty, 0))).toBe(4 + 17);
+  expect(await page.evaluate(() => B().map((b) => checkManifold(geomFor(b).polys).bad))).toEqual([0, 0]);
+  const notes = async () => (await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent)))
+    .filter((t) => t.includes('removable dividers'));
+  expect(await notes()).toEqual(['2 bins are built with fewer removable dividers than they ask for, as no more ' +
+    'leave every slot room for a 1.6 mm plate at 0.25 mm clearance: the 0.5×1 on layer 1 at column 1 row 1 ' +
+    'and the 1.5×1 on layer 1 at column 2 row 1.']);
+
+  // the half-cell-wide one, chosen, still asks for 10 and offers no more than 4
+  await H.clickCell(page, -0.25, 0);
+  await settle(page, 600);
+  expect(await page.inputValue('#u')).toBe('0.5');
+  expect(await page.inputValue('#divX')).toBe('10');
+  expect(await page.evaluate(() => +document.getElementById('divX').max)).toBe(4);
+  expect(await link()).toBe(before);
+  await H.setField(page, 'divX', 50);
+  expect(await page.evaluate(() => B()[0].divX)).toBe(4);
+  expect(await page.inputValue('#divX')).toBe('4');
+  expect(await notes()).toEqual(['Layer 1, the 1.5×1 bin at column 2 row 1: is built with 17 removable dividers ' +
+    'across, not the 30 it asks for, as no more leave every slot room for a 1.6 mm plate at 0.25 mm clearance.']);
+  expect(errors).toEqual([]);
+});
+
 test('a bin designed on its own is held to the 50 cells a link carries', async ({ page }) => {
   test.setTimeout(60_000);            // 100 × 100 took 14 s an edit with no limit at all
   const errors = await openAt(page, '');

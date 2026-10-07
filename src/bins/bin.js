@@ -1321,7 +1321,8 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
  * every plate is then the same part, and goes in any slot.
  */
 function railedMost(cfg, axis) {
-  const c = withWall(Object.assign({}, BIN_DEFAULTS, cfg));
+  // the size as it is built, to the nearest half cell (halfSized), as buildBin does
+  const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const inner = axis === 'x' ? hw : hd;
