@@ -110,7 +110,12 @@ test('a reload straight after the hand-over is still the drawer that was handed 
 /* The page saves 400 ms after a change, and a page being reloaded runs on until the new
    one arrives. On a slow connection that save landed after the reload had taken the
    address from before it, and the page came back unsaved. The server is slowed here so
-   the save would always land in that gap. */
+   the save would always land in that gap.
+   The page reloads itself just after the release, the drag's own refresh having armed the
+   save, rather than the test reloading after a wait: a fixed wait put the reload close to
+   the 400 ms debounce on a slow runner, and a save landing within a few milliseconds of
+   the reload marked the drawer with the new layout while the reload carried the old
+   address, so the page came back unsaved for a reason that had nothing to do with this. */
 test('a reload started before the last save is still the drawer', async ({ page }) => {
   const errors = await openPlates(page);
   await saveAs(page, 'Kitchen');
@@ -122,9 +127,8 @@ test('a reload started before the last save is still the drawer', async ({ page 
     await route.continue();
   });
   slow = 900;
-  await H.dragCells(page, [0, 0], [1, 1]);
-  await page.waitForTimeout(100);
-  await page.reload();
+  await page.evaluate(() => addEventListener('pointerup', () => setTimeout(() => location.reload()), { once: true }));
+  await Promise.all([page.waitForEvent('load', { timeout: 120000 }), H.dragCells(page, [0, 0], [1, 1])]);
   await binsReady(page);
   await expect(page.locator('#drawerName')).toHaveText('Kitchen');
   expect(errors).toEqual([]);

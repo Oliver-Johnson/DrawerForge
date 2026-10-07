@@ -145,6 +145,7 @@ function noteLine(text) {
 }
 
 const NOTE_ELLIPSIS = '...';
+const NOTE_CUT_KEEPS = 3;     // a cut keeping fewer of the note's characters is no note
 /* The note cut short to fit, with an ellipsis, when it will not go on two lines 3 mm
    tall: { lays, s, cut }, or null when cutting would not make it any bigger. Every line
    is given the vertical reach of the whole note, so whatever is kept fits whatever was
@@ -171,14 +172,21 @@ function noteCut(text, W, Hh) {
   let lines;
   if (n === 1) lines = [cutTo(text)];
   else {
-    let k = text.length;
+    let k = text.length, inWord = false;
     while (k > 0 && !fits(text.slice(0, k).trimEnd())) k--;
     if (k < text.length && text[k] !== ' ') {
       const sp = text.lastIndexOf(' ', k - 1);
       if (sp > 0) k = sp;
+      else inWord = true;
     }
     const first = text.slice(0, k).trimEnd(), rest = text.slice(k).trimStart();
-    lines = rest ? [first, cutTo(rest)] : [first];
+    const second = rest ? cutTo(rest) : '';
+    /* A second line of nothing but the ellipsis is not a line, and a word broken over
+       two lines and then cut short reads as two words: the note goes on one line, cut to
+       fit. Between dividers "M3 screws" came out "M / ..." and "Assorted M3 M4 nuts,
+       washers" "As / s...". A word broken with nothing cut ("Resis / tors") stays. */
+    lines = !rest ? [first]
+      : second === NOTE_ELLIPSIS || (inWord && second !== rest) ? [cutTo(text)] : [first, second];
   }
   return { lays: lines.map(noteLine), s, cut };
 }
@@ -190,9 +198,18 @@ function noteCut(text, W, Hh) {
    The band is where plastic may go, so the strokes' centre lines are fitted NOTE_INK
    inside it: fitted to the band itself, a letter at its edge reached half a stroke past
    it, under the lip at the back and to a tenth of a millimetre from the shelf's front.
-   Returns { lines, cap, cut, segs }: the lines as printed, the cap height in mm, whether
-   anything was cut, and every stroke as a list of [x, y] points in mm. A cut note on a
-   shelf too shallow even for one line 3 mm tall is smaller than 3 mm, and `cap` says so. */
+   Returns { lines, cap, cut, segs, readable }: the lines as printed, the cap height in
+   mm, whether anything was cut, every stroke as a list of [x, y] points in mm, and
+   whether the band has room for the note at these rules. A cut note on a shelf too
+   shallow even for one line 3 mm tall is smaller than 3 mm, and `cap` says so; that is
+   the shelf's depth, and still readable. A band too NARROW is not: when not even the
+   ellipsis goes in at the size the depth allows, nothing could be cut to fit, and the
+   letters come out as small as the width makes them; and when a cut keeps fewer than
+   three of the note's characters, or less than all of a shorter one, too little of it is
+   there to read: "M..." says nothing "M3 screws" did. Nor is a band with no width or
+   depth left at all, where the size came out at nothing or under it, mirroring the
+   letters. A shelf the width of a bin is never that narrow; the spaces between dividers
+   can be (noteOnShelf). */
 const noteFits = new Map();
 function noteFit(text, outer) {
   const k = [text, outer.x0, outer.x1, outer.y0, outer.y1].join('|');
@@ -231,7 +248,13 @@ function noteFit(text, outer) {
     for (const st of lay.strokes) segs.push(st.map(([x, y]) => [x0 + x * s, yTop - (y - lay.top) * s]));
     yTop -= (lay.span + gap) * s;
   }
-  const out = { lines: best.lays.map((l) => l.text), cap: s * NOTE_CAP_U, cut: best.cut, segs };
+  const sDepth = Math.min(sMin, Hh / noteLine(text).span);
+  // what a cut keeps, its own ellipsis (always at the end of the last line) and spaces aside
+  const chars = (t) => t.replace(/\s/g, '').length, shown = best.lays.map((l) => l.text).join(' ');
+  const few = best.cut &&
+    chars(shown.slice(0, -NOTE_ELLIPSIS.length)) < Math.min(NOTE_CUT_KEEPS, chars(text));
+  const out = { lines: best.lays.map((l) => l.text), cap: s * NOTE_CAP_U, cut: best.cut, segs,
+                readable: !few && W > 0 && Hh > 0 && s >= sDepth - 1e-9 };
   if (noteFits.size > 500) noteFits.clear();
   noteFits.set(k, out);
   return out;
@@ -331,10 +354,13 @@ function noteShells(G, segs, z0, z1) {
 
 /* ---------- names --------------------------------------------------------- */
 
-/* Eight hex digits that stand for the printed note wherever the note itself must not go:
-   in the part's key, which becomes the object name in a 3MF. FNV-1a, 32 bits: two
-   different notes in one drawer sharing a key would share a part, and at 32 bits that
-   is a chance in a few hundred million for a drawer of a hundred notes. */
+/* Eight hex digits (FNV-1a, 32 bits) that name a printed note in a file name when the
+   note has nothing noteSlug can spell. Only a name: two notes that hash alike still
+   download as two files, since typeNames numbers a clash apart. It is not what tells
+   one part from another. It was, in the part's key, and two notes sharing a key share a
+   part, so one bin printed the other's letters: in a drawer of a hundred notes that is
+   about one drawer in 868,000, not the chance in a few hundred million this said. The
+   key now carries the printed lines themselves (noteKey in ui.js). */
 function noteHash(text) {
   let h = 0x811c9dc5;
   const s = String(text);

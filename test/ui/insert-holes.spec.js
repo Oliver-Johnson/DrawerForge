@@ -28,6 +28,23 @@ const rest = (page) => page.evaluate(() => {
 });
 const checks = (page) => page.locator('#warnings');
 const tail = (page, i = 0) => page.evaluate((i) => packBin(B()[i]).split('-').slice(21), i);
+/* A fresh page at a link, through about:blank, as half-cells.spec.js opens one: a hash
+   alone does not reload it. The blank page now and then asks for the favicon of the
+   page it replaced, which it may not load from file://, and says so in the console; that
+   line is the hop's, not the page's, and is let go. */
+const BLANK_FAVICON = /^Not allowed to load local resource: file:\S*\/favicon\.svg$/;
+const arrive = async (page, hash) => {
+  await page.goto('about:blank');
+  await page.goto(H.BINS_URL + hash);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  const errors = page.__errors;
+  for (let i = errors.length - 1; i >= 0; i--) if (BLANK_FAVICON.test(errors[i])) errors.splice(i, 1);
+};
+// one bin as a link writes it: at x, y, u by v, h units tall, with holes for `insert`
+const linkBin = (x, y, u, v, h, insert) =>
+  `${x}-${y}-${u}-${v}-${h}-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15-0-0-${insert}-0`;
+const stack = (page) => page.evaluate(() => +stackHeight().toFixed(2));
 
 test.beforeEach(async ({ page }) => {
   await H.forgetSaved(page);
@@ -126,9 +143,12 @@ test('Hole clearance is one figure for the drawer, carried by the link only when
     const before = await page.evaluate(() => typeKey(B()[0]));
     expect(await page.evaluate(() => 'bhc' in descriptor())).toBe(false);
 
+    const at0 = await page.evaluate(() => descString());
     await H.setField(page, 'holeClr', 0.2);
     expect(await rest(page)).toMatch(/^Each hole is 6\.85 mm across the flats, the largest hex bits with 0\.5 mm to spare\./);
     expect(await page.evaluate(() => descriptor().bhc)).toBe(0.2);
+    // another design, so a link differing only in it sets the saved one aside
+    expect(await page.evaluate((a) => sameDesign(descString(), a), at0)).toBe(false);
     expect(await page.evaluate(() => typeKey(B()[0])), 'a looser hole is another part').toMatch(/-i4w6\.85d/);
     expect(await page.evaluate(() => typeKey(B()[0]))).not.toBe(before);
 
@@ -174,12 +194,14 @@ test('Checks says what is left off and what stands above the rim, as notes', asy
   // a drawer too shallow for what stands in the holes is a fault: it would not shut
   await H.setField(page, 'drawerH', 50);
   await expect(checks(page)).toContainText(/has AA batteries reaching 56\.5 mm above the baseplate, past the 45\.8 mm available, so the drawer would not shut over them/);
-  expect(await page.locator('#warnings .w.err').count()).toBe(1);
+  // and the stack is measured to their tops, as a bin too tall is said twice: the stack, then the bin
+  await expect(checks(page)).toContainText('The tallest stack is 56.5 mm but only 45.8 mm is available above the baseplate.');
+  expect(await page.locator('#warnings .w.err').count()).toBe(2);
   await H.setField(page, 'drawerH', 84);
 
   // too short a bin for a hole at all
   await H.setField(page, 'hUnits', 1);
-  expect(await lead(page)).toBe('This bin has room for holes only 0.5 mm deep, and they need 3 mm, so it has none.');
+  expect(await lead(page)).toBe('This bin has room for holes only 0.5 mm deep under the rim, and they need 3 mm, so it has none.');
   await expect(checks(page)).toContainText('is too short for holes for AA batteries, so it has none: it has room for 0.5 mm under its rim, and a hole needs 3 mm');
   expect(await page.evaluate(() => [geomFor(B()[0]).meta.holes, typeName(types()[0])]))
     .toEqual([0, 'bin-1x1x1-1x0div-qty1']);                // and its dividers are back
@@ -240,6 +262,72 @@ test('a bin with holes is its own STL, and two depths are two files', async ({ p
   expect(dl.suggestedFilename()).toMatch(/^bin-1x1x3-aa-holes-depth(10|14\.5)-qty1\.stl$/);
 });
 
+/* Holes and a note raised on the shelf, on one bin. The holes keep in front of the shelf
+   and under it, so the shelf is lowered for the letters first and the block stops under
+   it; and the dividers holes leave off are not there for the letters to keep clear of, so
+   they have the whole shelf. The page says the same as the build: the note's hint, its
+   key and name, the link, the rows and the README, and Checks. */
+test('a bin with holes and a raised note: the letters have the whole shelf, and the page says both',
+  async ({ page }) => {
+    const noteLead = () => page.evaluate(() => {
+      const h = document.getElementById('noteHint'), b = h.querySelector(':scope>button.more');
+      return (b ? b.previousElementSibling.textContent : h.textContent).trim();
+    });
+    await H.dragCells(page, [0, 0], [1, 0]);               // a 2x1x3, selected
+    await H.setField(page, 'hUnits', 4);
+    await H.setField(page, 'divX', 2);
+    await page.fill('#note', 'Hex bits 1/4 inch');
+    await page.selectOption('#labelMode', '1');
+    await settle(page);
+    await expect(page.locator('#label')).toHaveValue('12');
+    // between two dividers it takes two lines
+    expect(await noteLead()).toBe('Prints 3.1 mm tall on two lines, between the dividers.');
+    expect(await page.evaluate(() => typeName(types()[0]))).toBe('bin-2x1x4-2x0div-note-hex-bits-1-4-inch-qty1');
+
+    await holesFor(page, 4);
+    expect(await noteLead(), 'the dividers are left off, so not between them').toBe('Prints 5.6 mm tall on one line.');
+    expect(await lead(page)).toBe('20 holes, 8.3 mm deep. Bits are 25 mm long, so this bin needs 5 units to keep them below the rim.');
+    const [key, name, holes, top, tail4] = await page.evaluate(() => {
+      const b = B()[0], H = b.hUnits * SPEC.unitH;
+      // the highest point well inside the lip's opening: the letters' tops
+      let z = -Infinity;
+      for (const p of geomFor(b).polys)
+        for (const v of p.verts) if (Math.abs(v[0]) < 35 && Math.abs(v[1]) < 15) z = Math.max(z, v[2]);
+      return [typeKey(b), typeName(types()[0]), geomFor(b).meta.holes, z - H, packBin(b).split('-').slice(21)];
+    });
+    expect(holes).toBe(20);
+    expect(top, 'the letters stop 0.4 mm under the rim').toBeCloseTo(-0.4, 6);
+    // both are parts of their own, so both are in the key: the note's lines, then the holes
+    const codes = [...'Hex bits 1/4 inch'].map((c) => c.codePointAt(0).toString(16).padStart(4, '0')).join('');
+    expect(key).toMatch(new RegExp(`-n${codes}\\.5\\.64\\d*-i4w6\\.65d8\\.333$`));
+    expect(name).toBe('bin-2x1x4-hex-bit-holes-note-hex-bits-1-4-inch-qty1');
+    // the note's 23rd field, then the holes' two
+    expect(tail4).toEqual(['0', '1', '4', '0']);
+    await expect(page.locator('#typeRows')).toContainText('20 holes for hex bits');
+    expect(await page.evaluate(() => layoutReadme()))
+      .toMatch(/^ +1 x {2}2x1x4 {2}\(.*\) {2}20 holes for hex bits {2}note raised on the shelf/m);
+    await expect(checks(page)).toContainText('has holes for hex bits, so its dividers are left off');
+    await expect(checks(page)).not.toContainText('note on two lines');
+    expect(await page.locator('#warnings .w.err').count()).toBe(0);
+
+    // the README of the bin on its own says both, and no compartments
+    await H.clickCell(page, 0, 0);
+    await page.locator('#focusBin').click();
+    await settle(page);
+    const readme = await page.evaluate(() => layoutReadme());
+    expect(readme).toContain('Holes: 20 for hex bits, 6.65 mm across the flats, 8.3 mm deep');
+    expect(readme).toContain('Raised note: “Hex bits 1/4 inch” on the label shelf, 5.6 mm letters on one line.');
+    expect(readme).not.toContain('Compartments');
+    await page.locator('#focusExit').click();
+    await settle(page);
+
+    // holes off again: the dividers are back, and the letters between them as before
+    await holesFor(page, 0);
+    expect(await noteLead()).toBe('Prints 3.1 mm tall on two lines, between the dividers.');
+    expect(await page.evaluate(() => [typeName(types()[0]), packBin(B()[0]).split('-').slice(21)]))
+      .toEqual(['bin-2x1x4-2x0div-note-hex-bits-1-4-inch-qty1', ['0', '1']]);
+  });
+
 test('a layout without holes writes the same link it always did', async ({ page }) => {
   await H.dragCells(page, [0, 0], [1, 0]);
   await H.setField(page, 'label', 12);
@@ -259,4 +347,126 @@ test('a layout without holes writes the same link it always did', async ({ page 
   await H.setField(page, 'holeClr', 0.1);
   await H.setField(page, 'holeClr', 0);
   expect(await page.evaluate(() => descString())).toBe(before);
+});
+
+/* A hint with nothing to say is emptied as well as hidden: it kept the last bin's
+   words, there for a screen reader or a copy of the page to find. */
+test('the hint is empty, not only hidden, once there are no holes', async ({ page }) => {
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await holesFor(page, 1);
+  expect(await lead(page)).toMatch(/^4 holes, 14\.5 mm deep\./);
+  await holesFor(page, 0);
+  await expect(hint(page)).toBeHidden();
+  expect(await hint(page).evaluate((e) => e.textContent)).toBe('');
+});
+
+/* A bin stacked on one whose batteries stand past where it comes down stands on them:
+   higher than its layer, held by nothing, and the stack is as tall as that makes it. The
+   batteries in the top bin count too, where they stand above its lip. */
+test('a bin on batteries that stand past the rim below is a fault, and the stack is measured to them',
+  async ({ page }) => {
+    await arrive(page, '#bl=' + linkBin(0, 0, 1, 1, 3, 1) + '~0-0-1-1-3');
+    // the AA tops are 56.5 mm up, and the bin on them comes down 0.25 mm less than on a lip
+    expect(await stack(page)).toBe(81.7);
+    await expect(page.locator('#warnings .w.err').filter({ hasText: 'stands on' })).toHaveText(
+      'Layer 2, the 1×1 bin at column 1 row 1: stands on the AA batteries in the 1×1 bin below, 35.8 mm ' +
+      'higher than that bin\'s lip would hold it, so nothing keeps it in place; at 9 units that bin keeps them below its rim.');
+    await expect(checks(page)).toContainText('The tallest stack is 81.7 mm but only 79.8 mm is available above the baseplate.');
+
+    // on its own, the top of the stack is the batteries' tops, not its lip
+    await arrive(page, '#bl=' + linkBin(0, 0, 1, 1, 3, 1));
+    expect(await stack(page)).toBe(56.5);
+    await expect(checks(page)).toContainText('Tallest stack 56.5 mm of 79.8 mm available');
+
+    // at 9 units the bin below keeps them under its rim, and the one on it is in its place
+    await arrive(page, '#dh=120&bl=' + linkBin(0, 0, 1, 1, 9, 1) + '~0-0-1-1-3');
+    expect(await stack(page)).toBe(87.95);
+    await expect(checks(page)).not.toContainText('stands on');
+    expect(await page.locator('#warnings .w.err').count()).toBe(0);
+  });
+
+/* Below the rim is below where a bin stacked on this one comes down, 0.25 mm under it:
+   AA batteries in an 8-unit bin on a 0.6 mm floor stop 0.1 mm under the rim, and that
+   bin would stand on them. */
+test('items that stop just under the rim are still in the way of a bin stacked on it', async ({ page }) => {
+  await arrive(page, '#bl=0-0-1-1-8-1.2-0.6-0-0-0-1-1-1-1-0-0-0-0-0-0-15-0-0-1-0');
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  expect(await lead(page)).toBe('4 holes, 16.8 mm deep. AA batteries are 50.5 mm long, so this bin needs 9 units to keep them below the rim.');
+  expect(await rest(page)).toContain('They stop 0.1 mm under the rim, and a bin stacked on this one comes down 0.25 mm into it.');
+  await expect(checks(page)).toContainText('has AA batteries reaching to 0.1 mm under its rim, where a bin stacked on it ' +
+    'comes 0.25 mm down, so nothing can stack on it; at 9 units they stay below the rim');
+  expect(await page.locator('#warnings .w.err').count(), 'a note, as standing above it is').toBe(0);
+});
+
+/* Every bin is built with up to 2000 holes (HOLES_MAX in bin.js), and a layout of
+   different ones could ask for them all at once. Past 2000 over its different parts, in
+   layout order, a bin whose part is not among the first is built plain, keeps its
+   setting so the link still says what was asked, and Checks and its hint say why. */
+test('a layout past the most holes one layout builds builds the first, and says so', async ({ page }) => {
+  /* a 9x9 of hex bits is 1927 holes, a 2x2 80 more, past 2000; the 1x1 after it is held
+     too, though its 16 would fit, since "the first" means the first; and the second 2x2
+     is the first's part, so it costs nothing more and is held with it */
+  await arrive(page, '#w=500&d=500&bl=' + [linkBin(0, 0, 9, 9, 3, 4), linkBin(9, 0, 2, 2, 3, 4),
+    linkBin(9, 2, 1, 1, 3, 4), linkBin(9, 3, 2, 2, 3, 4)].join('_'));
+  const built = () => page.evaluate(() => types().map((t) => [typeName(t), geomFor(t.b).meta.holes || 0]).sort());
+  expect(await built()).toEqual([['bin-1x1x3-qty1', 0], ['bin-2x2x3-qty2', 0], ['bin-9x9x3-hex-bit-holes-qty1', 1927]]);
+  expect(await page.evaluate(() => B().map((b) => packBin(b).split('-').slice(23).join('-'))), 'the setting is kept')
+    .toEqual(['4-0', '4-0', '4-0', '4-0']);
+  await expect(page.locator('#warnings .w.err').filter({ hasText: 'holes are set' })).toHaveText(
+    '2023 holes are set across the floors of different bins, more than the 2000 one layout builds, so the bins of ' +
+    'the 2 kinds after the first 1927 holes are built without them. Set some to Nothing; print a layout with this ' +
+    'many holes in parts.');
+
+  // the bin says why, where its holes are
+  await H.clickCell(page, 9, 0);
+  await settle(page);
+  expect(await lead(page)).toBe('This layout already builds 1927 holes across other bins\' floors, and this bin\'s 80 ' +
+    'would take it past the 2000 one layout builds, so it is built without them.');
+  // and the one held for coming after it says that, not that its own 16 are too many
+  await H.clickCell(page, 9, 2);
+  await settle(page);
+  expect(await lead(page)).toBe('Bins before this one in the layout already ask for more holes than the 2000 one ' +
+    'layout builds, so this bin is built without its 16 holes.');
+
+  // the big one set to Nothing, the rest are built, and Checks has nothing to say of it
+  await H.clickCell(page, 0, 0);
+  await holesFor(page, 0);
+  expect(await built()).toEqual([['bin-1x1x3-hex-bit-holes-qty1', 16], ['bin-2x2x3-hex-bit-holes-qty2', 80], ['bin-9x9x3-qty1', 0]]);
+  await expect(checks(page)).not.toContainText('holes are set');
+});
+
+/* A bin asking for more removable dividers than fit is built with as many as fit, and
+   Checks says so; with holes across its floor it is built with none, so it is told they
+   are left off, and nothing of how many fit: no plates, no compartments, no rails. */
+test('a bin with holes asking for 31 removable dividers is told they are left off, not that 10 are built',
+  async ({ page }) => {
+    const link = (insert) => `#bl=0-0-1-1-3-1.2-1.2-31-0-0-1-1-1-1-0-0-0-0-1-0-15-0-0-${insert}-0`;
+    await arrive(page, link(0));
+    await expect(checks(page)).toContainText('is built with 10 removable dividers across, not the 31 it asks for');
+    expect(await page.evaluate(() => [typeName(types()[0]), dividerParts().length, compartments(B()[0])]))
+      .toEqual(['bin-1x1x3-10x0div-qty1', 1, 11]);
+
+    await arrive(page, link(1));
+    await expect(checks(page)).toContainText('has holes for AA batteries, so its dividers are left off');
+    await expect(checks(page)).not.toContainText('removable divider');
+    expect(await page.evaluate(() => [typeName(types()[0]), dividerParts().length, compartments(B()[0]),
+      geomFor(B()[0]).meta.holes, B()[0].divX]))
+      .toEqual(['bin-1x1x3-aa-holes-qty1', 0, 0, 4, 31]);
+    await H.clickCell(page, 0, 0);
+    await settle(page);
+    expect(await rest(page)).toContain('Dividers are left off a bin with holes.');
+  });
+
+// and one bin past it on its own has none, as a fault: what was asked for is not built
+test('a bin with more holes than one bin is built with has none, and says so', async ({ page }) => {
+  await arrive(page, '#w=500&d=500&bl=' + linkBin(0, 0, 10, 10, 3, 4));
+  expect(await page.evaluate(() => [typeName(types()[0]), geomFor(B()[0]).meta.holes || 0])).toEqual(['bin-10x10x3-qty1', 0]);
+  await expect(page.locator('#warnings .w.err').filter({ hasText: 'holes for' })).toHaveText(
+    'Layer 1, the 10×10 bin at column 1 row 1: would have 2392 holes for hex bits, more than the 2000 one bin is ' +
+    'built with, so it has none.');
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  expect(await lead(page)).toBe('A bin this size would have 2392 holes for hex bits, more than the 2000 one bin is ' +
+    'built with, so it has none.');
 });

@@ -417,7 +417,7 @@ footer .mono{font-family:var(--mono);font-size:11px}
 #fillmap .midline{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 4;opacity:.5;pointer-events:none}
 /* On a phone the layer tabs and the Steps switch share a row above the map; the switch
    drops to a row of its own only when the tabs need the room. On a wider window the
-   switch is in the card's heading instead (placeSteps), and the tabs have the row.
+   switch is on the card's heading row instead (placeSteps), and the tabs have the row.
    #stepWhy, under the map, is the reason a place was refused.
    On a row of their own the tabs may shrink, and their labels wrap, as they did before
    the switch: held at the width of every label in a line, they ran off the card, and
@@ -426,20 +426,29 @@ footer .mono{font-family:var(--mono);font-size:11px}
 .maptools #layerTabs{flex:1 1 auto}
 .steps{display:flex;align-items:center;gap:8px}
 .steps .seg button{flex:none;padding:7px 12px}
-/* In the heading it is out of the flow at the right-hand end, centred on the row the
-   title sets, so the heading is no taller than it was: a 31 px switch in the flow made
-   it 52 px where it is 35, and at 1366 × 768 the map has no height to give. Its buttons
-   are a little shorter for it, still a comfortable target for a mouse; a phone, which
-   needs 40 px, keeps the switch on the tabs' row. drawMap keeps the card wide enough
-   for the title and the switch.
+/* The map card's heading row: the heading, and on a wider window the switch beside it,
+   not in it (placeSteps). The row carries the line under the heading, so that it runs
+   under both. The switch is shorter than the heading, so the row is no taller than it
+   was: a full-size switch made it 52 px where it is 35, and at 1366 × 768 the map has
+   no height to give. Its buttons are 24 px, a comfortable target for a mouse; a phone,
+   which needs 40 px, keeps the switch on the tabs' row.
+   The title is never cut: drawMap keeps the card as wide as the whole title on one
+   line, the switch and the padding between, 290 to 310 px in the fonts tried, and the
+   map's own width where that is more. The title was let give way, with an ellipsis, so that the row
+   never made the card wider than the map, and every narrow drawer, and a 7-column one
+   on a window short enough to bring the map to its 40 px cells, showed "DRAWER LAYO…".
+   The 6 px after the title is what lets that 7-column map, 280 px wide, hold the row in
+   the wider DejaVu Sans; at 10 it was 3 px short. The ellipsis stays only for a column
+   narrower than the row, which a window wide enough to pair the map never has.
    The word "Steps" is for screen readers only up here, where it still names the pair
    of buttons. Shown, it ran on from the title as if one heading ("Drawer layout
-   Steps"), and it was the 41 px that made the card wider than the map at 1366 × 768,
-   out of the preview at every number of layers; the buttons say what they switch. */
-#s-layout > h3{position:relative}
-#s-layout > h3 .steps{position:absolute;top:0;bottom:0;right:14px;white-space:nowrap}
-#s-layout > h3 .steps .seg button{padding:4px 10px}
-#s-layout > h3 #stepsLabel{position:absolute;width:1px;height:1px;overflow:hidden;
+   Steps"), and it needed 41 px more; the buttons say what they switch. */
+#s-layout > .layouthead{display:flex;align-items:center;border-bottom:1px solid var(--line)}
+#s-layout > .layouthead > h3{display:block;flex:0 1 auto;min-width:0;padding-right:6px;
+  border-bottom:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#s-layout > .layouthead > .steps{flex:none;margin:0 14px 0 auto;white-space:nowrap}
+#s-layout > .layouthead .seg button{padding:4px 6px;min-height:24px;font-size:11px}
+#s-layout > .layouthead #stepsLabel{position:absolute;width:1px;height:1px;overflow:hidden;
   clip-path:inset(50%)}
 /* #stepWhy says its reason on the front marker's line, covering the marker until the
    next press on the map: drawMap counts one line under the map, so a reason arriving

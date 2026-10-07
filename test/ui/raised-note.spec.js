@@ -32,6 +32,9 @@ const checks = (page) => page.locator('#warnings');
 test.beforeEach(async ({ page }) => {
   await H.forgetSaved(page);
   page.__errors = await H.openBins(page);
+  /* A page without the menu fails here, at once, rather than every case waiting out the
+     whole timeout on a select it cannot find. */
+  await expect(page.locator('#labelMode'), 'the page has the "On the shelf" menu').toHaveCount(1, { timeout: 2000 });
 });
 test.afterEach(async ({ page }) => {
   expect(page.__errors, 'the page threw while being driven').toEqual([]);
@@ -53,18 +56,21 @@ test('the note raised: the menu gives the bin a shelf, and the bin becomes its o
   await expect(hint(page)).toBeVisible();
   expect(await lead(page)).toBe('Prints 4.5 mm tall on one line.');
 
-  const [key, name, top] = await page.evaluate(() => {
+  const [key, name, top, cap] = await page.evaluate(() => {
     const b = B()[0], H = b.hUnits * SPEC.unitH;
     // the highest point the build reaches well inside the lip's opening: the letters' tops
     let z = -Infinity;
     for (const p of geomFor(b).polys)
       for (const v of p.verts) if (Math.abs(v[0]) < 15 && Math.abs(v[1]) < 15) z = Math.max(z, v[2]);
-    return [typeKey(b), typeName(types()[0]), z - H];
+    return [typeKey(b), typeName(types()[0]), z - H, printedNote(b).fit.cap];
   });
   expect(key, 'a printed note is its own part').not.toBe(plain[0]);
-  expect(key, 'named by a hash of the note, never the note').toMatch(/-n[0-9a-f]{8}$/);
+  /* keyed on the lines as printed, written as character codes, and the letters' size:
+     never the note itself */
+  const codes = [...'M3 screws'].map((c) => c.codePointAt(0).toString(16).padStart(4, '0')).join('');
+  expect(key).toBe(plain[0] + '-L12-n' + codes + '.' + +cap.toFixed(6));
   expect(key).not.toMatch(/M3|screws/i);
-  expect(name).toBe('bin-1x1x3-m3-screws-qty1');
+  expect(name).toBe('bin-1x1x3-note-m3-screws-qty1');
   expect(top, 'the letters stop 0.4 mm under the rim').toBeCloseTo(-0.4, 6);
   // the link carries it in the one field it added, and a plain bin's is as it was
   expect(await page.evaluate(() => packBin(B()[0]).split('-').slice(21))).toEqual(['0', '1']);
@@ -75,6 +81,8 @@ test('the note raised: the menu gives the bin a shelf, and the bin becomes its o
   expect(await page.evaluate(() => [B()[0].labelMode || 0, B()[0].label])).toEqual([0, 0]);
   await expect(page.locator('#labelMode')).toHaveValue('0');
   await expect(hint(page)).toBeHidden();
+  // and the note's field no longer describes itself by a hint that is not there
+  await expect(page.locator('#note')).toHaveAccessibleDescription('');
   expect(await page.evaluate(() => packBin(B()[0]).split('-').length)).toBe(21);
 });
 
@@ -170,4 +178,118 @@ test('Checks says when the note is wrapped, cut short, left off or has no shelf'
   await H.setField(page, 'label', 12);
   expect(await lead(page)).toBe('With the back wall lowered there is no label shelf, so the note does not print.');
   await expect(checks(page)).toContainText('but its back wall is lowered, so it has none');
+});
+
+/* Fixed dividers stand through the shelf, rails and plates too, so the letters go in the
+   widest space between them, keeping 0.4 mm off each. The audit holds the geometry
+   (bin-audit's divider cases); this is that the page says so, and says when there is no
+   space wide enough. */
+test('dividers: the note goes between them, or the hint and Checks say there is no room', async ({ page }) => {
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await raise(page);
+  await note(page, 'M3 screws');
+  expect(await lead(page)).toBe('Prints 4.5 mm tall on one line.');
+
+  await H.setField(page, 'divX', 1);
+  // half the shelf each side of the divider: two lines, smaller
+  expect(await lead(page)).toBe('Prints 3.2 mm tall on two lines, between the dividers.');
+  await expect(hint(page).locator('.moretext')).toHaveText(
+    'The dividers stand through the shelf, so the letters go in the widest space between them.');
+  await expect(checks(page)).toContainText('has its note on two lines, 3.2 mm tall');
+
+  // seven leave no space a letter fits in
+  await H.setField(page, 'divX', 7);
+  expect(await lead(page)).toBe('The dividers leave no space on the label shelf wide enough for the note, so nothing prints.');
+  await expect(checks(page)).toContainText(
+    'has dividers across its label shelf too close together for its note to fit between them, so its note is not printed');
+  // the bin is the plain part again, since nothing prints on it
+  expect(await page.evaluate(() => typeKey(B()[0]).includes('-n'))).toBe(false);
+  // removable ones too: the plates' slots and the rails beside them
+  await page.check('#divRemovable');
+  await H.setField(page, 'divX', 4);
+  await settle(page);
+  expect(await lead(page)).toBe('The dividers leave no space on the label shelf wide enough for the note, so nothing prints.');
+  await H.setField(page, 'divX', 1);
+  // a plate's slot and two rails take more of the shelf than a fixed divider does
+  expect(await lead(page)).toBe('Prints 3 mm tall on two lines, between the dividers, cut short to fit.');
+  expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
+});
+
+/* Dividers along the bin cross the shelf too, and cut it short from front to back. The
+   letters were sized to what was left: 1 mm tall here, and under nothing with removable
+   ones, with no word from Checks. Under 3 mm only a shelf shallow by itself prints, and
+   Checks says that too. */
+test('dividers along that cut the shelf short print nothing', async ({ page }) => {
+  await page.evaluate(() => startScratch());
+  await settle(page);
+  for (const [id, x] of [['v', 0.5], ['hUnits', 6], ['label', 12]]) await H.setField(page, id, x);
+  await raise(page);
+  await note(page, 'M3 screws');
+  expect(await lead(page)).toBe('Prints 4.2 mm tall on one line.');
+  await H.setField(page, 'divY', 3);
+  expect(await lead(page)).toBe(
+    'The dividers along the bin cut the label shelf too short from front to back for the note, so nothing prints.');
+  await expect(hint(page).locator('.moretext')).toHaveText(
+    'They stand through the shelf, and the letters keep clear of each one; where they cut it short, letters print only 3 mm tall ' +
+    'or more. Fewer of them, or a bin deeper from front to back, leaves room.');
+  await expect(checks(page)).toContainText(
+    'has dividers along it that cut its label shelf too short for its note, so its note is not printed');
+  expect(await page.evaluate(() => typeKey(scratch).includes('-n')), 'the plain part').toBe(false);
+  await page.check('#divRemovable');
+  await settle(page);
+  expect(await lead(page)).toBe(
+    'The dividers along the bin cut the label shelf too short from front to back for the note, so nothing prints.');
+
+  /* ...but only where they are what is in the way. Half a cell deep and 3 units tall, with
+     a divider across as well, the space between the ones across is too narrow for the note
+     at the shelf's whole depth: those are what to change, and the hint said the ones along. */
+  for (const [id, x] of [['hUnits', 3], ['label', 8], ['divX', 1], ['divY', 1]]) await H.setField(page, id, x);
+  expect(await lead(page)).toBe('The dividers leave no space on the label shelf wide enough for the note, so nothing prints.');
+  await H.setField(page, 'divX', 0);
+  expect(await lead(page), 'without the one across it prints').toMatch(/^Prints /);
+});
+// a shelf 6 mm deep is shallow by itself: the letters print, under 3 mm, and Checks says so
+test('letters under 3 mm on a shallow shelf are named in Checks', async ({ page }) => {
+  await page.evaluate(() => startScratch());
+  await settle(page);
+  await H.setField(page, 'label', 6);
+  await raise(page);
+  await note(page, 'M3 screws');
+  expect(await lead(page)).toBe('Prints 2.9 mm tall on one line.');
+  await expect(checks(page)).toContainText(
+    'has its note 2.9 mm tall, under the 3 mm that stays readable: its label shelf is too shallow for bigger letters');
+  expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
+});
+
+/* A shelf is held to 80% of the inside's depth as well as to the height under the rim. A
+   bin only half a cell deep with thick walls is held by that, and was told a taller bin
+   had room for a deeper shelf, which it does not. */
+test('a shelf held by the inside\'s depth says so, not that a taller bin would do', async ({ page }) => {
+  await page.evaluate(() => startScratch());
+  await settle(page);
+  for (const [id, x] of [['v', 0.5], ['hUnits', 6], ['wall', 3], ['label', 12]]) await H.setField(page, id, x);
+  await raise(page);
+  await note(page, 'M3');
+  expect(await lead(page)).toBe("A shelf takes at most 80% of the inside's depth, 5.8 mm here, and letters need 6 mm, so nothing prints.");
+  await expect(hint(page).locator('.moretext')).toHaveText(
+    'A bin deeper from front to back, or with thinner walls, has room for a deeper shelf.');
+});
+
+/* Two notes are two parts. The key used to carry a 32-bit hash of the printed lines,
+   and these two hash alike: they came out one part, one bin printing the other's
+   letters, with one file between them. */
+test('two notes are two parts, even two a 32-bit hash cannot tell apart', async ({ page }) => {
+  for (const [x, text] of [[0, 'Kit 2wlfa'], [1, 'Kit zqdha']]) {
+    await H.dragCells(page, [x, 0], [x, 0]);
+    await raise(page);
+    await note(page, text);
+  }
+  const out = await page.evaluate(() => ({
+    hashes: B().map((b) => noteHash(b.note)),
+    lines: types().map((t) => printedNote(t.b).fit.lines.join(' / ')).sort(),
+    names: [...typeNames().values()].sort(),
+  }));
+  expect(out.hashes[0], 'the two notes this case is about hash alike').toBe(out.hashes[1]);
+  expect(out.lines).toEqual(['Kit 2wlfa', 'Kit zqdha']);
+  expect(out.names).toEqual(['bin-1x1x3-note-kit-2wlfa-qty1', 'bin-1x1x3-note-kit-zqdha-qty1']);
 });
