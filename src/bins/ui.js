@@ -3275,6 +3275,12 @@ function fingerIssues(b) {
       (n, names) => `${n} bins are carved shapes, so their finger slots are left off: ${names}`);
     return out;
   }
+  // a floor as thick as the bin is tall leaves a solid block, with no walls to dip
+  if (why('solid')) {
+    note('slot:solid', 'has a floor that fills it to the top, so there is no wall for a finger slot',
+      (n, names) => `${n} bins have floors that fill them to the top, so there is no wall for a finger slot: ${names}`);
+    return out;
+  }
   const open = why('open'), low = why('low'), high = why('holes');
   if (open)
     note(`slot:open:${open}`, `has its ${wl(open)} open, so there is no finger slot there`,
@@ -5504,6 +5510,8 @@ $('labelMode').addEventListener('change', () => {
 });
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
+  // a tray has no walls to dip, so it asks for no finger slots
+  for (const id of ['fingerF', 'fingerB', 'fingerL', 'fingerR']) $(id).checked = false;
   $('solid').checked = false;
   readControls(); drawMap(); refresh();
 });

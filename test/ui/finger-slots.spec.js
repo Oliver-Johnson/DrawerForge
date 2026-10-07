@@ -310,3 +310,22 @@ test('bins built alike are one part, whatever shelf or scoop their slots took aw
     '_0-1-2-1-4-1.2-1.2-0-0-0-1-1-1-1-8-0-0-0-0-0-15-8');
   expect(await parts()).toEqual([2, 2, ['bin-2x1x4-slot-f-scoop8-qty1', 'bin-2x1x4-slot-f-scoop9.92-qty2']]);
 });
+
+test('a floor that fills the bin says there is no wall for a slot, and Tray asks for none', async ({ page }) => {
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await slot(page, 'F');
+  await H.setField(page, 'floorT', 20);
+  await expect(checks(page)).toContainText('has a floor that fills it to the top, so there is no wall for a finger slot');
+  expect(await page.evaluate(() => geomFor(B()[0]).meta.fingers)).toBe(0);
+  await H.setField(page, 'floorT', 1.2);
+  await expect(checks(page)).not.toContainText('finger slot');
+
+  // a tray has every wall open, so nothing to dip, and its link is the plain one
+  await slot(page, 'L');
+  await page.locator('#presetTray').click();
+  await settle(page);
+  for (const k of ['F', 'B', 'L', 'R']) await expect(page.locator(`#finger${k}`)).not.toBeChecked();
+  expect(await page.evaluate(() => [B()[0].fingerSlots, packBin(B()[0]).split('-').length]))
+    .toEqual([{ f: false, b: false, l: false, r: false }, 21]);
+  await expect(checks(page)).not.toContainText('finger slot');
+});
