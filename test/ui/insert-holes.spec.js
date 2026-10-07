@@ -126,9 +126,12 @@ test('Hole clearance is one figure for the drawer, carried by the link only when
     const before = await page.evaluate(() => typeKey(B()[0]));
     expect(await page.evaluate(() => 'bhc' in descriptor())).toBe(false);
 
+    const at0 = await page.evaluate(() => descString());
     await H.setField(page, 'holeClr', 0.2);
     expect(await rest(page)).toMatch(/^Each hole is 6\.85 mm across the flats, the largest hex bits with 0\.5 mm to spare\./);
     expect(await page.evaluate(() => descriptor().bhc)).toBe(0.2);
+    // another design, so a link differing only in it sets the saved one aside
+    expect(await page.evaluate((a) => sameDesign(descString(), a), at0)).toBe(false);
     expect(await page.evaluate(() => typeKey(B()[0])), 'a looser hole is another part').toMatch(/-i4w6\.85d/);
     expect(await page.evaluate(() => typeKey(B()[0]))).not.toBe(before);
 
