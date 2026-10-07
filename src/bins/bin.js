@@ -1923,8 +1923,9 @@ function buildBin(G, cfg) {
     };
     /* Where the label shelf's front stands, for a fixed divider to meet it: the depth the
        shelf above was built to, by the same sum, or the depth noteOnShelf gave it when a
-       note is raised on it, which keeps a millimetre more under the rim. Nothing, when
-       there is no shelf. */
+       note is raised on it. That shelf is a millimetre lower, and on a short bin up to a
+       millimetre shallower too, so a divider that came to the plain shelf's front would
+       stop short of it, or flush with it. Nothing, when there is no shelf. */
     const shelfFoot = plan && plan.screws ? FOOT_HOLES.screwTop + BLOAT : bodyBase + BLOAT;
     const raisedOn = noteOnShelf(c, iw, id, H, shelfFoot);
     const shelfD = raisedOn.fit ? raisedOn.depth : Math.min(c.label, id * 0.8, H - c.labelT - shelfFoot);

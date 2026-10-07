@@ -1247,6 +1247,72 @@ const weldBad = (polys, step) => {
     : 'welded at 5 and 10 µm, all clean'));
   if (!some.length || fails.length) bad++;
 }
+/* With a note raised on it the shelf stands a millimetre lower, and on a short bin it is
+   shallower too: on a 2-unit bin it is 7 mm deep where a plain one is 8. So a fixed
+   divider whose back comes to the raised shelf's front has to run on into that front,
+   not the plain one's. Missing it leaves no shared edge, as the shelf's top is a
+   millimetre under the divider's, so neither checkManifold nor a weld finds it: the
+   divider stands flush against the shelf's front, or a slit of up to 10 x WELD short of
+   it (a 1x1x2 with a 3.375 mm wall, a 10 mm shelf and 3 along stood flush; with a 3.36
+   mm wall and a 7.5 mm shelf, 15 µm short). So the divider's back is measured where it
+   is built, at the rim, against the front of the shelf shelfNote says the note is on,
+   every 5 µm of wall on 2- and 3-unit bins, wherever the note still prints with the
+   dividers in. Each one from flush to 20 µm short must reach a BLOAT into the shelf. The count of those flush and short is printed and must
+   not be zero. */
+{
+  const WELD = 0.002, BLOAT = 0.05;
+  const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
+  // the furthest back the bin reaches at its rim this near the shelf's front: the divider
+  const builtBack = (cfg, from, front) => {
+    const H = cfg.hUnits * SPEC.unitH;
+    let back = -Infinity;
+    for (const t of G.polysToTriangles(buildBin(G, cfg).polys))
+      for (const [, y, z] of t)
+        if (Math.abs(z - H) < 1e-6 && y >= from - 1e-6 && y <= front + 2 * BLOAT) back = Math.max(back, y);
+    return back;
+  };
+  const rows = [
+    ['1x1x2, wall 3.375, 10 mm shelf, 3 along', { u: 1, v: 1, hUnits: 2, wall: 3.375, label: 10, labelMode: 1, note: 'M3', divY: 3 }],
+    ['1x1x2, wall 3.36, 7.5 mm shelf, 3 along', { u: 1, v: 1, hUnits: 2, wall: 3.36, label: 7.5, labelMode: 1, note: 'M3', divY: 3 }],
+  ].map(([name, cfg]) => [name, cfg, null]);
+  for (const v of [0.5, 1, 1.5, 2])
+    for (const hUnits of [2, 3])
+      for (const label of [7.5, 10, 15])
+        for (let w = 80; w <= 1000; w++) {
+          const wall = w / 200, inner = (v - 1) * SPEC.pitch / 2 + 20.75 - wall;
+          const cfg = { u: 1, v, hUnits, wall, label, labelMode: 1, note: 'M3' };
+          const note = shelfNote(cfg);
+          if (!note.fit) continue;
+          const front = inner - note.depth;
+          for (let n = 1; n <= most(2 * inner, wall); n++) {
+            if (2 * inner / (n + 1) - wall < 0.5) break;
+            for (let k = 1; k <= n; k++) {
+              const back = -inner + 2 * inner * k / (n + 1) + wall / 2;
+              // only where the note still prints with them, on a shelf as deep
+              const withDivs = Object.assign({}, cfg, { divY: n }), raised = shelfNote(withDivs);
+              if (back >= front - 10 * WELD && back <= front + 1e-6 && raised.fit &&
+                  Math.abs(raised.depth - note.depth) < 1e-9)
+                rows.push([`${v} deep x${hUnits}, wall ${wall}, ${label} mm shelf, ${n} along`, withDivs, back]);
+            }
+          }
+        }
+  let flush = 0;
+  const fails = [], some = rows.filter((r, i) => !r[2] || i % 3 === 0);
+  for (const [name, cfg, at] of some) {
+    const raised = shelfNote(cfg), inner = (cfg.v - 1) * SPEC.pitch / 2 + 20.75 - cfg.wall;
+    const front = inner - raised.depth, from = at === null ? front - 10 * WELD : at;
+    if (!raised.fit) { fails.push(`${name}: its note is not raised`); continue; }
+    if (Math.abs(from - front) < 1e-6) flush++;
+    const back = builtBack(cfg, from, front);
+    if (!(back >= front + BLOAT - 1e-6))
+      fails.push(`${name}: back ${back === -Infinity ? 'not found' : `${((back - front) * 1000).toFixed(1)} µm from`} the shelf's front`);
+  }
+  console.log(`  ${`${flush} flush, ${some.length - flush} short of a raised one`.padEnd(34)} ` +
+    (some.length < 3 || !flush ? 'NONE FOUND to build' : fails.length
+      ? `FAILED ${fails.length} of ${some.length}, among them ${fails.slice(0, 3).join('; ')}`
+      : `${some.length} builds, each run into the shelf`));
+  if (some.length < 3 || !flush || fails.length) bad++;
+}
 
 console.log('\nremovable dividers both ways, at every count up to the most that fit');
 /* Removable both ways, the end rails of the two directions end beside each other, each a
