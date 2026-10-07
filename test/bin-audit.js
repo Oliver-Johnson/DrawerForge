@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const G = require('../src/core.js');
-const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
+const { buildBin, binVolume, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
         unpackBin, binFeet, dividersBuilt, shelfNote, NOTE_CLEAR } = require('../src/bins/bin.js');
 const NOTE_TEXT = require('../src/bins/text.js');
@@ -2029,6 +2029,61 @@ console.log('\nnotes raised on the label shelf');
   console.log(`  between dividers         ` + (squeezed.length ? `${squeezed.length} FAILED: ` +
     squeezed.slice(0, 6).join('; ') : `${printed} of ${tried} everyday bins print their note, each one readable`));
   if (squeezed.length) bad++;
+}
+
+/* What a bin weighs (binVolume), which the page weighs, prices and times every bin by.
+ *
+ * It is worked out from the numbers buildBin builds from, so it has to come to the
+ * plastic buildBin's mesh encloses (enclosedVolume: the shells' union, each overlap
+ * once). It did not. The page summed its own idea of a bin: no scoop and no label shelf
+ * on any bin, fixed dividers on a carved shape that buildBin builds without them, a
+ * carved shape's slab and walls over its whole bounding box, the stacking lip in
+ * proportion to the bin's area rather than its perimeter, and the holes in the feet
+ * left in. Against what the mesh encloses, a 2x2x3 with an 8 mm scoop and a 12 mm shelf
+ * came to 0.890 of it, a 2.5x0.5x3 with them 0.746, a 0.5x0.5x3 plain 0.927 (its lip
+ * weighed as 297 mm³ where it is 555), and an L of three cells with fixed dividers
+ * 1.246. Over 1375 bins, whole, half and carved, walls 0.4 to 5 mm, with and without
+ * all of those, it ranged from 0.571 to 1.525; it ranges from 0.991 to 1.012 now. */
+console.log('\nwhat a bin weighs is the plastic it is built of');
+{
+  const { enclosedVolume } = require('./enclosed-volume.js');
+  const TOL = 0.015;
+  const L3 = [[0, 0], [1, 0], [0, 1]], U5 = [[0, 0], [1, 0], [2, 0], [0, 1], [2, 1]];
+  const NOTE = { labelMode: 1, note: 'M3 screws' };
+  const CASES = [
+    ['2x2x3, 8 mm scoop, 12 mm shelf', { u: 2, v: 2, hUnits: 3, scoop: 8, label: 12 }],
+    ['3x2x6, scoop, shelf, fixed dividers', { u: 3, v: 2, hUnits: 6, scoop: 8, label: 12, divX: 2, divY: 1 }],
+    ['carved L, asking for fixed dividers', { u: 2, v: 2, hUnits: 3, cells: L3, divX: 2, divY: 1 }],
+    ['carved U, asking for removable ones', { u: 3, v: 2, hUnits: 3, cells: U5, divX: 2, divY: 1, divRemovable: true }],
+    ['0.5x0.5x3', { u: 0.5, v: 0.5, hUnits: 3 }],
+    ['2.5x0.5x3, scoop and shelf', { u: 2.5, v: 0.5, hUnits: 3, scoop: 8, label: 12 }],
+    ['1.5x1x3, note raised on its shelf', { u: 1.5, v: 1, hUnits: 3, label: 12, ...NOTE }],
+    ['1x1x3, magnets and screws', { u: 1, v: 1, hUnits: 3, magnets: true, screws: true }],
+    ['3x2x3, front at half, scoop, shelf', { u: 3, v: 2, hUnits: 3, scoop: 8, label: 12, edges: { f: 0.5, b: 1, l: 1, r: 1 } }],
+    ['2x1x6, removable 3 across, 2 along', { u: 2, v: 1, hUnits: 6, divX: 3, divY: 2, divRemovable: true, scoop: 8, label: 12, ...NOTE }],
+    ['1x1x3, 0.4 mm walls, 5 x 3 removable', { u: 1, v: 1, hUnits: 3, wall: 0.4, divX: 5, divY: 3, divRemovable: true }],
+    ['3x2x6, 5 mm walls', { u: 3, v: 2, hUnits: 6, wall: 5 }],
+    ['2x2x3 solid, asking for dividers', { u: 2, v: 2, hUnits: 3, solid: true, divX: 2, divY: 1 }],
+  ];
+  const off = [];
+  for (const [name, cfg] of CASES) {
+    const est = binVolume(cfg, 0.15).raw, mesh = enclosedVolume(buildBin(G, cfg).polys);
+    const ratio = est / mesh;
+    console.log(`  ${name.padEnd(40)} ${(est / 1000).toFixed(2).padStart(6)} of ${(mesh / 1000).toFixed(2).padStart(6)} cm³` +
+                `  ${ratio.toFixed(3)}${Math.abs(ratio - 1) > TOL ? '  OFF' : ''}`);
+    if (Math.abs(ratio - 1) > TOL) off.push(name);
+  }
+  /* And what buildBin leaves off is not weighed, nor counted anywhere: a carved shape or a
+     solid block asking for dividers is built with none (dividersBuilt), which the page's
+     rows, names and README go by. */
+  const none = CASES.filter(([, c]) => c.cells || c.solid)
+    .filter(([, c]) => dividersBuilt(c).divX || dividersBuilt(c).divY || binVolume(c).parts.dividers);
+  console.log(`  within ${TOL * 100}% of what the mesh encloses: ` +
+              (off.length ? `${off.length} OFF: ${off.join('; ')}` : `all ${CASES.length}`));
+  console.log(`  carved and solid bins built with no dividers: ` +
+              (none.length ? 'COUNTED: ' + none.map(([n]) => n).join('; ') : 'none counted'));
+  if (off.length) bad++;
+  if (none.length) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');

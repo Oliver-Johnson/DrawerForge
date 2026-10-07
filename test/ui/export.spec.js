@@ -419,7 +419,12 @@ test('half-size bins download under their own sizes, with no holes they cannot h
    weighs its rails, so the total is 369 g, not 373, and nothing else in it changed. Then
    that bin's rails came to reach the clearance deeper, so that each end of its plates sits
    a whole rail's depth in them: its STL changed and nothing else did, not even the README,
-   whose 369 g they leave as it was. */
+   whose 369 g they leave as it was. Then each bin came to be weighed as the plastic its
+   mesh encloses (bin.js, binVolume): the scoops and label shelves counted, the carved L
+   over its eight cells rather than nine and less its magnet holes, and the lip round each
+   bin's edge rather than in proportion to its area, which had weighed the 2x2 and 3x2
+   bins a few percent heavy. The README's weights and times moved, to 347 g from 369, and
+   no STL and no link did. */
 test('a link from before half sizes downloads the same files, byte for byte', async ({ page }) => {
   const crypto = require('crypto');
   const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
@@ -445,7 +450,7 @@ test('a link from before half sizes downloads the same files, byte for byte', as
   }
   got.link = sha(await page.evaluate(() => descString()));
   expect(got).toEqual({
-    'README.txt': 'ee8088678d951284',
+    'README.txt': 'ebd8d84e9095c623',
     'bin-2x1x3-low-f50-l25-qty1.stl': '4f879f2b46d2fef3',
     'bin-2x1x3-qty1.stl': '1d5dddd4cc82d4d4',
     'bin-2x1x4-qty1.stl': '4b028774e7cab92a',

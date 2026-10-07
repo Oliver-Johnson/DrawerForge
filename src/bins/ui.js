@@ -568,153 +568,16 @@ function pruneGeometry() {
     geoCache.delete(k);
   }
 }
-function areaRR(hw, hd, r) { return 4 * hw * hd - (4 - Math.PI) * r * r; }
-function perimRR(hw, hd, r) { return 4 * hw + 4 * hd - 8 * r + 2 * Math.PI * r; }
-
-/* Material estimate.
- *
- * Raw mesh volume is NOT what a printer uses. Thin features (walls, floor,
- * dividers, lip) come out solid because they are only a few perimeters wide, but
- * the feet are thick blocks that the slicer shells and then infills — and on a
- * shallow bin the feet dominate. So thin parts are counted at full density and
- * the base block is counted as shell + infill x core.
- *
- * Assumes 2 perimeters (0.8 mm) and 4 solid top/bottom layers (0.8 mm), which is
- * a common default. Geometry is unaffected either way.
- */
-const SHELL_T = 0.8, SKIN_T = 0.8;
-
-function footProfileHalf(z) {
-  let h = SPEC.prof[SPEC.prof.length - 1][1];
-  for (let q = 0; q < SPEC.prof.length - 1; q++) {
-    const [z0, h0] = SPEC.prof[q], [z1, h1] = SPEC.prof[q + 1];
-    if (z >= z0 && z <= z1) { h = h0 + (h1 - h0) * (z1 > z0 ? (z - z0) / (z1 - z0) : 0); break; }
-  }
-  return h;
-}
-
-/* The plan area of the rails `n` removable dividers stand in along one direction: each a
-   slot between two ribs RAIL_T thick, standing out from each of the two facing walls its
-   plate slides between, from the floor to the rim, as deep as buildBin's reach() builds
-   them: a rail's depth and the clearance, or the whole way across a cavity too shallow
-   for two. `along` is half the length of those walls inside the cavity, hwI for the
-   dividers that stand at a fixed x (divX), hdI for the others, as buildBin's spans() and
-   reach() take them, and `across` half the distance between them. The plate and the
-   clearance are the ones buildBin is given for the bin (binCfg), so the two cannot drift.
-   Where the rails stand in the lip's chamfer, the scoop or the label shelf they are
-   counted in full all the same, as if those were not there, so such a bin comes out a
-   little heavy: about 0.2 g on a 1x1x3 or a 2x1x6 with two or three dividers each way, an
-   8 mm scoop and a 10 mm shelf, of which the chamfer is 0.03 g. It grows with the count
-   and with the scoop and the shelf, to 1.9 g on a 2x1x6 with 23 across and 10 along
-   under a 20 mm scoop and a 20 mm shelf, measured off the bin as built.
-   Placed, sorted and merged where two meet exactly as spans() does it, so dividers packed
-   close enough for one's rail to run into the next count the plastic they share once.
-   A rail beside an end wall can stand in the cavity's rounded corner, where buildBin
-   either leaves it buried in the wall or, if it would stand out through the bin, cuts it
-   to the cavity's outline. Either way the part behind the arc is wall, already counted,
-   so only the part in front of it is counted here: the rail's depth left in front of
-   the arc, summed along it, against a true arc of the cavity's radius rather than the
-   chords it is built from (under a rail 1.2 mm wide the two differ by a few hundredths
-   of a square millimetre at the coarsest smoothness). A rail on a straight run is
-   counted whole, so at any count that keeps the rails out of the corners the sum is
-   exactly the rails' own area. */
-function railArea(n, along, across, wall, divT, divClr) {
-  if (!(n > 0) || !(along > 0)) return 0;
-  const slot = divT / 2 + divClr, rail = slot + RAIL_T;
-  const deep = RAIL_D + divClr >= across - BLOAT / 2 ? across : RAIL_D + divClr;
-  const spans = [];
-  for (let k = 1; k <= n; k++) {
-    const p = -along + (2 * along) * k / (n + 1);
-    spans.push([p - rail, p - slot], [p + slot, p + rail]);
-  }
-  spans.sort((a, b) => a[0] - b[0]);
-  const merged = [];
-  for (const [lo, hi] of spans) {
-    const last = merged[merged.length - 1];
-    if (last && lo <= last[1] + BLOAT) last[1] = Math.max(last[1], hi);
-    else merged.push([lo, hi]);
-  }
-  /* t into a corner, the arc stands rI - sqrt(rI² - t²) in front of the wall's straight
-     line, and takes the whole of a rail's depth at tEnd (or never quite, where the
-     radius is no deeper than the rail). `under` is the depth left in front of it, summed
-     from the corner's start to t; `upTo` the same from the middle of the wall to x, both
-     ways, so a span's area is upTo(hi) - upTo(lo). Past the end wall it adds nothing. */
-  const rI = Math.max(0.4, SPEC.r - wall), straight = Math.max(0, along - rI);
-  const tEnd = deep >= rI ? rI : Math.sqrt(rI * rI - (rI - deep) * (rI - deep));
-  const under = (t) => {
-    t = Math.min(Math.max(t, 0), tEnd);
-    return (deep - rI) * t + (t * Math.sqrt(rI * rI - t * t) + rI * rI * Math.asin(t / rI)) / 2;
-  };
-  const upTo = (x) => Math.sign(x) * (deep * Math.min(Math.abs(x), straight) + under(Math.abs(x) - straight));
-  return 2 * merged.reduce((a, [lo, hi]) => a + upTo(hi) - upTo(lo), 0);  // both walls
-}
-
-// { raw, filament } in mm3
-function volumeMm3(c) {
-  const C = SPEC.centre;
-  const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half;
-  const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half;
-  // the floor as built: screw holes raise a thin one
-  const floorT = builtFloorT(c);
-  const H = c.hUnits * SPEC.unitH, floorZ = SPEC.footH + floorT;
-  const infill = Math.max(0, Math.min(1, (state.infill === undefined ? 15 : state.infill) / 100));
-
-  /* base block: the feet plus the solid floor slab above them.
-     The feet are the ones the engine builds, added up foot by foot (binFeet): a carved
-     bin has fewer than its bounding box implies, and a half-size bin stands on quarter
-     feet, 10.5 mm in on every side — counted a whole foot per cell, a 1.5 x 1 had two
-     whole feet where it has six quarter ones. Feet of one size are summed together, so a
-     whole bin's figures come out exactly as they did. */
-  const sizes = new Map();                       // how far in from a whole foot -> how many
-  for (const f of binFeet(c)) sizes.set(f.inset, (sizes.get(f.inset) || 0) + 1);
-  let footV = 0, footLat = 0, botA = 0;
-  const N = 60, h0 = SPEC.prof[0][1];
-  for (const [inset, count] of sizes) {
-    let v = 0, lat = 0;
-    for (let i = 0; i < N; i++) {
-      const h = footProfileHalf(SPEC.footH * (i + 0.5) / N);
-      v += areaRR(h - inset, h - inset, h - C) * (SPEC.footH / N);
-      lat += perimRR(h - inset, h - inset, h - C) * (SPEC.footH / N);
-    }
-    footV += v * count; footLat += lat * count;
-    botA += count * areaRR(h0 - inset, h0 - inset, h0 - C);
-  }
-  const slabH = (c.solid || floorZ >= H - 0.2) ? (H - SPEC.footH) : floorT;
-  const baseRaw = footV + areaRR(hwO, hdO, SPEC.r) * slabH;
-  const baseLat = footLat + perimRR(hwO, hdO, SPEC.r) * slabH;
-  const baseShell = baseLat * SHELL_T + (botA + areaRR(hwO, hdO, SPEC.r)) * SKIN_T;
-  const baseFil = Math.min(baseRaw, baseShell + infill * Math.max(0, baseRaw - baseShell));
-
-  if (c.solid || floorZ >= H - 0.2) return { raw: baseRaw, filament: baseFil };
-
-  /* thin parts — solid whatever the infill setting */
-  const e = (k) => (c.edges && c.edges[k] !== undefined ? Math.max(0, Math.min(1, c.edges[k])) : 1);
-  const wall = Math.max(WALL_MIN, c.wall);        // as built: buildBin holds it there too
-  const hwI = hwO - wall, hdI = hdO - wall;
-  const wallsFull = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - wall)))
-                    * (H - floorZ);
-  const perim = 4 * hwO + 4 * hdO;
-  const wallFrac = (e('f') * 2 * hwO + e('b') * 2 * hwO + e('l') * 2 * hdO + e('r') * 2 * hdO) / perim;
-  /* Dividers. A fixed one is a wall across the cavity, a wall thick, and is counted as
-     one. A removable one is not built into the bin at all: the bin gets the rails its
-     plate slides down (railArea), and the plate is a part of its own, which the plan
-     weighs beside the bin (computePlan). Counted as a wall each, the rails went uncounted
-     and each plate was weighed twice, once here and once as itself: a 2x1x6 with three
-     removable dividers across and two along was 41 g of bin where it is 27 g, and with
-     its 20 g of plates the job was 60 g where it is 47 g. A carved bin gets no rails
-     (buildBin leaves dividers off a carved shape, as dividerParts does its plates), so a
-     removable one counts none. */
-  /* As many as it is built with: a bin asking for more removable ones than fit has the
-     rails of as many as fit (builtDivs), and weighed as asked, two bins of one type could
-     weigh 72 g or 37 g by which came first. Fixed ones are built as asked. */
-  const built = builtDivs(c), bc = binCfg(c);
-  const divs = !c.divRemovable
-    ? (built.divX * wall * 2 * hdI + built.divY * wall * 2 * hwI) * (H - floorZ)
-    : isCarved(c) ? 0 : (railArea(built.divX, hwI, hdI, wall, bc.divT, bc.divClr) +
-                         railArea(built.divY, hdI, hwI, wall, bc.divT, bc.divClr)) * (H - floorZ);
-  const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
-  const thin = wallsFull * wallFrac + divs + lipV;
-  return { raw: baseRaw + thin, filament: baseFil + thin };
+/* Material estimate: { raw, filament, parts } in mm3, from binVolume in bin.js, which
+   weighs what buildBin builds by the numbers buildBin builds it from: the feet, the
+   slab, the walls and the lip of the shape as built, the scoop, the label shelf, fixed
+   dividers or a removable one's rails, and less the holes in the feet. A removable
+   divider's plate is a part of its own, which the plan weighs beside the bin
+   (computePlan), so it is not in its bin. Raw is what the solid holds; filament is what
+   a slicer lays down for it at the infill set here. The bin is the one the page builds
+   (binCfg), so a note held to plain (holdNotes) is weighed plain, as it is built. */
+function volumeMm3(b) {
+  return binVolume(binCfg(b), (state.infill === undefined ? 15 : state.infill) / 100);
 }
 
 /* The volume a closed mesh encloses: the signed volume of the tetrahedron each triangle
