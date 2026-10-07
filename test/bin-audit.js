@@ -8,7 +8,7 @@ const path = require('path');
 const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
-        unpackBin, binFeet, dividersBuilt, binDividers, plateLayout, shelfNote, floorPlan, NOTE_CLEAR,
+        unpackBin, binFeet, dividersBuilt, binDividers, dividerPlates, plateLayout, shelfNote, floorPlan, NOTE_CLEAR,
         insertPlan } = require('../src/bins/bin.js');
 // the label shelf as built, { top, depth, raised }, depth 0 for none: floorPlan's, which buildBin builds
 const shelfAs = (c, iw, id, H) => floorPlan(c, iw, id, H).shelf || { top: H, depth: 0, raised: null };
@@ -2704,6 +2704,24 @@ function weldOpen(polys, tol) {
   console.log(`  ${'dividers and scoop'.padEnd(20)} ` + (kept.length ? 'BUILT beside holes: ' + kept.join(', ')
     : `${extras.length} kinds left off, each the same STL as the bin without`));
   if (kept.length) bad++;
+  /* ...and removable ones both ways on a bin with its lip, a scoop and a shelf, with and
+     without a note raised on it, whose plates would notch the lip and the shelf, cut the
+     scoop and halve where they cross: none of that, and no plates (binDividers). */
+  const removable = { divX: 2, divY: 2, divRemovable: true, scoop: 8 };
+  const shelved = [Object.assign({}, holed, { label: 12 }), Object.assign({}, holed, { label: 12, labelMode: 1, note: 'Bits' }),
+                   Object.assign({}, holed, { insert: 2, hUnits: 4, label: 10 })];
+  const notched = shelved.map((b) => {
+    const asked = Object.assign({}, b, removable), out = [];
+    if (stl(asked) !== stl(b)) out.push('built differently');
+    const d = binDividers(asked), plates = dividerPlates(G, asked).length;
+    if (d.divX || d.divY) out.push(`${d.divX} + ${d.divY} dividers`);
+    if (plates) out.push(`${plates} plates`);
+    if (!buildBin(G, asked).meta.holes) out.push('no holes');
+    return out.length ? `${JSON.stringify(b)}: ${out.join(', ')}` : '';
+  }).filter(Boolean);
+  console.log(`  ${'removable dividers'.padEnd(20)} ` + (notched.length ? 'FAILED: ' + notched.join('; ')
+    : `${shelved.length} bins with the lip, a scoop and a shelf, asking for 2 each way: no notches, no rails, no plates`));
+  if (notched.length) bad++;
 
   /* Opt-in, and only when there are holes to build: every other bin is built to the byte
      as it was, whatever its hole settings say. Each row is a bin that has to come out the
