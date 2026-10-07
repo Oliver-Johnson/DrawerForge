@@ -14,10 +14,35 @@
 const { test, expect } = require('@playwright/test');
 const H = require('./helpers.js');
 
+/* Served over HTTP (H.serveRoot), not opened from disk. Every test here reads, on a later
+   page, what an earlier one saved, and from file:// pages the CI browser has now and then
+   opened the second page with the first page's localStorage write missing: a bare visit
+   read 306, the page's own default, where 444 had been saved, once in 611 runs. On a real
+   origin the save is dependable, as it is on the site. The service worker is blocked:
+   nothing here is about it, and a page it answers is not the one on disk. */
+test.use({ serviceWorkers: 'block' });
+let site;
+test.beforeAll(async () => { site = await H.serveRoot(); });
+test.afterAll(() => site.close());
+const binsUrl = () => site.base + 'bins/';
+// as H.openPlates and H.openBins, at the served pages
+async function openPlates(page) {
+  await page.goto(site.base);
+  await page.waitForFunction(() => {
+    const t = document.getElementById('pieceTail');
+    return t && /ready/.test(t.textContent);
+  }, null, { timeout: 20000 });
+}
+async function openBins(page) {
+  await page.goto(binsUrl());
+  await page.waitForFunction(() => !!document.getElementById('fillmap'));
+  await page.waitForTimeout(200);
+}
+
 const settle = (page) => page.waitForTimeout(900);   // past the 400 ms debounce
 
 test('the baseplates page comes back the way you left it', async ({ page }) => {
-  await H.openPlates(page);
+  await openPlates(page);
   await H.setField(page, 'drawerW', '512');
   await page.selectOption('#connector', 'hclip');
   await settle(page);
@@ -35,7 +60,7 @@ test('the baseplates page comes back the way you left it', async ({ page }) => {
 });
 
 test('the bins page comes back with the bins still in it', async ({ page }) => {
-  await H.openBins(page);
+  await openBins(page);
   await H.dragCells(page, [0, 0], [1, 1]);
   await H.dragCells(page, [3, 3], [3, 3]);
   await settle(page);
@@ -57,7 +82,7 @@ test('the bins page comes back with the bins still in it', async ({ page }) => {
    the defaults the page had not finished loading yet — and the person who sent the link
    would never know their recipient saw a different drawer. */
 test('following a shared link does not overwrite it with the defaults', async ({ page }) => {
-  await H.openPlates(page);
+  await openPlates(page);
   await H.setField(page, 'drawerW', '378');
   await settle(page);
   const shared = await page.evaluate(() => location.href);
@@ -79,7 +104,7 @@ test('following a shared link does not overwrite it with the defaults', async ({
  * trap you on the tool.
  */
 test('editing does not fill the history with entries', async ({ page }) => {
-  await H.openPlates(page);
+  await openPlates(page);
   const start = await page.evaluate(() => history.length);
   for (const w of ['400', '450', '500', '550']) {
     await H.setField(page, 'drawerW', w);
@@ -95,7 +120,7 @@ test('editing does not fill the history with entries', async ({ page }) => {
  * that path exactly — visit, work, then arrive again at a URL with no hash on it.
  */
 test('the baseplates page remembers a drawer with no link to carry it', async ({ page }) => {
-  await H.openPlates(page);
+  await openPlates(page);
   await H.setField(page, 'drawerW', '444');
   await settle(page);
 
@@ -109,7 +134,7 @@ test('the baseplates page remembers a drawer with no link to carry it', async ({
 });
 
 test('the bins page remembers its bins with no link to carry them', async ({ page }) => {
-  await H.openBins(page);
+  await openBins(page);
   await H.dragCells(page, [0, 0], [1, 1]);
   await settle(page);
   expect((await H.bins(page)).length).toBe(1);
@@ -121,7 +146,7 @@ test('the bins page remembers its bins with no link to carry them', async ({ pag
 });
 
 test('start fresh clears the save rather than hiding it', async ({ page }) => {
-  await H.openPlates(page);
+  await openPlates(page);
   await H.setField(page, 'drawerW', '451');
   await settle(page);
   await page.goto(page.url().split('#')[0]);
@@ -146,7 +171,7 @@ test('start fresh clears the save rather than hiding it', async ({ page }) => {
    or they see their own drawer while believing it is the sender's — and the sender has
    no way of finding out. */
 test('a shared link beats the layout this browser saved', async ({ page }) => {
-  await H.openPlates(page);
+  await openPlates(page);
   await H.setField(page, 'drawerW', '333');
   await settle(page);
   const mine = await page.evaluate(() => location.href);
@@ -175,7 +200,7 @@ const backAgain = async (page) => {
 };
 
 test('the skip link on the bins page keeps the bins', async ({ page }) => {
-  await H.openBins(page);
+  await openBins(page);
   await H.dragCells(page, [0, 0], [1, 1]);
   await H.dragCells(page, [3, 3], [3, 3]);
   await settle(page);
@@ -196,7 +221,7 @@ test('the skip link on the bins page keeps the bins', async ({ page }) => {
 });
 
 test('the skip link on the baseplates page keeps the drawer', async ({ page }) => {
-  await H.openPlates(page);
+  await openPlates(page);
   await H.setField(page, 'drawerW', '512');
   await settle(page);
 
@@ -216,7 +241,7 @@ test('the skip link on the baseplates page keeps the drawer', async ({ page }) =
    ending in a fragment that carries no settings. It is not a layout, so it must not
    beat the one this browser saved. */
 test('an address with no settings in it does not replace the saved layout', async ({ page }) => {
-  await H.openBins(page);
+  await openBins(page);
   await H.dragCells(page, [0, 0], [1, 1]);
   await settle(page);
 
@@ -242,7 +267,7 @@ const stepsNow = (page) => page.evaluate(() => ({
 }));
 
 test('the steps choice is kept in this browser and never in the link', async ({ page }) => {
-  await H.openBins(page);
+  await openBins(page);
   await H.dragCells(page, [0, 0], [1, 1]);
   await settle(page);
   const link = await page.evaluate(() => descString());
@@ -268,18 +293,18 @@ test('the steps choice is kept in this browser and never in the link', async ({ 
 });
 
 test('half steps turning on for a half-size bin is not kept as a choice', async ({ page }) => {
-  await H.openBins(page);
+  await openBins(page);
   await page.goto('about:blank');
-  await page.goto(H.BINS_URL + '#bl=' + halfBin(0.5, 0, 1.5, 1));
+  await page.goto(binsUrl() + '#bl=' + halfBin(0.5, 0, 1.5, 1));
   await page.waitForFunction(() => typeof THREE !== 'undefined');
   await settle(page);
   expect(await stepsNow(page)).toEqual({ half: true, pressed: 'true', kept: null });
 });
 
 test('a layout with half-size bins comes back after a reload', async ({ page }) => {
-  await H.openBins(page);
+  await openBins(page);
   await page.goto('about:blank');
-  await page.goto(H.BINS_URL + '#bl=' + halfBin(0.5, 0, 1.5, 1) + '_' + halfBin(2, 0.5, 0.5, 2.5) +
+  await page.goto(binsUrl() + '#bl=' + halfBin(0.5, 0, 1.5, 1) + '_' + halfBin(2, 0.5, 0.5, 2.5) +
     '&bs=' + halfBin(0, 0, 2.5, 0.5));
   await page.waitForFunction(() => typeof THREE !== 'undefined');
   await settle(page);
