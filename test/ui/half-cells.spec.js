@@ -22,11 +22,7 @@ const bin = (x, y, u, v, h = 3, feet = 0) =>
   [x, y, u, v, h, 1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 15].concat(feet ? [feet] : []).join('-');
 
 /* The page at a link of its own, through about:blank: a hash alone does not reload it.
-   That blank page now and then asks for the favicon of the page it replaced, which it
-   may not load from file://, and says so in the console; that line is the hop's, not
-   the page's, and is let go. Taken out of the same list, which the listener goes on
-   filling. */
-const BLANK_FAVICON = /^Not allowed to load local resource: file:\S*\/favicon\.svg$/;
+   The blank page's favicon line is the hop's, and the helpers' listener lets it go. */
 async function openAt(page, hash) {
   page.__errors = await H.openBins(page);
   if (hash) {
@@ -34,8 +30,6 @@ async function openAt(page, hash) {
     await page.goto(H.BINS_URL + '#' + hash);
     await page.waitForFunction(() => typeof THREE !== 'undefined');
     await settle(page);
-    const errors = page.__errors;
-    for (let i = errors.length - 1; i >= 0; i--) if (BLANK_FAVICON.test(errors[i])) errors.splice(i, 1);
   }
 }
 test.afterEach(async ({ page }) => {

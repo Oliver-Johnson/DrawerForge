@@ -17,7 +17,7 @@ async function openAt(page, hash) {
   await H.forgetSaved(page);
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !H.blankFavicon(m)) errors.push(m.text()); });
   await page.goto(H.BINS_URL + (hash ? '#' + hash : ''));
   await page.waitForFunction(() => !!document.getElementById('fillmap'));
   await settle(page, 300);

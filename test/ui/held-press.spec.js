@@ -24,10 +24,8 @@ const H = require('./helpers.js');
 const BINS_LINK = 'bl=3-3-2-2-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15_0-6-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15';
 
 /* The page at a link, through about:blank, with a layout of yours saved before it, so
-   the link sets yours aside and says so above the map. The blank page now and then asks
-   for the favicon of the page it replaced, which it may not load from file://, and says
-   so in the console: that line is the hop's, not the page's, and is let go. */
-const BLANK_FAVICON = /^Not allowed to load local resource: file:\S*\/favicon\.svg$/;
+   the link sets yours aside and says so above the map. The blank page's favicon line is
+   the hop's, and the helpers' listener lets it go. */
 async function arriveOverYours(page, open, yours, url) {
   // a case made again starts with nothing kept from the last try
   await page.evaluate(() => { try { localStorage.clear(); } catch (err) { /* about:blank */ } });
@@ -38,8 +36,6 @@ async function arriveOverYours(page, open, yours, url) {
   await page.goto(url);
   await page.waitForFunction(() => typeof THREE !== 'undefined');
   await page.waitForTimeout(600);                        // and past the boot's own, no change
-  const errors = page.__errors;
-  for (let i = errors.length - 1; i >= 0; i--) if (BLANK_FAVICON.test(errors[i])) errors.splice(i, 1);
   await expect(page.locator('#setAside')).toBeVisible();
   await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
 }
