@@ -5125,7 +5125,7 @@ function saveNow() {
     }
   }
   if (!drawers.isBehind(h)) saveLocal(h);   // not a save another tab has moved on from
-  try { drawers.wrote(h); }   // and into the saved drawer this is, if it is one
+  try { drawers.wrote(h, linkKeys(h, heldLink)); }   // and into the saved drawer this is, if it is one
   finally {
     /* Marked as this tab's own, or as someone's link's while the page still holds it as
        it arrived (see ownMark). After the drawer's save, so the mark names the save in the

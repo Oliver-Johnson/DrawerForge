@@ -168,9 +168,42 @@ for (const tool of ['bins', 'plates']) for (const link of [false, true]) {
     await expect(page.locator('#drawerName')).toHaveText('Kitchen');
     await expect(page.locator('#drawerW')).toHaveValue(link ? '520' : '400');
     await expect(page.locator('#setAside')).toBeHidden();
+    // the link's settings are still the link's, not yours, as before the reload
+    expect(!!await page.evaluate((k) => localStorage.getItem(k), `drawerforge:${tool}:v1:linked`),
+      link ? 'still the link\'s' : 'nothing is a link').toBe(link);
     expect(errors).toEqual([]);
   });
 }
+
+/* With someone's link carried across, that reload reopened onto the drawer as opening it
+   from the list does, and the link's settings became yours. The layout of yours the link
+   had set aside was still there, but the next link took the first one's layout for yours
+   and set it aside in its place, and yours was gone. */
+test('a link\'s hand-over reloaded as its first save lands still leaves your layout to put back',
+  async ({ page }) => {
+    await page.addInitScript(onArrival);
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto(base + 'bins/');
+    await binsReady(page);
+    await H.setField(page, 'gap', '5');   // your own layout, in no drawer
+    await settle(page);
+    await page.goto(base + '#w=520&d=410&v=2');
+    await platesReady(page);
+    await saveAs(page, 'Kitchen');
+    expect(await reloadOnArrival(page, '/bins/', true, '#navBins'), 'arriving')
+      .toBe('This link replaced the layout you had here.');
+    await expect(page.locator('#drawerW')).toHaveValue('520');
+
+    await page.goto('about:blank');
+    await page.goto(base + 'bins/#w=250&d=260&bgap=2&v=2');
+    await binsReady(page);
+    await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
+    await page.click('#putBack');
+    await expect.poll(() => page.inputValue('#gap').catch(() => ''),
+      { message: 'yours comes back', timeout: 20000 }).toBe('5');
+    expect(errors).toEqual([]);
+  });
 
 /* The same race after a change: the save waiting for it lands as the reload starts. The
    reload reopens onto the drawer, which has the change, rather than coming back unsaved
@@ -205,6 +238,60 @@ for (const tool of ['bins', 'plates']) {
         'nothing is a link').toBeFalsy();
       expect(errors).toEqual([]);
     });
+}
+
+/* The same race while the browser refuses the drawer's saves (its storage full): the
+   change before was refused too, so the address the reload took is the one copy of it,
+   and the drawer still has the save before both. The reload took the drawer for newer than
+   the page and reopened onto that older save, and the page's next save wrote it over the
+   change everywhere. Now it keeps the address, and the later change, which the reload
+   never saw, is set aside. */
+for (const tool of ['bins', 'plates']) {
+  const ready = tool === 'bins' ? binsReady : platesReady;
+  const [field, key, before, refused, raced] = tool === 'bins' ? ['gap', 'bgap', '6', '4', '7']
+    : ['connector', 'cn', 'dovetail', 'hclip', 'puzzlekey'];
+  test(`with the drawer's saves refused, a ${tool} page reloaded as a change's save lands keeps ` +
+    'the change before', async ({ page }) => {
+    const errors = await openPlates(page);
+    await H.setField(page, 'drawerW', '400');
+    await saveAs(page, 'Kitchen');
+    if (tool === 'bins') { await toBins(page); await H.setField(page, field, before); }
+    await settle(page);
+    expect((await stored(page)).Kitchen[key]).toBe(before);
+    await page.evaluate(() => {
+      const write = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (k) {
+        if (k === 'drawerforge:drawers:v1') throw new DOMException('full', 'QuotaExceededError');
+        return write.apply(this, arguments);
+      };
+    });
+    if (tool === 'bins') await H.setField(page, field, refused);
+    else await page.selectOption('#' + field, refused);
+    await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+    await settle(page);
+    await Promise.all([page.waitForEvent('load'), page.evaluate(([field, v]) => {
+      const e = document.getElementById(field);
+      e.value = v;
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+      e.dispatchEvent(new Event('change', { bubbles: true }));
+      if (typeof landEdit === 'function') landEdit();
+      const write = history.replaceState;
+      history.replaceState = () => {};     // the reload has the address already
+      try { saveNow(); } finally { history.replaceState = write; }
+      history.replaceState(null, '');      // and the address's mark went with the save's
+      location.reload();
+    }, [field, raced])]);
+    await ready(page);
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    await expect(page.locator('#' + field)).toHaveValue(refused);
+    await expect(page.locator('#setAsideMsg')).toHaveText('The layout you had here is set aside.');
+    await settle(page);
+    expect((await stored(page)).Kitchen[key], 'the drawer takes it now').toBe(refused);
+    await page.click('#putBack');
+    await expect.poll(() => page.inputValue('#' + field).catch(() => ''),
+      { message: 'and Put back brings the later change', timeout: 20000 }).toBe(raced);
+    expect(errors).toEqual([]);
+  });
 }
 
 /* The same reload with no save landing. The page is your own drawer handed over, and the
