@@ -43,11 +43,11 @@
  *
  *   - Overlapping closed shells. They are the construction, not a bug. Each is its own
  *     connected component, each is checked on its own.
- *   - Shells abutting face to face (baseMode 'bosses') or sharing an edge (the puzzle
- *     lobe apex at arcSegs 6). Both are quarantined in plate-audit.js as leaks and both
- *     are correctly wound: their shared edges come out balanced 2 and 2, and the fold
- *     test skips them because it only looks at edges used by exactly two triangles.
- *     Measured clean on every quarantined case.
+ *   - Shells abutting face to face (baseMode 'bosses'), or sharing an edge as the puzzle
+ *     lobe apex did before buildPiece kept its pole in one region. The bosses are
+ *     quarantined in plate-audit.js as leaks and are correctly wound: their shared edges
+ *     come out balanced 2 and 2, and the fold test skips them because it only looks at
+ *     edges used by exactly two triangles. Measured clean on every quarantined case.
  *   - Volume on an OPEN shell. The divergence theorem needs a closed surface; on an open
  *     one the tetrahedra do not cancel and the number is arbitrary. A top-insert hclip
  *     pocket reads -359 mm³ inside a 27 mm³ bounding box for exactly this reason. So

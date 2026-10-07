@@ -322,11 +322,12 @@ bugs, and clearing one tells you nothing about the other.**
   couple of them into spurs — a face that is real surface everywhere except for one
   out-and-back excursion, which no single-face test could see.
 
-What is quarantined now is **`connector: 'puzzle'` at every smoothness**, and it is the
-second kind: exactly one edge per notch, always used 4, never once. The lobe's far pole
-points along the seam, the boundary between two cell regions runs along that same line,
-and both regions cut the same notch — so both carry the apex vertex and the vertical edge
-either side of it. Two closed shells sharing an edge, the bosses bug in miniature.
+What was quarantined after that was **`connector: 'puzzle'` at every smoothness**, and it
+was the second kind: exactly one edge per notch, always used 4, never once. The lobe's far
+pole points along the seam, the boundary between two cell regions runs along that same
+line, and both regions cut the same notch — so both carried the apex vertex and the
+vertical edge either side of it. Two closed shells sharing an edge, the bosses bug in
+miniature.
 
 **"12 and 24 carry none" was in this paragraph and it was wrong**, and the way it was wrong
 is worth more than the number. At those smoothnesses the two regions happened to subdivide
@@ -337,13 +338,20 @@ and the defect appeared at 12 too, at exactly twice the size (the edge is split 
 there, so 14 rather than 7). It was called "deterministic, not luck" on the strength of a
 sweep over four smoothnesses and six drawer sizes, and the sweep was measuring a
 coincidence that held across all of them. **An edge count that depends on two shells
-disagreeing about where to put a vertex is not evidence of anything.**
+disagreeing about where to put a vertex is not evidence of anything.** Moving a margin's
+cut, which has nothing to do with the joint either, later flipped three clean puzzle
+pieces into leaking ones the same way.
 
-It is quarantined rather than fixed because **every fix costs joint geometry**, which is
-worse than the defect. Sliding the joint 0.09 mm along the seam gets the apex out of the
-overlap band and lands the lobe on the socket's flat wall at x = 2.15 instead, opening
-five real boundary edges. Reshaping the lobe so no vertex sits at the pole changes the
-notch's reach, and the audit asserts that reach to 1e-9 against the tab it mates with.
+It stayed quarantined for a while because every fix to the **notch** costs joint geometry.
+Sliding the joint 0.09 mm along the seam gets the apex out of the overlap band and lands
+the lobe on the socket's flat wall at x = 2.15 instead, opening five real boundary edges.
+Reshaping the lobe so no vertex sits at the pole changes the notch's reach, and the audit
+asserts that reach to 1e-9 against the tab it mates with. **The fix was to move the region,
+not the notch**: `buildPiece` starts the region past the pole half a BLOAT beyond it rather
+than a BLOAT short, so the pole is inside one region only. The two regions still overlap,
+from that edge to the neighbour's, and the notch is the same notch. The three puzzle cases
+are out of quarantine, and the audit has a puzzle plate with four different margins by a
+4 mm corner as a case of its own.
 
 The puzzle **key** had the identical defect from the identical cause — 14 edges a plate on
 every floor mount — and it is fixed rather than quarantined, which is the difference
@@ -353,7 +361,7 @@ inflates the arc by `1/cos(Δ/2)` so the facet that spans the pole still reaches
 nominal radius. The pocket comes out the same size to the micron and up to 26 µm looser
 elsewhere, which is the harmless direction. A notch that a printed tab has to enter has no
 such slack. If you take the notch on, the rule to aim at is the one the dovetail obeys by
-accident:
+accident, and that the notch now obeys by having the boundary moved:
 **a cutter straddling a region boundary must cross it with a face, not a vertex.**
 
 Run the headless audits:
@@ -440,8 +448,8 @@ Two things the checks must **not** treat as defects, and do not:
   surface; on an open one the tetrahedra do not cancel and the number is arbitrary. A
   top-insert hclip pocket reads −359 mm³ inside a 27 mm³ bounding box. Volume is asserted
   only on shells every edge of which is used an even number of times.
-- **Abutting shells are not inverted shells.** `baseMode: 'bosses'` and the puzzle lobe
-  apex both put two correctly-wound shells face to face or edge to edge.
+- **Abutting shells are not inverted shells.** `baseMode: 'bosses'` puts two
+  correctly-wound shells face to face, as the puzzle lobe apex used to put them edge to edge.
   Their shared edges come out balanced 2 and 2, and the fold test only looks at edges used
   by exactly two triangles, so it never sees them. Measured clean on every quarantined
   case.
