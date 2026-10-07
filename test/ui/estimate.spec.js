@@ -533,8 +533,10 @@ test.describe('the weight', () => {
                mesh: meshVolume(built(railed).polys), meshPlain: meshVolume(built(plain).polys),
                /* The rails as the mesh has them reach a BLOAT into the wall and a BLOAT into
                   the floor, which meshVolume, adding up shells that overlap, counts twice
-                  where the plastic is there once. */
-               trim: RAIL_D / (RAIL_D + BLOAT) * deep / (deep + BLOAT) };
+                  where the plastic is there once. They stand a rail's depth and the
+                  clearance out from the wall, so that the plate's end sits a whole rail's
+                  depth in them. */
+               trim: (RAIL_D + state.divClr) / (RAIL_D + state.divClr + BLOAT) * deep / (deep + BLOAT) };
     }), RAILED);
     for (const [i, x] of r.entries()) {
       const what = `${RAILED[i]}`;
