@@ -5331,21 +5331,26 @@ const DRAWERS = (function () {
        page; without it, that older address was taken for someone's link. An entry
        still holding someone's link as it arrived is marked as that link's, and comes
        back as that link: after Put back, Back to it is the link replacing your layout
-       again, not your own page. */
-    function ownMark(h) {
+       again, not your own page. It still names the drawer it was saved into (markOf). */
+    function markOf(h) {
       let st = null;
       try { st = history.state; } catch (err) { st = null; }
       const m = isPlain(st) && isPlain(st.drawerforge) ? st.drawerforge : null;
-      return m && m.tool === o.tool && !!h && m.fp === fingerprint(h) && m.link !== true ? m : null;
+      return m && m.tool === o.tool && !!h && m.fp === fingerprint(h) ? m : null;
+    }
+    function ownMark(h) {
+      const m = markOf(h);
+      return m && m.link !== true ? m : null;
     }
     /* The mark for the address the page writes `h` to; `link` when that is someone's
-       link, untouched since it arrived. */
-    const stamp = (h, link) => ({ drawerforge: { tool: o.tool, fp: fingerprint(h), id: attached || '',
-                                                 link: !!link, ours, theirs } });
-    // marks the address the page is at, if it is `h`, as this tab's own, leaving it as it is
-    function markHere(h) {
+       link, untouched since it arrived; `arrived` when it is the address the page
+       arrived at, not yet saved from. */
+    const stamp = (h, link, arrived) => ({ drawerforge: { tool: o.tool, fp: fingerprint(h),
+      id: attached || '', link: !!link, arrived: !!arrived, ours, theirs } });
+    // marks the address the page is at, if it is `h`, leaving it as it is
+    function markHere(h, link, arrived) {
       if ((location.hash || '').replace(/^#/, '') !== h) return;
-      try { history.replaceState(stamp(h), ''); }
+      try { history.replaceState(stamp(h, link, arrived), ''); }
       catch (err) { /* refused on file://: a reload goes by the tab's record instead */ }
     }
     // the marks for a note: this tool's `mine`, and the other's as this page has it
@@ -5756,7 +5761,8 @@ const DRAWERS = (function () {
       /* The note left for this page, if the design `h` it arrives with is the one the
          note is about: with `link` and `open` as handOver writes them. Read every time, so
          a stale note never lingers; attach reads the same one. Without one, `own` says the
-         address is this tab's own (see ownMark). Else null. */
+         address is this tab's own (see ownMark), and `arrived` that the page at it had not
+         saved since it arrived there. Else null. */
       arrival(h) {
         const next = takeOnce();
         if (next && h && next.fp === fingerprint(h)) {
@@ -5765,10 +5771,18 @@ const DRAWERS = (function () {
                    open: next.open === true, own: false };
         }
         const mine = ownMark(h);
-        return mine ? { id: typeof mine.id === 'string' ? mine.id : '', link: [], open: false, own: true }
+        return mine ? { id: typeof mine.id === 'string' ? mine.id : '', link: [], open: false, own: true,
+                        arrived: mine.arrived === true }
           : null;
       },
       stamp,   // for the address the page is about to write (see ownMark)
+      /* Whether `h` is a save that the drawer open has moved on from, with nothing new of
+         this page's (see behind). Its save writes nothing then, and nor does the page's
+         own: that is the save a later visit opens, and it held the older half. */
+      isBehind(h) {
+        const d = attached && find(loadAll(), attached);
+        return !!d && behind(d, h);
+      },
       /* Whether `h` is what this tool last saved into some saved drawer: replaced, it is
          still there, in that drawer. */
       holds(h) {
@@ -5818,8 +5832,9 @@ const DRAWERS = (function () {
           const noted = next && next.fp === fp ? find(s, next.id) : null;
           /* This tab's own page come back: the drawer it was saved into, even when a later
              page or another tab has saved into that drawer since, which is what the
-             catch-up below is for. */
-          const mine = !noted && ownMark(arrivedWith);
+             catch-up below is for. A page still holding a link it was saved with as well:
+             come back as that link, but into the drawer. */
+          const mine = !noted && markOf(arrivedWith);
           let d = noted || (mine && mine.id ? find(s, mine.id) : null);
           if (!d) {
             const tab = readNote('sessionStorage', TAB)[o.tool];
@@ -5839,9 +5854,10 @@ const DRAWERS = (function () {
             theirs = str(came[otherTool]);
             if (!noted && movedOn(d, arrivedWith, str(came[o.tool])) && reopen(d)) return;
             ours = d.marks[o.tool];
-            // a hand-over, onto a drawer this tool has saved into, with none of a link's settings
+            /* A hand-over, onto a drawer this tool has saved into. One carrying a link's
+               settings too: restore keeps the settings the other page sets, which are the
+               link's, and this tool's half was saved into the drawer with them. */
             if (noted && next.open !== true && typeof d.marks[o.tool] === 'string' &&
-                !(Array.isArray(next.link) && next.link.length) &&
                 restore(arrivedWith, d, next.link, str(came[o.tool]))) return;
             if (!(noted && next.caughtUp) && catchUp(arrivedWith, d)) return;
             /* A hand-over is written down now rather than at the page's first save, which
@@ -5854,15 +5870,15 @@ const DRAWERS = (function () {
               d.marks[o.tool] = fp;
               if (saveAll(s)) ours = fp;
               savedInto(d.id);
-              /* And the address it arrived at is marked as this tab's own now, as that first
-                 save would mark it: a reload before the save is this tab's page come back,
-                 not someone's link. A reload takes the address as it stands when it starts,
-                 and the save can still land before the page goes. The drawer then had the
-                 mark of the address the save writes, the reload had the one the page arrived
-                 at, and with no mark of its own the page came back unsaved; marked, it
-                 reopens onto the drawer as that save left it. Not while it holds a link's
-                 settings, which a save marks as the link's (see ownMark). */
-              if (!(Array.isArray(next.link) && next.link.length)) markHere(arrivedWith);
+              /* And the address it arrived at is marked now, as that first save would mark
+                 it: a reload before the save is this tab's page come back, not someone's
+                 link, unless it holds a link's settings (see ownMark). A reload takes the
+                 address as it stands when it starts, and the save can still land before the
+                 page goes. The drawer then had the mark of the address the save writes, the
+                 reload had the one the page arrived at, and with no mark of its own the
+                 page came back unsaved; marked, it reopens onto the drawer as that save
+                 left it. */
+              markHere(arrivedWith, Array.isArray(next.link) && next.link.length > 0, true);
             }
           }
         }
@@ -5899,8 +5915,12 @@ const DRAWERS = (function () {
       handoff(h, link) {
         const s = attached && loadAll();
         const d = s && find(s, attached);
-        // `h` is the address for the other page, which can carry more than this one's design
-        if (d && !behind(d, o.design())) {
+        /* `h` is the address for the other page, which can carry more than this one's
+           design. A design that cannot be read is no reason to stop the page going: the
+           drawer keeps what it has. */
+        let mine = null;
+        try { mine = o.design(); } catch (err) { mine = null; }
+        if (d && typeof mine === 'string' && !behind(d, mine)) {
           d.hash = mergeDesign(d.hash, h, o.owns, base);
           d.saved = Date.now();
           if (saveAll(s)) base = sharedOf(h);
@@ -12263,7 +12283,7 @@ function saveNow() {
       writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
-  saveLocal(h);
+  if (!drawers.isBehind(h)) saveLocal(h);   // not a save another tab has moved on from
   try { drawers.wrote(h); }   // and into the saved drawer this is, if it is one
   finally {
     /* Marked as this tab's own, or as someone's link's while the page still holds it as
@@ -12660,7 +12680,12 @@ let arrivedWith = '';    // the design string this page was opened with
     loadFromHash(src);
     if (!fromLink) $('restored').style.display = '';
     else if (canPutBack) {
-      showSetAside(back ? 'This page went back to an earlier layout of yours. The later one is set aside.'
+      /* Your own layout handed over from the other page is no link, and the same page
+         reloaded before it saved anything did not go back: what either sets aside is the
+         layout you had here before it arrived. */
+      showSetAside(back && !note.arrived
+        ? 'This page went back to an earlier layout of yours. The later one is set aside.'
+        : back || handedOver ? 'The layout you had here is set aside.'
         : 'This link replaced the layout you had here.', true, false);
     }
     /* A hand-over is your own layout come back from the other page, never someone's

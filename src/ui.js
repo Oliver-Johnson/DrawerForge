@@ -2171,7 +2171,7 @@ function saveNow() {
       writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
-  saveLocal(h);
+  if (!drawers.isBehind(h)) saveLocal(h);   // not a save another tab has moved on from
   try { drawers.wrote(h); }   // and into the saved drawer this is, if it is one
   finally {
     /* Marked as this tab's own, or as someone's link's while the page still holds it as
@@ -2617,7 +2617,12 @@ let arrivedWith = '';    // the design string this page was opened with, if it s
     loadFromHash(src);
     if (!fromLink) $('restored').style.display = '';
     else if (canPutBack) {
-      showSetAside(back ? 'This page went back to an earlier layout of yours. The later one is set aside.'
+      /* Your own layout handed over from the other page is no link, and the same page
+         reloaded before it saved anything did not go back: what either sets aside is the
+         layout you had here before it arrived. */
+      showSetAside(back && !note.arrived
+        ? 'This page went back to an earlier layout of yours. The later one is set aside.'
+        : back || handedOver ? 'The layout you had here is set aside.'
         : 'This link replaced the layout you had here.', true, false);
     }
     /* A hand-over is your own layout come back from the other page, never someone's

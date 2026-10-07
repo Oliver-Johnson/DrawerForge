@@ -123,10 +123,13 @@ function onArrival() {
       history.replaceState = () => {};     // the reload has the address already
       try { saveNow(); } finally { history.replaceState = write; }
     }
-    sessionStorage.setItem('raced', JSON.stringify([at, location.href]));
+    const aside = document.getElementById('setAside');
+    sessionStorage.setItem('raced', JSON.stringify([at, location.href,
+      aside.style.display === 'none' ? '' : document.getElementById('setAsideMsg').textContent]));
     location.reload();
   });
 }
+// resolves to what the page said on arriving, before the reload: its set-aside line, or ''
 async function reloadOnArrival(page, path, save, go) {
   await page.evaluate((r) => sessionStorage.setItem('race', JSON.stringify(r)), [path, save]);
   await page.click(go);
@@ -138,6 +141,7 @@ async function reloadOnArrival(page, path, save, go) {
   await expect.poll(() => page.textContent('#drawerName').catch(() => ''),
     { message: 'still the drawer', timeout: 20000 }).toBe('Kitchen');
   if (path === '/') await platesReady(page); else await binsReady(page);
+  return raced[2];
 }
 
 /* A reload takes the address as it stands when it starts, and the page's first save can
@@ -146,66 +150,81 @@ async function reloadOnArrival(page, path, save, go) {
    address it writes into the drawer, while the reload had the address the page was handed
    over at, which had no mark of its own. The page came back unsaved. Those milliseconds
    cannot be hit on purpose, so the save runs as the reload would find it. */
-for (const tool of ['bins', 'plates']) {
-  test(`a ${tool} page reloaded as its first save lands is still the drawer that was handed over`,
-    async ({ page }) => {
-      await page.addInitScript(onArrival);
-      const errors = await openPlates(page);
-      await H.setField(page, 'drawerW', '400');
-      await saveAs(page, 'Kitchen');
-      if (tool === 'bins') await reloadOnArrival(page, '/bins/', true, '#navBins');
-      else {
-        await toBins(page);
-        await settle(page);
-        await reloadOnArrival(page, '/', true, '#navPlates');
-      }
-      await expect(page.locator('#drawerName')).toHaveText('Kitchen');
-      await expect(page.locator('#drawerW')).toHaveValue('400');
-      await expect(page.locator('#setAside')).toBeHidden();
-      expect(errors).toEqual([]);
-    });
+for (const tool of ['bins', 'plates']) for (const link of [false, true]) {
+  test(`a ${tool} page reloaded as its first save lands is still the drawer that was handed over` +
+    (link ? ', with a link\'s settings' : ''), async ({ page }) => {
+    await page.addInitScript(onArrival);
+    // someone's link, saved as the drawer as it came, is carried across as theirs
+    const errors = await openPlates(page, link ? '#w=520&d=410&v=2' : '');
+    if (!link) await H.setField(page, 'drawerW', '400');
+    await saveAs(page, 'Kitchen');
+    if (tool === 'bins') await reloadOnArrival(page, '/bins/', true, '#navBins');
+    else {
+      await toBins(page);
+      await settle(page);
+      await reloadOnArrival(page, '/', true, '#navPlates');
+    }
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    await expect(page.locator('#drawerW')).toHaveValue(link ? '520' : '400');
+    await expect(page.locator('#setAside')).toBeHidden();
+    expect(errors).toEqual([]);
+  });
 }
 
-/* The same reload with no save landing, onto a layout another drawer holds. The page is
-   your own drawer handed over, and the reload is that page again: it used to say someone's
-   link had replaced your layout, and count the drawer's settings as that link's. */
-for (const tool of ['bins', 'plates']) {
-  test(`a ${tool} page reloaded before its first save after a hand-over is not a link`,
-    async ({ page }) => {
-      await page.addInitScript(onArrival);
-      const errors = [];
-      page.on('pageerror', (e) => errors.push(String(e)));
-      // this tool's save on the device is another drawer's
-      if (tool === 'bins') {
-        await page.goto(base + 'bins/');
-        await binsReady(page);
-        await H.dragCells(page, [0, 0], [1, 1]);
-      } else {
-        await page.goto(base);
-        await platesReady(page);
-        await H.setField(page, 'drawerW', '410');
-      }
-      await saveAs(page, 'Other');
-      await settle(page);
-      if (tool === 'bins') {
-        await page.goto(base);
-        await platesReady(page);
-        await H.setField(page, 'drawerW', '400');
-        await saveAs(page, 'Kitchen');
-        await reloadOnArrival(page, '/bins/', false, '#navBins');
-      } else {
-        await page.goto(base + 'bins/');
-        await binsReady(page);
-        await H.setField(page, 'drawerW', '400');
-        await saveAs(page, 'Kitchen');
-        await reloadOnArrival(page, '/', false, '#navPlates');
-      }
-      await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+/* The same reload with no save landing. The page is your own drawer handed over, and the
+   reload is that page again. Onto a layout another drawer holds, it used to say someone's
+   link had replaced your layout, set that aside, and count the drawer's settings as the
+   link's. Onto a layout only this browser has, it is set aside as when the page arrived,
+   and neither says a link replaced it or that the page went back. */
+for (const tool of ['bins', 'plates']) for (const held of [true, false]) {
+  test(`a ${tool} page reloaded before its first save after a hand-over is not a link, onto ` +
+    (held ? 'another drawer\'s layout' : 'a layout no drawer holds'), async ({ page }) => {
+    await page.addInitScript(onArrival);
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    const saveKey = `drawerforge:${tool}:v1`;
+    // this tool's save on the device: another drawer's, or only this browser's
+    if (tool === 'bins') {
+      await page.goto(base + 'bins/');
+      await binsReady(page);
+      await H.dragCells(page, [0, 0], [1, 1]);
+    } else {
+      await page.goto(base);
+      await platesReady(page);
+      await H.setField(page, 'drawerW', '410');
+    }
+    if (held) await saveAs(page, 'Other');
+    await settle(page);
+    const had = await page.evaluate((k) => localStorage.getItem(k), saveKey);
+    let said;
+    if (tool === 'bins') {
+      await page.goto(base);
+      await platesReady(page);
+      await H.setField(page, 'drawerW', '400');
+      await saveAs(page, 'Kitchen');
+      said = await reloadOnArrival(page, '/bins/', false, '#navBins');
+    } else {
+      await page.goto(base + 'bins/');
+      await binsReady(page);
+      await H.setField(page, 'drawerW', '400');
+      await saveAs(page, 'Kitchen');
+      said = await reloadOnArrival(page, '/', false, '#navPlates');
+    }
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    if (held) {
+      expect(said, 'arriving').toBe('');
       await expect(page.locator('#setAside')).toBeHidden();
-      expect(await page.evaluate((k) => localStorage.getItem(k + ':linked'),
-        tool === 'bins' ? 'drawerforge:bins:v1' : 'drawerforge:plates:v1'), 'nothing is a link').toBeFalsy();
-      expect(errors).toEqual([]);
-    });
+    } else {
+      const words = 'The layout you had here is set aside.';
+      expect(said, 'arriving').toBe(words);
+      await expect(page.locator('#setAsideMsg')).toHaveText(words);
+      await expect(page.locator('#putBack')).toBeVisible();
+      expect(await page.evaluate((k) => localStorage.getItem(k + ':prev'), saveKey)).toBe(had);
+    }
+    expect(await page.evaluate((k) => localStorage.getItem(k + ':linked'), saveKey),
+      'nothing is a link').toBeFalsy();
+    expect(errors).toEqual([]);
+  });
 }
 
 /* The page saves 400 ms after a change, and a page being reloaded runs on until the new
@@ -979,11 +998,23 @@ for (const tool of ['bins', 'plates']) {
 
       // the first tab still shows the older value, and goes across and back
       expect(await page.inputValue('#' + field)).toBe(older);
-      if (tool === 'bins') { await toPlates(page); await toBins(page); }
-      else { await toBins(page); await toPlates(page); }
+      if (tool === 'bins') await toPlates(page); else await toBins(page);
+      if (!cache) {
+        // a visit to the page it left, with no link, opens the drawer as the second tab left it
+        const third = await context.newPage();
+        third.on('pageerror', (e) => errors.push(String(e)));
+        await third.goto(base + (tool === 'bins' ? 'bins/' : ''));
+        await ready(third);
+        await expect(third.locator('#drawerName')).toHaveText('Kitchen');
+        expect(await third.inputValue('#' + field), 'a visit after it left').toBe(newer);
+        await third.close();
+      }
+      if (tool === 'bins') await toBins(page); else await toPlates(page);
       await expect.poll(() => page.inputValue('#' + field).catch(() => ''),
         { message: 'the first tab comes back with the drawer as it is', timeout: 20000 }).toBe(newer);
       await ready(page);
+      await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+      await expect(page.locator('#setAside')).toBeHidden();
       await settle(page);
       expect((await stored(page)).Kitchen[key], 'the drawer keeps the change').toBe(newer);
 
@@ -999,6 +1030,61 @@ for (const tool of ['bins', 'plates']) {
       expect(errors).toEqual([]);
     });
   }
+}
+
+/* The same, with the first tab holding someone's link that it saved as the drawer and has
+   not changed. Its trip to the other page carries the link's settings, and the hand-over
+   back wrote this tool's half as it carried it, older than the drawer's, over the second
+   tab's change. A reload of it came back unsaved on the older half: its address is
+   marked as the link's, not the tab's own, and that mark was not taken for the drawer. */
+for (const tool of ['bins', 'plates']) {
+  const ready = tool === 'bins' ? binsReady : platesReady;
+  const [field, key, older, newer] = tool === 'bins' ? ['gap', 'bgap', '6', '7']
+    : ['connector', 'cn', 'dovetail', 'hclip'];
+  const set = (p, v) => (tool === 'bins' ? H.setField(p, field, v) : p.selectOption('#' + field, v));
+  for (const how of ['going to the other page', 'reloaded']) test(`a ${tool} tab holding a link, ` +
+    `with nothing new, ${how} keeps another tab's change`, async ({ page, context }) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto(base + (tool === 'bins' ? 'bins/' : '') + `#w=520&d=410&${key}=${older}&v=2`);
+    await ready(page);
+    await expect(page.locator('#' + field)).toHaveValue(older);
+    await saveAs(page, 'Kitchen');
+    await settle(page);
+    if (how === 'reloaded') {
+      // reloaded once since, so its address is marked as the link's again by the next save
+      await page.reload();
+      await ready(page);
+      await settle(page);
+    }
+
+    const other = await context.newPage();
+    other.on('pageerror', (e) => errors.push(String(e)));
+    await other.goto(base + (tool === 'bins' ? 'bins/' : ''));
+    await ready(other);
+    await expect(other.locator('#drawerName')).toHaveText('Kitchen');
+    await set(other, newer);
+    await expect.poll(() => stored(other).then((s) => s.Kitchen[key]),
+      { message: 'the second tab\'s change saved', timeout: 20000 }).toBe(newer);
+
+    expect(await page.inputValue('#' + field)).toBe(older);
+    if (how === 'reloaded') await page.reload();
+    else if (tool === 'bins') { await toPlates(page); await toBins(page); }
+    else { await toBins(page); await toPlates(page); }
+    await expect.poll(() => page.inputValue('#' + field).catch(() => ''),
+      { message: 'the first tab comes back with the drawer as it is', timeout: 20000 }).toBe(newer);
+    await ready(page);
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    expect(await page.inputValue('#drawerW'), 'the link\'s settings are still there').toBe('520');
+    await settle(page);
+    expect((await stored(page)).Kitchen[key], 'the drawer keeps the change').toBe(newer);
+
+    await other.reload();
+    await ready(other);
+    await expect(other.locator('#drawerName')).toHaveText('Kitchen');
+    expect(await other.inputValue('#' + field), 'the second tab still has its change').toBe(newer);
+    expect(errors).toEqual([]);
+  });
 }
 
 test('export, clear the browser, import: the same design comes back', async ({ page }) => {
