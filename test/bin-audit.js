@@ -338,6 +338,25 @@ const CASES = [
   { name: '1x1x4-aa-smooth8', u: 1, v: 1, hUnits: 4, insert: 1, arcSegs: 8, holes: 4 },
   { name: '1x1x4-aa-smooth24', u: 1, v: 1, hUnits: 4, insert: 1, arcSegs: 24, holes: 4 },
   { name: '6x4x5-hex', u: 6, v: 4, hUnits: 5, insert: 4, holes: 558 },
+  /* A tray past a hundred thousand polygons, which a spread into push() could not pass
+     as arguments: it threw, and the page had no parts and no Checks. 23 x 30. */
+  { name: '7x9x3-aaa', u: 7, v: 9, hUnits: 3, insert: 2, holes: 690, depth: 14.5 },
+  /* Tiles whose corner a neighbour's ray landed on within a micron, so the two were one
+     vertex and edges stood open (10, 10, 16 and 4 of them), or did at a weld of 5 to 10
+     microns (36 and 14) where the same bins without holes weld clean. */
+  { name: '1.5x1x4-aa-wall10', u: 1.5, v: 1, hUnits: 4, wall: 10, insert: 1, holes: 2 },
+  { name: '1x1.5x4-aa-wall10', u: 1, v: 1.5, hUnits: 4, wall: 10, insert: 1, holes: 2 },
+  { name: '3x3x6-18650-wall2.7', u: 3, v: 3, hUnits: 6, wall: 2.7, insert: 3, holes: 25 },
+  { name: '3x4x3-18650-label', u: 3, v: 4, hUnits: 3, wall: 2.7, insert: 3, label: 12, holes: 35,
+    depth: 13.3 },
+  { name: '2x3x2-aa-low-feet', u: 2, v: 3, hUnits: 2, wall: 2, insert: 1, insertDepth: 1000, magnets: true,
+    screws: true, edges: { f: 0.66, b: 1, l: 1, r: 0.5 }, holes: 28, depth: 6.85 },
+  { name: '4x2.5x6-18650-wall0.4', u: 4, v: 2.5, hUnits: 6, wall: 0.4, insert: 3, magnets: true,
+    holesEvery: true, holes: 32 },
+  /* Hex bits in a thin-walled bin without a lip: 0.8 mm off the straight walls, a corner
+     hole came 0.72 from the rounded corner. */
+  { name: '2x4x6-hex-wall0.4-low', u: 2, v: 4, hUnits: 6, wall: 0.4, insert: 4,
+    edges: { f: 0, b: 1, l: 0, r: 0.5 }, holes: 180 },
 ];
 
 /* Every carved footprint builds one outer fillet per reflex corner, and every one of
@@ -439,7 +458,8 @@ for (const cs of CASES) {
                 `${orientationNote(ori)}${orientQuarantine(cs, ori)}`);
   if (!ok || !wOk || !oOk || !hOk || !lipOk) bad++;
   if (cs.orientQuarantine ? ori.ok : !ori.ok) bad++;
-  if (cs.magnets || cs.screws) {
+  // a half-size bin's feet take no holes whatever its boxes say (the half-size section)
+  if ((cs.magnets || cs.screws) && !halfSize(cs)) {
     const f = holeFaults(r, cs);
     if (f) { console.log(`${''.padEnd(14)}  HOLES WRONG: ${f}`); bad++; }
   }
@@ -1485,6 +1505,49 @@ console.log('\nnotes raised on the label shelf');
  * wall and stops below it: under the middle of the shelf there is block, and the highest
  * thing is still the shelf. */
 console.log('\nholes across the floor');
+/* Edges not used exactly twice once every vertex within `tol` of another is one vertex,
+   as a slicer welds them: a grid of cells `tol` across, each vertex joined to any within
+   tol of it in its own cell or the 26 around it. */
+function weldOpen(polys, tol) {
+  const verts = [], ids = new Map(), cell = new Map();
+  const tris = G.polysToTriangles(polys).map((t) => t.map((v) => {
+    const k = v.join(',');
+    if (!ids.has(k)) { ids.set(k, verts.length); verts.push(v); }
+    return ids.get(k);
+  }));
+  const up = verts.map((_, i) => i);
+  const find = (i) => { while (up[i] !== i) { up[i] = up[up[i]]; i = up[i]; } return i; };
+  const at = (v) => v.map((x) => Math.floor(x / tol));
+  verts.forEach((v, i) => {
+    const k = at(v).join(',');
+    if (!cell.has(k)) cell.set(k, []);
+    cell.get(k).push(i);
+  });
+  verts.forEach((v, i) => {
+    const [cx, cy, cz] = at(v);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++)
+      for (const j of cell.get(`${cx + dx},${cy + dy},${cz + dz}`) || []) {
+        if (j <= i) continue;
+        const w = verts[j];
+        if (Math.abs(v[0] - w[0]) <= tol && Math.abs(v[1] - w[1]) <= tol && Math.abs(v[2] - w[2]) <= tol) {
+          const a = find(i), b = find(j);
+          if (a !== b) up[a] = b;
+        }
+      }
+  });
+  const E = new Map();
+  for (const t of tris) {
+    const f = t.map(find);
+    if (f[0] === f[1] || f[1] === f[2] || f[0] === f[2]) continue;
+    for (let i = 0; i < 3; i++) {
+      const a = f[i], b = f[(i + 1) % 3], k = a < b ? a + '|' + b : b + '|' + a;
+      E.set(k, (E.get(k) || 0) + 1);
+    }
+  }
+  let open = 0;
+  for (const n of E.values()) if (n !== 2) open++;
+  return open;
+}
 {
   const ITEM = { 1: { across: 15.0, len: 50.5 }, 2: { across: 11.0, len: 44.5 },
                  3: { across: 19.0, len: 65.5 }, 4: { across: 6.65, len: 25, hex: true } };
@@ -1532,6 +1595,29 @@ console.log('\nholes across the floor');
       const backY = Math.max(...h.ys) + by / 2;
       if (reachX > hw - Wl - side + 1e-9 || front > hd - Wl - side + 1e-9)
         faults.push(`a hole reaches ${(hw - reachX).toFixed(2)} / ${(hd - front).toFixed(2)} from the outside, past the ${(Wl + side).toFixed(2)} kept`);
+      /* ...and the corners are rounded, the cavity's on an arc of 3.75 less the wall and
+         the lip's opening on one of 1.05, so every corner of every hole is measured to
+         those outlines as well: 0.8 from the cavity's, and with a lip 0.25 inside its
+         opening. Without a lip, hex bits came 0.72 from a 0.4 mm wall's corner. */
+      const rrIn = (x, y, a, b, r) => {
+        const ax = Math.abs(x), ay = Math.abs(y);
+        return ax > a - r && ay > b - r ? r - Math.hypot(ax - (a - r), ay - (b - r)) : Math.min(a - ax, b - ay);
+      };
+      const ring = it.hex ? [0, 1, 2, 3, 4, 5].map((k) => Math.PI / 2 + k * Math.PI / 3)
+        : Array.from({ length: 36 }, (_, k) => 2 * Math.PI * k / 36);
+      let toWall = Infinity, toLip = Infinity;
+      for (const x of h.xs) for (const y of h.ys) for (const a of ring) {
+        const px = x + corner * Math.cos(a), py = y + corner * Math.sin(a);
+        toWall = Math.min(toWall, rrIn(px, py, hw - Wl, hd - Wl, Math.max(0.4, 3.75 - Wl)));
+        toLip = Math.min(toLip, rrIn(px, py, hw - 2.70, hd - 2.70, 1.05));
+      }
+      if (toWall < 0.8 - 1e-9) faults.push(`a hole ${toWall.toFixed(3)} from the cavity's outline`);
+      if (lip && toLip < 0.25 - 1e-9) faults.push(`a hole ${toLip.toFixed(3)} inside the lip's opening`);
+      /* Welded at 10 microns, it closes as the bin without holes does: two tiles whose
+         points are a micron apart are one vertex to a slicer, and that left edges open
+         that checkManifold, which rounds to a micron, could miss. */
+      const open = weldOpen(r.polys, 0.01), was = weldOpen(buildBin(G, Object.assign({}, cs, { insert: 0 })).polys, 0.01);
+      if (open > was) faults.push(`${open} edges open welded at 10 microns, where the bin without holes has ${was}`);
       if (cs.label) {
         // the shelf as built: noteOnShelf's depth with a note, else as asked (12 fits all of these)
         const sd = shelf && shelf.depth ? shelf.depth : cs.label;
@@ -1571,6 +1657,8 @@ console.log('\nholes across the floor');
     ['solid', Object.assign({}, one, { solid: true }), { insert: 4 }, 'solid'],
     ['a 1-unit bin, too short', Object.assign({}, one, { hUnits: 1 }), { insert: 4 }, 'short'],
     ['18650s in half a cell', { u: 0.5, v: 0.5, hUnits: 6 }, { insert: 3 }, 'none'],
+    // 2392 of them, past the most one bin is built with (HOLES_MAX)
+    ['hex bits on a 10x10', { u: 10, v: 10, hUnits: 3 }, { insert: 4 }, 'many'],
     // none fit, so the dividers are built after all and the note goes between them
     ['18650s, a note between dividers', { u: 0.5, v: 1, hUnits: 3, label: 12, labelMode: 1, divY: 3, note: 'M2' },
      { insert: 3 }, 'none'],

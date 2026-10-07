@@ -1450,11 +1450,23 @@ const INSERT_SPEC = {
   lipClear: 0.25,       // and inside the lip's opening, when there is a lip
   sides: 36,            // facets of a round hole
   headroom: 0.5,        // the block stops this far under the rim, or the shelf's front edge
+  /* A bin stacked on this one comes down this far under H, where its foot meets the lip
+     (stack-check.js measures it), so an item reaching higher is in its way: that is what
+     "below the rim" is measured to, for the units it needs and for Checks. */
+  seat: 0.25,
   minDepth: 3,          // shallower than this a hole holds nothing upright, so none is built
   autoMin: 5,           // the automatic depth, a third of the item, is never less than this
   depthMin: 1,          // nor a depth someone typed
   clr: { min: -0.3, max: 1 },   // the Hole clearance field's limits, held here as well
 };
+/* The most holes one bin is built with. Each is a tile of its own, some 200 triangles for
+   a round hole, so the count is what the build costs: a link could ask for a 47 x 47 tray
+   of AAA holes, 9.6 million triangles, 13 s and 4.2 GB in Node. At the most, a 13 x 13 of
+   AAA (1,936) is 730,000 triangles, 1 s and 280 MB, and a 9 x 9 of hex bits (1,927), the
+   largest square a 400 mm bed prints, 210,000 and 0.4 s. Past it a bin gets none
+   (holeLayout's 'many'), from every way in, and the page says so; the page holds a whole
+   layout to the same count (holdHoles in bins/ui.js), as it does raised notes. */
+const HOLES_MAX = 2000;
 /* A hole of `d` across, at the origin, CCW, with what the layout and the estimate need to
    know of it. Round holes are faceted outside the nominal size, every facet a tangent of
    the circle, so a hole is never tighter than it says. A hex has its flats left and right,
@@ -1481,6 +1493,28 @@ function spreadHoles(span, b, lo, hi) {
   const n = room < b - 1e-9 ? 0 : Math.floor((room + W) / (b + W) + 1e-9);
   const step = n > 1 ? (room - b) / (n - 1) : 0;
   return Array.from({ length: n }, (_, k) => (n > 1 ? lo + b / 2 + k * step : lo + room / 2));
+}
+/* The margin from the walls a hole keeps, `side`, measured square to the straight walls,
+   grown where that would bring a corner hole nearer than `edge` to the cavity's rounded
+   corner, an arc of `rc`. Only a hex in a thin-walled bin without a lip comes that close:
+   at a 0.4 mm wall and 0.8 mm from both walls a corner of one is 0.72 mm from the arc. A
+   corner hole sits against both margins, so its outline is measured from the arc's centre
+   (the farthest point of a straight edge is one of its ends), and only where it is in the
+   arc's quarter: elsewhere the straight walls are nearer, and `side` already keeps those. */
+function cornerMargin(shape, rc, side, edge) {
+  const clear = (m) => {
+    const ox = rc - m - shape.bx / 2, oy = rc - m - shape.by / 2;
+    let least = Infinity;
+    for (const [x, y] of shape.pts) {
+      const dx = ox + x, dy = oy + y;
+      if (dx > 0 && dy > 0) least = Math.min(least, rc - Math.hypot(dx, dy));
+    }
+    return least;
+  };
+  if (clear(side) >= edge - 1e-9) return side;
+  let lo = side, hi = side + rc;                   // by then none of it is in the quarter
+  for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (clear(m) >= edge) hi = m; else lo = m; }
+  return hi;
 }
 /* The label shelf as buildBin builds it, { top, depth, raised }, or null for none: the
    shelf sits at H, or with the note raised on it lower (noteOnShelf). The holes need it
@@ -1524,14 +1558,18 @@ function floorPlan(c, iw, id, H) {
 }
 /* Where the holes go in a bin settled as buildBin settles it, and how deep they are, or
    why there are none. `why` is 'off' (none asked for), 'carved', 'solid', 'short' (under
-   minDepth of room above the floor) or 'none' (not one fits), and '' when they are built.
+   minDepth of room above the floor), 'none' (not one fits) or 'many' (more than
+   HOLES_MAX would, `count` of them), and '' when they are built.
    Every answer but 'off' carries the preset `p` and the hole's width `d`; from 'short'
-   on, also `floor` (what an item stands on), `room` (the deepest the block may be),
-   `units` (the fewest that keep an item under the rim, H) and `above` (how far one stands
-   over it, negative when it is under). Built: `n` holes, at `xs` by `ys`, `depth` deep,
-   the block's `top`, and whether the depth was typed (`asked`) and cut to the room
-   (`capped`). `shelf` is the label shelf they keep clear of, shelfFor's answer, settled
-   as floorPlan settles it. */
+   on, also `floor` (what an item stands on), `room` (the deepest the block may be) and
+   `under`, what holds the room down: 'rim', or 'shelf' when the label shelf is lower;
+   `units` (the fewest that keep an item clear of a bin stacked on this one, which comes
+   down INSERT_SPEC.seat under H), `above` (how far one stands over the rim, H, negative
+   when it is under) and `over` (how far into a stacked bin's way: over the rim less the
+   seat). 'none' says whether the shelf is what left no room (`byShelf`). Built: `n` holes,
+   at `xs` by `ys`, `depth` deep, the block's `top`, and whether the depth was typed
+   (`asked`) and cut to the room (`capped`). `shelf` is the label shelf they keep clear
+   of, shelfFor's answer, settled as floorPlan settles it. */
 function holeLayout(c, iw, id, H, shelf) {
   const p = Number.isInteger(+c.insert) ? INSERTS[+c.insert] || null : null;
   if (!p) return { why: 'off' };
@@ -1543,15 +1581,21 @@ function holeLayout(c, iw, id, H, shelf) {
   const shape = holeShape(p.shape, d);
   const floor = floorTop(c) + BLOAT;
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) => c.edges[k] === undefined || c.edges[k] >= 1);
-  const side = c.lip && allFull ? Math.max(S.edge, LIP[0][1] - c.wall + S.lipClear) : S.edge;
+  const side = cornerMargin(shape, Math.max(0.4, SPEC.r - c.wall),
+    c.lip && allFull ? Math.max(S.edge, LIP[0][1] - c.wall + S.lipClear) : S.edge, S.edge);
   const back = Math.max(side, shelf ? shelf.depth + S.edge : 0);
   const xs = spreadHoles(2 * iw, shape.bx, side, side).map((x) => x - iw);
   const ys = spreadHoles(2 * id, shape.by, side, back).map((y) => y - id);
-  const top = Math.min(H, shelf ? shelf.top - c.labelT : Infinity) - S.headroom;
-  const out = { p, d, shape, floor, room: top - floor, shelf,
-                units: Math.ceil((floor + p.len) / SPEC.unitH - 1e-9), above: floor + p.len - H };
+  const lid = shelf ? shelf.top - c.labelT : Infinity;
+  const top = Math.min(H, lid) - S.headroom;
+  const out = { p, d, shape, floor, room: top - floor, under: lid < H ? 'shelf' : 'rim', shelf,
+                units: Math.ceil((floor + p.len + S.seat) / SPEC.unitH - 1e-9),
+                above: floor + p.len - H, over: floor + p.len - (H - S.seat) };
   if (out.room < S.minDepth) return Object.assign(out, { why: 'short' });
-  if (!xs.length || !ys.length) return Object.assign(out, { why: 'none' });
+  if (!xs.length || !ys.length)
+    return Object.assign(out, { why: 'none', byShelf: !!xs.length && back > side &&
+      spreadHoles(2 * id, shape.by, side, side).length > 0 });
+  if (xs.length * ys.length > HOLES_MAX) return Object.assign(out, { why: 'many', count: xs.length * ys.length });
   const asked = isFinite(c.insertDepth) && c.insertDepth > 0;
   const want = asked ? Math.max(S.depthMin, +c.insertDepth) : Math.max(S.autoMin, p.len / 3);
   const depth = Math.min(out.room, want);
@@ -1600,24 +1644,34 @@ function tileLoops(tile, hole, cx, cy) {
   return { outer: angs.map((a) => hit(tile, a)), inner: angs.map((a) => hit(hole, a)) };
 }
 /* The block, one tile per hole of a holeLayout, from a BLOAT under the floor slab's top
-   to the block's top. */
-function holeTiles(G, c, h, iw, id) {
-  const rc = Math.max(0.4, SPEC.r - c.wall), polys = [];
+   to the block's top, added to `polys` one by one: a big tray is hundreds of thousands
+   of polygons, past what a spread into push() can pass as arguments (a 7 x 7 tray of AAA
+   holes threw).
+   Each tile reaches past halfway to its neighbours, and out past the cavity's outline,
+   by its own overlap, and neighbours' differ: a BLOAT, or 0.6 of one, in a checkerboard.
+   With one overlap for all, the tiles of a row shared their top and bottom lines, so a
+   corner of each lay on its neighbour's edge, where the neighbour has a point wherever
+   one of its rays lands; one landing within a micron of the corner made the two one
+   vertex and left edges open (10 on a 1.5 x 1 with 10 mm walls). The tiles at the walls
+   shared the cavity's outline the same way. Now no tile's corner is on another's line:
+   the nearest is 0.02 mm off it. */
+function holeTiles(G, c, h, iw, id, polys) {
+  const rc = Math.max(0.4, SPEC.r - c.wall), BL = [BLOAT, 0.6 * BLOAT];
   // points on the corner arcs only: see the block comment for why not on the straights
-  const cav = roundRect(iw + BLOAT, id + BLOAT, rc + BLOAT, c.arcSegs || 12, [[], [], [], []]);
-  // each tile's span: halfway to the next centre and a BLOAT past it, the cavity at the ends
-  const spans = (cs) => cs.map((v, k) => [k ? (cs[k - 1] + v) / 2 - BLOAT : null,
-                                          k < cs.length - 1 ? (v + cs[k + 1]) / 2 + BLOAT : null]);
-  const sx = spans(h.xs), sy = spans(h.ys);
+  const cav = BL.map((b) => roundRect(iw + b, id + b, rc + b, c.arcSegs || 12, [[], [], [], []]));
+  // a tile's span: halfway to the next centre and its overlap past it, the cavity at the ends
+  const span = (cs, k, b) => [k ? (cs[k - 1] + cs[k]) / 2 - b : null,
+                              k < cs.length - 1 ? (cs[k] + cs[k + 1]) / 2 + b : null];
   h.xs.forEach((cx, i) => h.ys.forEach((cy, j) => {
-    let tile = cav;
-    const [x0, x1] = sx[i], [y0, y1] = sy[j];
+    const q = (i + j) % 2, b = BL[q];
+    let tile = cav[q];
+    const [x0, x1] = span(h.xs, i, b), [y0, y1] = span(h.ys, j, b);
     if (x0 !== null) tile = clipHalf(tile, -1, 0, -x0);
     if (x1 !== null) tile = clipHalf(tile, 1, 0, x1);
     if (y0 !== null) tile = clipHalf(tile, 0, -1, -y0);
     if (y1 !== null) tile = clipHalf(tile, 0, 1, y1);
     const { outer, inner } = tileLoops(tile, h.shape.pts.map(([x, y]) => [x + cx, y + cy]), cx, cy);
-    polys.push(...wallRing(G, outer, inner, h.floor - 2 * BLOAT, h.top));
+    for (const p of wallRing(G, outer, inner, h.floor - 2 * BLOAT, h.top)) polys.push(p);
   }));
   return polys;
 }
@@ -2026,7 +2080,7 @@ function buildBin(G, cfg) {
         polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT));
 
     // the holes, last, so a bin without them is every shell it was, in the order it was
-    if (holesOn) { polys.push(...holeTiles(G, c, holes, iw, id)); holesBuilt = holes.n; }
+    if (holesOn) { holeTiles(G, c, holes, iw, id, polys); holesBuilt = holes.n; }
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */
@@ -2263,10 +2317,17 @@ function unpackBin(t) {
            done: !!p[17], divRemovable: !!p[18],
            lid: !!p[19], lidSides: lidSidesFrom(p[20]), ...feetFrom(p[21]),
            labelMode: countAt(p, 22, 0, 0, 1),
-           /* the presets there are, and no deeper than the bin is tall: the block stops
-              under the rim whatever is asked, so deeper builds the same part */
-           insert: countAt(p, 23, 0, 0, INSERTS.length - 1), insertDepth: numAt(p, 24, 0, H) };
+           /* one of the presets there are, and no deeper than the bin is tall: the block
+              stops under the rim whatever is asked, so deeper builds the same part */
+           insert: presetAt(p, 23), insertDepth: numAt(p, 24, 0, H) };
 }
+/* A preset this page has, or none. Held to the last one, a 5th from a later page opened
+   here as hex bits and was written back as them; read as none, it is a bin without
+   holes, whose link drops the two fields as any bin's without holes does. */
+const presetAt = (p, i) => {
+  const k = isFinite(p[i]) ? Math.round(p[i]) : 0;
+  return k > 0 && INSERTS[k] ? k : 0;
+};
 const packLayers = (layers) =>
   layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);
 const unpackLayers = (s) => (s || '').split(SEP.layer)
@@ -2279,5 +2340,5 @@ if (typeof module !== 'undefined') {
     isHalfSize, binFeet, feetHolesOff,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
     packBin, unpackBin, packLayers, unpackLayers, LINK_MAX, shelfNote, NOTE_CLEAR,
-    INSERTS, INSERT_SPEC, insertPlan };
+    INSERTS, INSERT_SPEC, HOLES_MAX, insertPlan };
 }
