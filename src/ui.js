@@ -497,10 +497,15 @@ function warningsList() {
       // deep where the two seams are front and back, wide where they are left and right
       const dirs = [...new Set(meet.map((m) => m.across))];
       const dir = dirs.length === 1 ? dirs[0] : null;
-      const named = one ? `Piece ${ids[0]}`
-        : `Pieces ${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]}`;
-      const is = dir ? `${named} ${one ? 'is' : 'are'} one cell ${dir}`
-        : `${named} ${one ? 'has' : 'have'} one cell`;
+      const pieces = (xs, P) => `${P}iece${xs.length > 1 ? 's' : ''} ` +
+        (xs.length < 2 ? xs[0] : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+      /* Both ways at once says which piece is which. It said "Pieces A2 and B3 have one
+         cell between two seams … Move a cut so they have two", which leaves you to work
+         out which way each one is narrow. */
+      const across = (way) => meet.filter((m) => m.across === way).map((m) => m.id);
+      const is = dir ? `${pieces(ids, 'P')} ${one ? 'is' : 'are'} one cell ${dir}`
+        : `${pieces(across('deep'), 'P')} ${across('deep').length > 1 ? 'are' : 'is'} one cell deep ` +
+          `and ${pieces(across('wide'), 'p')} one cell wide`;
       const keyName = { bowtie: 'bowtie keys', puzzlekey: 'puzzle keys', snap: 'snap clips' }[state.connector];
       const JOINT = { dovetail: 'dovetail tabs', hclip: 'H-clips',
                       'snap top': 'snap clips put in from above',
@@ -514,7 +519,7 @@ function warningsList() {
       out.push({ err: true, t: `${is} between two seams, and at this ${state.pitch} mm pitch ` +
         `the keys on ${one ? 'its' : 'their'} two sides are too close: their housings run into ` +
         'each other, which leaves holes in the plate. Move a cut so ' +
-        (dir ? `${one ? 'it is' : 'they are'} two cells ${dir}` : `${one ? 'it has' : 'they have'} two`) +
+        (dir ? `${one ? 'it is' : 'they are'} two cells ${dir}` : 'each has two cells between its seams') +
         `, use a pitch of ${needs} mm or more` +
         (fit.length ? `, or use a joint that fits at ${state.pitch} mm: ${list(fit)}.` : '.') });
     }

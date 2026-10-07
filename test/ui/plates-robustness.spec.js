@@ -210,6 +210,20 @@ test.describe('ranges on the geometry fields', () => {
     expect(errors).toEqual([]);
   });
 
+  /* Rows one cell deep and columns one cell wide in one drawer. It said "Pieces A2 and
+     B3 have one cell between two seams … Move a cut so they have two", which left you to
+     work out which piece was narrow which way. */
+  test('keys that meet both ways say which piece is which', async ({ page }) => {
+    const errors = await openAt(page,
+      '#pi=13.5&w=40.5&d=67.5&mm=custom&ml=0&mr=0&mf=0&mb=0&sp=manual&rc=1,2&cc=__1.2&cn=bowtie');
+    expect(await text(page, 'warnings')).toMatch(new RegExp(
+      'Piece A2 is one cell deep and piece B3 one cell wide between two seams, and at this ' +
+      '13\\.5 mm pitch the keys on their two sides are too close: their housings run into ' +
+      'each other, which leaves holes in the plate\\. Move a cut so each has two cells ' +
+      'between its seams, use a pitch of 14\\.35 mm or more, ' + instead));
+    expect(errors).toEqual([]);
+  });
+
   // and the pitch it names is enough: the same split builds, with nothing to say
   test('at the pitch the check names, the same rows build', async ({ page }) => {
     const errors = await openAt(page, rows(14.35, 43.05));
