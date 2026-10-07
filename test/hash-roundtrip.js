@@ -8,7 +8,7 @@
  * this exercises. Usage: node test/hash-roundtrip.js
  */
 'use strict';
-const { packBin, unpackBin, packLayers, unpackLayers, BIN_DEFAULTS } = require('../src/bins/bin.js');
+const { packBin, unpackBin, packLayers, unpackLayers, BIN_DEFAULTS, feetBits } = require('../src/bins/bin.js');
 
 const bin = (o) => Object.assign({
   x: 0, y: 0, u: 1, v: 1, hUnits: 3, wall: 1.2, floorT: 1.2, divX: 0, divY: 0,
@@ -212,6 +212,73 @@ console.log('\nwhat the label shelf carries');
   console.log(`  anything else is held to 0 or 1        ` +
               (misread.length ? 'MISREAD: ' + misread.join(', ') : `${WANT.length} values, each where it belongs`));
   if (misread.length) bad++;
+}
+
+/* Holes across the floor ride in fields 24 and 25: the preset, 1 to 4 (AA, AAA, 18650,
+   hex bits), and the depth, 0 for worked out from the item. Both are written only for a
+   bin that has holes, with the 22nd and 23rd written as 0 where they are not set, so every
+   link and saved drawer from before has 21 to 23 fields, reads as no holes, and packs back
+   to the same text. Unpacking holds the preset to the presets there are and the depth to
+   0 to H. */
+console.log('\nholes across the floor');
+{
+  const olds = [packBin(bin({ label: 12 })), packBin(bin({ magnets: true })),
+                packBin(bin({ label: 12, labelMode: 1 })), packBin(bin({ label: 12, labelMode: 1, screws: true })),
+                // a depth with no preset says nothing, and is not written
+                packBin(bin({ insert: 0, insertDepth: 12 }))];
+  const rewritten = olds.filter((p) => {
+    const b = unpackBin(p);
+    return b.insert !== 0 || b.insertDepth !== 0 || packBin(b) !== p || p.split('-').length > 23;
+  });
+  console.log(`  a link from before reads as no holes      ${rewritten.length ? 'WRONG: ' + rewritten.join(', ') : 'and packs as it was, byte for byte'}`);
+  if (rewritten.length) bad++;
+
+  const plain = packBin(bin({ insert: 4 })), pf = plain.split('-'), pb = unpackBin(plain);
+  const plainOk = pf.length === 25 && pf[21] === '0' && pf[22] === '0' && pf[23] === '4' && pf[24] === '0' &&
+    pb.insert === 4 && pb.insertDepth === 0 && pb.labelMode === 0 && !pb.magnets && !pb.screws &&
+    packBin(pb) === plain;
+  console.log(`  holes for hex bits survive the trip       ${plainOk ? 'intact, 25 fields, the two before as 0' : 'LOST: ' + plain}`);
+  if (!plainOk) bad++;
+  /* ...and its first 23 fields are the ones the same bin without holes writes, the raised
+     note's 23rd among them, so the two only ever add on at the end */
+  const noted = { hUnits: 6, label: 12, labelMode: 1, magnets: true, screws: true };
+  const all = packBin(bin(Object.assign({ insert: 1, insertDepth: 12.5 }, noted)));
+  const ab = unpackBin(all);
+  const allOk = all.split('-').length === 25 && ab.insert === 1 && ab.insertDepth === 12.5 && ab.labelMode === 1 &&
+    ab.magnets && ab.screws && packBin(ab) === all &&
+    all.split('-').slice(0, 23).join('-') === packBin(bin(noted));
+  console.log(`  beside a raised note and holes in the feet ${allOk ? 'intact, depth and all, after the note\'s 23' : 'LOST: ' + all}`);
+  if (!allOk) bad++;
+
+  /* the preset one of the four, rounded as any count is, and anything else none: a 5th
+     from a later page is not hex bits. The depth held to 0 to H: 21 mm on these 3-unit
+     bins. No field can hold a minus sign, which is the separator. */
+  const at = (pre, dep) => unpackBin(pf.slice(0, 23).concat([pre, dep]).join('-'));
+  const WANT = [['9', '0', 0, 0], ['5', '20', 0, 20], ['1e9', '0', 0, 0], ['4.6', '0', 0, 0], ['4.4', '0', 4, 0],
+                ['2.4', '0', 2, 0], ['0.4', '0', 0, 0],
+                ['NaN', '0', 0, 0], ['abc', '0', 0, 0], ['', '0', 0, 0], ['Infinity', '0', 0, 0],
+                ['3', '1e9', 3, 21], ['3', '30', 3, 21], ['3', 'NaN', 3, 0], ['3', '', 3, 0], ['3', 'x', 3, 0],
+                ['3', '7.5', 3, 7.5]];
+  const misread = WANT.filter(([p, d, wp, wd]) => at(p, d).insert !== wp || at(p, d).insertDepth !== wd)
+    .map(([p, d, wp, wd]) => `${p || '(empty)'}-${d || '(empty)'} as ${at(p, d).insert}, ${at(p, d).insertDepth}, not ${wp}, ${wd}`);
+  console.log(`  anything else is held to what there is    ` +
+              (misread.length ? 'MISREAD: ' + misread.join('; ') : `${WANT.length} pairs, each where it belongs`));
+  if (misread.length) bad++;
+
+  /* A link from a later page with a 5th preset: every other field reads as it was
+     written, the bin has no holes, and it is written back as a bin without holes is,
+     the note's 23 fields when it has one and 21 when it has nothing else. */
+  const later = (o) => packBin(bin(o)).split('-').slice(0, 21)
+    .concat([String(feetBits(bin(o))), String(o.labelMode || 0), '5', '12']).join('-');
+  const fifth = [[{ hUnits: 4, u: 2, divX: 1, label: 12, magnets: true }, 22],
+                 [{ label: 12, labelMode: 1 }, 23], [{ scoop: 8 }, 21]];
+  const lost = fifth.filter(([o, n]) => {
+    const b = unpackBin(later(o)), back = packBin(b);
+    return b.insert !== 0 || back !== packBin(bin(o)) || back.split('-').length !== n;
+  }).map(([o]) => later(o));
+  console.log(`  a 5th preset from a later page            ` +
+              (lost.length ? 'MISREAD: ' + lost.join('; ') : `no holes, the rest as written, ${fifth.length} links`));
+  if (lost.length) bad++;
 }
 
 /* Half-size bins ride in the same four fields as every bin's size and position, counted
