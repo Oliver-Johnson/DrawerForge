@@ -213,33 +213,79 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
   (maskBits(b) ? `-c${maskBits(b)}` : '') +
   /* A holed bin is a different part from the plain one, and from one holed for another
      magnet: the magnet's size is the page's, so it goes in from state, as the rails'
-     sizes do above. */
-  (b.magnets || b.screws ? `-h${feetBits({ magnets: b.magnets, screws: b.screws })}` +
+     sizes do above. A half-size bin has no holes yet whatever its boxes say
+     (feetHolesOff), so it is the plain part and is named as one. */
+  (holesBuilt(b) ? `-h${feetBits({ magnets: b.magnets, screws: b.screws })}` +
     (everyMatters(b) ? 'e' : '') + (b.magnets ? `m${state.magnetD}.${state.magnetH}` : '') : '');
 
+/* ---------- half cells -----------------------------------------------------
+   A bin's position and size are counted in cells, and since half-size bins they may end
+   in .5 (unpackBin). Everything that asks "what is here" asks it in HALF SLOTS, two to a
+   cell each way, so a 1.5 wide bin and the half cell beside it are both somebody's or
+   nobody's rather than sharing one cell. slotsOf is the one place a bin is turned into
+   slots, and every occupancy, support and clash test below goes through it.
+   A whole-size bin still covers four slots per cell of its own, so a layout with no
+   half-size bin in it fills every slot of a cell or none, and answers every question
+   exactly as the whole-cell grid did.
+   The map still draws one rectangle per cell, with a dashed midline through each when
+   half steps are on: drawing every slot would be four times the elements on a 47 x 47
+   drawer for no more information. */
+const slot = (n) => Math.round(n * 2);          // cells to half slots
+const onWhole = (n) => Number.isInteger(n);
+/* The holes a bin's feet really get: none on a half-size bin, whatever its boxes say. */
+const holesBuilt = (b) => !!(b.magnets || b.screws) && !feetHolesOff(b);
+// the half slots a bin covers, at its own position or at (x, y)
+function slotsOf(b, x = b.x, y = b.y) {
+  const X = slot(x), Y = slot(y), out = [];
+  if (isHalfSize(b)) {
+    // a half-size bin is never carved, so it is its whole box
+    for (let i = 0; i < slot(b.u); i++) for (let j = 0; j < slot(b.v); j++) out.push([X + i, Y + j]);
+    return out;
+  }
+  for (const [dx, dy] of binCells(b))
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) out.push([X + 2 * dx + i, Y + 2 * dy + j]);
+  return out;
+}
+/* Whether a layout holds a half-size bin anywhere: what turns half steps on by
+   themselves, and what doubles the README's map for a layer. */
+const binsHaveHalf = (bins) => bins.some((b) => isHalfSize(b));
+const layoutHasHalf = () => layers.some((L) => binsHaveHalf(L.bins)) || (!!scratch && isHalfSize(scratch));
+/* The steps the map draws, moves and resizes in. Starts on whole cells, so nothing
+   changes for anyone who never asks for a half; a layout holding a half-size bin turns
+   it on (stepsFollowLayout), and a choice made on the switch is kept in this browser.
+   Never in the link: it is how you are working, not what the drawer is, and a link
+   from someone who likes half steps should not change how your map behaves. */
+const STEPS_KEY = 'drawerforge:bins:steps';
+let halfSteps = false;
+let hadHalf = false;      // whether the layout held a half-size bin at the last look
+const stepOf = () => (halfSteps ? 0.5 : 1);
+/* The reason a place is refused when it is not a clash or the edge of the grid. A
+   whole-size bin stands on whole feet, one to a socket, and a socket is a whole cell:
+   on a half step every foot would straddle two. Giving it quarter feet there instead
+   would change its file when it moved, and a bin already printed could not follow. */
+const WHOLE_ON_WHOLE = 'A whole-size bin sits on whole cells.';
+
 function occupancyOf(k) {
-  const g = grid();
-  const occ = Array.from({ length: g.ny }, () => new Array(g.nx).fill(-1));
+  const g = grid(), W = 2 * g.nx, D = 2 * g.ny;
+  const occ = Array.from({ length: D }, () => new Array(W).fill(-1));
   (layers[k] ? layers[k].bins : []).forEach((b, i) => {
-    for (const [dx, dy] of binCells(b)) {
-      const x = b.x + dx, y = b.y + dy;
-      if (y >= 0 && y < g.ny && x >= 0 && x < g.nx) occ[y][x] = i;
-    }
+    for (const [x, y] of slotsOf(b))
+      if (y >= 0 && y < D && x >= 0 && x < W) occ[y][x] = i;
   });
   return occ;
 }
 const occupancy = () => occupancyOf(cur);
 
-/* Per-cell top surface available to layer k, and whether the stack below is
+/* Per-slot top surface available to layer k, and whether the stack below is
    continuous. A bin can only sit where every layer beneath it has one. */
 function support(k) {
-  const g = grid();
-  const top = Array.from({ length: g.ny }, () => new Array(g.nx).fill(0));
-  const ok = Array.from({ length: g.ny }, () => new Array(g.nx).fill(true));
+  const g = grid(), W = 2 * g.nx, D = 2 * g.ny;
+  const top = Array.from({ length: D }, () => new Array(W).fill(0));
+  const ok = Array.from({ length: D }, () => new Array(W).fill(true));
   for (let L = 0; L < k; L++) {
     const occ = occupancyOf(L);
-    for (let y = 0; y < g.ny; y++)
-      for (let x = 0; x < g.nx; x++) {
+    for (let y = 0; y < D; y++)
+      for (let x = 0; x < W; x++) {
         const i = occ[y][x];
         if (i === -1) ok[y][x] = false;
         else top[y][x] += layers[L].bins[i].hUnits * SPEC.unitH;
@@ -247,36 +293,42 @@ function support(k) {
   }
   return { top, ok };
 }
-// z of a bin's base, and whether its support is sound
+// z of a bin's base, and whether its support is sound — over its whole box, as ever
 function seat(b, k) {
   const s = support(k);
   let z = null, flat = true, solidBelow = true;
-  for (let dy = 0; dy < b.v; dy++)
-    for (let dx = 0; dx < b.u; dx++) {
-      const y = b.y + dy, x = b.x + dx;
+  const X = slot(b.x), Y = slot(b.y);
+  for (let j = 0; j < slot(b.v); j++)
+    for (let i = 0; i < slot(b.u); i++) {
+      const y = Y + j, x = X + i;
       if (!s.ok[y] || !s.ok[y][x]) { solidBelow = false; continue; }
       const t = s.top[y][x];
       if (z === null) z = t; else if (Math.abs(t - z) > 0.001) flat = false;
     }
   return { z: z === null ? 0 : z, flat, solidBelow };
 }
-function canPlace(x, y, u, v, ignore) {
+/* Why a box of u x v at (x, y) cannot go on this layer, or '' when it can: 'outside',
+   'clash', or WHOLE_ON_WHOLE, the one worth saying out loud — the other two are
+   visible on the map. */
+function placeWhy(x, y, u, v, ignore) {
   const g = grid();
-  if (x < 0 || y < 0 || x + u > g.nx || y + v > g.ny) return false;
-  const occ = occupancy();
-  for (let dy = 0; dy < v; dy++)
-    for (let dx = 0; dx < u; dx++) {
-      const o = occ[y + dy][x + dx];
-      if (o !== -1 && o !== ignore) return false;
+  if (x < 0 || y < 0 || x + u > g.nx || y + v > g.ny) return 'outside';
+  if (!isHalfSize({ u, v }) && !(onWhole(x) && onWhole(y))) return WHOLE_ON_WHOLE;
+  const occ = occupancy(), X = slot(x), Y = slot(y);
+  for (let j = 0; j < slot(v); j++)
+    for (let i = 0; i < slot(u); i++) {
+      const o = occ[Y + j][X + i];
+      if (o !== -1 && o !== ignore) return 'clash';
     }
-  return true;
+  return '';
 }
+function canPlace(x, y, u, v, ignore) { return !placeWhy(x, y, u, v, ignore); }
 // same test for a bin that may be carved: only its kept cells need to be free
 function canPlaceBin(b, x, y, ignore) {
   const g = grid(), occ = occupancy();
-  for (const [dx, dy] of binCells(b)) {
-    const px = x + dx, py = y + dy;
-    if (px < 0 || py < 0 || px >= g.nx || py >= g.ny) return false;
+  if (!isHalfSize(b) && !(onWhole(x) && onWhole(y))) return false;
+  for (const [px, py] of slotsOf(b, x, y)) {
+    if (px < 0 || py < 0 || px >= 2 * g.nx || py >= 2 * g.ny) return false;
     const o = occ[py][px];
     if (o !== -1 && o !== ignore) return false;
   }
@@ -286,9 +338,11 @@ function canPlaceBin(b, x, y, ignore) {
    holds everything together: a bin can never occupy a cell outside its own box. A
    resize used to leave the old mask in place, and those out-of-box cells drew nothing
    on the map yet still blocked other bins from being dropped there and still built in
-   the preview — a bin you could neither see nor get rid of. */
+   the preview — a bin you could neither see nor get rid of.
+   Cells are whole cells: a half-size bin, which is never carved, gives every cell its
+   box touches. Anything asking what a bin covers asks slotsOf instead. */
 function binCells(b) {
-  if (b.cells && b.cells.length) {
+  if (b.cells && b.cells.length && !isHalfSize(b)) {
     const kept = b.cells.filter(([x, y]) => x >= 0 && y >= 0 && x < b.u && y < b.v);
     if (kept.length) return kept;
   }
@@ -296,15 +350,19 @@ function binCells(b) {
   for (let x = 0; x < b.u; x++) for (let y = 0; y < b.v; y++) out.push([x, y]);
   return out;
 }
-const isCarved = (b) => binCells(b).length < b.u * b.v;
+const isCarved = (b) => !isHalfSize(b) && binCells(b).length < b.u * b.v;
 
 /* The one way to change a footprint. Resizing a carved bin has to reconcile the mask,
    and what carries across is the HOLES rather than the kept cells: clip the kept cells
    and growing a bin leaves its new column empty, which is not what dragging a grip
    outwards means. Carrying the holes grows and shrinks an L the way you would expect,
-   and a shape whose holes swallow the whole new box falls back to a plain rectangle. */
+   and a shape whose holes swallow the whole new box falls back to a plain rectangle.
+   A carve is counted in whole cells, so a bin made half-size loses it and is the plain
+   rectangle its box is: every caller has already checked that whole box is free, and
+   Undo has the shape. */
 function setFootprint(b, nu, nv) {
-  if (b.cells && b.cells.length) {
+  if (isHalfSize({ u: nu, v: nv })) b.cells = null;
+  else if (b.cells && b.cells.length) {
     const kept = new Set(binCells(b).map((c) => c[0] + ',' + c[1]));
     const holes = new Set();
     for (let x = 0; x < b.u; x++) for (let y = 0; y < b.v; y++)
@@ -316,13 +374,18 @@ function setFootprint(b, nu, nv) {
   }
   b.u = nu; b.v = nv;
 }
+/* Carving and merging count whole cells — the mask in the link is one bit a cell — so
+   neither takes a half-size bin in this version. Their buttons go grey and say why
+   rather than vanish, so the feature does not look missing. */
+const SHAPE_OFF = 'Carve and Merge work in whole cells, so they are off for half-size bins.';
+const carveOff = (b) => !!b && isHalfSize(b);
 /* Cut a cell out of a bin, or put one back. Both maps carve — the drawer map by
    alt-click or carve mode, the focus map by a plain click — and the rule for what a
    click may do is subtle enough (never empty the bin; never take back a cell another
    bin now owns) that a second copy would be a fourth jointKind. Says whether it
-   changed anything. */
+   changed anything. A half-size bin is not carved: see carveOff. */
 function carveToggle(b, dx, dy) {
-  if (dx < 0 || dy < 0 || dx >= b.u || dy >= b.v) return false;
+  if (carveOff(b) || dx < 0 || dy < 0 || dx >= b.u || dy >= b.v) return false;
   const cells = binCells(b).slice();
   const at = cells.findIndex(([a, o]) => a === dx && o === dy);
   if (at >= 0) {
@@ -629,6 +692,30 @@ function placeDividers() {
 }
 PHONE.addEventListener('change', placeDividers);
 placeDividers();
+/* The Steps switch goes on the drawer map's heading row on a wider window, and beside the
+   layer tabs on a phone, moved the same way and for the same reason. Beside the tabs,
+   the map's card had to be as wide as two layers' tabs and the switch, which came out of
+   the preview, and from a third layer the switch took a row of its own: at 1366 × 768
+   that put the coverage bar 21 px under the window, with the map already at its 40 px
+   cells and nothing left to give. The heading row is there anyway, so in it the switch
+   costs the map no height and the tabs have their row to themselves, as they did before
+   it. A phone's heading has no room for it beside the title, and a 40 px button is
+   taller than the heading, so there it stays on the tabs' row. drawMap is run again on
+   the change, which comes after the resize that already drew it.
+   On the row, beside the <h3> and never in it: inside it, the heading was read out as
+   "Drawer layout Steps Steps". And a button that had the focus keeps it: moving an
+   element in the document takes the focus off it, and a window narrowed past 980 px, or
+   zoomed, with the keyboard on Half cells left it on the page's body. */
+function placeSteps() {
+  const card = $('s-layout'), steps = card.querySelector('.steps');
+  const home = card.querySelector(PHONE.matches ? '.maptools' : '.layouthead');
+  if (steps.parentNode === home) return;
+  const had = steps.contains(document.activeElement) ? document.activeElement : null;
+  home.appendChild(steps);
+  if (had) had.focus({ preventScroll: true });
+}
+PHONE.addEventListener('change', () => { placeSteps(); drawMap(); });
+placeSteps();
 function closeSheet() {
   const inside = $('s-bin').contains(document.activeElement);
   /* What was typed a moment ago is still waiting for its redraw (schedule, below), and
@@ -728,15 +815,16 @@ function frameBin() {
 /* Where a loose bin would go if you added it now: the first free spot on the layer you
    were last editing, scanned front-left first because that is the corner the map draws
    at its origin and the one people fill first. Returns the reason instead when there
-   is nowhere — the two failures are different and want different sentences. */
+   is nowhere — the two failures are different and want different sentences. A
+   half-size bin may land on any half step, a whole one only on whole cells. */
 function scratchLanding() {
   const b = scratch, g = grid();
   if (!b) return { why: 'no bin' };
   if (b.u > g.nx || b.v > g.ny)
     return { why: `a ${b.u}×${b.v} bin does not fit the ${g.nx}×${g.ny} grid — make it smaller, or the drawer bigger` };
-  const sup = support(cur);
-  for (let y = 0; y <= g.ny - b.v; y++)
-    for (let x = 0; x <= g.nx - b.u; x++) {
+  const step = isHalfSize(b) ? 0.5 : 1;
+  for (let y = 0; y <= g.ny - b.v; y += step)
+    for (let x = 0; x <= g.nx - b.u; x += step) {
       if (!canPlace(x, y, b.u, b.v, -1)) continue;
       /* Upper layers need level, continuous support underneath, the same rule the
          drag-to-place path applies — a bin dropped onto a step would rock. */
@@ -890,6 +978,9 @@ function readControls() {
   const int = (id, d) => { const x = parseInt($(id).value, 10); return isFinite(x) ? x : d; };
   /* Counts are rounded, not truncated: parseInt read "2.7" dividers as 2 and "1e3" as 1. */
   const count = (id, d) => fieldClamp(id, Math.round(num(id, d)));
+  /* Width and depth to the nearest half cell, as the engine would build them anyway
+     (halfSized in bin.js): a 1.3 would be a bin of no size the grid has. */
+  const halves = (id, d) => fieldClamp(id, Math.round(num(id, d) * 2) / 2);
   const len = (id, d) => { const x = FIELDS.lengthOf($(id), unit); return isFinite(x) ? x : d; };
   /* Only the drawer's own fields are shown in inches. The wall, floor, scoop, label and
      bed stay in millimetres whatever the unit, so reading them as lengths took a 1.2 mm
@@ -923,7 +1014,7 @@ function readControls() {
   state.gap = num('gap', 3);
 
   const t = {
-    u: count('u', 1), v: count('v', 1),
+    u: halves('u', 1), v: halves('v', 1),
     hUnits: count('hUnits', 3),
     wall: mm('wall', 1.2),
     solid: $('solid').checked,
@@ -951,6 +1042,13 @@ function readControls() {
      on exactly that pair of changes. */
   const sel = selAll();
   const b = !scratch && sel.length ? B()[selected] : null;
+  /* What #sizeWhy says after this pass. Each pass says it afresh, so a reason stays only
+     until the next edit, Undo or selection, whatever that touched: it was about the
+     size the fields held then. */
+  let sizeNote = '';
+  // a size the last pass refused under the caret, if it did (sizeHeld)
+  const held = sizeHeld;
+  sizeHeld = null;
   /* The footprint is settled first: the floor, the label shelf and the dividers are
      limited by the bin's real size, so they wait for it. A loose bin has no drawer to
      collide with, so its footprint is held only by the fields' own 50 cells — with no
@@ -962,8 +1060,33 @@ function readControls() {
        which quietly destroyed their shapes. */
     delete t.u; delete t.v;
     $('u').value = b.u; $('v').value = b.v;
-  } else if (b && (t.u !== b.u || t.v !== b.v) && !canPlace(b.x, b.y, t.u, t.v, selected)) {
-    t.u = b.u; t.v = b.v; $('u').value = b.u; $('v').value = b.v;
+  } else if (b) {
+    /* An emptied field is a number about to be typed, not the default 1: the bin keeps
+       its size meanwhile, and the field shows it again if it is left empty. */
+    if (!$('u').value.trim()) t.u = b.u;
+    if (!$('v').value.trim()) t.v = b.v;
+    if (t.u !== b.u || t.v !== b.v) {
+      /* A size that would clash is put back, as ever. So is a whole size for a bin on a
+         half step, and that one says why under the fields, because nothing on the map
+         shows it: 2 wide at column 1.5 is free cells, just not whole ones. Never under
+         the caret (sizeDraft): there it may be the 2 of a 2.5 still being typed, and
+         the bin simply waits. It is put back once the field is left. */
+      const why = placeWhy(b.x, b.y, t.u, t.v, selected);
+      if (why) {
+        t.u = b.u; t.v = b.v;
+        if (!sizeTyping()) { $('u').value = b.u; $('v').value = b.v; }
+        else sizeHeld = { u: b.u, v: b.v };
+      }
+      if (why === WHOLE_ON_WHOLE) sizeNote = why;
+    }
+  } else if (!scratch && held) {
+    /* With no bin selected the fields are the size of the next one drawn, and what they
+       hold here is a size the bin selected a moment ago refused, left under the caret.
+       It goes back to that bin's, as it would have on leaving the field had the bin
+       still been selected: Fill the rest takes the selection away first, and a 2 typed
+       for the 1.5 × 1 on a half step filled the drawer with 2 × 1 bins. */
+    Object.assign(t, held);
+    $('u').value = held.u; $('v').value = held.v;
   }
   /* Several bins take the same settings, so the smallest of them sets the limit: the
      dividers that fit a 1x1 are the most any of them can be given. */
@@ -1003,19 +1126,28 @@ function readControls() {
     const nu = t.u, nv = t.v; delete t.u; delete t.v;
     noteSettingsEdit([scratch], t, nu, nv);
     Object.assign(scratch, t, { edges: Object.assign({}, t.edges) });
-    if (nu !== undefined && (nu !== scratch.u || nv !== scratch.v))
+    if (nu !== undefined && (nu !== scratch.u || nv !== scratch.v)) {
+      if (dropsShape(scratch, nu, nv)) sizeNote = SHAPE_DROPPED;
       setFootprint(scratch, nu, nv);
+    }
   } else if (sel.length) {
     /* u and v never ride the bulk assign — a footprint change has to reconcile the
        carve mask, so it goes through setFootprint. */
     const nu = t.u, nv = t.v; delete t.u; delete t.v;
     noteSettingsEdit(sel.map((i) => B()[i]), t, nu, nv);
     for (const i of sel) Object.assign(B()[i], t, { edges: Object.assign({}, t.edges) });
-    if (sel.length === 1 && nu !== undefined && (nu !== b.u || nv !== b.v))
+    if (sel.length === 1 && nu !== undefined && (nu !== b.u || nv !== b.v)) {
+      if (dropsShape(b, nu, nv)) sizeNote = SHAPE_DROPPED;
       setFootprint(b, nu, nv);
+    }
   } else {
     Object.assign(state, t);
   }
+  sizeSay(sizeNote);
+  /* The map's reason lasts as long as the action that said it (mapSay): any pass after
+     that is another edit, an Undo or a selection, which it is not about. */
+  if (!stepSaid) mapSay('');
+  stepSaid = false;
   /* A lid needs a lip to grip, and a lowered wall takes the lip away. Say which it is
      rather than hiding the control, or ticking it and getting nothing looks like a bug.
      A carved bin keeps its lip, but the lid is a rectangle: it would hang over the cells
@@ -1028,18 +1160,28 @@ function readControls() {
   $('lidCarved').style.display = !t.solid && lipOk && carvedNow && $('lid').checked ? '' : 'none';
   $('lidHint').style.display = !t.solid && lipOk && !carvedNow && $('lid').checked ? '' : 'none';
   /* The feet. "Where" and the count only mean something once there are holes, and each
-     hint says what its holes are for, so each shows with its box. */
-  const holes = t.magnets || t.screws;
-  $('holesWhereRow').style.display = holes ? '' : 'none';
-  $('magnetHint').style.display = t.magnets ? '' : 'none';
-  $('screwHint').style.display = t.screws ? '' : 'none';
-  $('magnetSize').textContent = `${state.magnetD} x ${state.magnetH}`;
+     hint says what its holes are for, so each shows with its box.
+     A half-size bin has no holes yet (feetHolesOff), so its boxes go grey with the
+     reason under them. They keep what they hold rather than being cleared: the bin
+     takes its holes back if it is made whole again, and clearing them here would file
+     an undo step for a change nobody made. Several bins are greyed only when none of
+     them could take a hole — the whole ones among them still do. */
   const holed = target || Object.assign({}, state, t);
+  const holesFor = sel.length > 1 && !scratch ? sel.map((i) => B()[i]) : [holed];
+  const holesOff = holesFor.every((x) => feetHolesOff(x)) ? feetHolesOff(holesFor[0]) : '';
+  $('magnets').disabled = $('screws').disabled = !!holesOff;
+  $('feetOff').textContent = holesOff;
+  $('feetOff').style.display = holesOff ? '' : 'none';
+  const holes = (t.magnets || t.screws) && !holesOff;
+  $('holesWhereRow').style.display = holes ? '' : 'none';
+  $('magnetHint').style.display = t.magnets && !holesOff ? '' : 'none';
+  $('screwHint').style.display = t.screws && !holesOff ? '' : 'none';
+  $('magnetSize').textContent = `${state.magnetD} x ${state.magnetH}`;
   $('holeCount').style.display = holes ? '' : 'none';
   $('holeCount').textContent = !holes ? ''
     : (!target ? `A new ${holed.u} by ${holed.v} bin takes `
        : sel.length > 1 && !scratch ? 'The first of these bins takes ' : 'This bin takes ') +
-      holesText(holed) + '.';
+      (holesText(holed) || 'no holes') + '.';
   // the front measurement is only worth asking for once the drawer is being drawn
   $('drawerFrontRow').style.display = state.showDrawer ? '' : 'none';
   $('drawerViewHint').style.display = state.showDrawer ? '' : 'none';
@@ -1057,20 +1199,28 @@ function readControls() {
      is not a selection, so counting the selection would have hidden the Carve button
      in the one mode built around a single bin. */
   const one = !!scratch || selAll().length === 1;
-  if (!one) carving = false;
+  // neither takes a half-size bin (SHAPE_OFF): greyed, with the reason beside them
+  const carveNo = one && carveOff(scratch || B()[selected]);
+  const many = selAll().length > 1;
+  const mergeNo = many && selAll().some((i) => carveOff(B()[i]));
+  if (!one || carveNo) carving = false;
   $('carveMode').style.display = one ? '' : 'none';
+  $('carveMode').disabled = carveNo;
   $('carveHint').style.display = one && carving ? '' : 'none';
   $('carveMode').classList.toggle('on', carving);
   $('fillmap').classList.toggle('carving', carving);
   $('carveMode').textContent = carving ? 'Done carving' : 'Carve this bin into a shape';
-  $('mergeBins').style.display = selAll().length > 1 ? '' : 'none';
-  $('mergeHint').style.display = selAll().length > 1 ? '' : 'none';
+  $('mergeBins').style.display = many ? '' : 'none';
+  $('mergeBins').disabled = mergeNo;
+  $('mergeHint').style.display = many && !mergeNo ? '' : 'none';
+  $('shapeOff').textContent = SHAPE_OFF;
+  $('shapeOff').style.display = carveNo || mergeNo ? '' : 'none';
   const selBin = selected >= 0 ? B()[selected] : null;
-  const needsSplit = !!selBin && !fitsBed(selBin.u, selBin.v) && !!splitPlan(selBin.u, selBin.v);
+  const needsSplit = !!selBin && !fitsBed(selBin.u, selBin.v) && !!splitPlan(selBin);
   $('splitFit').style.display = needsSplit ? '' : 'none';
   $('splitHint').style.display = needsSplit ? '' : 'none';
   if (needsSplit) {
-    const sp = describeSplit(selBin.u, selBin.v);
+    const sp = describeSplit(selBin);
     $('splitFit').textContent = `Split into ${sp.text} to fit the bed`;
   }
   const nSel = selAll().length;
@@ -1095,6 +1245,7 @@ function readControls() {
      which spun on past the room they leave. */
   const top = plateCells(DRAWER_MAX, DRAWER_MAX);
   $('gridX').max = top.nx; $('gridY').max = top.ny;
+  stepsFollowLayout();
   /* Last, so it sees the selection this pass settled on — and so the one class that
      decides what focus hides is applied after every other visibility decision above,
      rather than being quietly undone by one of them. */
@@ -1103,6 +1254,7 @@ function readControls() {
   applySheet();
 }
 function writeControls(src) {
+  sizeSay('');              // a refusal was about the size the fields held before
   $('u').value = src.u; $('v').value = src.v; $('hUnits').value = src.hUnits;
   $('wall').value = src.wall; $('floorT').value = src.floorT;
   $('divX').value = src.divX; $('divY').value = src.divY;
@@ -1189,6 +1341,120 @@ $('delLayer').addEventListener('click', () => {
 
 /* ---------- the map ------------------------------------------------------- */
 let drag = null;
+/* The Steps switch above the map: whole cells or half cells. See STEPS_KEY for what it
+   is, and why it is kept in this browser and never in the link. */
+function showSteps() {
+  for (const [id, on] of [['stepWhole', !halfSteps], ['stepHalf', halfSteps]]) {
+    $(id).classList.toggle('on', on);
+    $(id).setAttribute('aria-pressed', String(on));
+  }
+}
+function chooseSteps(half) {
+  writeKey(STEPS_KEY, half ? 'half' : 'whole');
+  if (half === halfSteps) return;
+  halfSteps = half;
+  mapSay('');
+  showSteps(); drawMap();
+}
+$('stepWhole').addEventListener('click', () => chooseSteps(false));
+$('stepHalf').addEventListener('click', () => chooseSteps(true));
+/* Half steps turn themselves on when a half-size bin appears — opening a link that has
+   one, or typing 1.5 into a width — because a half-size bin on a whole-step map can be
+   drawn but not lined up. Only on that edge, the way a panel opens on one: switched back
+   to whole cells, the map stays on whole cells until the layout next gains a half-size
+   bin. Not saved, since nobody chose it; what this browser remembers is the choice made
+   on the switch. */
+function stepsFollowLayout() {
+  const any = layoutHasHalf();
+  if (any && !hadHalf) halfSteps = true;
+  hadHalf = any;
+  showSteps();
+}
+/* Says why the map refused a place, when the reason is not one the map can show: a
+   clash is a red outline, the edge of the drawer is the edge of the map, but a whole
+   bin on a half step looks like free cells. Cleared by the next press on the map, and by
+   the readControls pass after the one that ends the action that said it: an Undo or an
+   edit of anything else left it there, about a place nobody was trying any more. */
+let stepSaid = false;
+function mapSay(t) {
+  if ($('stepWhy').textContent !== t) $('stepWhy').textContent = t;
+  stepSaid = !!t;
+}
+/* The same, under the Width and Depth fields, for a size typed there. Present but empty
+   when there is nothing to say, never display:none: a status region only announces what
+   changes inside it while it is there, and one shown at the moment it got its text was
+   one a screen reader might not read out. Empty, it takes no room. */
+function sizeSay(t) {
+  if ($('sizeWhy').textContent !== t) $('sizeWhy').textContent = t;
+}
+/* A carve is counted in whole cells, so a carved bin made half-size is the plain
+   rectangle its box is (setFootprint). That happened without a word: the L simply went.
+   Said where the size was changed, under the fields or under the map.
+   Under the map it is said in a line, the one it has there (#stepWhy in style.css): the
+   sentence took three on a 1366 × 768 window, from the front marker to 23 px under the
+   window, over the coverage bar, and a block of up to 58 px over it on a phone. The map
+   has just shown the shape go, so the line need only say why; it fits a 320 px phone
+   with room to spare, as WHOLE_ON_WHOLE does. */
+const SHAPE_DROPPED = 'A half-size bin cannot keep a carved shape, so this one is a plain rectangle now. Undo brings the shape back.';
+const SHAPE_DROPPED_MAP = 'A half-size bin cannot be carved.';
+const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
+
+/* Width and Depth while they are being typed into. A size refused under the caret was
+   written back there when the debounce ran out, 180 ms later, so "2.5" typed at a human
+   pace was refused at its "2" and came out "1.55", and a field emptied to type a new
+   number filled straight back in. A refused size now leaves the field as it is typed,
+   and is put back with the reason when the field is committed: left, or stepped by its
+   arrows, which give a whole value at once rather than a number on its way. */
+let sizeDraft = null;          // the field being typed into, if either is
+const sizeTyping = () => !!sizeDraft && document.activeElement === $(sizeDraft);
+/* The size of the bin that refused what is under the caret, from the last pass that
+   refused it: if that bin is no longer selected by the next pass, the fields go back to
+   it rather than handing the refused size to the next bin drawn (readControls). */
+let sizeHeld = null;
+// the one bin the fields are sizing, where it stands: a loose or a new bin stands nowhere
+const sizedBin = () => (!scratch && selected >= 0 && selAll().length === 1 && B()[selected]) || null;
+/* A step of Width or Depth from `from` to the next half cell up or down, and over a whole
+   size the bin may not take where it stands to the half size beyond it: 1.5 wide at
+   column 1.5 steps to 2.5 and to 0.5, since 2 and 1 there would be whole bins on a half
+   step. The field's own step stopped on them, refused, and never got past. */
+function sizeStep(id, from, dir) {
+  const lo = parseFloat($(id).min), hi = parseFloat($(id).max), b = sizedBin();
+  const held = (n) => Math.min(hi, Math.max(lo, n));
+  const whole = (n) => !!b && placeWhy(b.x, b.y, id === 'u' ? n : b.u, id === 'v' ? n : b.v,
+                                       selected) === WHOLE_ON_WHOLE;
+  let n = held(dir > 0 ? Math.floor(from * 2) / 2 + 0.5 : Math.ceil(from * 2) / 2 - 0.5);
+  if (whole(n) && held(n + dir * 0.5) !== n) n += dir * 0.5;
+  return n;
+}
+for (const id of ['u', 'v']) {
+  // the arrow keys step here rather than in the browser, so that they can step over
+  $(id).addEventListener('keydown', (e) => {
+    if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || e.altKey || e.ctrlKey || e.metaKey) return;
+    const b = sizedBin();
+    if (!b) return;
+    e.preventDefault();
+    const x = parseFloat($(id).value);
+    $(id).value = sizeStep(id, isFinite(x) ? x : b[id], e.key === 'ArrowUp' ? 1 : -1);
+    sizeDraft = null;
+    schedule();
+  });
+  /* The spinner steps in the browser, and Chromium says so with an input event that is
+     not an InputEvent, which typing always is. A step onto a refused whole size goes on
+     to the half size past it, the way the keys do; where a browser does not tell the
+     two apart, the spinner's step is refused when it lands, as typing is when left. */
+  let before = NaN;
+  $(id).addEventListener('beforeinput', () => { before = parseFloat($(id).value); });
+  $(id).addEventListener('input', (e) => {
+    if (!e.isTrusted || e instanceof InputEvent) { sizeDraft = id; return; }
+    sizeDraft = null;
+    const b = sizedBin(), x = parseFloat($(id).value);
+    if (!b || !isFinite(x)) return;
+    const from = isFinite(before) && before !== x ? before : b[id];
+    if (x !== from) $(id).value = sizeStep(id, from, Math.sign(x - from));
+  });
+  $(id).addEventListener('change', () => { sizeDraft = null; });
+  $(id).addEventListener('blur', () => { sizeDraft = null; });
+}
 /* The focus map's cell size. Bigger than the drawer map's because it is showing one
    bin instead of sixty-three cells, and the reason carving on the drawer map is
    awkward is that a 1×1 bin there is a 40 px square. */
@@ -1272,13 +1538,32 @@ function drawFocusMap() {
  * wider and taller than any monospace in --mono actually is, so the estimate errs into
  * the margin rather than out of the bin. Sizes are the stylesheet's #fillmap ones.
  *
- * Returns [{ cls, text, dy }], dy being each baseline's offset from the bin's centre. */
+ * A half-size bin can be narrower than its own size. Every whole bin's size fits across
+ * it — "1×10" in a bin one cell wide is the tightest, 30 of 30 — so this only ever moves
+ * a half-size bin's: turned to run up the bin if it is taller than wide, else in the
+ * smaller type, else turned and smaller, else left off. A 0.5 × 0.5 has room for none;
+ * the hover text and the map's own label still say what it is.
+ *
+ * Returns [{ cls, text, dy, turn }], dy being each baseline's offset from the bin's
+ * centre, in a frame turned a quarter anticlockwise when turn is set. */
 const LABEL = { CH: 0.62, ASC: 0.95, DESC: 0.27, GAP: 1.5,
-                size: { blabel: 12, bsub: 9.5, bnote: 9 } };
+                size: { blabel: 12, bsize: 9.5, bsub: 9.5, bnote: 9 } };
 function binLabels(b) {
-  const roomW = b.u * S - 10, roomH = b.v * S - 8;   // the rect's 2 inset, plus clearance
-  const fits = (str, cls) => str.length * LABEL.CH * LABEL.size[cls] <= roomW;
-  const lines = [{ cls: 'blabel', text: `${b.u}×${b.v}`, rank: 0 }];
+  let roomW = b.u * S - 10, roomH = b.v * S - 8;     // the rect's 2 inset, plus clearance
+  const size = `${b.u}×${b.v}`;
+  const across = (str, cls, room) => str.length * LABEL.CH * LABEL.size[cls] <= room;
+  let top = 'blabel', turn = false;
+  if (!across(size, top, roomW)) {
+    // turned, the line has the bin's width to stand in, edge to edge inside the outline
+    const way = [['blabel', true], ['bsize', false], ['bsize', true]].find(([cls, t]) =>
+      across(size, cls, t ? b.v * S - 10 : roomW) &&
+      (LABEL.ASC + LABEL.DESC) * LABEL.size[cls] <= (t ? b.u : b.v) * S - 4);
+    if (!way) return [];
+    [top, turn] = way;
+    if (turn) [roomW, roomH] = [b.v * S - 10, b.u * S - 8];
+  }
+  const fits = (str, cls) => across(str, cls, roomW);
+  const lines = [{ cls: top, text: size, rank: 0 }];
   const full = `${b.hUnits}u · ${b.hUnits * SPEC.unitH}mm`, short = `${b.hUnits}u`;
   const ht = fits(full, 'bsub') ? full : fits(short, 'bsub') ? short : null;
   if (ht) lines.push({ cls: 'bsub', text: ht, rank: 2 });
@@ -1298,7 +1583,7 @@ function binLabels(b) {
     const fs = LABEL.size[l.cls];
     const dy = y + LABEL.ASC * fs;
     y += (LABEL.ASC + LABEL.DESC) * fs + LABEL.GAP;
-    return { cls: l.cls, text: l.text, dy };
+    return { cls: l.cls, text: l.text, dy, turn };
   });
 }
 function drawMap() {
@@ -1362,7 +1647,9 @@ function drawMap() {
      coverage bar now fit together with the stage scrolled to the top.
      Above the map is measured rather than assumed, because the layer tabs wrap as
      layers are added: the card's heading and tabs (row.room has already lost the
-     stage's top padding). Below it the marker and the bar are a fixed 41 px. Stacked,
+     stage's top padding). Below it the marker and the bar are a fixed 41 px: #stepWhy,
+     the reason the map refused a place, says it on the marker's own line (style.css),
+     because a line of its own put the bar 20 px under a 1366 × 768 window. Stacked,
      the stage is as tall as its content and it is the window that scrolls, so there
      the window is the room — see DF.stageRow.
      Fitting the height never takes a cell under 40 px, the size the phone pass set as
@@ -1370,13 +1657,52 @@ function drawMap() {
      layout" banner showing, a map that scrolls a little beats one too fine to use.
      The 52 px cell and 720 px caps are for a 1080-line window and grow with a taller
      one (row.big): at 1440 a cell may be 69 px rather than staying 52 while the screen
-     round it got a third bigger. The labels scale with the cells, so they stay legible. */
-  const above = svg.getBoundingClientRect().top - top.getBoundingClientRect().top;
-  const availH = Math.max(H * 40 / S, Math.min(720 * row.big, row.room - above - 41));
-  const sc = Math.min(availW / W, availH / H, Math.round(CELL_PX * row.big) / S);
-  svg.setAttribute('width', Math.round(W * sc));
-  svg.setAttribute('height', Math.round(H * sc));
-  if (twoCol) DF.pairColumns(top, Math.round(W * sc) + 30, PREVIEW_MIN);
+     round it got a third bigger. The labels scale with the cells, so they stay legible.
+     Paired, the card is the map's width, and no narrower than its heading's row needs
+     for the whole title and the Steps switch, which is on that row on any window wide
+     enough to pair (placeSteps). That is 290 to 310 px in the fonts tried, less than a
+     7-column map at 1366 × 768 and no more than one at its 40 px cells, so it takes
+     nothing from the preview there; a narrower drawer's card is held at it, its preview
+     no narrower than a 7-column drawer's. Counted at the title's first word only, the
+     row cut the title to "DRAWER LAYO…" for every drawer under 7 columns, and for a
+     7-column one on a shorter window.
+     The switch was first beside the layer tabs, and the card kept as wide as that row:
+     paired at the map's width alone, a 1366 × 768 window had no room
+     for the switch beside two layers' tabs, it dropped to a row of its own after the
+     height was settled, and the map, its front marker and the coverage bar went 38 px
+     under the window. Kept that wide, each layer took a tab's width, about 70 px, out of
+     the preview, in a drawer of whole bins as much as in one of half; held at two
+     layers' width, the switch's own row from a third layer still put the bar 21 px under
+     the window, the map there being within a pixel of its 40 px cells. On the heading's
+     row it costs no height, and the tabs have their row to themselves as before it.
+     "Above" is measured with the columns taken away (stageRow), and the map is sized
+     again once paired, as the baseplates page's cut map is, should anything above it
+     wrap all the same: the tabs' labels do, with five layers or more. */
+  let headW = 0;
+  const steps = twoCol && $('s-layout').querySelector('.layouthead > .steps');
+  if (steps) {
+    /* the title on one line and the heading's padding round it, the switch and its
+       margin, and the card's border, up to the next pixel, which a rounded offsetWidth
+       was not: 385.4 px in 385 overlaps. The title's text, not the <h3>, whose box is
+       the room it was given last time and may have cut it. */
+    const h3 = $('s-layout').querySelector('.layouthead > h3'), cs = getComputedStyle(h3);
+    const title = document.createRange();
+    title.selectNodeContents(h3);
+    headW = Math.ceil(parseFloat(cs.paddingLeft) + title.getBoundingClientRect().width +
+                      parseFloat(cs.paddingRight) + steps.getBoundingClientRect().width +
+                      parseFloat(getComputedStyle(steps).marginRight)) + 2;
+  }
+  const chrome = () => svg.getBoundingClientRect().top - top.getBoundingClientRect().top + 41;
+  const size = (fixed) => {
+    const availH = Math.max(H * 40 / S, Math.min(720 * row.big, row.room - fixed));
+    const sc = Math.min(availW / W, availH / H, Math.round(CELL_PX * row.big) / S);
+    svg.setAttribute('width', Math.round(W * sc));
+    svg.setAttribute('height', Math.round(H * sc));
+    if (twoCol) DF.pairColumns(top, Math.min(availW + 30, Math.max(Math.round(W * sc) + 30, headW)), PREVIEW_MIN);
+  };
+  const fixed = chrome();
+  size(fixed);
+  if (twoCol) { const paired = chrome(); if (paired > fixed) size(paired); }
 
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const el = (n, a) => { const e = document.createElementNS(SVGNS, n);
@@ -1385,14 +1711,33 @@ function drawMap() {
 
   const occ = occupancy();
   const sup = support(cur);
+  /* One rectangle a cell, read from its four half slots. They agree in any cell no
+     half-size bin reaches, which is every cell of a whole-cell layout. Where they do not,
+     the cell is drawn free if any of it is, and a slot with nothing under it on an upper
+     layer is greyed on its own. */
+  const H2 = S / 2;
   for (let y = 0; y < g.ny; y++)
     for (let x = 0; x < g.nx; x++) {
-      const free = occ[y][x] === -1;
-      const dead = cur > 0 && !sup.ok[y][x];
+      const q = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([i, j]) => ({ i, j,
+        free: occ[2 * y + j][2 * x + i] === -1, dead: cur > 0 && !sup.ok[2 * y + j][2 * x + i] }));
+      const same = q.every((s) => s.free === q[0].free && s.dead === q[0].dead);
+      const free = q.some((s) => s.free && !s.dead), dead = same && q[0].dead;
       const c = el('rect', { class: 'cell' + (free && !dead ? ' free' : '') + (dead ? ' dead' : ''),
         x: x * S, y: sy(y, 1), width: S, height: S });
       svg.appendChild(c);
+      if (!same)
+        for (const s of q.filter((s) => s.dead))
+          svg.appendChild(el('rect', { class: 'cell dead', x: x * S + s.i * H2,
+            y: sy(y, 1) + (1 - s.j) * H2, width: H2, height: H2 }));
     }
+  /* Half steps draw a dashed line through the middle of every cell, both ways: the
+     places a half-size bin can start. One path for the lot. */
+  if (halfSteps) {
+    let d = '';
+    for (let x = 0; x < g.nx; x++) d += `M${x * S + H2} 0V${H}`;
+    for (let y = 0; y < g.ny; y++) d += `M0 ${y * S + H2}H${W}`;
+    svg.appendChild(el('path', { class: 'midline', d }));
+  }
 
   // ghost the layer below so you can line bins up with what supports them
   if (cur > 0)
@@ -1434,6 +1779,7 @@ function drawMap() {
     const cx = (b.x + b.u / 2) * S, cy = sy(b.y, b.v) + b.v * S / 2;
     for (const t of binLabels(b)) {
       const e = el('text', { class: t.cls, x: cx, y: cy + t.dy, 'text-anchor': 'middle' });
+      if (t.turn) e.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
       e.textContent = t.text;
       svg.appendChild(e);
     }
@@ -1465,8 +1811,7 @@ function drawMap() {
      or a move read x0/y0 off a drag that never set them, so every attribute came out
      NaN and the browser rejected the rect four times a frame. */
   if (drag && drag.mode === 'create') {
-    const x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1);
-    const u = Math.abs(drag.x1 - drag.x0) + 1, v = Math.abs(drag.y1 - drag.y0) + 1;
+    const { x, y, u, v } = dragBox(drag);
     svg.appendChild(el('rect', { class: 'drag' + (canPlace(x, y, u, v, -1) ? '' : ' bad'),
       x: x * S + 1, y: sy(y, v) + 1, width: u * S - 2, height: v * S - 2, rx: 5 }));
   }
@@ -1488,14 +1833,19 @@ function drawMap() {
     (B().length
       ? `${plural(B().length, 'bin')} on this layer: ` +
         listed.join('; ') + (more > 0 ? `; and ${more} more` : '') + '.'
-      : 'No bins on this layer.'));
+      : 'No bins on this layer.') +
+    (halfSteps ? ' Drawing in half-cell steps.' : ''));
 }
 /* Screen point -> grid cell.
    Goes through the SVG's own screen matrix rather than measuring the element box.
    preserveAspectRatio letterboxes the drawing inside that box whenever the element's
    aspect ratio differs from the viewBox's, so box-relative arithmetic is off by the
    dead margin — and the margin changes as the element resizes. getScreenCTM accounts
-   for the viewBox, the letterboxing, page zoom and scroll together. */
+   for the viewBox, the letterboxing, page zoom and scroll together.
+   x and y are where a bin would start under the pointer, in the map's steps: a whole
+   cell, or with half steps on, a half one. slot is the half slot under the pointer,
+   which is what "what is here" asks about, and cell the whole cell, which is what a
+   carve asks about. */
 function cellFromEvent(e) {
   const g = grid(), svg = $('fillmap');
   const m = svg.getScreenCTM && svg.getScreenCTM();
@@ -1510,9 +1860,16 @@ function cellFromEvent(e) {
     vx = (e.clientX - r.left) / (r.width || 1) * g.nx * S;
     vy = (e.clientY - r.top) / (r.height || 1) * g.ny * S;
   }
-  return { x: Math.max(0, Math.min(g.nx - 1, Math.floor(vx / S))),
-           y: Math.max(0, Math.min(g.ny - 1, g.ny - 1 - Math.floor(vy / S))) };
+  const sx = Math.max(0, Math.min(2 * g.nx - 1, Math.floor(vx / (S / 2))));
+  const sy = Math.max(0, Math.min(2 * g.ny - 1, 2 * g.ny - 1 - Math.floor(vy / (S / 2))));
+  const cell = { x: Math.floor(sx / 2), y: Math.floor(sy / 2) };
+  return { x: halfSteps ? sx / 2 : cell.x, y: halfSteps ? sy / 2 : cell.y,
+           slot: { x: sx, y: sy }, cell };
 }
+/* The box a create drag has swept, from the step it started in to the one under the
+   pointer, both included. */
+const dragBox = (d) => ({ x: Math.min(d.x0, d.x1), y: Math.min(d.y0, d.y1),
+                          u: Math.abs(d.x1 - d.x0) + d.st, v: Math.abs(d.y1 - d.y0) + d.st });
 function initMap() {
   const svg = $('fillmap');
   /* Right-click on the map. Uses the same cell arithmetic as every other click here, so
@@ -1520,13 +1877,21 @@ function initMap() {
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const c = cellFromEvent(e);
-    const i = B().findIndex((b) => binCells(b).some(([dx, dy]) =>
-      b.x + dx === c.x && b.y + dy === c.y));
+    const i = B().findIndex((b) => slotsOf(b).some(([x, y]) => x === c.slot.x && y === c.slot.y));
     if (i < 0) return closeMenu();
     hideTip();
     openMenu(e.clientX, e.clientY, cur, i);
   });
   svg.addEventListener('pointerdown', (e) => {
+    /* An edit still waiting lands first (landEdit), before the field is left, which
+       comes after this, and before the press is read: against the grid it leaves, not
+       the one before it. Read first, a drawer width or depth typed and pressed on the
+       map at once looked a cell up in the old grid and then in the new, smaller one,
+       and threw. And where it changed the grid, the press goes no further: the map was
+       drawn again under the pointer, and the cell aimed at has moved, or is gone. */
+    const was = grid(), landed = landEdit();
+    mapSay('');
+    if (landed && (grid().nx !== was.nx || grid().ny !== was.ny)) return;
     const c = cellFromEvent(e);
     const handle = e.target && e.target.dataset ? e.target.dataset.handle : null;
 
@@ -1534,11 +1899,15 @@ function initMap() {
        L. While carving they have to yield, or the one cell you most want to remove
        is the one cell you cannot. */
     if (handle && !e.altKey && !carving && selected >= 0 && B()[selected]) {
-      const b = B()[selected];
-      pushUndo();
-      drag = { mode: 'resize', idx: selected,
-               ax: handle[0] === 'l' ? b.x + b.u - 1 : b.x,
-               ay: handle[1] === 'f' ? b.y + b.v - 1 : b.y,
+      const b = B()[selected], st = stepOf();
+      /* The anchor is the step at the far corner, which stays put. In half steps the
+         grips resize in halves; in whole ones a half-size bin keeps its far edge where
+         it is, and the near one follows the pointer in whole cells. The undo step is
+         filed at the first change (banked), not here: a grip pressed and let go is no
+         edit. */
+      drag = { mode: 'resize', idx: selected, st, snap: snapshot(), moved: false,
+               ax: handle[0] === 'l' ? b.x + b.u - st : b.x,
+               ay: handle[1] === 'f' ? b.y + b.v - st : b.y,
                x1: c.x, y1: c.y };
       if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
       return;
@@ -1548,7 +1917,8 @@ function initMap() {
        once covered it puts one back, so a carve can be undone by the same gesture. */
     if ((e.altKey || carving) && selected >= 0 && B()[selected]) {
       const b = B()[selected];
-      const dx = c.x - b.x, dy = c.y - b.y;
+      // carving counts whole cells, whatever the steps
+      const dx = c.cell.x - b.x, dy = c.cell.y - b.y;
       if (dx >= 0 && dy >= 0 && dx < b.u && dy < b.v) {
         carveToggle(b, dx, dy);
         /* Redrawn whether or not it changed anything: a refused click still has to put
@@ -1563,7 +1933,7 @@ function initMap() {
       if (e.altKey) return;
       carving = false;
     }
-    const hit = occupancy()[c.y][c.x];
+    const hit = occupancy()[c.slot.y][c.slot.x];
     if (hit !== -1) {
       if (e.ctrlKey || e.metaKey) {                      // add or remove from the set
         if (hit === selected) {                          // dropping the primary promotes another
@@ -1577,18 +1947,18 @@ function initMap() {
         return;
       }
       const b = B()[hit];                                // grab to move; a still
-      selExtra.clear();                                  // release is just a select
-      selected = hit;
-      writeControls(b);
-      pushUndo();
-      drag = { mode: 'move', idx: hit, dx: c.x - b.x, dy: c.y - b.y, moved: false };
+      selExtra.clear();                                  // release is just a select,
+      selected = hit;                                    // so the undo step waits for
+      writeControls(b);                                  // the first move (banked)
+      drag = { mode: 'move', idx: hit, dx: c.x - b.x, dy: c.y - b.y, moved: false,
+               snap: snapshot() };
       if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
       readControls(); drawMap(); refresh();
       return;
     }
 
     clearSel();                                          // draw a new bin
-    drag = { mode: 'create', x0: c.x, y0: c.y, x1: c.x, y1: c.y };
+    drag = { mode: 'create', st: stepOf(), x0: c.x, y0: c.y, x1: c.x, y1: c.y };
     if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
     readControls(); drawMap();
   });
@@ -1597,9 +1967,24 @@ function initMap() {
     if (!drag) return;
     const c = cellFromEvent(e);
 
+    /* A refusal the map cannot show is said (mapSay); any other outcome clears it, so
+       it describes where the pointer is now rather than somewhere it passed. Except that
+       a carved shape a resize made half-size has gone for good, so that stays said while
+       the bin is half-size: pulled back to a whole size in the same drag it is a plain
+       rectangle, which may be carved, and the line went on saying it could not be. */
+    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why
+      : drag.dropped && isHalfSize(B()[drag.idx]) ? SHAPE_DROPPED_MAP : '');
+    /* A move or a resize files its undo step with the layout as the press found it, at
+       its first real change. Filed at the press, a click that only selected a bin was a
+       step of its own: the next Undo spent itself on a layout that had not changed, and
+       the click threw away Redo. */
+    const banked = () => { if (!drag.moved) pushOn(uStack(), rStack(), drag.snap); };
     if (drag.mode === 'create') {
       if (c.x === drag.x1 && c.y === drag.y1) return;
-      drag.x1 = c.x; drag.y1 = c.y; drawMap();
+      drag.x1 = c.x; drag.y1 = c.y;
+      const box = dragBox(drag);
+      say(placeWhy(box.x, box.y, box.u, box.v, -1));
+      drawMap();
       return;
     }
     const b = B()[drag.idx];
@@ -1608,17 +1993,24 @@ function initMap() {
     if (drag.mode === 'move') {
       const nx = c.x - drag.dx, ny = c.y - drag.dy;
       if (nx === b.x && ny === b.y) return;
-      if (!canPlace(nx, ny, b.u, b.v, drag.idx)) return;  // refuse, don't snap away
+      const why = placeWhy(nx, ny, b.u, b.v, drag.idx);
+      say(why);
+      if (why) return;                                   // refuse, don't snap away
+      banked();
       b.x = nx; b.y = ny; drag.moved = true;
       drawMap();
       return;
     }
     // resize: the opposite corner stays put, this one follows the pointer
     const nx = Math.min(c.x, drag.ax), ny = Math.min(c.y, drag.ay);
-    const nu = Math.abs(c.x - drag.ax) + 1, nv = Math.abs(c.y - drag.ay) + 1;
+    const nu = Math.abs(c.x - drag.ax) + drag.st, nv = Math.abs(c.y - drag.ay) + drag.st;
     if (nx === b.x && ny === b.y && nu === b.u && nv === b.v) return;
-    if (!canPlace(nx, ny, nu, nv, drag.idx)) return;
+    const why = placeWhy(nx, ny, nu, nv, drag.idx);
+    if (why) { say(why); return; }
+    banked();
+    if (dropsShape(b, nu, nv)) drag.dropped = true;
     b.x = nx; b.y = ny; setFootprint(b, nu, nv);
+    say('');                                             // about the size it is now
     drag.moved = true;
     writeControls(b); drawMap();
   });
@@ -1626,8 +2018,7 @@ function initMap() {
   svg.addEventListener('pointerup', () => {
     if (!drag) return;
     if (drag.mode === 'create') {
-      const x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1);
-      const u = Math.abs(drag.x1 - drag.x0) + 1, v = Math.abs(drag.y1 - drag.y0) + 1;
+      const { x, y, u, v } = dragBox(drag);
       if (canPlace(x, y, u, v, -1)) {
         /* Snapshot here rather than at pointerdown: a drag that ends across an
            occupied cell places nothing, and an entry filed for it would make the
@@ -1652,28 +2043,43 @@ function initMap() {
 }
 
 /* ---------- actions ------------------------------------------------------- */
+/* Two passes. The first is the fill there has always been: the new-bin size either way
+   round, else a 1x1, tried at every whole cell — or at every half step when the new bins
+   are half-size, so that they pack edge to edge rather than a half cell apart. The second
+   only finds anything beside a half-size bin, which can leave part of a cell free that
+   no whole bin fits: it takes those half strips and quarters, largest first. A layout of
+   whole bins comes out of it exactly as it always did. */
 $('fillRest').addEventListener('click', () => {
+  landEdit();
   pushUndo();
   const g = grid();
   clearSel(); readControls();
   const sup = support(cur);
-  for (let y = 0; y < g.ny; y++)
-    for (let x = 0; x < g.nx; x++) {
-      if (cur > 0 && !sup.ok[y][x]) continue;
-      for (const [u, v] of [[state.u, state.v], [state.v, state.u], [1, 1]]) {
-        if (!canPlace(x, y, u, v, -1)) continue;
-        // on upper layers, only place where the support underneath is level
-        const probe = { x, y, u, v };
-        if (cur > 0) { const st = seat(probe, cur); if (!st.flat || !st.solidBelow) continue; }
-        B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
-                   floorT: state.floorT, divX: state.divX, divY: state.divY,
-                   solid: state.solid, scoop: state.scoop, label: state.label,
+  // the slots taken so far, kept here so a step already full is passed without a search
+  const taken = occupancy();
+  const tryAt = (x, y, sizes) => {
+    if (taken[slot(y)][slot(x)] !== -1) return;
+    if (cur > 0 && !sup.ok[slot(y)][slot(x)]) return;
+    for (const [u, v] of sizes) {
+      if (!canPlace(x, y, u, v, -1)) continue;
+      // on upper layers, only place where the support underneath is level
+      const probe = { x, y, u, v };
+      if (cur > 0) { const st = seat(probe, cur); if (!st.flat || !st.solidBelow) continue; }
+      B().push({ x, y, u, v, hUnits: state.hUnits, wall: state.wall,
+                 floorT: state.floorT, divX: state.divX, divY: state.divY,
+                 solid: state.solid, scoop: state.scoop, label: state.label,
                  note: '',
                  magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
                  edges: Object.assign({}, state.edges) });
-        break;
-      }
+      for (const [px, py] of slotsOf(probe)) taken[py][px] = B().length - 1;
+      return;
     }
+  };
+  const step = isHalfSize(state) ? 0.5 : 1;
+  for (let y = 0; y < g.ny; y += step)
+    for (let x = 0; x < g.nx; x += step) tryAt(x, y, [[state.u, state.v], [state.v, state.u], [1, 1]]);
+  for (let y = 0; y < g.ny; y += 0.5)
+    for (let x = 0; x < g.nx; x += 0.5) tryAt(x, y, [[1, 0.5], [0.5, 1], [0.5, 0.5]]);
   drawLayerTabs(); drawMap(); refresh();
 });
 $('clearAll').addEventListener('click', () => {
@@ -1690,7 +2096,7 @@ $('delBin').addEventListener('click', () => {
 });
 $('splitFit').addEventListener('click', () => {
   if (selected < 0) return;
-  const b = B()[selected], sp = describeSplit(b.u, b.v);
+  const b = B()[selected], sp = describeSplit(b);
   if (!sp) return;
   pushUndo();
   const src = Object.assign({}, b);
@@ -1698,19 +2104,21 @@ $('splitFit').addEventListener('click', () => {
      of it that falls in the piece's box, rebased to that box. Copying the whole mask
      into each piece read cells meant for the first piece in all of them — and outside
      the first, where nothing matched, the mask was ignored and the piece came out full,
-     on top of the cell another bin held. */
-  const kept = binCells(src);
+     on top of the cell another bin held. A half-size bin has no mask, so its pieces
+     are plain. */
+  const kept = binCells(src), half = isHalfSize(src);
   B().splice(selected, 1);
   let oy = src.y;
   for (const vv of sp.ys) {
     let ox = src.x;
     for (const uu of sp.xs) {
       const rx = ox - src.x, ry = oy - src.y;
-      const cells = kept.filter(([x, y]) => x >= rx && x < rx + uu && y >= ry && y < ry + vv)
-                        .map(([x, y]) => [x - rx, y - ry]);
-      if (cells.length)                       // a piece the carve emptied is not a bin
+      const cells = half ? null
+        : kept.filter(([x, y]) => x >= rx && x < rx + uu && y >= ry && y < ry + vv)
+          .map(([x, y]) => [x - rx, y - ry]);
+      if (half || cells.length)               // a piece the carve emptied is not a bin
         B().push(Object.assign({}, src, { x: ox, y: oy, u: uu, v: vv,
-                                          cells: cells.length === uu * vv ? null : cells,
+                                          cells: half || cells.length === uu * vv ? null : cells,
                                           edges: Object.assign({}, src.edges) }));
       ox += uu;
     }
@@ -1723,13 +2131,15 @@ $('splitFit').addEventListener('click', () => {
    as the new footprint, and keep only the cells that were actually occupied — which is
    the same mask the carve gesture produces, so the two routes meet in the same place. */
 $('carveMode').addEventListener('click', () => {
+  if (!carving && carveOff(scratch || B()[selected])) return;   // greyed, see SHAPE_OFF
   carving = !carving;
   readControls(); drawMap();
 });
 
 $('mergeBins').addEventListener('click', () => {
   const sel = selAll();
-  if (sel.length < 2) return;
+  // the button is greyed for a half-size bin (SHAPE_OFF), but not only here
+  if (sel.length < 2 || sel.some((i) => carveOff(B()[i]))) return;
   pushUndo();
   const bins = sel.map((i) => B()[i]);
   const abs = new Set();
@@ -1848,10 +2258,17 @@ function applySnap(snap) {
      is stable across an undo because the snapshot restores the same bin list; if the
      bin genuinely is not there any more, focus falls away as it should. */
   const keep = focused ? selected : -1;
+  const was = selected, wasCur = cur;
   layers = o.layers; cur = Math.min(o.cur, layers.length - 1);
   clearSel();
   if (keep >= 0 && B()[keep]) {
     selected = keep; B()[keep].sel = true; writeControls(B()[keep]);
+  } else if (was >= 0 && cur === wasCur && B()[was]) {
+    /* Out of focus the selection goes, and the panel, now "New bins", keeps the bin it
+       last showed, as it does when you click away from one. It has to be that bin as
+       the step left it: still showing what the step took back, the panel went on saying
+       the bin had it, and readControls below handed it to the next bin drawn. */
+    writeControls(B()[was]);
   }
   readControls(); drawLayerTabs(); drawMap(); refresh();
 }
@@ -1887,26 +2304,69 @@ const fitsBed = (u, v) => {
   const w = footW(u), d = footW(v);
   return (w <= state.bedW && d <= state.bedD) || (d <= state.bedW && w <= state.bedD);
 };
-// fewest pieces that each fit; ties broken towards squarer pieces
-function splitPlan(u, v) {
-  let best = null;
-  for (let nx = 1; nx <= u; nx++)
-    for (let ny = 1; ny <= v; ny++) {
-      const pu = Math.ceil(u / nx), pv = Math.ceil(v / ny);
-      if (!fitsBed(pu, pv)) continue;
-      const n = nx * ny, ar = Math.max(pu, pv) / Math.min(pu, pv);
-      if (!best || n < best.n || (n === best.n && ar < best.ar)) best = { nx, ny, n, ar, pu, pv };
-    }
-  return best;
-}
 const evenParts = (total, n) => {
   const base = Math.floor(total / n), extra = total % n;
   return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
 };
-function describeSplit(u, v) {
-  const p = splitPlan(u, v);
+/* A span of `n` cells starting at `at`, cut into k pieces as evenly as whole cells allow.
+   The cuts fall on whole cells, so a piece that is whole-size starts on a whole cell, as a
+   whole-size bin must (WHOLE_ON_WHOLE): a half cell at either end stays with the end
+   piece, which makes that one half-size. evenParts gives its spare cells to the first
+   pieces, so a half cell at the start turns the order round and lands on a smaller one:
+   5.5 from column 1.5 is 1.5 + 2 + 2, not 2.5 + 2 + 1. For a whole span this is
+   evenParts. */
+function splitParts(at, n, k) {
+  const head = Math.ceil(at) - at, tail = at + n - Math.floor(at + n);
+  const parts = evenParts(n - head - tail, k);
+  if (head && !tail) parts.reverse();
+  parts[0] += head; parts[k - 1] += tail;
+  return parts;
+}
+/* That holds for each axis on its own, and is not enough for a piece. One piece across a
+   span with a half cell at BOTH ends keeps the two halves, and is a whole number of cells
+   standing on a half step: a 3 wide from column 1.5 is 0.5 + 2 + 0.5, all one piece. Cut
+   into rows, a 3 x 7.5 there gave a whole 3 x 4 at column 1.5, which Checks never
+   questioned and a reload put on whole cells, on top of the bin beside it. It is the one
+   case: a span cut in two or more gives its head to the first piece and its tail to the
+   last, and every piece between starts on a whole cell. So where it leaves a whole-size
+   piece, that span is cut in two instead, a half cell to each side (1.5 + 1.5), which
+   makes every piece half-size whatever the other axis does. The pieces only get smaller,
+   so the plan still fits the bed. Where every piece the other way is half-size anyway (a
+   3 x 2.5 at column 1.5 is fine there) the span stays one piece. */
+const wholeOnHalf = (x, y, u, v) => !isHalfSize({ u, v }) && !(onWhole(x) && onWhole(y));
+function piecesStand(x0, xs, y0, ys) {
+  for (let j = 0, y = y0; j < ys.length; y += ys[j++])
+    for (let i = 0, x = x0; i < xs.length; x += xs[i++])
+      if (wholeOnHalf(x, y, xs[i], ys[j])) return false;
+  return true;
+}
+const halvesAtBothEnds = (at, n, parts) => parts.length === 1 && !onWhole(at) && onWhole(n);
+// fewest pieces that each fit; ties broken towards squarer pieces
+function splitPlan(b) {
+  let best = null;
+  for (let nx = 1; nx <= Math.ceil(b.u); nx++)
+    for (let ny = 1; ny <= Math.ceil(b.v); ny++) {
+      let xs = splitParts(b.x, b.u, nx), ys = splitParts(b.y, b.v, ny);
+      if (!(Math.min(...xs) > 0 && Math.min(...ys) > 0)) continue;
+      if (!piecesStand(b.x, xs, b.y, ys)) {
+        if (halvesAtBothEnds(b.x, b.u, xs)) xs = splitParts(b.x, b.u, 2);
+        else if (halvesAtBothEnds(b.y, b.v, ys)) ys = splitParts(b.y, b.v, 2);
+        // never reached by the rule above, and refused all the same: no plan offered here
+        // may be one a reload would have to move
+        if (!piecesStand(b.x, xs, b.y, ys)) continue;
+      }
+      const pu = Math.max(...xs), pv = Math.max(...ys);
+      if (!fitsBed(pu, pv)) continue;
+      const n = xs.length * ys.length, ar = Math.max(pu, pv) / Math.min(pu, pv);
+      if (!best || n < best.n || (n === best.n && ar < best.ar))
+        best = { nx: xs.length, ny: ys.length, n, ar, pu, pv, xs, ys };
+    }
+  return best;
+}
+function describeSplit(b) {
+  const p = splitPlan(b);
   if (!p) return null;
-  const xs = evenParts(u, p.nx), ys = evenParts(v, p.ny);
+  const { xs, ys } = p;
   const names = [];
   for (const b of ys) for (const a of xs) names.push(`${a}×${b}`);
   return { plan: p, xs, ys, text: names.join(' + ') };
@@ -1916,17 +2376,16 @@ function describeSplit(u, v) {
    One place decides what is wrong with a bin, so the badge on the map and the
    text in Checks can never disagree. Nothing here blocks placement — you may be
    about to fill in the thing that fixes it. */
-/* Who claims each cell of a layer: -1, one bin's index, or an array of them when two or
-   more bins sit on the same cell. occupancyOf keeps only the last bin per cell, which is
-   right for "what is here" and blind to the case that matters for Checks — a link
-   holding two bins on one cell drew one, counted both, and reported nothing. */
+/* Who claims each half slot of a layer: -1, one bin's index, or an array of them when
+   two or more bins sit on the same slot. occupancyOf keeps only the last bin per slot,
+   which is right for "what is here" and blind to the case that matters for Checks — a
+   link holding two bins on one cell drew one, counted both, and reported nothing. */
 function layerClaims(k) {
-  const g = grid();
-  const cl = Array.from({ length: g.ny }, () => new Array(g.nx).fill(-1));
+  const g = grid(), W = 2 * g.nx, D = 2 * g.ny;
+  const cl = Array.from({ length: D }, () => new Array(W).fill(-1));
   (layers[k] ? layers[k].bins : []).forEach((b, i) => {
-    for (const [dx, dy] of binCells(b)) {
-      const x = b.x + dx, y = b.y + dy;
-      if (y < 0 || y >= g.ny || x < 0 || x >= g.nx) continue;
+    for (const [x, y] of slotsOf(b)) {
+      if (y < 0 || y >= D || x < 0 || x >= W) continue;
       const c = cl[y][x];
       if (c === -1) cl[y][x] = i;
       else if (Array.isArray(c)) c.push(i);
@@ -1951,8 +2410,8 @@ function binIssues(b, k, claims) {
   }
   if (!loose) {
     const cl = (claims && claims[k]) || layerClaims(k), others = new Set();
-    for (const [dx, dy] of binCells(b)) {
-      const c = cl[b.y + dy][b.x + dx];
+    for (const [x, y] of slotsOf(b)) {
+      const c = cl[y][x];
       if (Array.isArray(c)) for (const i of c) if (layers[k].bins[i] !== b) others.add(i);
     }
     if (others.size) {
@@ -1970,13 +2429,15 @@ function binIssues(b, k, claims) {
     // Where the bin below reaches each of this bin's four edges. Support does not
     // have to be continuous: a bin bridging a gap between two others is a plank on
     // two beams. What it cannot do is rest on one side only, or on nothing.
+    // Counted in half slots, and measured in cells from the bin's own corner.
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, any = false;
-    for (let dy = 0; dy < b.v; dy++)
-      for (let dx = 0; dx < b.u; dx++) {
-        if (occB[b.y + dy][b.x + dx] === -1) continue;
+    const X = slot(b.x), Y = slot(b.y);
+    for (let j = 0; j < slot(b.v); j++)
+      for (let i = 0; i < slot(b.u); i++) {
+        if (occB[Y + j][X + i] === -1) continue;
         any = true;
-        x0 = Math.min(x0, dx); x1 = Math.max(x1, dx + 1);
-        y0 = Math.min(y0, dy); y1 = Math.max(y1, dy + 1);
+        x0 = Math.min(x0, i / 2); x1 = Math.max(x1, (i + 1) / 2);
+        y0 = Math.min(y0, j / 2); y1 = Math.max(y1, (j + 1) / 2);
       }
     // Tips unless its centre of mass falls strictly inside the supported span. Touching
     // two opposite edges is not enough on its own: a wide bin resting on one narrow bin
@@ -1997,8 +2458,8 @@ function binIssues(b, k, claims) {
       // Spanning a bin across either axis lands you on two of its opposite rails;
       // being inset on BOTH axes leaves you over the hole in the middle.
       const covered = new Set();
-      for (let dy = 0; dy < b.v; dy++)
-        for (let dx = 0; dx < b.u; dx++) covered.add(occB[b.y + dy][b.x + dx]);
+      for (let j = 0; j < slot(b.v); j++)
+        for (let i = 0; i < slot(b.u); i++) covered.add(occB[Y + j][X + i]);
       for (const i of covered) {
         const bb = layers[k - 1].bins[i];
         if (!bb) continue;
@@ -2030,11 +2491,20 @@ function binIssues(b, k, claims) {
        broken the moment you started. */
     out.push({ note: true, t: 'is a carved shape — it keeps its stacking lip and still takes bins on top, but dividers, the scoop and the label shelf need a rectangle, so they are left off' });
   }
+  /* A foot only touches the socket walls on its outer sides, so a bin half a cell across
+     has nothing holding it that way on a standard baseplate: alone in a socket it was
+     measured sliding 21 mm. The bins beside it hold it, so this is a note, not a fault —
+     but it is worth knowing before a drawer goes in with a gap beside one. Marked `thin`,
+     because Checks says it once for every such bin in the drawer (warnings). */
+  const thin = [b.u === 0.5 ? 'wide' : '', b.v === 0.5 ? 'deep' : ''].filter(Boolean).join(' and ');
+  if (thin)
+    out.push({ note: true, thin: true, t: `is only half a cell ${thin}. On a standard baseplate the bins ` +
+      'beside it hold it in place; on its own it can slide about 21 mm in its socket' });
 
   const fw = (b.u - 1) * SPEC.pitch + 2 * SPEC.half, fd = (b.v - 1) * SPEC.pitch + 2 * SPEC.half;
   if (!((fw <= state.bedW && fd <= state.bedD) || (fd <= state.bedW && fw <= state.bedD)))
   {
-    const sp = describeSplit(b.u, b.v);
+    const sp = describeSplit(b);
     out.push(`is ${fw.toFixed(0)} × ${fd.toFixed(0)} mm, too big for your ${state.bedW} × ${state.bedD} mm bed in either orientation` +
       (sp ? ` — split it into ${sp.text}` : ''));
   }
@@ -2090,8 +2560,8 @@ function stackHeight() {
      cells squared times layers, 4.2 s a redraw on a 100 × 100 grid of five layers. */
   const occs = layers.map((_, L) => occupancyOf(L));
   let top = 0;
-  for (let y = 0; y < g.ny; y++)
-    for (let x = 0; x < g.nx; x++) {
+  for (let y = 0; y < 2 * g.ny; y++)          // every half slot: see slotsOf
+    for (let x = 0; x < 2 * g.nx; x++) {
       let h = 0;
       for (let L = 0; L < layers.length; L++) {
         const i = occs[L][y][x];
@@ -2158,11 +2628,16 @@ function warnings() {
 
   const claims = layers.map((_, k) => layerClaims(k));
   const where = (b, k) => `Layer ${k + 1}, the ${b.u}×${b.v} bin at column ${b.x + 1} row ${b.y + 1}`;
-  /* A note a whole drawer of bins would each repeat carries a `group`, and is said once
-     for all the bins it fits, by its `many(n, names)`; one such bin keeps its own. */
+  /* The note about a bin half a cell across is said once for all of them. Said for each,
+     "Fill the rest" with a half-cell-wide bin gave 126 copies of the same two sentences,
+     some 23,000 characters, between the faults that matter. One such bin keeps its own. */
+  const thin = [];
+  /* Likewise any note a whole drawer of bins would each repeat: it carries a `group`, and
+     is said once for all the bins it fits, by its `many(n, names)`. */
   const groups = new Map();
   layers.forEach((L, k) => L.bins.forEach((b) => {
     for (const it of binIssues(b, k, claims)) {
+      if (it.thin) { thin.push({ b, k, t: it.t }); continue; }
       if (it.group) {
         if (!groups.has(it.group)) groups.set(it.group, []);
         groups.get(it.group).push({ b, k, it });
@@ -2172,6 +2647,15 @@ function warnings() {
       out.push({ err: !x.note, note: x.note, t: `${where(b, k)}: ${x.t}.` });
     }
   }));
+  if (thin.length === 1) out.push({ note: true, t: `${where(thin[0].b, thin[0].k)}: ${thin[0].t}.` });
+  else if (thin.length) {
+    const named = thin.slice(0, 3).map(({ b, k }) =>
+      `the ${b.u}×${b.v} on layer ${k + 1} at column ${b.x + 1} row ${b.y + 1}`);
+    if (thin.length > 3) named.push(`${thin.length - 3} more`);
+    out.push({ note: true, t: `${thin.length} bins are only half a cell wide or deep: ` +
+      `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}. On a standard ` +
+      'baseplate the bins beside each one hold it in place; on its own one can slide about 21 mm in its socket.' });
+  }
   for (const list of groups.values()) {
     if (list.length === 1) { out.push({ note: true, t: `${where(list[0].b, list[0].k)}: ${list[0].it.t}.` }); continue; }
     const named = list.slice(0, 3).map(({ b, k }) =>
@@ -2345,6 +2829,8 @@ function refresh() {
     (inch ? ` (${gw} × ${gd} mm, ${FIELDS.inchText(gw)} × ${FIELDS.inchText(gd)} in)` : '') +
     ` · ${g.avail.toFixed(1)} mm${also(g.avail)} above the baseplate · ` +
     `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`;
+  // and the half cell under the size fields, which said 21 mm whatever the drawer was in
+  $('halfCellLen').textContent = `${SPEC.pitch / 2} mm${also(SPEC.pitch / 2)}`;
   const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
   $('binSizeHint').textContent =
     `${(src.u * SPEC.pitch - 0.5).toFixed(1)} × ${(src.v * SPEC.pitch - 0.5).toFixed(1)} × ${(src.hUnits * SPEC.unitH).toFixed(1)} mm (+${LIP_H.toFixed(2)} lip)`;
@@ -2355,9 +2841,9 @@ function refresh() {
   /* Cells covered, not cells claimed: summing every bin's cells counted two bins on one
      cell twice and a bin off the grid in full, which is how 500 copies of one bin read
      "794%". Checks names the overlap; this is just how full the grid is. */
-  let used = 0;
-  for (const row of occupancy()) for (const c of row) if (c !== -1) used++;
-  const total = g.nx * g.ny;
+  let slots = 0;
+  for (const row of occupancy()) for (const c of row) if (c !== -1) slots++;
+  const used = slots / 4, total = g.nx * g.ny;     // in cells, so a half-size bin counts its part
   const pct = total ? Math.round(100 * used / total) : 0;
   /* The drawer is named here because nothing else on the stage names it. Arriving from
      the baseplates page with a 412 × 297 drawer, the only confirmation that it carried
@@ -3106,8 +3592,10 @@ function saveBlob(buf, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 /* A holed bin and a plain one are different prints, so they arrive as different files:
-   "bin-2x1x3-magnets-screws-qty4.stl" beside "bin-2x1x3-qty2.stl". */
-const holeTag = (b) => (!b.magnets && !b.screws ? ''
+   "bin-2x1x3-magnets-screws-qty4.stl" beside "bin-2x1x3-qty2.stl". A half-size bin is
+   built without holes whatever its boxes say (holesBuilt), so its name says none:
+   "bin-1.5x1x3-qty2.stl". */
+const holeTag = (b) => (!holesBuilt(b) ? ''
   : '-' + [b.magnets ? 'magnets' : '', b.screws ? 'screws' : ''].filter(Boolean).join('-') +
     (everyMatters(b) ? '-every-cell' : ''));
 function typeName(t) {
@@ -3244,10 +3732,17 @@ function layoutReadme() {
   if (fix.length) L.push(...fix);
   L.push('');
   layers.forEach((Ly, k) => {
-    L.push(`LAYER ${k + 1} (front of the drawer at the bottom):`);
+    /* A character for each cell, three wide. A layer holding a half-size bin is drawn
+       at twice that resolution — a character for each half cell, two wide, so a cell is
+       about as wide as before — and says so. Only that layer: every README a whole-cell
+       layout has ever written comes out the same to the byte. */
     const occ = occupancyOf(k);
-    for (let y = g.ny - 1; y >= 0; y--)
-      L.push('  ' + occ[y].map((i) => i === -1 ? ' . ' : String.fromCharCode(65 + (i % 26)) + '  ').join('').trimEnd());
+    const half = binsHaveHalf(Ly.bins);
+    L.push(`LAYER ${k + 1} (front of the drawer at the bottom${half ? ', one letter per half cell' : ''}):`);
+    const tag = (i) => (i === -1 ? '.' : String.fromCharCode(65 + (i % 26)));
+    for (let y = 2 * g.ny - 1; y >= 0; y -= half ? 1 : 2)
+      L.push('  ' + (half ? occ[y].map((i) => tag(i) + ' ')
+        : occ[y].filter((_, x) => x % 2 === 0).map((i) => (i === -1 ? ' . ' : tag(i) + '  '))).join('').trimEnd());
     Ly.bins.forEach((b, i) => {
       const tag = String.fromCharCode(65 + (i % 26));
       L.push(`    ${tag} = ${b.u}x${b.v}x${b.hUnits}` + (b.note ? `  — ${b.note}` : ''));
@@ -3449,11 +3944,12 @@ const heightSrc = () => scratch || (selected >= 0 && B()[selected] ? B()[selecte
 /* everything about a bin its heights depend on, bar the units being worked out. Screws
    are among them, because their holes raise the floor; so are the dividers it is built
    with, which stand to the full height whatever the walls do, and the cells, because a
-   carved bin's walls are full height too. The new-bin settings have no size or cells of
-   their own, and are a whole rectangle. */
+   carved bin's walls are full height too. The new-bin settings have no cells of their
+   own, and are a whole rectangle; nor is a half-size bin carved (buildBin drops its
+   mask), so it is asked without one, or it would be quoted walled full height. */
 const heightCfg = (b) => ({ floorT: b.floorT, screws: b.screws, solid: b.solid, edges: b.edges,
-                            ...builtDivs(b),
-                            u: b.u || 1, v: b.v || 1, cells: b.cells || null });
+                            ...builtDivs(b), u: b.u || 1, v: b.v || 1,
+                            cells: isHalfSize(b) ? null : b.cells || null });
 const heightsOf = (b) => binHeights(Object.assign(heightCfg(b), { hUnits: b.hUnits }));
 /* Which length the field takes for this bin. Inside depth when that is the menu's choice
    and the bin has an inside; a solid block has none at any height, nor has a tray open
@@ -3971,26 +4467,13 @@ function shareLink() {
 function designLink() {
   return location.origin + location.pathname + '#' + descString(VIEW_KEYS);
 }
-/* The link format takes half cells now (unpackBin), and this page does not yet: its map,
-   its occupancy and its drag all count whole cells, and a bin at y 0.5 threw in the map
-   and left the page dead. So a layout read here is put on whole cells the way a page from
-   before half cells reads it, 1.5 up to 2, until the map learns half steps. No page has
-   written a half yet, so this only meets a link typed by hand. */
-function onWholeCells(ls) {
-  for (const L of ls)
-    for (const b of L.bins) {
-      b.u = Math.max(1, Math.round(b.u)); b.v = Math.max(1, Math.round(b.v));
-      b.x = Math.round(b.x); b.y = Math.round(b.y);
-    }
-  return ls;
-}
 function loadFromHash(src) {
   const h = (src !== undefined ? src : location.hash || '').replace(/^#/, '');
   if (!h) return;
   const q = parseHash(h);
   for (const [k, val] of Object.entries(q)) {
     if (k === 'v') continue;
-    if (k === 'bl') { const ls = onWholeCells(unpackLayers(val)); if (ls.length) layers = ls; continue; }
+    if (k === 'bl') { const ls = unpackLayers(val); if (ls.length) layers = ls; continue; }
     // a menu takes only a value it offers; anything else leaves it blank and reads NaN
     if (k === 'bseg') {
       if ([...$('arcSegs').options].some((o) => o.value === val)) $('arcSegs').value = val;
@@ -4087,8 +4570,22 @@ let timer = null;
    reads, so an edit that changes a bin misses the cache by itself, and refresh() lets go
    of the builds nothing uses. Clearing on every input rebuilt every type in the drawer
    because a note was typed, and leaked the old buffers each time. */
-const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
-  readControls(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
+const editPass = () => { readControls(); drawLayerTabs(); drawMap(); refresh(); };
+const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { timer = null; editPass(); }, 180); };
+/* An edit still waiting for its pass has it now, before something takes the selection
+   away, so it goes to the bin it was typed for and not to the next one drawn. Fill the
+   rest and a press on the map both clear the selection first thing: a 2 typed for the
+   1.5 × 1 on a half step and pressed on either inside the 180 ms became the new bins'
+   size, the refusal never having run. The whole pass, the map and the save with it:
+   with the fields read alone, a drawer width typed and pressed on the map at once left
+   the map drawn for the old grid, its grips and all, and the address and the saved
+   drawer on the old width until the next edit. True when there was one to land. */
+function landEdit() {
+  if (timer === null) return false;
+  clearTimeout(timer); timer = null;
+  editPass();
+  return true;
+}
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
@@ -4139,10 +4636,12 @@ $('dupBtn').addEventListener('click', duplicateSelected);
 function duplicateSelected() {
   if (selected < 0) return;
   const src = B()[selected];
-  // first free spot scanning right then up from the original
-  const g = grid();
-  for (let dy = 0; dy < g.ny; dy++)
-    for (let dx = 0; dx < g.nx; dx++) {
+  /* First free spot scanning right then up from the original: by whole cells for a
+     whole-size bin, which must stay on them, and by half cells for a half-size one, so
+     a 1.5 wide bin's copy lands beside it rather than half a cell off. */
+  const g = grid(), step = isHalfSize(src) ? 0.5 : 1;
+  for (let dy = 0; dy < g.ny; dy += step)
+    for (let dx = 0; dx < g.nx; dx += step) {
       const nx = src.x + dx, ny = src.y + dy;
       if (!dx && !dy) continue;
       if (!canPlace(nx, ny, src.u, src.v, -1)) continue;
@@ -4199,13 +4698,31 @@ document.addEventListener('keydown', (e) => {
   const nudge = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
   if (nudge) {
     e.preventDefault();
+    /* In half steps a half-size bin moves half a cell, and shift resizes by half a cell,
+       as the grips do. A whole-size bin always moves a whole cell: half a cell would put
+       it on a half step, which it cannot sit on. The smallest a key shrinks to is a step,
+       or the bin's own size if that is smaller. */
+    const st = stepOf(), move = halfSteps && isHalfSize(b) ? 0.5 : 1;
     const [dx, dy] = nudge;
+    let why = '';
+    let dropped = false;
     if (e.shiftKey) {                       // shift-arrow grows or shrinks instead
-      const nu = Math.max(1, b.u + dx), nv = Math.max(1, b.v + dy);
-      if (canPlace(b.x, b.y, nu, nv, selected)) { pushUndo(); setFootprint(b, nu, nv); }
-    } else if (canPlace(b.x + dx, b.y + dy, b.u, b.v, selected)) {
-      pushUndo(); b.x += dx; b.y += dy;
+      /* And over a whole size the bin may not take where it stands, to the half size
+         beyond it, as Width and Depth step (sizeStep): 1.5 wide at column 1.5 goes to
+         2.5 and to 0.5. Stopping on 2 or 1, refused, it could not be resized at all. */
+      const by = (n, d) => Math.max(Math.min(st, n), n + d * st);
+      let nu = by(b.u, dx), nv = by(b.v, dy);
+      why = placeWhy(b.x, b.y, nu, nv, selected);
+      if (why === WHOLE_ON_WHOLE && (by(nu, dx) !== nu || by(nv, dy) !== nv)) {
+        nu = by(nu, dx); nv = by(nv, dy);
+        why = placeWhy(b.x, b.y, nu, nv, selected);
+      }
+      if (!why) { pushUndo(); dropped = dropsShape(b, nu, nv); setFootprint(b, nu, nv); }
+    } else {
+      why = placeWhy(b.x + dx * move, b.y + dy * move, b.u, b.v, selected);
+      if (!why) { pushUndo(); b.x += dx * move; b.y += dy * move; }
     }
+    mapSay(why === WHOLE_ON_WHOLE ? why : dropped ? SHAPE_DROPPED_MAP : '');
     writeControls(b); readControls(); drawMap(); refresh();
   }
 });
@@ -4221,6 +4738,8 @@ if (FIELDS.savedUnit() !== unit) {
 }
 // and the way the bin's height is typed, which is the same kind of habit
 applyHMode(savedHMode());
+// the steps this browser last chose; a layout holding a half-size bin turns them on anyway
+halfSteps = readKey(STEPS_KEY) === 'half';
 /* Whether two saves hold the same bins, compared setting by setting on what this page
    owns. Compared as strings, the baseplates page handing the drawer back — its keys in
    its own order, with its own extras — was a link that had replaced your layout, on
@@ -4331,7 +4850,7 @@ updateUndoButtons();
    you did not want to look at. Indices are safe to trust here because the same hash
    carried the layout they point into. */
 if (pendingScratch) {
-  const ls = onWholeCells(unpackLayers(pendingScratch));
+  const ls = unpackLayers(pendingScratch);
   const b = ls[0] && ls[0].bins[0];
   if (b) {
     scratch = b;
@@ -4462,10 +4981,9 @@ function openMenu(clientX, clientY, layerIdx, idx) {
   /* Cell against cell, not box against box: an L and a bin sitting in its notch have
      overlapping boxes and no cell in common, and the box test called that layer
      occupied. */
-  const mine = new Set(binCells(b).map(([dx, dy]) => (b.x + dx) + ',' + (b.y + dy)));
+  const mine = new Set(slotsOf(b).map((p) => p.join(',')));
   for (const k of targets) {
-    const clash = layers[k].bins.some((o) =>
-      binCells(o).some(([dx, dy]) => mine.has((o.x + dx) + ',' + (o.y + dy))));
+    const clash = layers[k].bins.some((o) => slotsOf(o).some((p) => mine.has(p.join(','))));
     m.appendChild(menuItem(`Move to layer ${k + 1}${clash ? ' (occupied)' : ''}`, () => {
       pushUndo();
       const [moved] = layers[layerIdx].bins.splice(idx, 1);

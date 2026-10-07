@@ -8,7 +8,7 @@ const path = require('path');
 const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
-        unpackBin, dividersBuilt } = require('../src/bins/bin.js');
+        unpackBin, binFeet, dividersBuilt } = require('../src/bins/bin.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
 // the browser hand-assembles its own G; make sure core still exports everything
@@ -520,6 +520,34 @@ console.log('\nhalf-size bins build no holes, and no carve');
   if (stl(carved) !== stl({ u: 1.5, v: 1, hUnits: 3 })) fails.push('a 1.5x1 with a mask came out carved');
   console.log('  ' + (fails.length ? 'WRONG: ' + fails.join('; ')
     : `${n} holed builds, each the bin without; no such reason on a whole bin; a mask ignored`));
+  if (fails.length) bad++;
+}
+
+/* A size with no place on the grid builds as the half it is nearest, body and feet
+   alike. Built as asked, a 1.25 wide bin was a 52 mm body on quarter feet spanning
+   62.5 mm. The page and a link never hand the engine one, but nothing else stops a
+   caller doing it. Each part and the feet the page counts are compared with the half's. */
+console.log('\na size between halves builds as the nearest half');
+{
+  const stl = (polys) => Buffer.from(G.stlBinary(polys, 'b')).toString('base64');
+  const fails = [];
+  const PAIRS = [[{ u: 1.25, v: 1 }, { u: 1.5, v: 1 }], [{ u: 1, v: 2.3 }, { u: 1, v: 2.5 }],
+                 [{ u: 0.2, v: 0.6 }, { u: 0.5, v: 0.5 }], [{ u: 2.1, v: 1.9 }, { u: 2, v: 2 }]];
+  for (const [asked, near] of PAIRS) {
+    const extra = { hUnits: 3, divX: 1, divRemovable: true };
+    const a = Object.assign({}, asked, extra), b = Object.assign({}, near, extra);
+    const what = `${asked.u}x${asked.v}`;
+    const r = buildBin(G, a);
+    if (stl(r.polys) !== stl(buildBin(G, b).polys)) fails.push(`${what} is not the ${near.u}x${near.v} bin`);
+    const feet = binFeet(a), span = feet.length ? Math.max(...feet.map((f) => f.x)) -
+      Math.min(...feet.map((f) => f.x)) + 2 * (SPEC.half - feet[0].inset - BIN_DEFAULTS.shrink) : 0;
+    if (Math.abs(span - r.meta.W) > 0.01) fails.push(`${what} has feet ${span.toFixed(1)} mm across a ${r.meta.W.toFixed(1)} mm body`);
+    if (JSON.stringify(feet) !== JSON.stringify(binFeet(b))) fails.push(`${what} counts other feet`);
+    if (stl(dividerPart(G, a, 'y').polys) !== stl(dividerPart(G, b, 'y').polys)) fails.push(`${what} has another divider`);
+    if (stl(lidPartOf(G, a).polys) !== stl(lidPartOf(G, b).polys)) fails.push(`${what} has another lid`);
+  }
+  console.log('  ' + (fails.length ? 'WRONG: ' + fails.join('; ')
+    : `${PAIRS.length} sizes: bin, feet, divider and lid each the nearest half's`));
   if (fails.length) bad++;
 }
 
