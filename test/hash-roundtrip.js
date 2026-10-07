@@ -439,15 +439,30 @@ console.log('\nmalformed hashes fall back instead of throwing');
    here is a link someone could paste; what comes back must be buildable, whole where
    it counts something, and inside the range the page can show.
 
-   And buildable in reasonable time, which is measured as the work the build does, this
-   process's CPU time, not as the clock. On a machine busy with other work the clock runs
-   on while the build waits its turn: the largest here, the 50 x 50 footprint, took 1.5 s
-   by the clock on an idle machine and 8.1 s at a load average of 25, failing an 8 s
-   budget with nothing wrong, while its CPU time stayed at 2.8 s at both. A build that
-   does more work than that takes more CPU time on any machine, busy or not, so 8 s of it
-   is still a slowdown found: a little under three times what the largest takes. */
-const cpuMs = () => { const u = process.cpuUsage(); return (u.user + u.system) / 1000; };
-const BUILD_BUDGET_MS = 8000;
+   And buildable in reasonable time, which is measured as the work the build does, CPU
+   time, not as the clock. On a machine busy with other work the clock runs on while the
+   build waits its turn: the largest here, the 50 x 50 footprint, took 1.5 s by the clock
+   on an idle machine and 8.1 s at a load average of 25, failing an 8 s budget with
+   nothing wrong, while its CPU time grew by two thirds at most. A build that does more
+   work takes more CPU time on any machine, busy or not, so going past the budget is a
+   slowdown found.
+   Which CPU time, and so which budget:
+   - process.threadCpuUsage, where Node has it (22.19 and 23.9 on): the time the thread
+     that runs the build spent running, which is the build's own work. The 50 x 50 takes
+     1.3 s of it, 2.1 s at a load average of 20; built twice over, 3.3 s, and four times
+     over, 5.6 s. So 4 s, about three times what the largest takes, which a build four
+     times slower is 40% past.
+   - process.cpuUsage, without it (Node 20, which CI runs): the whole process's, which
+     also counts V8's garbage collector working on threads of its own beside the build,
+     as much again as the build on the 50 x 50 and more on one that makes more garbage:
+     2.5 s, 3.2 s at that load, and four times over 11.3 s here but 8.5 s on another
+     machine. So 8 s as before, which a build four times slower can come within 6% of. */
+const THREAD_CPU = typeof process.threadCpuUsage === 'function';
+const cpuMs = () => {
+  const u = THREAD_CPU ? process.threadCpuUsage() : process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
+const BUILD_BUDGET_MS = THREAD_CPU ? 4000 : 8000;
 console.log('\nwhat a link asks for is held to what can be built');
 {
   const { LINK_MAX } = require('../src/bins/bin.js');
