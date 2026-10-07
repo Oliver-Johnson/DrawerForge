@@ -807,6 +807,37 @@ test('a size typed a moment before a press elsewhere still goes to the bin it wa
   }
 });
 
+/* A press that grabs another bin draws the map and refreshes the page for the bin it
+   selects, and landing the edit drew them both a moment before: the same pass twice, at
+   about 40 ms a refresh on four layers of 63 bins. The press now draws the landed edit
+   with its own pass. The height still goes to the bin it was typed for, the press still
+   selects the other, and the page is drawn for both, once. Counted from the press to its
+   release, which has a pass of its own. */
+test('a height typed a moment before a press on another bin goes to its bin, and the press draws once', async ({ page }) => {
+  for (let tries = 1; ; tries++) {
+    await openAt(page, 'bl=' + bin(0, 0, 1, 1) + '_' + bin(2, 0, 1, 1));
+    await select(page, 0);
+    await page.evaluate(() => {
+      const pass = window.refresh;
+      window.__refreshed = null;
+      let n = 0;
+      window.refresh = function () { n++; return pass.apply(this, arguments); };
+      addEventListener('pointerdown', () => { n = 0; }, { capture: true, once: true });
+      addEventListener('pointerup', () => { window.__refreshed = n; }, { capture: true, once: true });
+    });
+    if (await typeAndPress(page, 'hUnits', '4', () => H.cellPoint(page, 2, 0))) break;
+    expect(tries, 'pressed while the 4 waited for its pass').toBeLessThan(3);
+  }
+  await settle(page);
+  expect(await page.evaluate(() => ({
+    heights: B().map((b) => b.hUnits), selected, field: $('hUnits').value,
+    grips: [...document.querySelectorAll('#fillmap .grip')].length,
+    tab: $('layerTabs').textContent, types: types().map((t) => typeName(t)).sort(),
+    refreshed: window.__refreshed,
+  }))).toEqual({ heights: [4, 3], selected: 1, field: '3', grips: 4, tab: 'Layer 1 · 2',
+                 types: ['bin-1x1x3-qty1', 'bin-1x1x4-qty1'], refreshed: 1 });
+});
+
 /* The line under the map about a carved shape made half-size is about a bin that is
    half-size. Pulled back to a whole size in the same drag, the bin is a plain 2 x 2 and
    the line went on saying a half-size bin cannot be carved. */
