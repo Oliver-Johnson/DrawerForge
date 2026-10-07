@@ -79,5 +79,81 @@ console.log(`   clearance across the whole lip: ${worst.toFixed(3)} to ${widest.
             `${uniform ? `uniform at the spec's ${CLEARANCE}` : 'NOT UNIFORM, the profiles disagree'}`);
 if (!uniform) bad++;
 
+/* How far the bin above sinks into the lip before its foot rests on it. Both slopes are
+ * 45 degrees with the spec's 0.25 mm between them, so it comes down 0.25 mm past H, the
+ * top of the bin below, and seats there with its flat underside at H - 0.25. That is
+ * found here by lowering the real foot into the real lip until they touch, not taken
+ * from the 0.25, so it moves if either profile does. A plain label shelf is not lowered
+ * at all: its top is at H, so the bin above stands on it 0.25 mm short of that seat. */
+let seatDrop = 0;
+{
+  const fits = (d) => {
+    for (let z = 0; z <= LIP_H + 1e-9; z += 0.001) if (lipInnerAt(z) - outerHalfAt(z + d) < -1e-9) return false;
+    return true;
+  };
+  let lo = 0, hi = 2;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (fits(m)) lo = m; else hi = m; }
+  seatDrop = lo;
+}
+console.log(`   the bin above seats ${seatDrop.toFixed(3)} mm below H, where its foot meets the lip`);
+
+/* A note raised on the label shelf stands in the way of the bin above, if anything does.
+ * That bin's flat underside comes down to H - 0.25 (seatDrop, above), and covers every
+ * letter the lip's opening lets it reach: the opening is 2.70 mm in from the outline,
+ * the underside 2.95, so all but a 0.25 mm band at the back, which its chamfer clears
+ * by more. So the shelf with letters on it drops to H - 1.0 and the letters stop at
+ * H - 0.4, 0.15 mm under it. This used to say they were 0.4 mm clear, measuring from H,
+ * where the bin above does not stop.
+ *
+ * 0.15 mm is positive but tight: less than one 0.2 mm layer, so a lip printed a touch
+ * wide or a foot a touch narrow can take it up. What then happens is the letters
+ * carrying the bin above at most 0.15 mm high, where a plain shelf carries it 0.25 mm
+ * high every time, so a raised note never stacks worse than the shelf it replaced.
+ *
+ * Measured off the real mesh, not the numbers that built it: every vertex inside the
+ * lip's opening, which is all the bin above can reach into, and inside the walls, has
+ * to be at H - 0.4 or below, and the highest has to be AT H - 0.4, or the letters were
+ * not built at all and this proved nothing. */
+console.log('\nnotes raised on the label shelf, under the bin above');
+{
+  const G = require('../src/core.js');
+  const { buildBin } = require('../src/bins/bin.js');
+  const CLEAR = 0.4;
+  const NOTES = [
+    ['1x1x3, one line', { u: 1, v: 1, hUnits: 3, label: 12, note: 'M3 screws' }],
+    ['1x1x3, two lines', { u: 1, v: 1, hUnits: 3, label: 12, note: 'Resistors 10k to 100k' }],
+    ['2x1x2, the lowest shelf', { u: 2, v: 1, hUnits: 2, label: 12, note: 'Drill bits 1-6 mm' }],
+    ['1x1x3, 0.4 mm walls', { u: 1, v: 1, hUnits: 3, wall: 0.4, label: 12, note: 'M3 screws' }],
+    ['1x1x3, 3 mm walls', { u: 1, v: 1, hUnits: 3, wall: 3, label: 12, note: 'M3 screws' }],
+    ['0.5x1x3, half a cell wide', { u: 0.5, v: 1, hUnits: 3, label: 12, note: 'M2' }],
+    ['3x2x4, holes in every foot', { u: 3, v: 2, hUnits: 4, label: 20, note: 'Fuses 5A, 10A',
+                                     magnets: true, screws: true, holesEvery: true }],
+  ];
+  for (const [name, cfg] of NOTES) {
+    const c = Object.assign({ wall: BIN_DEFAULTS.wall, labelMode: 1 }, cfg);
+    const H = c.hUnits * SPEC.unitH;
+    const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half, hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half;
+    /* Strictly inside the rounded outline inset by the lip's opening at the top, 2.70, or
+       by the wall where that is thicker. The corner arcs share the 17.00 mm centre. */
+    const t = Math.max(LIP_TABLE[0][1], c.wall) + 0.01, r = SPEC.r - t;
+    const inside = ([x, y]) => {
+      const ax = Math.abs(x), ay = Math.abs(y);
+      if (ax >= hw - t || ay >= hd - t) return false;
+      const dx = Math.max(0, ax - (hw - SPEC.r)), dy = Math.max(0, ay - (hd - SPEC.r));
+      return Math.hypot(dx, dy) < r;
+    };
+    let top = -Infinity;
+    for (const p of buildBin(G, c).polys)
+      for (const v of p.verts) if (inside(v)) top = Math.max(top, v[2]);
+    const under = H - seatDrop - top;
+    const ok = Math.abs(top - (H - CLEAR)) < 1e-9 && under > 0.1;
+    console.log(`   ${name.padEnd(28)} highest ${(top - H).toFixed(3).padStart(7)} mm from H, ` +
+                `${under.toFixed(3)} mm under the bin above   ` +
+                (ok ? 'clear of it'
+                  : top > H - CLEAR || under <= 0.1 ? 'IN THE WAY of the bin above' : 'NO LETTERS BUILT'));
+    if (!ok) bad++;
+  }
+}
+
 console.log(bad ? `\n${bad} check(s) FAILED` : '\na bin seats in the bin below it');
 process.exit(bad ? 1 : 0);

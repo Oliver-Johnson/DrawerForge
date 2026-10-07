@@ -76,3 +76,24 @@ this file:
 
   three.js  r128    MIT              (c) 2010-2021 Three.js Authors
   JSZip     3.10.1  MIT or GPLv3     (c) 2009-2016 Stuart Knightley
+
+It also carries font data, in src/bins/font.js, that the bins page prints a bin's
+note in: glyphs from the Hershey Simplex fonts, as packaged in the hershey-fonts
+distribution (https://github.com/kamalmostafa/hershey-fonts, futural.jhf and
+greeks.jhf). The data keeps its own terms, which allow any use, commercial or
+otherwise, and is not relicensed by this file. Those terms ask for these
+acknowledgements to be distributed with it:
+
+  - The Hershey Fonts were originally created by Dr. A. V. Hershey while working
+    at the U. S. National Bureau of Standards.
+  - The format of the Font data in this distribution was originally created by
+      James Hurt
+      Cognition, Inc.
+      900 Technology Park Drive
+      Billerica, MA 01821
+      (mit-eddie!ci-dandelion!hurt)
+
+and that the data is never converted into the format distributed by the U.S.
+NTIS; it is kept here in Hurt's format, unconverted. Three glyphs in that file,
+for the signs ± × and Ø, were drawn for Drawerforge in the same format and are
+under this program's licence.
