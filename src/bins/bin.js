@@ -129,34 +129,228 @@ function labelPrism(G, hwI, hdI, top, depth, t) {
   return G.profilePrism(prof, -hwI - BLOAT, hwI + BLOAT, (u, v) => [v, u]);
 }
 
+/* ...which suits a wall of the usual thickness and nothing much thinner. The prisms end
+   square, a BLOAT into the side walls, and the bin's outer corner is an arc of SPEC.r:
+   a wall under about 1.15 mm leaves those square ends standing out through the rounded
+   corners, 1.06 mm at the 0.4 minimum and 0.21 at 1.0. Such a bin builds the scoop and
+   the shelf over the cavity's own rounded outline instead, grown a BLOAT into the wall
+   all round, so their ends follow the corners. The usual wall keeps the prisms, and with
+   them the same bytes. Dividers and their rails are boxes with the same trouble, and
+   are built the same way when they have it (see the dividers in buildBin). */
+function cornersPoke(hw, hd, hwI, hdI, n) {
+  return outsideArc(hw, hd, hwI + BLOAT, hdI + BLOAT, n);
+}
+
+/* Whether a point stands out through the outline's rounded corner, or on it. Measured
+   against the outline as built, chords and all: in the direction of the point, the chord
+   it faces comes in to SPEC.r * cos(half a segment) at its middle and out to SPEC.r at
+   its ends. Held to the chord's middle everywhere, a scoop's corner, which lies exactly
+   on a vertex at 45 degrees, counted as out at walls 1.148 to 1.154 that never were. */
+function outsideArc(hw, hd, x, y, n) {
+  const dx = Math.abs(x) - (hw - SPEC.r), dy = Math.abs(y) - (hd - SPEC.r);
+  if (dx <= 0 || dy <= 0) return Math.max(dx, dy) > SPEC.r - 1e-6;
+  const seg = Math.PI / (2 * n), a = Math.atan2(dy, dx);
+  const mid = (Math.min(n - 1, Math.floor(a / seg)) + 0.5) * seg;
+  return Math.hypot(dx, dy) > SPEC.r * Math.cos(seg / 2) / Math.cos(a - mid) - 1e-6;
+}
+
+// the part of a convex outline with keep * (p[axis] - v) >= 0, the cut along it set to v
+function clipSide(pts, axis, v, keep) {
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const da = keep * (a[axis] - v), db = keep * (b[axis] - v);
+    if (da >= 0) out.push(a);
+    if (da * db < 0) {
+      const o = 1 - axis;
+      const p = [];
+      p[o] = a[o] + (b[o] - a[o]) * da / (da - db);
+      p[axis] = v;
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/* A solid standing over a convex outline in plan, between a bottom and a top that
+   depend on y alone and run straight between consecutive `stations`. Cut at the
+   stations, every band of it has a flat top and a flat bottom, so it is built as flat
+   faces: the outline's sides, and each band's top and bottom fanned from its middle.
+
+   Nothing in it is closer than WELD to anything else. checkManifold, and a slicer, weld
+   vertices a micron or so apart, and a scoop's arc runs into the floor at a tangent: a
+   0.09 mm scoop on a lowered front had stations 0.0004 mm apart and a top that never
+   rose a thousandth above its bottom, and welded, its faces folded onto each other. So
+   stations closer than ten times WELD are thinned out, a vertex that close to a station
+   is moved onto it, and the bottom stays a little way under the top's lowest point. */
+const WELD = 0.002;
+function bandSolid(G, ring, ylo, yhi, stations, zTop, zBot) {
+  const pts = clipSide(clipSide(ring, 1, ylo, 1), 1, yhi, -1);
+  let lo = Infinity, hi = -Infinity;
+  for (const p of pts) { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }
+  const cuts = [];
+  for (const s of stations.slice().sort((a, b) => a - b))
+    if (s > lo + 10 * WELD && s < hi - 10 * WELD && !(s - cuts[cuts.length - 1] < 10 * WELD)) cuts.push(s);
+  // a vertex wherever a station crosses the outline, and any vertex near one moved onto it
+  const rim = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const near = cuts.find((s) => Math.abs(a[1] - s) < WELD);
+    rim.push(near === undefined ? a : [a[0], near]);
+    const on = cuts.filter((s) => (s - a[1]) * (s - b[1]) < 0);
+    if (b[1] < a[1]) on.reverse();
+    for (const s of on) rim.push([a[0] + (b[0] - a[0]) * (s - a[1]) / (b[1] - a[1]), s]);
+  }
+  const vs = [];
+  for (const p of rim) {
+    const q = vs[vs.length - 1];
+    if (!q || Math.hypot(p[0] - q.x, p[1] - q.y) >= WELD)
+      vs.push({ x: p[0], y: p[1], t: zTop(p[1]), b: zBot(p[1]) });
+  }
+  while (vs.length > 1 && Math.hypot(vs[0].x - vs[vs.length - 1].x, vs[0].y - vs[vs.length - 1].y) < WELD)
+    vs.pop();
+  const polys = [];
+  const add = (verts) => { const p = G.makePoly(verts); if (p) polys.push(p); };
+  for (let i = 0; i < vs.length; i++) {             // sides, outwards: the outline is CCW
+    const a = vs[i], b = vs[(i + 1) % vs.length];
+    add([[a.x, a.y, a.b], [b.x, b.y, b.b], [b.x, b.y, b.t], [a.x, a.y, a.t]]);
+  }
+  /* Each band takes the outline's edges that lie in it. An edge along a station belongs
+     to the band the outline's inside is on: above it when the edge runs +x, as it does
+     anticlockwise along the bottom. */
+  const edges = [lo].concat(cuts, [hi]);
+  for (let k = 0; k + 1 < edges.length; k++) {
+    const y0 = edges[k], y1 = edges[k + 1];
+    const mine = vs.map((a, i) => {
+      const b = vs[(i + 1) % vs.length], m = (a.y + b.y) / 2;
+      if (a.y === b.y && (a.y === y0 || a.y === y1)) return a.y === (b.x > a.x ? y0 : y1);
+      return m > y0 && m < y1;
+    });
+    const band = vs.filter((v, i) => mine[i] || mine[(i - 1 + vs.length) % vs.length]);
+    const cx = band.reduce((s, v) => s + v.x, 0) / band.length;
+    const cy = band.reduce((s, v) => s + v.y, 0) / band.length;
+    for (let i = 0; i < band.length; i++) {
+      const a = band[i], b = band[(i + 1) % band.length];
+      add([[cx, cy, zTop(cy)], [a.x, a.y, a.t], [b.x, b.y, b.t]]);
+      add([[cx, cy, zBot(cy)], [b.x, b.y, b.b], [a.x, a.y, a.b]]);
+    }
+  }
+  return polys;
+}
+
+// straight between the points of a profile [[y, z], ...] sorted by y, flat beyond it
+function piecewise(prof) {
+  return (y) => {
+    if (y <= prof[0][0]) return prof[0][1];
+    for (let k = 1; k < prof.length; k++)
+      if (y <= prof[k][0]) {
+        const [y0, z0] = prof[k - 1], [y1, z1] = prof[k];
+        return y === y1 ? z1 : z0 + (z1 - z0) * (y - y0) / (y1 - y0);
+      }
+    return prof[prof.length - 1][1];
+  };
+}
+
+// the cavity's outline grown a BLOAT into the wall, without the straights' split points
+function cavityRing(hwI, hdI, wall, n, grow = BLOAT) {
+  return roundRect(hwI + grow, hdI + grow, Math.max(0.4, SPEC.r - wall) + grow, n,
+                   [[], [], [], []]);
+}
+function scoopRounded(G, hwI, hdI, wall, floorZ, r, segs, n) {
+  const y0 = -hdI, prof = [];
+  for (let k = segs; k >= 0; k--) {                 // the same arc, from the wall down
+    const a = (k / segs) * Math.PI / 2;
+    prof.push([y0 + r - r * Math.sin(a), floorZ + r - r * Math.cos(a)]);
+  }
+  return bandSolid(G, cavityRing(hwI, hdI, wall, n), -Infinity, y0 + r,
+                   prof.map(([y]) => y), piecewise(prof), () => floorZ - BLOAT / 2);
+}
+function labelRounded(G, hwI, hdI, wall, H, depth, t, n) {
+  const yb = hdI;
+  return bandSolid(G, cavityRing(hwI, hdI, wall, n), yb - depth, Infinity, [],
+                   () => H, piecewise([[yb - depth, H - t], [yb + BLOAT, H - t - depth]]));
+}
+
 /* The note raised on the label shelf (labelMode 1).
  *
- * The shelf is what a bin stacked on this one rests on: its feet come down at H, which
- * is where the shelf's top is. Letters standing on it there would hold that bin up and
- * be crushed by it. So with letters on it the shelf drops to H - 1.0, and they stand
- * 0.6 on it and top out at H - 0.4, under anything that comes down at H. Without letters
- * nothing moves: every other bin is built exactly as it was.
+ * A bin stacked on this one comes down into its lip until the chamfers of its feet meet
+ * the lip's, 0.25 mm below H (the spec's clearance, on 45 degree faces: stack-check.js),
+ * unless something stops it first, and a shelf with its top at H does. Letters standing
+ * on a shelf there would hold that bin up and be crushed by it. So with letters on it
+ * the shelf drops to H - 1.0, and they stand 0.6 on it and top out at H - 0.4: 0.15 mm
+ * under the feet of a bin seated above. Without letters nothing moves: every other bin
+ * is built exactly as it was.
  *
  * The letters go where they can be read from above. At the back and the sides that is
  * clear of the stacking lip, whose chamfer leans in over the shelf to 2.70 from the
  * outside at H: the band stops there, which at the letters' top, 0.4 lower, is 0.4 clear
  * of the chamfer too. At the front they keep 0.6 off the shelf's edge.
  *
+ * Dividers stand from the floor to H, through the shelf and anything on it (buildBin), so
+ * the letters keep 0.4 off each one that crosses the band: a fixed divider is a wall
+ * thick, and a removable one has a rail each side of the slot its plate slides down,
+ * which is where the plate goes too. They go in the widest space left across the shelf
+ * and, where dividers the other way cross it, the deepest from front to back. A space
+ * that will not take the note at the usual sizes (noteFit's readable) takes nothing. The
+ * walls alone leave one that narrow only on a half-size bin with walls past about 6.5 mm,
+ * where letters came out half a millimetre tall. noteFit lets letters under 3 mm stand
+ * where the depth it is given is the shelf's, and a space cut short by dividers along the
+ * bin is not: there they came out a millimetre tall, or under nothing and mirrored, and a
+ * space like that takes letters only 3 mm tall or more.
+ *
  * `footAt` is how low the shelf's slope may reach, which buildBin works out. Returns what
  * goes on the shelf: { why } with why 'off' when no note was asked for, 'empty' when
- * nothing in it prints and 'shallow' when the lowered shelf is under 6 mm deep (with its
- * depth); otherwise { why: '', top, depth, text, fit }, `fit` being noteFit's answer. */
+ * nothing in it prints, 'shallow' when the lowered shelf is under 6 mm deep (with its
+ * depth, and `by`: 'asked' for a shelf asked for that shallow, 'inside' for one held to
+ * 0.8 of the inside's depth, 'height' for one held to the room above the floor),
+ * 'dividers' when the dividers leave no space the note fits (with `along` when it is
+ * the ones along the bin: the shelf's whole depth would take it) and 'narrow' when the
+ * walls do (both with its depth); otherwise { why: '', top, depth, text, fit, divided }, `fit`
+ * being noteFit's answer and `divided` whether dividers narrowed the space it was fitted
+ * to. */
 const NOTE_CLEAR = 0.4;      // letters stop this far under H
+const NOTE_DIV_CLEAR = 0.4;  // ...and this far off a divider, its rails or its plate's slot
 function noteOnShelf(c, iw, id, H, footAt) {
   if (+c.labelMode !== 1) return { why: 'off' };
   const text = NOTE_TEXT.notePrintable(c.note).text;
   if (!text) return { why: 'empty' };
   const S = NOTE_TEXT.NOTE_SPEC, top = H - NOTE_CLEAR - S.relief;
-  const depth = Math.min(c.label, id * 0.8, top - c.labelT - footAt);
-  if (!(depth >= S.shelfMin)) return { why: 'shallow', depth: Math.max(0, depth) };
+  const inside = id * 0.8, room = top - c.labelT - footAt;
+  const depth = Math.min(c.label, inside, room);
+  if (!(depth >= S.shelfMin))
+    return { why: 'shallow', depth: Math.max(0, depth),
+             by: depth === c.label ? 'asked' : depth === inside ? 'inside' : 'height' };
   const m = Math.max(0.5, LIP[0][1] - c.wall);
-  const band = { x0: -iw + m, x1: iw - m, y0: id - depth + S.front, y1: id - m };
-  return { why: '', top, depth, text, fit: NOTE_TEXT.noteFit(text, band) };
+  /* The widest stretch of lo..hi clear of n dividers spread across -inner..inner as
+     buildBin spreads them, `half` either side of each centre line, the first of equals;
+     null when nothing is left. `divided` says whether any of them crossed it. */
+  const half = (c.divRemovable ? c.divT / 2 + c.divClr + RAIL_T : c.wall / 2) + NOTE_DIV_CLEAR;
+  let divided = false;
+  const widest = (lo, hi, n, inner) => {
+    let gaps = [[lo, hi]];
+    for (let k = 1; k <= n; k++) {
+      const p = -inner + (2 * inner) * k / (n + 1), a = p - half, b = p + half;
+      if (b <= lo || a >= hi) continue;
+      divided = true;
+      gaps = gaps.flatMap(([u, v]) => [[u, Math.min(v, a)], [Math.max(u, b), v]])
+        .filter(([u, v]) => v - u > 1e-9);
+    }
+    return gaps.reduce((w, g) => (!w || g[1] - g[0] > w[1] - w[0] + 1e-9 ? g : w), null);
+  };
+  const y0 = id - depth + S.front, y1 = id - m;
+  const xs = widest(-iw + m, iw - m, c.divX, iw), across = divided, ys = widest(y0, y1, c.divY, id);
+  const fitIn = (x, y) => NOTE_TEXT.noteFit(text, { x0: x[0], x1: x[1], y0: y[0], y1: y[1] });
+  const prints = (f) => f.readable && f.cap > 0;
+  /* Nothing printed, and why: the dividers along the bin only when the shelf's whole
+     depth, between the same dividers across, would have taken the note. Said whenever
+     they cut the shelf short, it sent people to take out dividers that were not in the
+     way: a 1 x 0.5 with one divider each way had no room between the ones across. */
+  const refuse = (cut) => (cut && xs && prints(fitIn(xs, [y0, y1]))
+    ? { why: 'dividers', depth, along: true } : { why: across ? 'dividers' : 'narrow', depth });
+  if (!xs || !ys) return refuse(!ys);
+  const fit = fitIn(xs, ys), cut = ys[1] - ys[0] < y1 - y0 - 1e-9;
+  if (!prints(fit) || (cut && fit.cap < S.capMin - 1e-9)) return refuse(cut);
+  return { why: '', top, depth, text, fit, divided };
 }
 
 /* Stacking lip.
@@ -1231,6 +1425,10 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
  * the shelf's front edge so it never comes through the shelf, or through a note raised
  * on it. Dividers and the scoop are left off a bin with holes, and a carved shape gets
  * none. A half-size bin is a rectangle with one slab like any other, and takes them.
+ *
+ * A note raised on the shelf is fitted to the bin as it is built (floorPlan): a bin with
+ * holes has no dividers, so its note takes the whole shelf, as on a bin that never had
+ * any, and the block keeps under the lowered shelf as it does under a plain one.
  */
 /* The presets: what goes in, at its largest, and the room its hole gets. The AA and AAA
    sizes are the IEC maxima; the 18650's is a typical maximum, and a protected cell can be
@@ -1300,12 +1498,29 @@ function shelfFor(c, iw, id, H) {
      built cleanly: a 14 mm label on a 1x1x3 came out 13.65.
      With screws the foot stops above the screws' ends instead, for the reason the wall
      ring does: behind a wall over 5 mm thick it reaches in over a hole. */
-  const feet = holePlan(c);
-  const footAt = feet && feet.screws ? FOOT_HOLES.screwTop + BLOAT : SPEC.footH + BLOAT;
-  const raised = noteOnShelf(c, iw, id, H, footAt);
+  const raised = noteOnShelf(c, iw, id, H, shelfFoot(c));
   if (raised.fit) return { top: raised.top, depth: raised.depth, raised };
-  const d = Math.min(c.label, id * 0.8, H - c.labelT - footAt);
+  const d = Math.min(c.label, id * 0.8, H - c.labelT - shelfFoot(c));
   return d > 0.05 ? { top: H, depth: d, raised: null } : null;
+}
+// how low the shelf's slope may reach: the top of the feet, or of the screws in them
+const shelfFoot = (c) => {
+  const feet = holePlan(c);
+  return feet && feet.screws ? FOOT_HOLES.screwTop + BLOAT : SPEC.footH + BLOAT;
+};
+/* The shelf and the holes of a bin, as buildBin builds them: { shelf, holes }, shelfFor's
+   and holeLayout's answers. They decide each other. The holes keep in front of the shelf
+   and under it, so they need it first; and a bin with holes is built without its
+   dividers, which a note raised on the shelf keeps clear of (noteOnShelf), so the shelf
+   needs to know whether there are holes. Asked for holes, a bin is worked out without its
+   dividers, and if the holes come out built that is the bin. If they do not (too short,
+   or none fit), the dividers are built after all and the shelf is worked out with them,
+   as on any bin without holes, which is every bin not asked for them. */
+function floorPlan(c, iw, id, H) {
+  if (!insertOf(c)) return { shelf: shelfFor(c, iw, id, H), holes: { why: 'off' } };
+  const bare = c.divX || c.divY ? Object.assign({}, c, { divX: 0, divY: 0 }) : c;
+  const shelf = shelfFor(bare, iw, id, H), holes = holeLayout(c, iw, id, H, shelf);
+  return holes.n ? { shelf, holes } : { shelf: bare === c ? shelf : shelfFor(c, iw, id, H), holes };
 }
 /* Where the holes go in a bin settled as buildBin settles it, and how deep they are, or
    why there are none. `why` is 'off' (none asked for), 'carved', 'solid', 'short' (under
@@ -1315,8 +1530,9 @@ function shelfFor(c, iw, id, H) {
    `units` (the fewest that keep an item under the rim, H) and `above` (how far one stands
    over it, negative when it is under). Built: `n` holes, at `xs` by `ys`, `depth` deep,
    the block's `top`, and whether the depth was typed (`asked`) and cut to the room
-   (`capped`). */
-function holeLayout(c, iw, id, H) {
+   (`capped`). `shelf` is the label shelf they keep clear of, shelfFor's answer, settled
+   as floorPlan settles it. */
+function holeLayout(c, iw, id, H, shelf) {
   const p = Number.isInteger(+c.insert) ? INSERTS[+c.insert] || null : null;
   if (!p) return { why: 'off' };
   const S = INSERT_SPEC;
@@ -1324,7 +1540,7 @@ function holeLayout(c, iw, id, H) {
   const d = p.size + p.clr + extra;
   if (!isFullRect(c)) return { why: 'carved', p, d };
   if (builtSolid(c)) return { why: 'solid', p, d };
-  const shape = holeShape(p.shape, d), shelf = shelfFor(c, iw, id, H);
+  const shape = holeShape(p.shape, d);
   const floor = floorTop(c) + BLOAT;
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) => c.edges[k] === undefined || c.edges[k] >= 1);
   const side = c.lip && allFull ? Math.max(S.edge, LIP[0][1] - c.wall + S.lipClear) : S.edge;
@@ -1350,7 +1566,7 @@ function insertPlan(cfg) {
   if (isHalfSize(c)) c.cells = null;
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
-  return holeLayout(c, hw - c.wall, hd - c.wall, c.hUnits * SPEC.unitH);
+  return insertOf(c) ? floorPlan(c, hw - c.wall, hd - c.wall, c.hUnits * SPEC.unitH).holes : { why: 'off' };
 }
 /* Both loops of one tile: the tile's outline and the hole's, sampled on the same rays
    from the hole's centre. A ray goes through every corner of either, so both come out
@@ -1710,9 +1926,8 @@ function buildBin(G, cfg) {
        first, because holes across the floor keep in front of it and under it, and a bin
        with holes has no scoop and no dividers: the holes take the floor. */
     const eF = c.edges && c.edges.f !== undefined ? c.edges.f : 1;
-    const iw = hw - c.wall, id = hd - c.wall;
-    const shelf = shelfFor(c, iw, id, H);
-    const holes = holeLayout(c, iw, id, H);
+    const iw = hw - c.wall, id = hd - c.wall, poke = cornersPoke(hw, hd, iw, id, n);
+    const { shelf, holes } = floorPlan(c, iw, id, H);
     const holesOn = !!holes.n;
     if (c.scoop > 0.05 && eF > 0 && !holesOn) {
       /* No taller than the front wall it fills the corner of. With the front lowered,
@@ -1720,12 +1935,18 @@ function buildBin(G, cfg) {
          height binTop quotes: a 2x1x4 with every wall at a quarter and an 8.5 mm scoop
          was 14.45 mm built and 11.5 quoted, to its README and the bed check. */
       const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF));
-      if (r > 0.05) polys.push(...scoopPrism(G, iw, id, floorZ, r, Math.max(4, n)));
+      if (r > 0.05) polys.push(...(poke ? scoopRounded(G, iw, id, c.wall, floorZ, r, Math.max(4, n), n)
+                                        : scoopPrism(G, iw, id, floorZ, r, Math.max(4, n))));
     }
     if (shelf) {
-      polys.push(...labelPrism(G, iw, id, shelf.top, shelf.depth, c.labelT));
+      /* How deep and how high is shelfFor's, which the holes keep in front of and under.
+         The shelf's top is H, or lower with a note raised on it (noteOnShelf), and on a
+         thin wall it is built over the cavity's rounded outline (cornersPoke) whichever
+         height it is at. */
+      polys.push(...(poke ? labelRounded(G, iw, id, c.wall, shelf.top, shelf.depth, c.labelT, n)
+                          : labelPrism(G, iw, id, shelf.top, shelf.depth, c.labelT)));
       if (shelf.raised)
-        polys.push(...NOTE_TEXT.noteShells(G, shelf.raised.fit.segs, shelf.top - BLOAT, H - NOTE_CLEAR));
+        polys.push(...NOTE_TEXT.noteShells(G, shelf.raised.fit.segs, shelf.raised.top - BLOAT, H - NOTE_CLEAR));
     }
 
     /* Dividers — separate overlapping shells, never unioned.
@@ -1775,13 +1996,34 @@ function buildBin(G, cfg) {
     const reach = (inner) => (c.divRemovable
       ? [[-inner - BLOAT, -inner + RAIL_D], [inner - RAIL_D, inner + BLOAT]]
       : [[-inner - BLOAT, inner + BLOAT]]);
+    /* A box that would stand out through a rounded corner, as one packed up to a corner
+       does (16 pairs of rails across a 1x1 with a 0.4 mm wall: 0.92 mm out; the most
+       rails both ways the fields allow, at the usual 1.2: 0.67), is
+       the cavity's outline grown a BLOAT into the wall, cut to the box instead: the same
+       outline the scoop and shelf follow there, so it meets the wall the same way. A box
+       left with almost nothing inside the outline is all wall, and is not built.
+       Each direction's boxes take the outline grown a little less than a BLOAT, and by a
+       different amount, so that two cut at one corner, or one and the shelf, never share
+       a vertical edge at the same outline vertex: 8 edges used four times when they did. */
+    const box = (pts, grow) => {
+      if (!pts.some(([x, y]) => outsideArc(hw, hd, x, y, n)))
+        return G.extrudePoly(pts, floorZ - BLOAT, H);
+      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      let cut = cavityRing(iw, id, c.wall, n, grow);
+      cut = clipSide(clipSide(cut, 0, Math.min(...xs), 1), 0, Math.max(...xs), -1);
+      cut = clipSide(clipSide(cut, 1, Math.min(...ys), 1), 1, Math.max(...ys), -1);
+      cut = cut.filter((p, i) => Math.hypot(p[0] - cut[(i + 1) % cut.length][0],
+                                            p[1] - cut[(i + 1) % cut.length][1]) >= WELD);
+      return cut.length >= 3 && Math.abs(G.polyArea2D(cut)) > 0.01
+        ? G.extrudePoly(cut, floorZ - BLOAT, H) : [];
+    };
     // none with holes across the floor: the holes are what divides it
     for (const [a, b] of spans(holesOn ? 0 : c.divX, iw))
       for (const [lo, hi] of reach(id))
-        polys.push(...G.extrudePoly([[a, lo], [b, lo], [b, hi], [a, hi]], floorZ - BLOAT, H));
+        polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
     for (const [a, b] of spans(holesOn ? 0 : c.divY, id))
       for (const [lo, hi] of reach(iw))
-        polys.push(...G.extrudePoly([[lo, a], [hi, a], [hi, b], [lo, b]], floorZ - BLOAT, H));
+        polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT));
 
     // the holes, last, so a bin without them is every shell it was, in the order it was
     if (holesOn) { polys.push(...holeTiles(G, c, holes, iw, id)); holesBuilt = holes.n; }
@@ -1835,7 +2077,9 @@ function shelfNote(cfg) {
   const iw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const id = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const footAt = plan && plan.screws ? FOOT_HOLES.screwTop + BLOAT : SPEC.footH + BLOAT;
-  return say(noteOnShelf(c, iw, id, H, footAt));
+  // a bin built with holes across its floor is built without dividers (floorPlan)
+  const holed = insertOf(c) && floorPlan(c, iw, id, H).holes.n;
+  return say(noteOnShelf(holed ? Object.assign({}, c, { divX: 0, divY: 0 }) : c, iw, id, H, footAt));
 }
 
 /* ---------- layout packing -------------------------------------------------

@@ -394,6 +394,7 @@ a.ghost{display:inline-flex;align-items:center;justify-content:center;text-decor
 #mapwrap{padding:10px 14px 14px;overflow-x:auto}
 #cutmap{display:block;margin:0 auto;max-width:100%}
 #cutmap .gridline{stroke:var(--line);stroke-width:1}
+#cutmap .halfcell{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 3}
 #cutmap .cutline{stroke:var(--cyan);stroke-width:2.5}
 #cutmap .hitline{stroke:transparent;stroke-width:11;cursor:pointer}
 #cutmap .hitline:hover{stroke:rgba(79,195,232,.28)}
@@ -467,21 +468,55 @@ footer .mono{font-family:var(--mono);font-size:11px}
 /* Half steps: a dashed line through the middle of every cell, under the bins, faint
    enough that the cells still read as cells. */
 #fillmap .midline{fill:none;stroke:var(--dim);stroke-width:1;stroke-dasharray:3 4;opacity:.5;pointer-events:none}
-/* The layer tabs and the Steps switch share a row above the map; the switch drops to a
-   row of its own only when the tabs need the room. Beside the preview the map's card is
-   kept wide enough for the row (drawMap), so there that is only with many layers.
-   #stepWhy, under the map, is the reason a place was refused. */
+/* On a phone the layer tabs and the Steps switch share a row above the map; the switch
+   drops to a row of its own only when the tabs need the room. On a wider window the
+   switch is on the card's heading row instead (placeSteps), and the tabs have the row.
+   #stepWhy, under the map, is the reason a place was refused.
+   On a row of their own the tabs may shrink, and their labels wrap, as they did before
+   the switch: held at the width of every label in a line, they ran off the card, and
+   off the screen, on a phone from four layers at 320 px wide and six at 390. */
 .maptools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
-.maptools #layerTabs{flex:1 0 auto}
+.maptools #layerTabs{flex:1 1 auto}
 .steps{display:flex;align-items:center;gap:8px}
 .steps .seg button{flex:none;padding:7px 12px}
+/* The map card's heading row: the heading, and on a wider window the switch beside it,
+   not in it (placeSteps). The row carries the line under the heading, so that it runs
+   under both. The switch is shorter than the heading, so the row is no taller than it
+   was: a full-size switch made it 52 px where it is 35, and at 1366 × 768 the map has
+   no height to give. Its buttons are 24 px, a comfortable target for a mouse; a phone,
+   which needs 40 px, keeps the switch on the tabs' row.
+   The title is never cut: drawMap keeps the card as wide as the whole title on one
+   line, the switch and the padding between, 290 to 310 px in the fonts tried, and the
+   map's own width where that is more. The title was let give way, with an ellipsis, so that the row
+   never made the card wider than the map, and every narrow drawer, and a 7-column one
+   on a window short enough to bring the map to its 40 px cells, showed "DRAWER LAYO…".
+   The 6 px after the title is what lets that 7-column map, 280 px wide, hold the row in
+   the wider DejaVu Sans; at 10 it was 3 px short. The ellipsis stays only for a column
+   narrower than the row, which a window wide enough to pair the map never has.
+   The word "Steps" is for screen readers only up here, where it still names the pair
+   of buttons. Shown, it ran on from the title as if one heading ("Drawer layout
+   Steps"), and it needed 41 px more; the buttons say what they switch. */
+#s-layout > .layouthead{display:flex;align-items:center;border-bottom:1px solid var(--line)}
+#s-layout > .layouthead > h3{display:block;flex:0 1 auto;min-width:0;padding-right:6px;
+  border-bottom:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#s-layout > .layouthead > .steps{flex:none;margin:0 14px 0 auto;white-space:nowrap}
+#s-layout > .layouthead .seg button{padding:4px 6px;min-height:24px;font-size:11px}
+#s-layout > .layouthead #stepsLabel{position:absolute;width:1px;height:1px;overflow:hidden;
+  clip-path:inset(50%)}
 /* #stepWhy says its reason on the front marker's line, covering the marker until the
    next press on the map: drawMap counts one line under the map, so a reason arriving
    neither pushes the coverage bar below the window nor makes the map change size under
-   the pointer. Empty, it is transparent and the marker shows through. */
+   the pointer. Empty, it is transparent and the marker shows through.
+   One line and no more, whatever it is given. Above the bar and out of the flow, a
+   reason that wrapped did not push anything down but grew over the bar instead, and
+   off the bottom of a 1366 × 768 window: the carved-shape sentence did both before it
+   was given a line of its own length (SHAPE_DROPPED_MAP). The reasons said here fit a
+   320 px phone; one that ever does not is cut short, with an ellipsis, rather than let
+   loose over the bar, and a screen reader still hears all of it. */
 .mapfoot{position:relative}
 #stepWhy{position:absolute;left:0;right:0;top:0;min-height:100%;padding:2px 14px 0;
-  text-align:center;color:var(--red);background:var(--panel)}
+  text-align:center;color:var(--red);background:var(--panel);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #stepWhy:empty{background:none}
 #sizeWhy{color:var(--red)}
 #sizeWhy:not(:empty){margin-top:6px}
@@ -1361,12 +1396,18 @@ body.binfocus.focuscarve .stagetop{grid-template-columns:auto minmax(340px,1fr)}
 <div class="stagetop">
 
 <div class="stagecard" id="s-layout">
-  <h3>Drawer layout</h3>
+  <!-- The heading's row. On a wider window the Steps switch below moves up into it,
+       beside the heading and not in it (placeSteps): inside the <h3> its label and its
+       group's name were read as part of the heading, "Drawer layout Steps Steps", and its
+       buttons were in a heading. -->
+  <div class="layouthead"><h3>Drawer layout</h3></div>
   <!-- Whole cells or half cells: what the map draws, drags and resizes in. Kept in this
        browser, never in the link, and turned on by itself when the layout holds a
-       half-size bin. On the layer tabs' row, beside them while one or two layers leave
-       room, so the map does not move down the page: on a phone it has about 150 px
-       above the fold to spare, and a row of its own took 50 of them. -->
+       half-size bin. On a wider window it moves up onto the heading's row (placeSteps),
+       where it costs the map no height. On a phone it stays here, on the layer tabs' row,
+       beside them while the tabs leave room, so the map does not move down the page:
+       there it has about 150 px above the fold to spare, and a row of its own took 50 of
+       them. -->
   <div class="maptools" style="padding:10px 14px 0">
     <div class="seg" id="layerTabs"></div>
     <div class="steps">
@@ -2131,10 +2172,17 @@ function extrudePoly(pts2d, z0, z1) {
 }
 
 function roundedSquareRing(cx, cy, half, r, n) {
+  return roundedRectRing(cx, cy, half, half, r, n);
+}
+/* The same ring with a half size of its own on each axis, for the half cells along a
+   plate's right side and back (see halfStrips): a 21 × 42 or 21 × 21 socket. Same
+   vertices in the same order as the square one, so a square ring is the bytes it was,
+   and its corner radius is held by the shorter side, as the square's is by its one. */
+function roundedRectRing(cx, cy, hx, hy, r, n) {
   n = n || 6;
-  r = Math.max(0.3, Math.min(r, half - 0.01));
+  r = Math.max(0.3, Math.min(r, Math.min(hx, hy) - 0.01));
   const pts = [];
-  const cs = [[half-r, half-r, 0], [-half+r, half-r, 90], [-half+r, -half+r, 180], [half-r, -half+r, 270]];
+  const cs = [[hx-r, hy-r, 0], [-hx+r, hy-r, 90], [-hx+r, -hy+r, 180], [hx-r, -hy+r, 270]];
   for (const [ox, oy, a0] of cs) {
     for (let k = 0; k < n; k++) {
       const a = (a0 + 90*k/n) * Math.PI/180;
@@ -2428,10 +2476,18 @@ function pieceColumn(s) {
    margins six cells wide arrived there as a map seven wide, and the seventh column took
    bins with no sockets under them. Both pages ask here now. Needs drawerW, drawerD,
    pitch, marginMode, and the four margins when it is 'custom' or the alignment when it
-   is not. */
+   is not.
+ *
+ * marginMode 'half' is 'auto' with a strip of half cells laid in the leftover first (see
+ * halfStrips): hX and hY say whether there is a half column and a half row, and the
+ * alignment places what is left after them. The strips are counted INTO mR and mB, so to
+ * everything that sizes a piece — the bed check, the split search, the outline — they are
+ * margin, which is the width they take; only buildPiece and the cut map look inside. A
+ * caller quoting the solid margin takes them back out. hX and hY are 0 in every other
+ * mode, and that mode's numbers are the ones it always gave. */
 function gridCells(p) {
   const pitch = p.pitch;
-  let nx, ny, mL, mR, mF, mB;
+  let nx, ny, mL, mR, mF, mB, hX = 0, hY = 0;
   if (p.marginMode === 'custom') {
     mL = p.mLeft; mR = p.mRight; mF = p.mFront; mB = p.mBack;
     nx = Math.max(1, Math.floor((p.drawerW - mL - mR) / pitch + 1e-6));
@@ -2441,19 +2497,49 @@ function gridCells(p) {
   } else {
     nx = Math.max(1, Math.floor(p.drawerW / pitch + 1e-6));
     ny = Math.max(1, Math.floor(p.drawerD / pitch + 1e-6));
-    const remX = p.drawerW - nx*pitch, remY = p.drawerD - ny*pitch;
+    let remX = p.drawerW - nx*pitch, remY = p.drawerD - ny*pitch;
+    if (p.marginMode === 'half') {
+      ({ hX, hY } = halfStrips(remX, remY, pitch));
+      remX -= hX * pitch/2; remY -= hY * pitch/2;
+    }
     mL = p.alignX === 'start' ? remX : p.alignX === 'end' ? 0 : remX/2;
     mR = remX - mL;
     mF = p.alignY === 'start' ? remY : p.alignY === 'end' ? 0 : remY/2;
     mB = remY - mF;
+    // added only where there is a strip, so a plate without one keeps its exact margins
+    if (hX) mR += pitch/2;
+    if (hY) mB += pitch/2;
   }
-  return { nx, ny, mL, mR, mF, mB };
+  return { nx, ny, mL, mR, mF, mB, hX, hY };
+}
+/* Whether the leftover past the whole cells takes a half cell: a column of them on the
+ * right if remX is half a pitch or more, a row along the back if remY is. Each answer is
+ * 0 or 1 — a second strip would be a whole cell, and the whole cells already took those.
+ *
+ * Always the right and the back, whatever the alignment says, and the alignment then
+ * places what is left. A bin is placed in cells from the front left corner, so a strip
+ * there would move every bin on the Bins page when this switched on or off; at the right
+ * and back it sits past the last whole cell (x = nx, y = ny) and nothing else moves. The
+ * front also stays free for the slack the drawer-size guide says to keep where you reach
+ * in.
+ *
+ * A half cell takes half-size bins only, whose quarter feet seat in a corner of a whole
+ * socket with a whole foot's clearance (ENGINE.md §4) — so the socket here is the spec
+ * profile on a 21 × 42 or 21 × 21 rounded rectangle, the same distance in from every
+ * side. The 1e-6 is gridCells' own floor tolerance: a 357 mm drawer is 8 cells and
+ * exactly a half, and must say so. The Bins page is to ask it the same way, through
+ * gridCells with the plate's `mm` from the link, so both maps put the strip in the same
+ * place; until it does, it reads 'half' as a solid margin, as any page from before
+ * half cells does. */
+function halfStrips(remX, remY, pitch) {
+  const fits = (rem) => rem >= pitch/2 - 1e-6 ? 1 : 0;
+  return { hX: fits(remX), hY: fits(remY) };
 }
 /* General layout: horizontal bands (rowCuts) and per-band column cuts (colCuts[b]).
    splitMode: 'balanced' | 'staggered' | 'manual' (manual uses provided cuts). */
 function computeLayout(p) {
   const pitch = p.pitch;
-  const { nx, ny, mL, mR, mF, mB } = gridCells(p);
+  const { nx, ny, mL, mR, mF, mB, hX, hY } = gridCells(p);
   const maxCellsX = Math.max(1, Math.floor(p.bedW / pitch));
   const maxCellsY = Math.max(1, Math.floor(p.bedD / pitch));
 
@@ -2550,6 +2636,10 @@ function computeLayout(p) {
         nx: segEnds[s] - segStarts[s], ny: bandEnds[b] - bandStarts[b],
         mL: segStarts[s] === 0 ? mL : 0, mR: segEnds[s] === nx ? mR : 0,
         mF: bandStarts[b] === 0 ? mF : 0, mB: bandEnds[b] === ny ? mB : 0,
+        /* The piece that owns a strip of half cells, which its mR or mB includes (see
+           gridCells): every piece along the right edge carries its stretch of the half
+           column, and every piece along the back its stretch of the half row. */
+        hR: segEnds[s] === nx && hX === 1, hB: bandEnds[b] === ny && hY === 1,
       });
     }
   }
@@ -2577,7 +2667,7 @@ function computeLayout(p) {
       }
     }
   }
-  return { nx, ny, mL, mR, mF, mB, rowCuts, colCuts, pieces, seams,
+  return { nx, ny, mL, mR, mF, mB, hX, hY, rowCuts, colCuts, pieces, seams,
            bands: nBands, gridW: nx*pitch, gridD: ny*pitch,
            maxCellsX, maxCellsY };
 }
@@ -3266,7 +3356,13 @@ function annulusStrip(outerLoop, innerLoop, cx, cy, z, up) {
   return polys;
 }
 
-function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
+/* `half` is the cell's half size on each axis, [hx, hy]: left out, a whole cell at the
+   profile's pitch. A half cell passes its own (see halfStrips) and gets the same socket,
+   the same distance in from each of its sides, on a rounded rectangle: the strip around
+   the socket, the rim on top and the floor cap all follow the ring, and annulusStrip
+   pairs the cell outline against it by angle about the centre as it does a square, both
+   loops being star-shaped about that point. */
+function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half) {
   const polys = [];
   const { pts: oc } = earTriangulate(clipped);
   const n = oc.length;
@@ -3276,11 +3372,12 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs) {
                         [oc[j][0], oc[j][1], H], [oc[i][0], oc[i][1], H]]);
     if (p) polys.push(p);
   }
+  const [hx, hy] = half || [prof.pitchHalf, prof.pitchHalf];
   const zs = prof.zs.slice(1, 5), ds = prof.ds.slice(1, 5);
   const rings = zs.map((z, i) => {
     const d = ds[i];
     const r = prof.rTop - (d - ds[ds.length-1]);
-    return roundedSquareRing(cx, cy, prof.pitchHalf - d, r, arcSegs).map(p => [p[0], p[1], z]);
+    return roundedRectRing(cx, cy, hx - d, hy - d, r, arcSegs).map(p => [p[0], p[1], z]);
   });
   const rn = rings[0].length;
   for (let i = 0; i < rings.length - 1; i++) {
@@ -3506,8 +3603,19 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const WALL = 0.2;
   const rMax = Math.max(0, ((cfg.topCutoff + cfg.socketRadius) * Math.SQRT2
                             - cfg.socketRadius - WALL) / (Math.SQRT2 - 1));
+  /* A corner holding a half cell (see halfStrips) is capped by that cell's socket. Its
+     short side is a quarter pitch, and roundedRectRing holds the top ring's corner to
+     that side less the cutoff: below a pitch of about 17.6 mm the ring's corner shrinks,
+     the socket's corner comes out towards the plate's, and the whole cell's cap let the
+     arc fold through the rim (pitch 14, radius 4.5: six coplanar folds at the three
+     corners with half cells). The same sum with the ring's own radius; at 42 mm it is
+     the whole cell's number. */
+  const rcHalf = Math.min(cfg.socketRadius, pitch / 4 - cfg.topCutoff - 0.01);
+  const rMaxHalf = Math.max(0, Math.min(rMax, ((cfg.topCutoff + rcHalf) * Math.SQRT2
+                                               - rcHalf - WALL) / (Math.SQRT2 - 1)));
+  const halfAt = { ll: false, lr: !!piece.hR, ur: !!(piece.hR || piece.hB), ul: !!piece.hB };
   const rOf = (k) => Math.max(0, Math.min(rr[k] !== undefined ? rr[k] : cfg.outerRadius,
-                                          rMax, half));
+                                          halfAt[k] ? rMaxHalf : rMax, half));
   const NARC = 10;
   /* A corner of the WHOLE plate, not of the piece: only the piece that owns it gets the
      arc, and the other three of its corners stay square so it still butts up against its
@@ -3547,12 +3655,27 @@ function buildPiece(cfg, layout, piece, onStatus) {
   if (onStatus) onStatus('outline');
 
   // ---- region grid: x cuts and y cuts ----
+  /* A strip of half cells (piece.hR, piece.hB; see halfStrips) is one more cut, half a
+     pitch past the last whole cell, and the region it closes off is a cell rather than
+     margin. The margin after it is what mR or mB holds beyond the strip, and gets a
+     region of its own only when there is any, as a plate's margin always has. */
+  const hxR = piece.hR ? 1 : 0, hyB = piece.hB ? 1 : 0;
+  /* A margin past a strip thinner than this joins the half cell instead: built as a
+     region of its own, a sliver under two BLOATs thick put the shells either side of it
+     face to face. The half cell's rim is that much wider on its far side. */
+  const STRIP_SLIVER = 0.1;
   const xs = [0]; if (piece.mL > 0.01) xs.push(piece.mL);
   for (let i = 1; i <= piece.nx; i++) xs.push(gx0 + i*pitch);
-  if (piece.mR > 0.01) xs.push(W); else xs[xs.length-1] = W;
+  if (hxR) {
+    xs.push(gx0 + piece.nx*pitch + half);
+    if (piece.mR - half > STRIP_SLIVER) xs.push(W); else xs[xs.length-1] = W;
+  } else if (piece.mR > 0.01) xs.push(W); else xs[xs.length-1] = W;
   const ys = [0]; if (piece.mF > 0.01) ys.push(piece.mF);
   for (let j = 1; j <= piece.ny; j++) ys.push(gy0 + j*pitch);
-  if (piece.mB > 0.01) ys.push(D); else ys[ys.length-1] = D;
+  if (hyB) {
+    ys.push(gy0 + piece.ny*pitch + half);
+    if (piece.mB - half > STRIP_SLIVER) ys.push(D); else ys[ys.length-1] = D;
+  } else if (piece.mB > 0.01) ys.push(D); else ys[ys.length-1] = D;
   const cellXi = piece.mL > 0.01 ? 1 : 0;         // index offset of first cell column
   const cellYi = piece.mF > 0.01 ? 1 : 0;
   const BLOAT = 0.05;
@@ -3570,12 +3693,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
       const clipped = clipToRect(outline, x0, y0, x1, y1);
       if (!clipped) continue;
       const ci = ix - cellXi, cj = iy - cellYi;
-      const isCell = ci >= 0 && ci < piece.nx && cj >= 0 && cj < piece.ny;
+      const isCell = ci >= 0 && ci < piece.nx + hxR && cj >= 0 && cj < piece.ny + hyB;
       if (!isCell) {                                 // margin / corner: plain extrusion
         shells.push(extrudePoly(clipped, 0, H));
         continue;
       }
-      const cx = gx0 + ci*pitch + half, cy = gy0 + cj*pitch + half;
+      // in the half column, the half row, or both (the quarter cell at the back right)
+      const halfX = ci === piece.nx, halfY = cj === piece.ny;
+      const cx = gx0 + ci*pitch + (halfX ? half/2 : half);
+      const cy = gy0 + cj*pitch + (halfY ? half/2 : half);
       /* Skeleton only where there is nothing that needs the material back.
        *
        * The shell removes the bulk below z 2.5 — which is exactly the wall band every
@@ -3589,7 +3715,8 @@ function buildPiece(cfg, layout, piece, onStatus) {
        * that skeleton mode does not build.
        */
       // cells are built bloated by BLOAT per side, so a whole one measures (pitch+0.1)^2;
-      // anything the piece boundary has cut into measures less than pitch^2
+      // anything the piece boundary has cut into measures less than pitch^2 — and so does
+      // a half cell, which stays solid: skeletonCellRegion's rings are square
       const fullCell = Math.abs(polyArea2D(clipped)) >= pitch * pitch - 0.5;
       const onEdge = ci === 0 || cj === 0 || ci === piece.nx - 1 || cj === piece.ny - 1;
       const jointed = cfg.connector && cfg.connector !== 'none';
@@ -3598,7 +3725,8 @@ function buildPiece(cfg, layout, piece, onStatus) {
       let region = skel
         ? skeletonCellRegion(clipped, prof, cx, cy, H, cfg.arcSegs || 6,
                              Math.max(0.4, cfg.skin || 0.8))
-        : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6);
+        : directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6,
+                           halfX || halfY ? [halfX ? half/2 : half, halfY ? half/2 : half] : undefined);
       /* Small convex cutters local to this cell, batched by feature and subtracted one
        * batch at a time.
        *
@@ -3670,7 +3798,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
           ...extrudePoly(puzzleShape(pn.edge, pn.e, pn.s, cfg.puzzle, cfg.puzzle.clr, true),
                          -0.5, pad - 0.4));
       }
-      if (cellFastener) {
+      /* None in a half cell. A half-size bin's quarter feet carry no holes (feetHolesOff
+         in bins/bin.js), and where a half socket's would go is not settled: a whole
+         cell's four sites are holeOffset (13 mm) from its centre each way, past the
+         middle of a 21 mm cell, so they cannot simply be kept, and moving them is a
+         choice for magnets in bins that do not have any. Checks on the page says so, so
+         a plate with magnets does not look short of holes by mistake. The corner bosses
+         below are laid out over the whole cells only, so half cells get none of those
+         either. */
+      if (cellFastener && !halfX && !halfY) {
         const off = cfg.holeOffset;
         for (const sx of [-1, 1]) for (const sy of [-1, 1])
           cuts.fastener.push(...movePolys(cellFastener, cx + sx*off, cy + sy*off));
@@ -3695,6 +3831,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
       cfg.magnets ? cfg.magnetH + 0.8 : 0,
       cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
     const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
+    // whole cells only: a half cell has no mounting sites (see the fastener cut above)
     for (let i = 0; i < piece.nx; i++) for (let j = 0; j < piece.ny; j++) {
       const ccx = gx0 + i*pitch + half, ccy = gy0 + j*pitch + half;
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
@@ -4213,11 +4350,11 @@ const DEFAULTS = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { computeLayout, gridCells, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
+  module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
     platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
-    makePoly, triangulateRing, earTriangulate, roundedSquareRing, clampZ, profilePrism,
+    makePoly, triangulateRing, earTriangulate, roundedSquareRing, roundedRectRing, clampZ, profilePrism,
     skeletonCellRegion, directCellRegion, polyArea2D };
 }
 
@@ -5921,6 +6058,7 @@ function noteLine(text) {
 }
 
 const NOTE_ELLIPSIS = '...';
+const NOTE_CUT_KEEPS = 3;     // a cut keeping fewer of the note's characters is no note
 /* The note cut short to fit, with an ellipsis, when it will not go on two lines 3 mm
    tall: { lays, s, cut }, or null when cutting would not make it any bigger. Every line
    is given the vertical reach of the whole note, so whatever is kept fits whatever was
@@ -5947,14 +6085,21 @@ function noteCut(text, W, Hh) {
   let lines;
   if (n === 1) lines = [cutTo(text)];
   else {
-    let k = text.length;
+    let k = text.length, inWord = false;
     while (k > 0 && !fits(text.slice(0, k).trimEnd())) k--;
     if (k < text.length && text[k] !== ' ') {
       const sp = text.lastIndexOf(' ', k - 1);
       if (sp > 0) k = sp;
+      else inWord = true;
     }
     const first = text.slice(0, k).trimEnd(), rest = text.slice(k).trimStart();
-    lines = rest ? [first, cutTo(rest)] : [first];
+    const second = rest ? cutTo(rest) : '';
+    /* A second line of nothing but the ellipsis is not a line, and a word broken over
+       two lines and then cut short reads as two words: the note goes on one line, cut to
+       fit. Between dividers "M3 screws" came out "M / ..." and "Assorted M3 M4 nuts,
+       washers" "As / s...". A word broken with nothing cut ("Resis / tors") stays. */
+    lines = !rest ? [first]
+      : second === NOTE_ELLIPSIS || (inWord && second !== rest) ? [cutTo(text)] : [first, second];
   }
   return { lays: lines.map(noteLine), s, cut };
 }
@@ -5966,9 +6111,18 @@ function noteCut(text, W, Hh) {
    The band is where plastic may go, so the strokes' centre lines are fitted NOTE_INK
    inside it: fitted to the band itself, a letter at its edge reached half a stroke past
    it, under the lip at the back and to a tenth of a millimetre from the shelf's front.
-   Returns { lines, cap, cut, segs }: the lines as printed, the cap height in mm, whether
-   anything was cut, and every stroke as a list of [x, y] points in mm. A cut note on a
-   shelf too shallow even for one line 3 mm tall is smaller than 3 mm, and `cap` says so. */
+   Returns { lines, cap, cut, segs, readable }: the lines as printed, the cap height in
+   mm, whether anything was cut, every stroke as a list of [x, y] points in mm, and
+   whether the band has room for the note at these rules. A cut note on a shelf too
+   shallow even for one line 3 mm tall is smaller than 3 mm, and `cap` says so; that is
+   the shelf's depth, and still readable. A band too NARROW is not: when not even the
+   ellipsis goes in at the size the depth allows, nothing could be cut to fit, and the
+   letters come out as small as the width makes them; and when a cut keeps fewer than
+   three of the note's characters, or less than all of a shorter one, too little of it is
+   there to read: "M..." says nothing "M3 screws" did. Nor is a band with no width or
+   depth left at all, where the size came out at nothing or under it, mirroring the
+   letters. A shelf the width of a bin is never that narrow; the spaces between dividers
+   can be (noteOnShelf). */
 const noteFits = new Map();
 function noteFit(text, outer) {
   const k = [text, outer.x0, outer.x1, outer.y0, outer.y1].join('|');
@@ -6007,7 +6161,13 @@ function noteFit(text, outer) {
     for (const st of lay.strokes) segs.push(st.map(([x, y]) => [x0 + x * s, yTop - (y - lay.top) * s]));
     yTop -= (lay.span + gap) * s;
   }
-  const out = { lines: best.lays.map((l) => l.text), cap: s * NOTE_CAP_U, cut: best.cut, segs };
+  const sDepth = Math.min(sMin, Hh / noteLine(text).span);
+  // what a cut keeps, its own ellipsis (always at the end of the last line) and spaces aside
+  const chars = (t) => t.replace(/\s/g, '').length, shown = best.lays.map((l) => l.text).join(' ');
+  const few = best.cut &&
+    chars(shown.slice(0, -NOTE_ELLIPSIS.length)) < Math.min(NOTE_CUT_KEEPS, chars(text));
+  const out = { lines: best.lays.map((l) => l.text), cap: s * NOTE_CAP_U, cut: best.cut, segs,
+                readable: !few && W > 0 && Hh > 0 && s >= sDepth - 1e-9 };
   if (noteFits.size > 500) noteFits.clear();
   noteFits.set(k, out);
   return out;
@@ -6107,10 +6267,13 @@ function noteShells(G, segs, z0, z1) {
 
 /* ---------- names --------------------------------------------------------- */
 
-/* Eight hex digits that stand for the printed note wherever the note itself must not go:
-   in the part's key, which becomes the object name in a 3MF. FNV-1a, 32 bits: two
-   different notes in one drawer sharing a key would share a part, and at 32 bits that
-   is a chance in a few hundred million for a drawer of a hundred notes. */
+/* Eight hex digits (FNV-1a, 32 bits) that name a printed note in a file name when the
+   note has nothing noteSlug can spell. Only a name: two notes that hash alike still
+   download as two files, since typeNames numbers a clash apart. It is not what tells
+   one part from another. It was, in the part's key, and two notes sharing a key share a
+   part, so one bin printed the other's letters: in a drawer of a hundred notes that is
+   about one drawer in 868,000, not the chance in a few hundred million this said. The
+   key now carries the printed lines themselves (noteKey in ui.js). */
 function noteHash(text) {
   let h = 0x811c9dc5;
   const s = String(text);
@@ -6266,34 +6429,228 @@ function labelPrism(G, hwI, hdI, top, depth, t) {
   return G.profilePrism(prof, -hwI - BLOAT, hwI + BLOAT, (u, v) => [v, u]);
 }
 
+/* ...which suits a wall of the usual thickness and nothing much thinner. The prisms end
+   square, a BLOAT into the side walls, and the bin's outer corner is an arc of SPEC.r:
+   a wall under about 1.15 mm leaves those square ends standing out through the rounded
+   corners, 1.06 mm at the 0.4 minimum and 0.21 at 1.0. Such a bin builds the scoop and
+   the shelf over the cavity's own rounded outline instead, grown a BLOAT into the wall
+   all round, so their ends follow the corners. The usual wall keeps the prisms, and with
+   them the same bytes. Dividers and their rails are boxes with the same trouble, and
+   are built the same way when they have it (see the dividers in buildBin). */
+function cornersPoke(hw, hd, hwI, hdI, n) {
+  return outsideArc(hw, hd, hwI + BLOAT, hdI + BLOAT, n);
+}
+
+/* Whether a point stands out through the outline's rounded corner, or on it. Measured
+   against the outline as built, chords and all: in the direction of the point, the chord
+   it faces comes in to SPEC.r * cos(half a segment) at its middle and out to SPEC.r at
+   its ends. Held to the chord's middle everywhere, a scoop's corner, which lies exactly
+   on a vertex at 45 degrees, counted as out at walls 1.148 to 1.154 that never were. */
+function outsideArc(hw, hd, x, y, n) {
+  const dx = Math.abs(x) - (hw - SPEC.r), dy = Math.abs(y) - (hd - SPEC.r);
+  if (dx <= 0 || dy <= 0) return Math.max(dx, dy) > SPEC.r - 1e-6;
+  const seg = Math.PI / (2 * n), a = Math.atan2(dy, dx);
+  const mid = (Math.min(n - 1, Math.floor(a / seg)) + 0.5) * seg;
+  return Math.hypot(dx, dy) > SPEC.r * Math.cos(seg / 2) / Math.cos(a - mid) - 1e-6;
+}
+
+// the part of a convex outline with keep * (p[axis] - v) >= 0, the cut along it set to v
+function clipSide(pts, axis, v, keep) {
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const da = keep * (a[axis] - v), db = keep * (b[axis] - v);
+    if (da >= 0) out.push(a);
+    if (da * db < 0) {
+      const o = 1 - axis;
+      const p = [];
+      p[o] = a[o] + (b[o] - a[o]) * da / (da - db);
+      p[axis] = v;
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/* A solid standing over a convex outline in plan, between a bottom and a top that
+   depend on y alone and run straight between consecutive `stations`. Cut at the
+   stations, every band of it has a flat top and a flat bottom, so it is built as flat
+   faces: the outline's sides, and each band's top and bottom fanned from its middle.
+
+   Nothing in it is closer than WELD to anything else. checkManifold, and a slicer, weld
+   vertices a micron or so apart, and a scoop's arc runs into the floor at a tangent: a
+   0.09 mm scoop on a lowered front had stations 0.0004 mm apart and a top that never
+   rose a thousandth above its bottom, and welded, its faces folded onto each other. So
+   stations closer than ten times WELD are thinned out, a vertex that close to a station
+   is moved onto it, and the bottom stays a little way under the top's lowest point. */
+const WELD = 0.002;
+function bandSolid(G, ring, ylo, yhi, stations, zTop, zBot) {
+  const pts = clipSide(clipSide(ring, 1, ylo, 1), 1, yhi, -1);
+  let lo = Infinity, hi = -Infinity;
+  for (const p of pts) { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }
+  const cuts = [];
+  for (const s of stations.slice().sort((a, b) => a - b))
+    if (s > lo + 10 * WELD && s < hi - 10 * WELD && !(s - cuts[cuts.length - 1] < 10 * WELD)) cuts.push(s);
+  // a vertex wherever a station crosses the outline, and any vertex near one moved onto it
+  const rim = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const near = cuts.find((s) => Math.abs(a[1] - s) < WELD);
+    rim.push(near === undefined ? a : [a[0], near]);
+    const on = cuts.filter((s) => (s - a[1]) * (s - b[1]) < 0);
+    if (b[1] < a[1]) on.reverse();
+    for (const s of on) rim.push([a[0] + (b[0] - a[0]) * (s - a[1]) / (b[1] - a[1]), s]);
+  }
+  const vs = [];
+  for (const p of rim) {
+    const q = vs[vs.length - 1];
+    if (!q || Math.hypot(p[0] - q.x, p[1] - q.y) >= WELD)
+      vs.push({ x: p[0], y: p[1], t: zTop(p[1]), b: zBot(p[1]) });
+  }
+  while (vs.length > 1 && Math.hypot(vs[0].x - vs[vs.length - 1].x, vs[0].y - vs[vs.length - 1].y) < WELD)
+    vs.pop();
+  const polys = [];
+  const add = (verts) => { const p = G.makePoly(verts); if (p) polys.push(p); };
+  for (let i = 0; i < vs.length; i++) {             // sides, outwards: the outline is CCW
+    const a = vs[i], b = vs[(i + 1) % vs.length];
+    add([[a.x, a.y, a.b], [b.x, b.y, b.b], [b.x, b.y, b.t], [a.x, a.y, a.t]]);
+  }
+  /* Each band takes the outline's edges that lie in it. An edge along a station belongs
+     to the band the outline's inside is on: above it when the edge runs +x, as it does
+     anticlockwise along the bottom. */
+  const edges = [lo].concat(cuts, [hi]);
+  for (let k = 0; k + 1 < edges.length; k++) {
+    const y0 = edges[k], y1 = edges[k + 1];
+    const mine = vs.map((a, i) => {
+      const b = vs[(i + 1) % vs.length], m = (a.y + b.y) / 2;
+      if (a.y === b.y && (a.y === y0 || a.y === y1)) return a.y === (b.x > a.x ? y0 : y1);
+      return m > y0 && m < y1;
+    });
+    const band = vs.filter((v, i) => mine[i] || mine[(i - 1 + vs.length) % vs.length]);
+    const cx = band.reduce((s, v) => s + v.x, 0) / band.length;
+    const cy = band.reduce((s, v) => s + v.y, 0) / band.length;
+    for (let i = 0; i < band.length; i++) {
+      const a = band[i], b = band[(i + 1) % band.length];
+      add([[cx, cy, zTop(cy)], [a.x, a.y, a.t], [b.x, b.y, b.t]]);
+      add([[cx, cy, zBot(cy)], [b.x, b.y, b.b], [a.x, a.y, a.b]]);
+    }
+  }
+  return polys;
+}
+
+// straight between the points of a profile [[y, z], ...] sorted by y, flat beyond it
+function piecewise(prof) {
+  return (y) => {
+    if (y <= prof[0][0]) return prof[0][1];
+    for (let k = 1; k < prof.length; k++)
+      if (y <= prof[k][0]) {
+        const [y0, z0] = prof[k - 1], [y1, z1] = prof[k];
+        return y === y1 ? z1 : z0 + (z1 - z0) * (y - y0) / (y1 - y0);
+      }
+    return prof[prof.length - 1][1];
+  };
+}
+
+// the cavity's outline grown a BLOAT into the wall, without the straights' split points
+function cavityRing(hwI, hdI, wall, n, grow = BLOAT) {
+  return roundRect(hwI + grow, hdI + grow, Math.max(0.4, SPEC.r - wall) + grow, n,
+                   [[], [], [], []]);
+}
+function scoopRounded(G, hwI, hdI, wall, floorZ, r, segs, n) {
+  const y0 = -hdI, prof = [];
+  for (let k = segs; k >= 0; k--) {                 // the same arc, from the wall down
+    const a = (k / segs) * Math.PI / 2;
+    prof.push([y0 + r - r * Math.sin(a), floorZ + r - r * Math.cos(a)]);
+  }
+  return bandSolid(G, cavityRing(hwI, hdI, wall, n), -Infinity, y0 + r,
+                   prof.map(([y]) => y), piecewise(prof), () => floorZ - BLOAT / 2);
+}
+function labelRounded(G, hwI, hdI, wall, H, depth, t, n) {
+  const yb = hdI;
+  return bandSolid(G, cavityRing(hwI, hdI, wall, n), yb - depth, Infinity, [],
+                   () => H, piecewise([[yb - depth, H - t], [yb + BLOAT, H - t - depth]]));
+}
+
 /* The note raised on the label shelf (labelMode 1).
  *
- * The shelf is what a bin stacked on this one rests on: its feet come down at H, which
- * is where the shelf's top is. Letters standing on it there would hold that bin up and
- * be crushed by it. So with letters on it the shelf drops to H - 1.0, and they stand
- * 0.6 on it and top out at H - 0.4, under anything that comes down at H. Without letters
- * nothing moves: every other bin is built exactly as it was.
+ * A bin stacked on this one comes down into its lip until the chamfers of its feet meet
+ * the lip's, 0.25 mm below H (the spec's clearance, on 45 degree faces: stack-check.js),
+ * unless something stops it first, and a shelf with its top at H does. Letters standing
+ * on a shelf there would hold that bin up and be crushed by it. So with letters on it
+ * the shelf drops to H - 1.0, and they stand 0.6 on it and top out at H - 0.4: 0.15 mm
+ * under the feet of a bin seated above. Without letters nothing moves: every other bin
+ * is built exactly as it was.
  *
  * The letters go where they can be read from above. At the back and the sides that is
  * clear of the stacking lip, whose chamfer leans in over the shelf to 2.70 from the
  * outside at H: the band stops there, which at the letters' top, 0.4 lower, is 0.4 clear
  * of the chamfer too. At the front they keep 0.6 off the shelf's edge.
  *
+ * Dividers stand from the floor to H, through the shelf and anything on it (buildBin), so
+ * the letters keep 0.4 off each one that crosses the band: a fixed divider is a wall
+ * thick, and a removable one has a rail each side of the slot its plate slides down,
+ * which is where the plate goes too. They go in the widest space left across the shelf
+ * and, where dividers the other way cross it, the deepest from front to back. A space
+ * that will not take the note at the usual sizes (noteFit's readable) takes nothing. The
+ * walls alone leave one that narrow only on a half-size bin with walls past about 6.5 mm,
+ * where letters came out half a millimetre tall. noteFit lets letters under 3 mm stand
+ * where the depth it is given is the shelf's, and a space cut short by dividers along the
+ * bin is not: there they came out a millimetre tall, or under nothing and mirrored, and a
+ * space like that takes letters only 3 mm tall or more.
+ *
  * `footAt` is how low the shelf's slope may reach, which buildBin works out. Returns what
  * goes on the shelf: { why } with why 'off' when no note was asked for, 'empty' when
- * nothing in it prints and 'shallow' when the lowered shelf is under 6 mm deep (with its
- * depth); otherwise { why: '', top, depth, text, fit }, `fit` being noteFit's answer. */
+ * nothing in it prints, 'shallow' when the lowered shelf is under 6 mm deep (with its
+ * depth, and `by`: 'asked' for a shelf asked for that shallow, 'inside' for one held to
+ * 0.8 of the inside's depth, 'height' for one held to the room above the floor),
+ * 'dividers' when the dividers leave no space the note fits (with `along` when it is
+ * the ones along the bin: the shelf's whole depth would take it) and 'narrow' when the
+ * walls do (both with its depth); otherwise { why: '', top, depth, text, fit, divided }, `fit`
+ * being noteFit's answer and `divided` whether dividers narrowed the space it was fitted
+ * to. */
 const NOTE_CLEAR = 0.4;      // letters stop this far under H
+const NOTE_DIV_CLEAR = 0.4;  // ...and this far off a divider, its rails or its plate's slot
 function noteOnShelf(c, iw, id, H, footAt) {
   if (+c.labelMode !== 1) return { why: 'off' };
   const text = NOTE_TEXT.notePrintable(c.note).text;
   if (!text) return { why: 'empty' };
   const S = NOTE_TEXT.NOTE_SPEC, top = H - NOTE_CLEAR - S.relief;
-  const depth = Math.min(c.label, id * 0.8, top - c.labelT - footAt);
-  if (!(depth >= S.shelfMin)) return { why: 'shallow', depth: Math.max(0, depth) };
+  const inside = id * 0.8, room = top - c.labelT - footAt;
+  const depth = Math.min(c.label, inside, room);
+  if (!(depth >= S.shelfMin))
+    return { why: 'shallow', depth: Math.max(0, depth),
+             by: depth === c.label ? 'asked' : depth === inside ? 'inside' : 'height' };
   const m = Math.max(0.5, LIP[0][1] - c.wall);
-  const band = { x0: -iw + m, x1: iw - m, y0: id - depth + S.front, y1: id - m };
-  return { why: '', top, depth, text, fit: NOTE_TEXT.noteFit(text, band) };
+  /* The widest stretch of lo..hi clear of n dividers spread across -inner..inner as
+     buildBin spreads them, `half` either side of each centre line, the first of equals;
+     null when nothing is left. `divided` says whether any of them crossed it. */
+  const half = (c.divRemovable ? c.divT / 2 + c.divClr + RAIL_T : c.wall / 2) + NOTE_DIV_CLEAR;
+  let divided = false;
+  const widest = (lo, hi, n, inner) => {
+    let gaps = [[lo, hi]];
+    for (let k = 1; k <= n; k++) {
+      const p = -inner + (2 * inner) * k / (n + 1), a = p - half, b = p + half;
+      if (b <= lo || a >= hi) continue;
+      divided = true;
+      gaps = gaps.flatMap(([u, v]) => [[u, Math.min(v, a)], [Math.max(u, b), v]])
+        .filter(([u, v]) => v - u > 1e-9);
+    }
+    return gaps.reduce((w, g) => (!w || g[1] - g[0] > w[1] - w[0] + 1e-9 ? g : w), null);
+  };
+  const y0 = id - depth + S.front, y1 = id - m;
+  const xs = widest(-iw + m, iw - m, c.divX, iw), across = divided, ys = widest(y0, y1, c.divY, id);
+  const fitIn = (x, y) => NOTE_TEXT.noteFit(text, { x0: x[0], x1: x[1], y0: y[0], y1: y[1] });
+  const prints = (f) => f.readable && f.cap > 0;
+  /* Nothing printed, and why: the dividers along the bin only when the shelf's whole
+     depth, between the same dividers across, would have taken the note. Said whenever
+     they cut the shelf short, it sent people to take out dividers that were not in the
+     way: a 1 x 0.5 with one divider each way had no room between the ones across. */
+  const refuse = (cut) => (cut && xs && prints(fitIn(xs, [y0, y1]))
+    ? { why: 'dividers', depth, along: true } : { why: across ? 'dividers' : 'narrow', depth });
+  if (!xs || !ys) return refuse(!ys);
+  const fit = fitIn(xs, ys), cut = ys[1] - ys[0] < y1 - y0 - 1e-9;
+  if (!prints(fit) || (cut && fit.cap < S.capMin - 1e-9)) return refuse(cut);
+  return { why: '', top, depth, text, fit, divided };
 }
 
 /* Stacking lip.
@@ -7368,6 +7725,10 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
  * the shelf's front edge so it never comes through the shelf, or through a note raised
  * on it. Dividers and the scoop are left off a bin with holes, and a carved shape gets
  * none. A half-size bin is a rectangle with one slab like any other, and takes them.
+ *
+ * A note raised on the shelf is fitted to the bin as it is built (floorPlan): a bin with
+ * holes has no dividers, so its note takes the whole shelf, as on a bin that never had
+ * any, and the block keeps under the lowered shelf as it does under a plain one.
  */
 /* The presets: what goes in, at its largest, and the room its hole gets. The AA and AAA
    sizes are the IEC maxima; the 18650's is a typical maximum, and a protected cell can be
@@ -7437,12 +7798,29 @@ function shelfFor(c, iw, id, H) {
      built cleanly: a 14 mm label on a 1x1x3 came out 13.65.
      With screws the foot stops above the screws' ends instead, for the reason the wall
      ring does: behind a wall over 5 mm thick it reaches in over a hole. */
-  const feet = holePlan(c);
-  const footAt = feet && feet.screws ? FOOT_HOLES.screwTop + BLOAT : SPEC.footH + BLOAT;
-  const raised = noteOnShelf(c, iw, id, H, footAt);
+  const raised = noteOnShelf(c, iw, id, H, shelfFoot(c));
   if (raised.fit) return { top: raised.top, depth: raised.depth, raised };
-  const d = Math.min(c.label, id * 0.8, H - c.labelT - footAt);
+  const d = Math.min(c.label, id * 0.8, H - c.labelT - shelfFoot(c));
   return d > 0.05 ? { top: H, depth: d, raised: null } : null;
+}
+// how low the shelf's slope may reach: the top of the feet, or of the screws in them
+const shelfFoot = (c) => {
+  const feet = holePlan(c);
+  return feet && feet.screws ? FOOT_HOLES.screwTop + BLOAT : SPEC.footH + BLOAT;
+};
+/* The shelf and the holes of a bin, as buildBin builds them: { shelf, holes }, shelfFor's
+   and holeLayout's answers. They decide each other. The holes keep in front of the shelf
+   and under it, so they need it first; and a bin with holes is built without its
+   dividers, which a note raised on the shelf keeps clear of (noteOnShelf), so the shelf
+   needs to know whether there are holes. Asked for holes, a bin is worked out without its
+   dividers, and if the holes come out built that is the bin. If they do not (too short,
+   or none fit), the dividers are built after all and the shelf is worked out with them,
+   as on any bin without holes, which is every bin not asked for them. */
+function floorPlan(c, iw, id, H) {
+  if (!insertOf(c)) return { shelf: shelfFor(c, iw, id, H), holes: { why: 'off' } };
+  const bare = c.divX || c.divY ? Object.assign({}, c, { divX: 0, divY: 0 }) : c;
+  const shelf = shelfFor(bare, iw, id, H), holes = holeLayout(c, iw, id, H, shelf);
+  return holes.n ? { shelf, holes } : { shelf: bare === c ? shelf : shelfFor(c, iw, id, H), holes };
 }
 /* Where the holes go in a bin settled as buildBin settles it, and how deep they are, or
    why there are none. `why` is 'off' (none asked for), 'carved', 'solid', 'short' (under
@@ -7452,8 +7830,9 @@ function shelfFor(c, iw, id, H) {
    `units` (the fewest that keep an item under the rim, H) and `above` (how far one stands
    over it, negative when it is under). Built: `n` holes, at `xs` by `ys`, `depth` deep,
    the block's `top`, and whether the depth was typed (`asked`) and cut to the room
-   (`capped`). */
-function holeLayout(c, iw, id, H) {
+   (`capped`). `shelf` is the label shelf they keep clear of, shelfFor's answer, settled
+   as floorPlan settles it. */
+function holeLayout(c, iw, id, H, shelf) {
   const p = Number.isInteger(+c.insert) ? INSERTS[+c.insert] || null : null;
   if (!p) return { why: 'off' };
   const S = INSERT_SPEC;
@@ -7461,7 +7840,7 @@ function holeLayout(c, iw, id, H) {
   const d = p.size + p.clr + extra;
   if (!isFullRect(c)) return { why: 'carved', p, d };
   if (builtSolid(c)) return { why: 'solid', p, d };
-  const shape = holeShape(p.shape, d), shelf = shelfFor(c, iw, id, H);
+  const shape = holeShape(p.shape, d);
   const floor = floorTop(c) + BLOAT;
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) => c.edges[k] === undefined || c.edges[k] >= 1);
   const side = c.lip && allFull ? Math.max(S.edge, LIP[0][1] - c.wall + S.lipClear) : S.edge;
@@ -7487,7 +7866,7 @@ function insertPlan(cfg) {
   if (isHalfSize(c)) c.cells = null;
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink;
-  return holeLayout(c, hw - c.wall, hd - c.wall, c.hUnits * SPEC.unitH);
+  return insertOf(c) ? floorPlan(c, hw - c.wall, hd - c.wall, c.hUnits * SPEC.unitH).holes : { why: 'off' };
 }
 /* Both loops of one tile: the tile's outline and the hole's, sampled on the same rays
    from the hole's centre. A ray goes through every corner of either, so both come out
@@ -7847,9 +8226,8 @@ function buildBin(G, cfg) {
        first, because holes across the floor keep in front of it and under it, and a bin
        with holes has no scoop and no dividers: the holes take the floor. */
     const eF = c.edges && c.edges.f !== undefined ? c.edges.f : 1;
-    const iw = hw - c.wall, id = hd - c.wall;
-    const shelf = shelfFor(c, iw, id, H);
-    const holes = holeLayout(c, iw, id, H);
+    const iw = hw - c.wall, id = hd - c.wall, poke = cornersPoke(hw, hd, iw, id, n);
+    const { shelf, holes } = floorPlan(c, iw, id, H);
     const holesOn = !!holes.n;
     if (c.scoop > 0.05 && eF > 0 && !holesOn) {
       /* No taller than the front wall it fills the corner of. With the front lowered,
@@ -7857,12 +8235,18 @@ function buildBin(G, cfg) {
          height binTop quotes: a 2x1x4 with every wall at a quarter and an 8.5 mm scoop
          was 14.45 mm built and 11.5 quoted, to its README and the bed check. */
       const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF));
-      if (r > 0.05) polys.push(...scoopPrism(G, iw, id, floorZ, r, Math.max(4, n)));
+      if (r > 0.05) polys.push(...(poke ? scoopRounded(G, iw, id, c.wall, floorZ, r, Math.max(4, n), n)
+                                        : scoopPrism(G, iw, id, floorZ, r, Math.max(4, n))));
     }
     if (shelf) {
-      polys.push(...labelPrism(G, iw, id, shelf.top, shelf.depth, c.labelT));
+      /* How deep and how high is shelfFor's, which the holes keep in front of and under.
+         The shelf's top is H, or lower with a note raised on it (noteOnShelf), and on a
+         thin wall it is built over the cavity's rounded outline (cornersPoke) whichever
+         height it is at. */
+      polys.push(...(poke ? labelRounded(G, iw, id, c.wall, shelf.top, shelf.depth, c.labelT, n)
+                          : labelPrism(G, iw, id, shelf.top, shelf.depth, c.labelT)));
       if (shelf.raised)
-        polys.push(...NOTE_TEXT.noteShells(G, shelf.raised.fit.segs, shelf.top - BLOAT, H - NOTE_CLEAR));
+        polys.push(...NOTE_TEXT.noteShells(G, shelf.raised.fit.segs, shelf.raised.top - BLOAT, H - NOTE_CLEAR));
     }
 
     /* Dividers — separate overlapping shells, never unioned.
@@ -7912,13 +8296,34 @@ function buildBin(G, cfg) {
     const reach = (inner) => (c.divRemovable
       ? [[-inner - BLOAT, -inner + RAIL_D], [inner - RAIL_D, inner + BLOAT]]
       : [[-inner - BLOAT, inner + BLOAT]]);
+    /* A box that would stand out through a rounded corner, as one packed up to a corner
+       does (16 pairs of rails across a 1x1 with a 0.4 mm wall: 0.92 mm out; the most
+       rails both ways the fields allow, at the usual 1.2: 0.67), is
+       the cavity's outline grown a BLOAT into the wall, cut to the box instead: the same
+       outline the scoop and shelf follow there, so it meets the wall the same way. A box
+       left with almost nothing inside the outline is all wall, and is not built.
+       Each direction's boxes take the outline grown a little less than a BLOAT, and by a
+       different amount, so that two cut at one corner, or one and the shelf, never share
+       a vertical edge at the same outline vertex: 8 edges used four times when they did. */
+    const box = (pts, grow) => {
+      if (!pts.some(([x, y]) => outsideArc(hw, hd, x, y, n)))
+        return G.extrudePoly(pts, floorZ - BLOAT, H);
+      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      let cut = cavityRing(iw, id, c.wall, n, grow);
+      cut = clipSide(clipSide(cut, 0, Math.min(...xs), 1), 0, Math.max(...xs), -1);
+      cut = clipSide(clipSide(cut, 1, Math.min(...ys), 1), 1, Math.max(...ys), -1);
+      cut = cut.filter((p, i) => Math.hypot(p[0] - cut[(i + 1) % cut.length][0],
+                                            p[1] - cut[(i + 1) % cut.length][1]) >= WELD);
+      return cut.length >= 3 && Math.abs(G.polyArea2D(cut)) > 0.01
+        ? G.extrudePoly(cut, floorZ - BLOAT, H) : [];
+    };
     // none with holes across the floor: the holes are what divides it
     for (const [a, b] of spans(holesOn ? 0 : c.divX, iw))
       for (const [lo, hi] of reach(id))
-        polys.push(...G.extrudePoly([[a, lo], [b, lo], [b, hi], [a, hi]], floorZ - BLOAT, H));
+        polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
     for (const [a, b] of spans(holesOn ? 0 : c.divY, id))
       for (const [lo, hi] of reach(iw))
-        polys.push(...G.extrudePoly([[lo, a], [hi, a], [hi, b], [lo, b]], floorZ - BLOAT, H));
+        polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT));
 
     // the holes, last, so a bin without them is every shell it was, in the order it was
     if (holesOn) { polys.push(...holeTiles(G, c, holes, iw, id)); holesBuilt = holes.n; }
@@ -7972,7 +8377,9 @@ function shelfNote(cfg) {
   const iw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const id = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const footAt = plan && plan.screws ? FOOT_HOLES.screwTop + BLOAT : SPEC.footH + BLOAT;
-  return say(noteOnShelf(c, iw, id, H, footAt));
+  // a bin built with holes across its floor is built without dividers (floorPlan)
+  const holed = insertOf(c) && floorPlan(c, iw, id, H).holes.n;
+  return say(noteOnShelf(holed ? Object.assign({}, c, { divX: 0, divY: 0 }) : c, iw, id, H, footAt));
 }
 
 /* ---------- layout packing -------------------------------------------------
@@ -8232,6 +8639,9 @@ let hashExtras = {};
 let pendingNotes = null;
 let pendingFocus = null;    // "layer.index" from the hash, applied once the layout exists
 let pendingScratch = null;  // a packed loose bin from the hash
+let pendingScratchNote = null;  // ...and its note, which travels beside it (bsn)
+let noteHeld = new WeakSet();   // bins whose raised note is past RAISED_MAX (holdNotes)
+let notesOver = 0;              // ...and how many different notes that is
 const geoCache = new Map();
 
 const B = () => layers[cur].bins;
@@ -8309,8 +8719,13 @@ function platePitch() {
 function plateCells(W, D) {
   const pm = plateMargins();
   // each held to the drawer, as the plate's fields hold them
+  /* A plate with half cells in its leftover (see halfStrips in core.js) has the same
+     whole cells, and its margins take the strip on the right and the back: asked as
+     'auto', the drawer was drawn up to half a cell off where the plate sits in it. The
+     strip is not offered to bins here yet, so to this page it is margin. */
   const c = gridCells({ drawerW: W, drawerD: D, pitch: SPEC.pitch,
-    marginMode: pm ? 'custom' : 'auto', alignX: hashExtras.ax, alignY: hashExtras.ay,
+    marginMode: pm ? 'custom' : hashExtras.mm === 'half' ? 'half' : 'auto',
+    alignX: hashExtras.ax, alignY: hashExtras.ay,
     mLeft: pm ? Math.min(pm.l, W) : 0, mRight: pm ? Math.min(pm.r, W) : 0,
     mFront: pm ? Math.min(pm.f, D) : 0, mBack: pm ? Math.min(pm.b, D) : 0 });
   return { nx: Math.max(1, Math.min(GRID_MAX, c.nx)), ny: Math.max(1, Math.min(GRID_MAX, c.ny)),
@@ -8336,8 +8751,9 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          // holes in the feet are per bin, the magnet they fit is the page's
                          magnets: b.magnets, screws: b.screws, holesEvery: b.holesEvery,
                          magnetD: state.magnetD, magnetH: state.magnetH,
-                         // the note goes in only to be raised on the shelf (labelMode 1)
-                         labelMode: b.labelMode, note: b.note,
+                         /* the note goes in only to be raised on the shelf (labelMode 1),
+                            and not past the most one layout raises (holdNotes) */
+                         labelMode: noteHeld.has(b) ? 0 : b.labelMode, note: b.note,
                          // holes across the floor are per bin, their clearance the page's
                          insert: b.insert, insertDepth: b.insertDepth, holeClr: state.holeClr,
                          arcSegs: state.arcSegs });
@@ -8410,19 +8826,54 @@ function insertHintSay(b) {
 /* ---------- the note, raised on the label shelf ----------------------------
    A bin set to it (labelMode 1) prints its note in raised letters on its label shelf:
    bin.js decides where and whether, text.js which letters and how big. */
+/* How many different notes one layout prints raised. Each is a part of its own, built
+   and held in memory like any other, so a link could ask for as many as it has bins: 256
+   took the page to 1.3 GB and 20 s to load. A hundred is a 10 x 10 drawer of 1x1 bins
+   each with its own label. Past it, a bin whose note is not among the first hundred,
+   layer by layer and bin by bin, prints plain, and Checks says so, as it does for a
+   drawer past the most this tool lays out; the bins keep the setting, so the link and
+   the saved drawer still say what was asked. A loose bin is one bin, and never held. A
+   bin whose note does not fit its shelf builds no part for it, so it takes none of the
+   hundred: a hundred shelfless bins with notes held the one note that could print. */
+const RAISED_MAX = 100;
+/* Which bins are past it, worked out afresh at the start of every pass that reads or
+   draws the layout (readControls, refresh), since anything can have changed a note or
+   the order: an edit, Undo, a link. Once per pass, not per bin: per bin it was the whole
+   layout for every raised bin in it. */
+function holdNotes() {
+  noteHeld = new WeakSet();
+  const allowed = new Set(), held = new Set();
+  for (const L of layers) for (const b of L.bins) {
+    if (+b.labelMode !== 1 || !b.note) continue;
+    const t = notePrintable(b.note).text;
+    if (!t || !shelfNote(binCfg(b)).fit) continue;
+    if (!allowed.has(t) && !held.has(t)) (allowed.size < RAISED_MAX ? allowed : held).add(t);
+    if (held.has(t)) noteHeld.add(b);
+  }
+  notesOver = held.size;
+}
 /* What a bin prints on its shelf, shelfNote's answer, or null when it prints nothing
    there. Only a bin set to raise its note can print one, so every other bin is answered
    without working anything out. */
 const printedNote = (b) => {
-  if (+b.labelMode !== 1 || !b.note) return null;
+  if (+b.labelMode !== 1 || !b.note || noteHeld.has(b)) return null;
   const s = shelfNote(binCfg(b));
   return s.fit ? s : null;
 };
 /* A bin printing its note is a part of its own: two with different notes are two
-   parts, and two whose letters come out the same are one. The key carries a hash of
-   the lines as printed, never the note itself: the key is the object's name in a 3MF,
-   and a note is whatever someone typed. */
-const noteKey = (b) => { const p = printedNote(b); return p ? '-n' + noteHash(p.fit.lines.join('\n')) : ''; };
+   parts, and two whose letters come out the same are one. So the key carries the lines
+   as printed, and the size, which a note cut short takes from the whole of it: exactly,
+   since two notes sharing a key share a part, and one bin would print the other's
+   letters. It used to carry a 32-bit hash of them, where two notes in a hundred
+   matched about once in 868,000 drawers. Written as the code of each character in hex,
+   never as the note itself: the key is the object's name in a 3MF and goes into the
+   download table's markup, and a note is whatever someone typed. */
+const noteKey = (b) => {
+  const p = printedNote(b);
+  if (!p) return '';
+  const hex = [...p.fit.lines.join('\n')].map((c) => c.codePointAt(0).toString(16).padStart(4, '0')).join('');
+  return `-n${hex}.${+p.fit.cap.toFixed(6)}`;
+};
 /* A character the font cannot draw, as the hint and Checks name it: itself, or its code
    point when it is one nobody could see — a control, or a space of some other kind —
    so a sentence never names a blank. */
@@ -8441,6 +8892,9 @@ const leftOff = (list) => `${charList(list)} cannot print, so ${list.length > 1 
    showing, or nothing when it is the settings for new bins, which start with no note. */
 function noteHintSay(b) {
   if (!b) return ['New bins print their note raised on the label shelf, once you give each one a note.', ''];
+  if (noteHeld.has(b))
+    return [`This layout already raises ${RAISED_MAX} other notes, the most one layout prints, ` +
+            'so this one prints plain.', 'Set some of the others to Nothing, or print some bins as a layout of their own.'];
   const s = shelfNote(binCfg(b)), S = NOTE_SPEC, mm = (x) => +x.toFixed(1);
   const many = s.dropped.length > 3;
   const off = !s.dropped.length ? ''
@@ -8450,23 +8904,39 @@ function noteHintSay(b) {
   if (s.why === '') {
     const f = s.fit;
     return [`Prints ${mm(f.cap)} mm tall on ${f.lines.length > 1 ? 'two lines' : 'one line'}` +
-            `${f.cut ? ', cut short to fit' : ''}.${off}`,
+            `${s.divided ? ', between the dividers' : ''}${f.cut ? ', cut short to fit' : ''}.${off}`,
             rest(f.cut ? `It reads \u201c${f.lines.join(' / ')}\u201d: a wider bin, a deeper shelf or a shorter note fits more.` : '',
+                 s.divided ? 'The dividers stand through the shelf, so the letters go in the widest space between them.' : '',
                  f.cap < S.capMin - 1e-9 ? `That is under the ${S.capMin} mm that stays readable; a deeper shelf has room for bigger letters.` : '',
                  offMore)];
   }
+  if (s.why === 'dividers' && s.along)
+    return ['The dividers along the bin cut the label shelf too short from front to back for the note, so nothing prints.' + off,
+            rest(`They stand through the shelf, and the letters keep clear of each one; where they cut it short, letters print only ${S.capMin} mm tall or more. Fewer of them, or a bin deeper from front to back, leaves room.`, offMore)];
+  if (s.why === 'dividers')
+    return ['The dividers leave no space on the label shelf wide enough for the note, so nothing prints.' + off,
+            rest('They stand through the shelf, and the letters keep clear of each one. Fewer dividers, a bigger bin or a shorter note leaves room.', offMore)];
+  if (s.why === 'narrow')
+    return ['The walls leave the label shelf too narrow for the note, so nothing prints.' + off,
+            rest('Thinner walls or a wider bin leaves room.', offMore)];
   if (s.why === 'empty')
     return !(b.note || '').trim()
       ? ['Type what goes in it above, and it prints raised on the label shelf.', '']
       : ['Nothing in this note can print, so the shelf stays plain.',
          `The letters are A to Z and a to z without accents, the digits, the punctuation on a ` +
          `keyboard, and \u00b5 \u03a9 \u00b0 \u00b1 \u00d7 \u00d8. ${charList(s.dropped)} ${s.dropped.length > 1 ? 'are' : 'is'} not among them.`];
+  /* Which limit held the shelf (noteOnShelf's `by`) is what to change: the depth asked
+     for, the inside's own depth, or the height. Said as the height, a 1 x 0.5 bin six
+     units tall with 3 mm walls was told a taller bin had room for a deeper shelf. */
   if (s.why === 'shallow')
-    return [(b.label < S.shelfMin
+    return [(s.by === 'asked'
       ? `The label shelf is ${mm(b.label)} mm deep, and letters need ${S.shelfMin} mm, so nothing prints.`
+      : s.by === 'inside' ? `A shelf takes at most 80% of the inside's depth, ${mm(s.depth)} mm here, and letters need ${S.shelfMin} mm, so nothing prints.`
       : s.depth < 0.05 ? 'A bin this short has no room under its rim for a shelf to print on, so nothing prints.'
       : `A bin this tall has room under its rim for a shelf ${mm(s.depth)} mm deep, and letters need ${S.shelfMin} mm, so nothing prints.`) + off,
-      rest(b.label < S.shelfMin ? '' : 'The shelf slopes down to the wall at 45 degrees, so its depth is held to the room above the floor. A taller bin has room for a deeper one.', offMore)];
+      rest(s.by === 'asked' ? ''
+        : s.by === 'inside' ? 'A bin deeper from front to back, or with thinner walls, has room for a deeper shelf.'
+        : 'The shelf slopes down to the wall at 45 degrees, so its depth is held to the room above the floor. A taller bin has room for a deeper one.', offMore)];
   return [{
     noshelf: 'Give it a label shelf above, and the note prints raised on it.',
     carved: 'A carved shape has no label shelf, so the note does not print.',
@@ -8742,6 +9212,52 @@ function footProfileHalf(z) {
   return h;
 }
 
+/* The plan area of the rails `n` removable dividers stand in along one direction: each a
+   slot between two ribs RAIL_T thick, standing RAIL_D out from each of the two facing
+   walls its plate slides between, from the floor to the rim. `along` is half the length
+   of those walls inside the cavity, hwI for the dividers that stand at a fixed x (divX),
+   hdI for the others, as buildBin's spans() and reach() take them.
+   Placed, sorted and merged where two meet exactly as spans() does it, so dividers packed
+   close enough for one's rail to run into the next count the plastic they share once.
+   A rail beside an end wall can stand in the cavity's rounded corner, where buildBin
+   either leaves it buried in the wall or, if it would stand out through the bin, cuts it
+   to the cavity's outline. Either way the part behind the arc is wall, already counted,
+   so only the part in front of it is counted here: the rail's depth left in front of
+   the arc, summed along it, against a true arc of the cavity's radius rather than the
+   chords it is built from (under a rail 1.2 mm wide the two differ by a few hundredths
+   of a square millimetre at the coarsest smoothness). A rail on a straight run is
+   counted whole, so at any count that keeps the rails out of the corners the sum is
+   exactly the rails' own area. */
+function railArea(n, along, wall) {
+  if (!(n > 0) || !(along > 0)) return 0;
+  const slot = state.divT / 2 + state.divClr, rail = slot + RAIL_T;
+  const spans = [];
+  for (let k = 1; k <= n; k++) {
+    const p = -along + (2 * along) * k / (n + 1);
+    spans.push([p - rail, p - slot], [p + slot, p + rail]);
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const [lo, hi] of spans) {
+    const last = merged[merged.length - 1];
+    if (last && lo <= last[1] + BLOAT) last[1] = Math.max(last[1], hi);
+    else merged.push([lo, hi]);
+  }
+  /* t into a corner, the arc stands rI - sqrt(rI² - t²) in front of the wall's straight
+     line, and takes the whole of a rail's depth at tEnd (or never quite, where the
+     radius is no deeper than the rail). `under` is the depth left in front of it, summed
+     from the corner's start to t; `upTo` the same from the middle of the wall to x, both
+     ways, so a span's area is upTo(hi) - upTo(lo). Past the end wall it adds nothing. */
+  const rI = Math.max(0.4, SPEC.r - wall), straight = Math.max(0, along - rI);
+  const tEnd = RAIL_D >= rI ? rI : Math.sqrt(rI * rI - (rI - RAIL_D) * (rI - RAIL_D));
+  const under = (t) => {
+    t = Math.min(Math.max(t, 0), tEnd);
+    return (RAIL_D - rI) * t + (t * Math.sqrt(rI * rI - t * t) + rI * rI * Math.asin(t / rI)) / 2;
+  };
+  const upTo = (x) => Math.sign(x) * (RAIL_D * Math.min(Math.abs(x), straight) + under(Math.abs(x) - straight));
+  return 2 * merged.reduce((a, [lo, hi]) => a + upTo(hi) - upTo(lo), 0);  // both walls
+}
+
 // { raw, filament } in mm3
 function volumeMm3(c) {
   const C = SPEC.centre;
@@ -8788,9 +9304,22 @@ function volumeMm3(c) {
                     * (H - floorZ);
   const perim = 4 * hwO + 4 * hdO;
   const wallFrac = (e('f') * 2 * hwO + e('b') * 2 * hwO + e('l') * 2 * hdO + e('r') * 2 * hdO) / perim;
-  // a bin with holes across its floor has no dividers (holesIn)
+  /* Dividers. A fixed one is a wall across the cavity, a wall thick, and is counted as
+     one. A removable one is not built into the bin at all: the bin gets the rails its
+     plate slides down (railArea), and the plate is a part of its own, which the plan
+     weighs beside the bin (computePlan). Counted as a wall each, the rails went uncounted
+     and each plate was weighed twice, once here and once as itself: a 2x1x6 with three
+     removable dividers across and two along was 41 g of bin where it is 27 g, and with
+     its 20 g of plates the job was 60 g where it is 47 g. A carved bin gets no rails
+     (buildBin leaves dividers off a carved shape, as dividerParts does its plates), so a
+     removable one counts none. A bin with holes across its floor has no dividers at all
+     (holesIn), and its holes are counted below. */
   const holes = holesIn(c);
-  const divs = holes ? 0 : (c.divX * wall * 2 * hdI + c.divY * wall * 2 * hwI) * (H - floorZ);
+  const built = holes ? { divX: 0, divY: 0 }                 // the dividers it is built with
+    : { divX: c.divX || 0, divY: c.divY || 0 };
+  const divs = !c.divRemovable
+    ? (built.divX * wall * 2 * hdI + built.divY * wall * 2 * hwI) * (H - floorZ)
+    : isCarved(c) ? 0 : (railArea(built.divX, hwI, wall) + railArea(built.divY, hdI, wall)) * (H - floorZ);
   const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
   /* The block the holes are in fills the cavity to their depth, less the holes: a thick
@@ -8985,6 +9514,30 @@ function placeDividers() {
 }
 PHONE.addEventListener('change', placeDividers);
 placeDividers();
+/* The Steps switch goes on the drawer map's heading row on a wider window, and beside the
+   layer tabs on a phone, moved the same way and for the same reason. Beside the tabs,
+   the map's card had to be as wide as two layers' tabs and the switch, which came out of
+   the preview, and from a third layer the switch took a row of its own: at 1366 × 768
+   that put the coverage bar 21 px under the window, with the map already at its 40 px
+   cells and nothing left to give. The heading row is there anyway, so in it the switch
+   costs the map no height and the tabs have their row to themselves, as they did before
+   it. A phone's heading has no room for it beside the title, and a 40 px button is
+   taller than the heading, so there it stays on the tabs' row. drawMap is run again on
+   the change, which comes after the resize that already drew it.
+   On the row, beside the <h3> and never in it: inside it, the heading was read out as
+   "Drawer layout Steps Steps". And a button that had the focus keeps it: moving an
+   element in the document takes the focus off it, and a window narrowed past 980 px, or
+   zoomed, with the keyboard on Half cells left it on the page's body. */
+function placeSteps() {
+  const card = $('s-layout'), steps = card.querySelector('.steps');
+  const home = card.querySelector(PHONE.matches ? '.maptools' : '.layouthead');
+  if (steps.parentNode === home) return;
+  const had = steps.contains(document.activeElement) ? document.activeElement : null;
+  home.appendChild(steps);
+  if (had) had.focus({ preventScroll: true });
+}
+PHONE.addEventListener('change', () => { placeSteps(); drawMap(); });
+placeSteps();
 function closeSheet() {
   const inside = $('s-bin').contains(document.activeElement);
   /* What was typed a moment ago is still waiting for its redraw (schedule, below), and
@@ -9322,6 +9875,9 @@ function readControls() {
      until the next edit, Undo or selection, whatever that touched: it was about the
      size the fields held then. */
   let sizeNote = '';
+  // a size the last pass refused under the caret, if it did (sizeHeld)
+  const held = sizeHeld;
+  sizeHeld = null;
   /* The footprint is settled first: the floor, the label shelf and the dividers are
      limited by the bin's real size, so they wait for it. A loose bin has no drawer to
      collide with, so its footprint is held only by the fields' own 50 cells — with no
@@ -9348,9 +9904,18 @@ function readControls() {
       if (why) {
         t.u = b.u; t.v = b.v;
         if (!sizeTyping()) { $('u').value = b.u; $('v').value = b.v; }
+        else sizeHeld = { u: b.u, v: b.v };
       }
       if (why === WHOLE_ON_WHOLE) sizeNote = why;
     }
+  } else if (!scratch && held) {
+    /* With no bin selected the fields are the size of the next one drawn, and what they
+       hold here is a size the bin selected a moment ago refused, left under the caret.
+       It goes back to that bin's, as it would have on leaving the field had the bin
+       still been selected: Fill the rest takes the selection away first, and a 2 typed
+       for the 1.5 × 1 on a half step filled the drawer with 2 × 1 bins. */
+    Object.assign(t, held);
+    $('u').value = held.u; $('v').value = held.v;
   }
   /* Several bins take the same settings, so the smallest of them sets the limit: the
      dividers that fit a 1x1 are the most any of them can be given. */
@@ -9455,9 +10020,14 @@ function readControls() {
   /* The note raised on the shelf: the menu sits with the shelf it prints on, the hint
      under the note it describes, saying what will print. A solid block has no shelf. */
   $('labelModeRow').style.display = t.solid ? 'none' : '';
+  holdNotes();
   const raise = t.labelMode === 1 && !t.solid;
   $('noteHint').style.display = raise ? '' : 'none';
-  if (raise) {
+  /* Emptied, not only hidden, once nothing is raised: the note's field is described by
+     it, and a hidden description is still read out, so the field went on saying
+     "Prints 4.5 mm tall on one line." after the note was set back to Nothing. */
+  if (!raise) $('noteHint').textContent = '';
+  else {
     const [lead, rest] = noteHintSay(target);
     if (rest) DF.hint($('noteHint'), lead, rest);
     else $('noteHint').textContent = lead;
@@ -9675,8 +10245,18 @@ function sizeSay(t) {
 }
 /* A carve is counted in whole cells, so a carved bin made half-size is the plain
    rectangle its box is (setFootprint). That happened without a word: the L simply went.
-   Said where the size was changed, under the fields or under the map. */
+   Said where the size was changed, under the fields or under the map.
+   Under the map it is said in a line, the one it has there (#stepWhy in style.css): the
+   sentence took three on a 1366 × 768 window, from the front marker to 23 px under the
+   window, over the coverage bar, and a block of up to 58 px over it on a phone. The map
+   has just shown the shape go, so the line need only say why; it fits a 320 px phone
+   with room to spare, as WHOLE_ON_WHOLE does. */
 const SHAPE_DROPPED = 'A half-size bin cannot keep a carved shape, so this one is a plain rectangle now. Undo brings the shape back.';
+const SHAPE_DROPPED_MAP = 'A half-size bin cannot be carved.';
+/* A press on the map that lands a drawer size typed a moment before is not taken: the
+   map is drawn again for the new grid under the pointer (initMap). Said under the map,
+   since a press that does nothing looks lost; one line on a 320 px phone. */
+const GRID_MOVED = 'The drawer changed size. Press again.';
 const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
 
 /* Width and Depth while they are being typed into. A size refused under the caret was
@@ -9687,6 +10267,10 @@ const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
    arrows, which give a whole value at once rather than a number on its way. */
 let sizeDraft = null;          // the field being typed into, if either is
 const sizeTyping = () => !!sizeDraft && document.activeElement === $(sizeDraft);
+/* The size of the bin that refused what is under the caret, from the last pass that
+   refused it: if that bin is no longer selected by the next pass, the fields go back to
+   it rather than handing the refused size to the next bin drawn (readControls). */
+let sizeHeld = null;
 // the one bin the fields are sizing, where it stands: a loose or a new bin stands nowhere
 const sizedBin = () => (!scratch && selected >= 0 && selAll().length === 1 && B()[selected]) || null;
 /* A step of Width or Depth from `from` to the next half cell up or down, and over a whole
@@ -9934,23 +10518,39 @@ function drawMap() {
      The 52 px cell and 720 px caps are for a 1080-line window and grow with a taller
      one (row.big): at 1440 a cell may be 69 px rather than staying 52 while the screen
      round it got a third bigger. The labels scale with the cells, so they stay legible.
-     Paired, the card is the map's width, and no narrower than the row above the map
-     needs to stay on one line: the layer tabs and the Steps switch. "Above" is measured
-     with the columns taken away (stageRow), where the card is as wide as that row asks;
-     paired at the map's width alone, a 1366 × 768 window had no room for the switch
-     beside two layers' tabs, it dropped to a row of its own after the height was
-     settled, and the map, its front marker and the coverage bar went 38 px under the
-     window. Measuring the extra row would not have saved them: there the map is within
-     about 20 px of its 40 px cells. So the preview gives up the difference instead.
-     And the map is sized again once paired, as the baseplates page's cut map is, should
-     anything above it wrap all the same: with more layers than the row can hold. */
-  let toolsW = 0;
-  if (twoCol) {
-    const tools = $('s-layout').querySelector('.maptools');
-    tools.style.width = 'max-content';
-    // up to the next pixel, which a rounded offsetWidth was not: 385.4 px in 385 wraps
-    toolsW = Math.ceil(tools.getBoundingClientRect().width) + 2;   // and the card's border
-    tools.style.width = '';
+     Paired, the card is the map's width, and no narrower than its heading's row needs
+     for the whole title and the Steps switch, which is on that row on any window wide
+     enough to pair (placeSteps). That is 290 to 310 px in the fonts tried, less than a
+     7-column map at 1366 × 768 and no more than one at its 40 px cells, so it takes
+     nothing from the preview there; a narrower drawer's card is held at it, its preview
+     no narrower than a 7-column drawer's. Counted at the title's first word only, the
+     row cut the title to "DRAWER LAYO…" for every drawer under 7 columns, and for a
+     7-column one on a shorter window.
+     The switch was first beside the layer tabs, and the card kept as wide as that row:
+     paired at the map's width alone, a 1366 × 768 window had no room
+     for the switch beside two layers' tabs, it dropped to a row of its own after the
+     height was settled, and the map, its front marker and the coverage bar went 38 px
+     under the window. Kept that wide, each layer took a tab's width, about 70 px, out of
+     the preview, in a drawer of whole bins as much as in one of half; held at two
+     layers' width, the switch's own row from a third layer still put the bar 21 px under
+     the window, the map there being within a pixel of its 40 px cells. On the heading's
+     row it costs no height, and the tabs have their row to themselves as before it.
+     "Above" is measured with the columns taken away (stageRow), and the map is sized
+     again once paired, as the baseplates page's cut map is, should anything above it
+     wrap all the same: the tabs' labels do, with five layers or more. */
+  let headW = 0;
+  const steps = twoCol && $('s-layout').querySelector('.layouthead > .steps');
+  if (steps) {
+    /* the title on one line and the heading's padding round it, the switch and its
+       margin, and the card's border, up to the next pixel, which a rounded offsetWidth
+       was not: 385.4 px in 385 overlaps. The title's text, not the <h3>, whose box is
+       the room it was given last time and may have cut it. */
+    const h3 = $('s-layout').querySelector('.layouthead > h3'), cs = getComputedStyle(h3);
+    const title = document.createRange();
+    title.selectNodeContents(h3);
+    headW = Math.ceil(parseFloat(cs.paddingLeft) + title.getBoundingClientRect().width +
+                      parseFloat(cs.paddingRight) + steps.getBoundingClientRect().width +
+                      parseFloat(getComputedStyle(steps).marginRight)) + 2;
   }
   const chrome = () => svg.getBoundingClientRect().top - top.getBoundingClientRect().top + 41;
   const size = (fixed) => {
@@ -9958,7 +10558,7 @@ function drawMap() {
     const sc = Math.min(availW / W, availH / H, Math.round(CELL_PX * row.big) / S);
     svg.setAttribute('width', Math.round(W * sc));
     svg.setAttribute('height', Math.round(H * sc));
-    if (twoCol) DF.pairColumns(top, Math.min(availW + 30, Math.max(Math.round(W * sc) + 30, toolsW)), PREVIEW_MIN);
+    if (twoCol) DF.pairColumns(top, Math.min(availW + 30, Math.max(Math.round(W * sc) + 30, headW)), PREVIEW_MIN);
   };
   const fixed = chrome();
   size(fixed);
@@ -10143,14 +10743,38 @@ function initMap() {
     openMenu(e.clientX, e.clientY, cur, i);
   });
   svg.addEventListener('pointerdown', (e) => {
+    /* An edit still waiting lands first (landEdit), before the field is left, which
+       comes after this, and before the press is read: against the grid it leaves, not
+       the one before it. Read first, a drawer width or depth typed and pressed on the
+       map at once looked a cell up in the old grid and then in the new, smaller one,
+       and threw. And where it changed the grid, the press goes no further: the map was
+       drawn again under the pointer, and the cell aimed at has moved, or is gone.
+       The edit is only read in here. A press that selects or moves a bin draws the map
+       and refreshes the page straight after, and drawing the edit a moment before that
+       was the same work twice: about 40 ms of the 80 such a press took, at four layers
+       of 63 bins. So that press draws the edit with its own pass, and every other press
+       draws it first (drawLanded), as it always was. */
+    const was = grid(), landed = landEdit(false);
+    let owed = landed;
+    const drawLanded = () => { if (owed) { owed = false; drawLayerTabs(); drawMap(); refresh(); } };
+    mapSay('');
+    if (landed && (grid().nx !== was.nx || grid().ny !== was.ny)) {
+      drawLanded();
+      /* Said, or the press looks lost: the same press made a bin before the edit landed
+         first. The press is over as it is said, so the next pass of any kind takes it
+         away, not only the next press on the map (mapSay). */
+      mapSay(GRID_MOVED);
+      stepSaid = false;
+      return;
+    }
     const c = cellFromEvent(e);
     const handle = e.target && e.target.dataset ? e.target.dataset.handle : null;
-    mapSay('');
 
     /* Grips sit on the bin's corners, which is exactly where you click to carve an
        L. While carving they have to yield, or the one cell you most want to remove
        is the one cell you cannot. */
     if (handle && !e.altKey && !carving && selected >= 0 && B()[selected]) {
+      drawLanded();
       const b = B()[selected], st = stepOf();
       /* The anchor is the step at the far corner, which stays put. In half steps the
          grips resize in halves; in whole ones a half-size bin keeps its far edge where
@@ -10168,6 +10792,7 @@ function initMap() {
     /* Alt-click carves. Inside the selected bin it removes a cell; on a cell the bin
        once covered it puts one back, so a carve can be undone by the same gesture. */
     if ((e.altKey || carving) && selected >= 0 && B()[selected]) {
+      drawLanded();
       const b = B()[selected];
       // carving counts whole cells, whatever the steps
       const dx = c.cell.x - b.x, dy = c.cell.y - b.y;
@@ -10188,6 +10813,7 @@ function initMap() {
     const hit = occupancy()[c.slot.y][c.slot.x];
     if (hit !== -1) {
       if (e.ctrlKey || e.metaKey) {                      // add or remove from the set
+        drawLanded();
         if (hit === selected) {                          // dropping the primary promotes another
           const rest = [...selExtra]; selExtra.delete(rest[0]);
           selected = rest.length ? rest[0] : -1;
@@ -10205,10 +10831,12 @@ function initMap() {
       drag = { mode: 'move', idx: hit, dx: c.x - b.x, dy: c.y - b.y, moved: false,
                snap: snapshot() };
       if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
-      readControls(); drawMap(); refresh();
+      // the landed edit's drawing too, which is all of this and the layer tabs
+      readControls(); if (owed) drawLayerTabs(); drawMap(); refresh();
       return;
     }
 
+    drawLanded();
     clearSel();                                          // draw a new bin
     drag = { mode: 'create', st: stepOf(), x0: c.x, y0: c.y, x1: c.x, y1: c.y };
     if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
@@ -10221,8 +10849,11 @@ function initMap() {
 
     /* A refusal the map cannot show is said (mapSay); any other outcome clears it, so
        it describes where the pointer is now rather than somewhere it passed. Except that
-       a carved shape a resize made half-size has gone for good, so that stays said. */
-    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why : drag.dropped ? SHAPE_DROPPED : '');
+       a carved shape a resize made half-size has gone for good, so that stays said while
+       the bin is half-size: pulled back to a whole size in the same drag it is a plain
+       rectangle, which may be carved, and the line went on saying it could not be. */
+    const say = (why) => mapSay(why === WHOLE_ON_WHOLE ? why
+      : drag.dropped && isHalfSize(B()[drag.idx]) ? SHAPE_DROPPED_MAP : '');
     /* A move or a resize files its undo step with the layout as the press found it, at
        its first real change. Filed at the press, a click that only selected a bin was a
        step of its own: the next Undo spent itself on a layout that had not changed, and
@@ -10255,11 +10886,11 @@ function initMap() {
     const nu = Math.abs(c.x - drag.ax) + drag.st, nv = Math.abs(c.y - drag.ay) + drag.st;
     if (nx === b.x && ny === b.y && nu === b.u && nv === b.v) return;
     const why = placeWhy(nx, ny, nu, nv, drag.idx);
-    say(why);
-    if (why) return;
+    if (why) { say(why); return; }
     banked();
-    if (dropsShape(b, nu, nv)) { drag.dropped = true; say(''); }
+    if (dropsShape(b, nu, nv)) drag.dropped = true;
     b.x = nx; b.y = ny; setFootprint(b, nu, nv);
+    say('');                                             // about the size it is now
     drag.moved = true;
     writeControls(b); drawMap();
   });
@@ -10290,6 +10921,14 @@ function initMap() {
   /* and a sheet kept up for a drag that never finished goes the way a release over
      nothing would put it */
   svg.addEventListener('pointercancel', () => { drag = null; applySheet(); drawMap(); refresh(); });
+  /* and so does one whose release never reaches the page: let go in another window after
+     an alt-tab, the map gets neither of the two above, only the capture going. The drag
+     stayed on, the bin followed a pointer with no button held, and since the save waits
+     for a press to be let go, nothing more was saved until the next press on the map.
+     After an ordinary release or cancel the drag is already over and this does nothing. */
+  svg.addEventListener('lostpointercapture', () => {
+    if (drag) { drag = null; applySheet(); drawMap(); refresh(); }
+  });
 }
 
 /* ---------- actions ------------------------------------------------------- */
@@ -10300,6 +10939,7 @@ function initMap() {
    no whole bin fits: it takes those half strips and quarters, largest first. A layout of
    whole bins comes out of it exactly as it always did. */
 $('fillRest').addEventListener('click', () => {
+  landEdit();
   pushUndo();
   const g = grid();
   clearSel(); readControls();
@@ -10798,6 +11438,9 @@ function binIssues(b, k, claims) {
     if (s.why === '' && s.fit.cut)
       out.push({ note: true, t: `has its note cut short to fit its label shelf, ${mm(s.fit.cap)} mm tall: ` +
         `it prints as \u201c${s.fit.lines.join(' / ')}\u201d` });
+    else if (s.why === '' && s.fit.cap < NOTE_SPEC.capMin - 1e-9)
+      out.push({ note: true, t: `has its note ${mm(s.fit.cap)} mm tall${s.fit.lines.length > 1 ? ' on two lines' : ''}, ` +
+        `under the ${NOTE_SPEC.capMin} mm that stays readable: its label shelf is too shallow for bigger letters` });
     else if (s.why === '' && s.fit.lines.length > 1)
       out.push({ note: true, t: `has its note on two lines, ${mm(s.fit.cap)} mm tall, as on one it would print ` +
         `under the ${NOTE_SPEC.capMin} mm that stays readable` });
@@ -10811,6 +11454,11 @@ function binIssues(b, k, claims) {
     if (s.why === 'noshelf' || s.why === 'back')
       out.push({ note: true, t: 'is set to print its note on its label shelf, but ' +
         (s.why === 'back' ? 'its back wall is lowered, so it has none' : 'it has none') });
+    if (s.why === 'dividers' || s.why === 'narrow')
+      out.push({ note: true, t: s.along
+        ? 'has dividers along it that cut its label shelf too short for its note, so its note is not printed'
+        : `has ${s.why === 'dividers' ? 'dividers across its label shelf too close together'
+        : 'walls too thick'} for its note to fit between them, so its note is not printed` });
   }
   out.push(...insertIssues(b, loose ? null : st.z));
   return out;
@@ -10904,6 +11552,9 @@ function warnings() {
   }
   if (drawerAsked.w > DRAWER_MAX || drawerAsked.d > DRAWER_MAX)
     out.push({ err: true, t: `A ${drawerAsked.w} × ${drawerAsked.d} mm drawer is bigger than the ${DRAWER_MAX} mm a side this tool lays out, so it is drawn as ${state.drawerW} × ${state.drawerD} mm — a ${g.nx} × ${g.ny} grid. Check the drawer size; split a drawer that really is this big into parts.` });
+  // the most different notes one layout raises (holdNotes), said the way the drawer's is
+  if (notesOver)
+    out.push({ err: true, t: `${RAISED_MAX + notesOver} different notes are set to print raised on label shelves, more than the ${RAISED_MAX} one layout prints, so the bins with the ${plural(notesOver, 'note')} after the first ${RAISED_MAX} print plain. Set some to Nothing; print a layout this labelled in parts.` });
   /* Custom margins can leave the drawer no room for a cell. The Baseplates page builds
      nothing from a design like that, and says why; this page drew its one cell anyway,
      because grid() never draws fewer, and said nothing, so the design looked sound here
@@ -11139,6 +11790,7 @@ function types() {
   return [...m.values()].sort((a, b) => b.qty - a.qty);
 }
 function refresh() {
+  holdNotes();
   const g = grid();
   // the tallest bin is capped by the drawer OR the printer's Z, whichever bites first
   const zUnits = Math.max(1, Math.floor((state.bedH - LIP_H) / SPEC.unitH));
@@ -11926,13 +12578,16 @@ const holeTag = (b) => (!holesBuilt(b) ? ''
   : '-' + [b.magnets ? 'magnets' : '', b.screws ? 'screws' : ''].filter(Boolean).join('-') +
     (everyMatters(b) ? '-every-cell' : ''));
 /* A bin printing its note says so in its name, as the note shortened to a-z, 0-9 and
-   dashes (noteSlug): "bin-1x1x3-m3-screws-qty2.stl". Two bins with the same shape and
-   different notes are two files, and the name says which is which. A note that does not
-   print stays out of the name, as it always has. */
-const noteTag = (b) => { const p = printedNote(b); return p ? '-' + noteSlug(p.fit.lines.join(' ')) : ''; };
+   dashes (noteSlug) behind "note": "bin-1x1x3-note-m3-screws-qty2.stl". Two bins with the
+   same shape and different notes are two files, and the name says which is which. The
+   word keeps a note from reading as the rest of the name: a note "solid" was
+   "bin-1x1x3-solid-qty1", a solid block's name. A note that does not print stays out of
+   the name, as it always has. */
+const noteTag = (b) => { const p = printedNote(b); return p ? '-note-' + noteSlug(p.fit.lines.join(' ')) : ''; };
 /* A bin with holes across its floor says what for, "bin-1x1x3-aa-holes-qty2.stl", and
-   not the dividers it is built without. One asked for holes it does not get is the
-   plain bin, and is named as one. */
+   not the dividers it is built without; ahead of its note, which comes last, so the name
+   reads "bin-1x1x3-aa-holes-note-aa-cells-qty1". One asked for holes it does not get is
+   the plain bin, and is named as one. */
 const insertTag = (b) => { const h = holesIn(b); return h ? `-${h.p.tag}-holes` : ''; };
 function typeName(t) {
   return `bin-${t.b.u}x${t.b.v}x${t.b.hUnits}${t.b.solid ? '-solid' : ''}` +
@@ -12029,6 +12684,12 @@ function layoutReadme() {
       (b.divRemovable ? '  (removable divider plates, printed loose)' : ''));
     if (holes) L.push(`Holes: ${holes.n} for ${holes.p.items}, ${+holes.d.toFixed(2)} mm ` +
       `${holes.p.shape === 'hex' ? 'across the flats' : 'across'}, ${+holes.depth.toFixed(1)} mm deep`);
+    /* The note raised on its shelf, as it prints: the lines it comes out as, which a note
+       cut short or left partly off is not the same as the note above. */
+    const raised = printedNote(b);
+    if (raised) L.push(`Raised note: “${raised.fit.lines.join(' / ')}” on the label shelf, ` +
+      `${+raised.fit.cap.toFixed(1)} mm letters on ${raised.fit.lines.length > 1 ? 'two lines' : 'one line'}` +
+      (raised.fit.cut ? ', cut short to fit' : '') + '.');
     if (b.lid && lidFits(b)) L.push('Lid: yes — prints upside down, no supports.');
     L.push(...holesReadme([{ b, qty: 1 }]));
     const job = jobEstimate();
@@ -12062,6 +12723,8 @@ function layoutReadme() {
       `  (${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip)` +
       `${t.b.solid ? '  solid' : ''}${(t.b.divX || t.b.divY) && !holesIn(t.b) ? `  ${(t.b.divX + 1) * (t.b.divY + 1)} compartments` : ''}` +
       `${insertText(t.b) ? `  ${insertText(t.b)}` : ''}` +
+      // a part of its own, with its note in letters on the shelf
+      `${printedNote(t.b) ? '  note raised on the shelf' : ''}` +
       // the README is read beside a pile of printed parts, which is exactly when
       // "1x1x3" stops being enough to tell them apart
       `${t.notes && t.notes.length ? `  — ${t.notes.join(', ')}` : ''}` +
@@ -12555,8 +13218,15 @@ function descriptor() {
      So it travels in the link the README carries too. Packed with the same packBin the
      layers use — one serialisation to keep right rather than a second that can
      disagree with it, and hash-roundtrip.js already proves that one. */
-  if (scratch) o.bs = packLayers([{ bins: [scratch] }]);
-  else if (focused && fBin()) o.bf = `${cur}.${selected}`;
+  if (scratch) {
+    o.bs = packLayers([{ bins: [scratch] }]);
+    /* Its note beside it, as bnotes carries the layers' below, since packBin carries no
+       note. Without it a loose bin's note was never saved: a reload, a saved drawer and
+       the README's link all came back without it, and one raised on the shelf came back
+       a plain bin under another name. Written only when there is a note, so a loose bin
+       without one has the link it always had. */
+    if (scratch.note) o.bsn = scratch.note;
+  } else if (focused && fBin()) o.bf = `${cur}.${selected}`;
   o.bl = packLayers(layers);
   o.bseg = state.arcSegs;
   o.bdt = state.divT; o.bdc = state.divClr;
@@ -12770,11 +13440,21 @@ function showSetAside(msg, canPutBack, canTry) {
 $('putBack').addEventListener('click', putBack);
 $('tryAnyway').addEventListener('click', tryAnyway);
 
+/* Not while a press on the map is held (drag): the save waits for the release, which
+   refreshes, and so sets it going again from there. On a link that set a layout aside,
+   the first save to find the design changed takes the set-aside line above the map away
+   (below), and a press that grabs a bin sets a save going. A drag held 400 ms met it:
+   the save found the bin half moved, the map went up 43 px under the pointer, and the
+   bin landed a row off. The save is the one thing that runs on a clock while a press is
+   held (an edit still waiting lands at the press, landEdit), so holding it holds all a
+   save changes above the map, the drawer bar's "not saving" too, rather than each line
+   being held on its own. And what a save keeps is a design someone has let go of, not
+   a bin half way across the map. */
 function rememberState() {
   if (!hashReady) return;
   clearTimeout(hashSaveT);
   addEventListener('beforeunload', dropSave);
-  hashSaveT = setTimeout(saveNow, 400);
+  hashSaveT = setTimeout(() => { if (!drag) saveNow(); }, 400);
 }
 function saveNow() {
   clearTimeout(hashSaveT);
@@ -12839,6 +13519,7 @@ function loadFromHash(src) {
     if (k === 'bnotes') { pendingNotes = val; continue; }
     if (k === 'bf') { pendingFocus = val; continue; }
     if (k === 'bs') { pendingScratch = val; continue; }
+    if (k === 'bsn') { pendingScratchNote = val; continue; }
     if (k === 'pr') continue;             // applied below, once the bed is in
     // not Object.hasOwn, which Safari only has from 15.4
     const id = Object.prototype.hasOwnProperty.call(KEYS, k) ? KEYS[k] : '';
@@ -12874,7 +13555,7 @@ function loadFromHash(src) {
    ones loadFromHash above takes for itself rather than parking in hashExtras, so if one is
    added there it belongs here too. */
 const BINS_OWN = new Set(['v', ...Object.keys(KEYS), 'pr', 'dv', 'bl', 'bseg', 'bdt', 'bdc', 'bhc',
-                          'bmd', 'bmh', 'bnotes', 'bf', 'bs']);
+                          'bmd', 'bmh', 'bnotes', 'bf', 'bs', 'bsn']);
 const drawers = DRAWERS.create({
   tool: 'bins',
   owns: (k) => BINS_OWN.has(k),
@@ -12927,8 +13608,24 @@ let timer = null;
    reads, so an edit that changes a bin misses the cache by itself, and refresh() lets go
    of the builds nothing uses. Clearing on every input rebuilt every type in the drawer
    because a note was typed, and leaked the old buffers each time. */
-const schedule = () => { clearTimeout(timer); timer = setTimeout(() => {
-  readControls(); drawLayerTabs(); drawMap(); refresh(); }, 180); };
+const editPass = () => { readControls(); drawLayerTabs(); drawMap(); refresh(); };
+const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { timer = null; editPass(); }, 180); };
+/* An edit still waiting for its pass has it now, before something takes the selection
+   away, so it goes to the bin it was typed for and not to the next one drawn. Fill the
+   rest and a press on the map both clear the selection first thing: a 2 typed for the
+   1.5 × 1 on a half step and pressed on either inside the 180 ms became the new bins'
+   size, the refusal never having run. The whole pass, the map and the save with it:
+   with the fields read alone, a drawer width typed and pressed on the map at once left
+   the map drawn for the old grid, its grips and all, and the address and the saved
+   drawer on the old width until the next edit. True when there was one to land.
+   With `draw` false the edit is only read in, and the caller draws the rest of the pass
+   (drawLayerTabs, drawMap, refresh): the map press, which draws them anyway. */
+function landEdit(draw = true) {
+  if (timer === null) return false;
+  clearTimeout(timer); timer = null;
+  if (draw) editPass(); else readControls();
+  return true;
+}
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
                   'u', 'v', 'hUnits',
                   'wall', 'floorT', 'divX', 'divY', 'solid', 'arcSegs',
@@ -13074,7 +13771,7 @@ document.addEventListener('keydown', (e) => {
       why = placeWhy(b.x + dx * move, b.y + dy * move, b.u, b.v, selected);
       if (!why) { pushUndo(); b.x += dx * move; b.y += dy * move; }
     }
-    mapSay(why === WHOLE_ON_WHOLE ? why : dropped ? SHAPE_DROPPED : '');
+    mapSay(why === WHOLE_ON_WHOLE ? why : dropped ? SHAPE_DROPPED_MAP : '');
     writeControls(b); readControls(); drawMap(); refresh();
   }
 });
@@ -13102,7 +13799,7 @@ halfSteps = readKey(STEPS_KEY) === 'half';
    are left out always: how the design is looked at is not what it is. */
 // the drawer, the bed and its printer, and the infill: drawers.js keeps the same list
 const SHARED_KEYS = new Set([...DRAWERS.SHARED].filter((k) => k !== 'v'));
-const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bseg', 'bdt', 'bdc', 'bmd', 'bmh', 'bnotes']
+const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bsn', 'bseg', 'bdt', 'bdc', 'bmd', 'bmh', 'bnotes']
   .filter((k) => k !== 'ph' && !VIEW_KEYS.includes(k));
 function sameDesign(a, b, skip = []) {
   const p = parseHash(a), q = parseHash(b);
@@ -13205,6 +13902,8 @@ if (pendingScratch) {
   const ls = unpackLayers(pendingScratch);
   const b = ls[0] && ls[0].bins[0];
   if (b) {
+    // its note, cleaned as a layer's is (cleanNote): one short line, whatever the link says
+    if (pendingScratchNote !== null) b.note = cleanNote(pendingScratchNote);
     scratch = b;
     focused = true;
     frameBin();

@@ -131,12 +131,16 @@ if (window.matchMedia && matchMedia('(max-width: 980px)').matches)
     </div>
     <div class="hint">Internal dimensions. Measure at the tightest point and subtract 1–2&nbsp;mm (about 1/16&nbsp;in) so the assembly slides in.</div>
     <label class="f"><b>Leftover space (margins)</b>
+      <!-- Half cells: the 21 mm is rewritten from the pitch by readControls, and the
+           strips always go along the right and the back (halfStrips in core.js). -->
       <select id="marginMode">
         <option value="auto">Fill with solid margin (alignment below)</option>
+        <option value="half">Fill with half cells where they fit (21 mm)</option>
         <option value="none">Leave as gap (plate = grid only)</option>
         <option value="custom">Custom per side…</option>
       </select>
     </label>
+    <div class="hint" id="halfHint" style="display:none">Half cells go along the right side and the back, wherever there is room for one. The alignment below places what is left after them.</div>
     <div class="row" id="alignRow">
       <label class="f"><b>Align width</b>
         <select id="alignX"><option value="center">Centre</option><option value="start">Right (margin left)</option><option value="end">Left (margin right)</option></select></label>

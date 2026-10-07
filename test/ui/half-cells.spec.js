@@ -15,10 +15,18 @@ const { test, expect } = require('@playwright/test');
 const H = require('./helpers.js');
 
 const settle = (page) => page.waitForTimeout(300);
+// said under the map for a press that lands a drawer size, which redraws the map under it
+const GRID_MOVED = 'The drawer changed size. Press again.';
 // one bin, as packBin writes it, with everything after the size left at the defaults
 const bin = (x, y, u, v, h = 3, feet = 0) =>
   [x, y, u, v, h, 1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 15].concat(feet ? [feet] : []).join('-');
 
+/* The page at a link of its own, through about:blank: a hash alone does not reload it.
+   That blank page now and then asks for the favicon of the page it replaced, which it
+   may not load from file://, and says so in the console; that line is the hop's, not
+   the page's, and is let go. Taken out of the same list, which the listener goes on
+   filling. */
+const BLANK_FAVICON = /^Not allowed to load local resource: file:\S*\/favicon\.svg$/;
 async function openAt(page, hash) {
   page.__errors = await H.openBins(page);
   if (hash) {
@@ -26,6 +34,8 @@ async function openAt(page, hash) {
     await page.goto(H.BINS_URL + '#' + hash);
     await page.waitForFunction(() => typeof THREE !== 'undefined');
     await settle(page);
+    const errors = page.__errors;
+    for (let i = errors.length - 1; i >= 0; i--) if (BLANK_FAVICON.test(errors[i])) errors.splice(i, 1);
   }
 }
 test.afterEach(async ({ page }) => {
@@ -46,6 +56,44 @@ async function slotPoint(page, sx, sy) {
     const q = p.matrixTransform(svg.getScreenCTM());
     return { x: q.x, y: q.y };
   }, { sx, sy, CELL: H.CELL });
+}
+/* The same point where the map is now, without scrolling it into the middle first: for
+   the cases that measure the page as it opened, where a scroll would be what they see. */
+const slotHere = (page, sx, sy) => page.evaluate(({ sx, sy, CELL }) => {
+  const svg = $('fillmap'), ny = svg.getAttribute('viewBox').split(' ').map(Number)[3] / CELL;
+  const p = svg.createSVGPoint();
+  p.x = (sx + 0.5) * CELL / 2; p.y = (2 * ny - 1 - sy + 0.5) * CELL / 2;
+  const q = p.matrixTransform(svg.getScreenCTM());
+  return { x: q.x, y: q.y };
+}, { sx, sy, CELL: H.CELL });
+/* The centre of the selected bin's grip, read once its box holds still between two
+   looks: one read while the map was still being laid out would be pressed where the
+   grip had been. */
+async function gripPoint(page, handle) {
+  const box = () => page.locator(`#fillmap .grip[data-handle="${handle}"]`).boundingBox();
+  let last = null;
+  await expect.poll(async () => {
+    const b = await box(), still = !!(b && last && Math.abs(b.x - last.x) < 0.5 && Math.abs(b.y - last.y) < 0.5);
+    last = b;
+    return still;
+  }, { message: `the ${handle} grip stops moving`, intervals: [50, 100, 100, 200] }).toBe(true);
+  return { x: last.x + last.width / 2, y: last.y + last.height / 2 };
+}
+/* Types into a field and presses at once at the point where() gives, measured with the
+   field focused, while the edit still waits for its pass (schedule's 180 ms). Says
+   whether the press did come while it waited: on a slow moment the pass runs first,
+   which is the ordinary order and not the one a case using this is about. */
+async function typeAndPress(page, field, text, where) {
+  await page.evaluate(() => {
+    window.__pending = null;
+    addEventListener('pointerdown', () => { window.__pending = timer !== null; }, { capture: true, once: true });
+  });
+  await page.focus('#' + field);
+  const at = await where();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type(text);
+  await page.mouse.click(at.x, at.y);
+  return page.evaluate(() => window.__pending);
 }
 async function dragSlots(page, from, to) {
   const a = await slotPoint(page, ...from), b = await slotPoint(page, ...to);
@@ -301,12 +349,13 @@ test('a carved bin made half-size says its shape has gone, and Undo brings it ba
   expect(await now()).toEqual([2, 2, true]);
   await expect(page.locator('#sizeWhy'), 'gone with what it was about').toHaveText('');
 
-  // and with shift and an arrow on the map, in half steps, said under the map
+  // and with shift and an arrow on the map, in half steps, said under the map, in the
+  // one line there is room for there
   expect((await steps(page)).half, 'still on from the half-size bin a moment ago').toBe(true);
   await select(page, 0);
   await page.keyboard.press('Shift+ArrowLeft');
   expect(await now()).toEqual([1.5, 2, false]);
-  await expect(page.locator('#stepWhy')).toHaveText(note);
+  await expect(page.locator('#stepWhy')).toHaveText('A half-size bin cannot be carved.');
   await page.keyboard.press('Control+z');
   await settle(page);
   expect(await now()).toEqual([2, 2, true]);
@@ -514,14 +563,7 @@ test('at 1366 x 768 the map, its front, the reason under it and the coverage bar
   inView(await at());
 
   // a whole cell drawn half a cell in from the left, which the map refuses and says so
-  const slot = (sx, sy) => page.evaluate(({ sx, sy, CELL }) => {
-    const svg = $('fillmap'), ny = svg.getAttribute('viewBox').split(' ').map(Number)[3] / CELL;
-    const p = svg.createSVGPoint();
-    p.x = (sx + 0.5) * CELL / 2; p.y = (2 * ny - 1 - sy + 0.5) * CELL / 2;
-    const q = p.matrixTransform(svg.getScreenCTM());
-    return { x: q.x, y: q.y };
-  }, { sx, sy, CELL: H.CELL });
-  const a = await slot(1, 4), b = await slot(2, 5);
+  const a = await slotHere(page, 1, 4), b = await slotHere(page, 2, 5);
   await page.mouse.move(a.x, a.y);
   await page.mouse.down();
   await page.mouse.move(b.x, b.y, { steps: 6 });
@@ -531,4 +573,423 @@ test('at 1366 x 768 the map, its front, the reason under it and the coverage bar
   expect(m.said).toBe('A whole-size bin sits on whole cells.');
   inView(m);
   expect(await page.evaluate(() => document.querySelector('.stage').scrollTop), 'nothing scrolled').toBe(0);
+});
+
+/* The reason under the map says it on the front marker's line, over the marker, so that
+   saying it never moves the map or the coverage bar. That held for the one-line reason it
+   was made for, but a carved bin made half-size on the map said three lines there: at
+   1366 x 768 they ran from the marker to 23 px under the window, over the coverage bar,
+   and on a phone they were a 58 px block over it. Under the map that is now said in a
+   line of its own length, the long sentence stays under the size fields, and the line
+   stays one line whatever it is given: an overlong one is cut short rather than let
+   loose over the bar. Checked at each window size the page is laid out for, by Shift
+   and an arrow, and at 1366 x 768 by a grip too, and with a reason too long for its line. */
+test('a reason under the map stays on the front marker\'s line, at any window size', async ({ page }) => {
+  const L = [3, 3, 2, 2, 3, 1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, '1110', 0, 0, 0, 15].join('-');
+  const hash = 'bl=' + bin(0.5, 0, 1.5, 1) + '_' + L;
+  const short = 'A half-size bin cannot be carved.';
+  const at = () => page.evaluate(() => {
+    const r = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom }; };
+    const why = $('stepWhy'), bar = document.querySelector('#s-layout .covbar');
+    const b = bar.getBoundingClientRect();
+    return { said: why.textContent, whole: why.scrollWidth <= why.clientWidth,
+             why: r(why), front: r(why.previousElementSibling), bar: r(bar), map: r($('fillmap')),
+             covered: document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2) === why,
+             fold: innerHeight, scrolled: document.querySelector('.stage').scrollTop };
+  });
+  const onItsLine = (m, where) => {
+    expect(m.why.bottom, `${where}: on the marker's line`).toBeLessThanOrEqual(m.front.bottom + 0.5);
+    expect(m.why.bottom, `${where}: clear of the coverage bar`).toBeLessThanOrEqual(m.bar.top);
+    expect(m.covered, `${where}: the bar is not under the reason`).toBe(false);
+  };
+  const inView = (m, where) => {
+    for (const k of ['map', 'front', 'why', 'bar'])
+      expect(m[k].bottom, `${where}: ${k} inside the ${m.fold} px window`).toBeLessThanOrEqual(m.fold);
+    expect(m.scrolled, `${where}: nothing scrolled`).toBe(0);
+  };
+
+  for (const [w, h] of [[1366, 768], [1024, 768], [1440, 900], [1920, 1080], [390, 844], [320, 640]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await openAt(page, hash);
+    await select(page, 1);
+    await page.keyboard.press('Shift+ArrowLeft');
+    await settle(page);
+    expect(await page.evaluate(() => [B()[1].u, B()[1].v, isCarved(B()[1])])).toEqual([1.5, 2, false]);
+    const m = await at();
+    expect(m.said, `${w} x ${h}`).toBe(short);
+    expect(m.whole, `${w} x ${h}: said in full`).toBe(true);
+    onItsLine(m, `${w} x ${h}`);
+    if (w === 1366) inView(m, '1366 x 768');
+  }
+
+  // a grip pulled half a cell in on the same L, at 1366 x 768
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openAt(page, hash);
+  await select(page, 1);
+  const g = await gripPoint(page, 'rb');
+  const to = await slotHere(page, 8, 9);
+  await page.mouse.move(g.x, g.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  await page.mouse.up();
+  await settle(page);
+  expect(await page.evaluate(() => [B()[1].u, B()[1].v, isCarved(B()[1])])).toEqual([1.5, 2, false]);
+  let m = await at();
+  expect(m.said, 'by a grip').toBe(short);
+  onItsLine(m, 'by a grip');
+  inView(m, 'by a grip');
+
+  // and a reason far longer than the line has room for is cut short, not let over the bar
+  await page.evaluate(() => mapSay(SHAPE_DROPPED));
+  m = await at();
+  expect(m.said.length, 'fixture: a long reason').toBeGreaterThan(100);
+  expect(m.whole, 'too long for one line').toBe(false);
+  onItsLine(m, 'a long reason');
+  inView(m, 'a long reason');
+});
+
+/* The Steps switch was first beside the layer tabs, and the map's card was kept as wide
+   as that row. Measured with every tab, each layer took a tab's width, about 70 px, off
+   the preview: four layers left it 391 px at 1366 x 768 rather than 587, beside a map
+   centred in an empty card, in a drawer of whole bins too. Held at two layers' width,
+   the switch took a row of its own from a third layer, and at 1366 x 768 that put the
+   coverage bar 21 px under the window, where the old page kept it in view up to four.
+   On a wider window the switch is now in the card's heading (placeSteps), so the tabs
+   have their row as before and the number of layers costs the preview nothing; on a
+   phone it stays on the tabs' row, where it was. */
+test('more layers take none of the preview\'s width, and at 1366 x 768 keep the bar in view', async ({ page }) => {
+  const one = bin(0, 0, 1, 1);
+  const look = () => page.evaluate(() => {
+    const card = $('s-layout').getBoundingClientRect();
+    const inCard = [...document.querySelectorAll('#layerTabs button, .steps')]
+      .every((el) => { const r = el.getBoundingClientRect(); return r.left >= card.left && r.right <= card.right; });
+    const why = $('stepWhy'), bottom = (el) => el.getBoundingClientRect().bottom;
+    return { preview: Math.round($('threewrap').getBoundingClientRect().width), inCard,
+             tabs: Math.round($('layerTabs').getBoundingClientRect().height),
+             steps: document.querySelector('#s-layout .steps').parentElement.matches('.layouthead') ? 'heading' : 'tabs',
+             low: Math.max(bottom($('fillmap')), bottom(why.previousElementSibling), bottom(why),
+                           bottom(document.querySelector('#s-layout .covbar'))),
+             fold: innerHeight, scrolled: document.querySelector('.stage').scrollTop };
+  });
+  for (const [w, h, inView] of [[1366, 768, 4], [1920, 1080, 6]]) {
+    await page.setViewportSize({ width: w, height: h });
+    const seen = {};
+    for (const n of [1, 2, 3, 4, 6]) {
+      await openAt(page, 'bl=' + Array(n).fill(one).join('~'));
+      const m = seen[n] = await look();
+      const at = `${w} x ${h}, ${n} layers`;
+      expect(m.steps, `${at}: the switch in the heading`).toBe('heading');
+      expect(m.inCard, `${at}: every tab and the switch inside the card`).toBe(true);
+      expect(m.preview, `${at}: no narrower than with one`).toBeGreaterThanOrEqual(seen[1].preview - 2);
+      if (n <= inView) {
+        expect(m.low, `${at}: the map, its front, the reason and the bar inside the window`)
+          .toBeLessThanOrEqual(m.fold);
+        expect(m.scrolled, `${at}: nothing scrolled`).toBe(0);
+      }
+    }
+    // two layers' tabs, the one in use in bold, each on one line
+    expect(seen[2].tabs, `${w} x ${h}: two layers' tabs each on one line`).toBe(seen[1].tabs);
+  }
+  /* On a phone the switch is on the tabs' row, as it was, and many tabs still fit the
+     card. Taken there by a narrower window, and brought back by a wider one. */
+  await page.setViewportSize({ width: 390, height: 844 });
+  await settle(page);
+  expect((await look()).steps, 'narrowed to a phone').toBe('tabs');
+  await openAt(page, 'bl=' + Array(6).fill(one).join('~'));
+  const phone = await look();
+  expect([phone.steps, phone.inCard], 'six layers on a phone').toEqual(['tabs', true]);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await settle(page);
+  expect((await look()).steps, 'widened again').toBe('heading');
+});
+
+/* A size the selected bin refuses is left in the field while it is being typed, and put
+   back once the field is left (sizeDraft). Left by pressing Fill the rest, the selection
+   was gone before the bin had put it back, and with no bin selected the fields are the
+   size of the next bin: a 2 typed for the 1.5 x 1 on a half step, refused, filled the
+   drawer with 2 x 1 bins. Before half steps a refused size was written back at once. */
+test('a size the selected bin refused does not become the size of new bins', async ({ page }) => {
+  await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1));
+  await select(page, 0);
+  await page.focus('#u');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('2', { delay: 250 });
+  await settle(page);
+  expect(await page.evaluate(() => [B()[0].u, $('u').value]), 'refused, and left as typed').toEqual([1.5, '2']);
+  await page.click('#fillRest');
+  await settle(page);
+  const r = await page.evaluate(() => ({ u: state.u, field: $('u').value,
+    twoWide: B().filter((b) => b.u === 2 && b.v === 1).length }));
+  expect(r).toEqual({ u: 1.5, field: '1.5', twoWide: 0 });
+
+  // and when a press on the map takes the selection, which it does before the field is left
+  await page.keyboard.press('Control+z');
+  await settle(page);
+  expect(await binsNow(page), 'the fill undone').toEqual([[0.5, 0, 1.5, 1]]);
+  await select(page, 0);
+  await page.focus('#u');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('2', { delay: 250 });
+  await settle(page);
+  await H.clickCell(page, 4, 4);
+  expect(await page.evaluate(() => [state.u, $('fillSize').textContent])).toEqual([1.5, '1.5×1']);
+});
+
+/* On a wider window the Steps switch is on the map card's heading row (placeSteps). It
+   was put inside the <h3>, which made the heading's name "Drawer layout Steps Steps", from
+   the switch's hidden label and its group's name, and put two buttons in a heading. It
+   now stands beside the heading on the same row. Moved in the document across 980 px, it
+   also took the focus with it: on Half cells at 1366 and narrowed to 900, the focus was
+   on the page's body. And it set the card's width: in a wider font than this machine's,
+   its heading needed 16 px more than the map at 1366 x 768, out of the preview on every
+   layout. With the switch's smaller buttons the whole title and the switch fit in the
+   map's own width there, in this machine's font and in DejaVu Sans, the wider font that
+   showed it, so the card is the map's. */
+test('the Steps switch is on the heading row, not in the heading, and keeps the card to the map', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openAt(page, 'bl=' + bin(0, 0, 1, 1));
+  await expect(page.getByRole('heading', { name: 'Drawer layout', exact: true })).toHaveCount(1);
+  expect(await page.evaluate(() => document.querySelectorAll(
+    '.stage :is(h1, h2, h3, h4, h5, h6, [role=heading]) :is(button, [role=button])').length),
+    'no button in a heading on the stage').toBe(0);
+  const row = () => page.evaluate(() => {
+    const r = (el) => el.getBoundingClientRect();
+    const head = r(document.querySelector('#s-layout h3')), steps = r(document.querySelector('#s-layout .steps'));
+    return { onRow: steps.top >= head.top - 0.5 && steps.bottom <= head.bottom + 0.5,
+             buttons: [...document.querySelectorAll('#s-layout .steps button')].map((b) => r(b).height),
+             card: Math.round(r($('s-layout')).width), map: Math.round(r($('fillmap')).width) };
+  });
+  for (const font of [null, 'DejaVu Sans']) {
+    if (font) {
+      await page.evaluate((f) => { document.documentElement.style.setProperty('--sans', `'${f}'`); }, font);
+      await settle(page);
+      await page.evaluate(() => drawMap());
+      await settle(page);
+    }
+    const m = await row();
+    const at = font || 'this machine\'s font';
+    expect(m.onRow, `${at}: the switch on the heading's row`).toBe(true);
+    for (const h of m.buttons) expect(h, `${at}: a button 24 px tall or more`).toBeGreaterThanOrEqual(24);
+    expect(m.card, `${at}: the card is what the map needs, its padding and border`).toBe(m.map + 30);
+  }
+
+  // the focus stays on the button it was on, wherever the switch goes
+  await page.focus('#stepHalf');
+  for (const [w, where] of [[900, 'tabs'], [1366, 'heading'], [981, 'heading'], [979, 'tabs'], [1366, 'heading']]) {
+    await page.setViewportSize({ width: w, height: 768 });
+    await settle(page);
+    expect(await page.evaluate(() => [document.activeElement.id,
+      document.querySelector('#s-layout .steps').parentElement.closest('.maptools') ? 'tabs' : 'heading']),
+      `at ${w} px wide`).toEqual(['stepHalf', where]);
+  }
+});
+
+/* An edit typed into the panel waits 180 ms for its pass (schedule). Pressing Fill the
+   rest, or the map, inside that time took the selection away before the pass had run,
+   and the refused 2 typed for the 1.5 x 1 on a half step became the new bins' size. The
+   press is made the moment the 2 is typed, at a point measured beforehand, and made
+   again should the pass have run first all the same (typeAndPress). */
+test('a size typed a moment before a press elsewhere still goes to the bin it was typed for', async ({ page }) => {
+  for (const press of ['fill', 'map']) {
+    for (let tries = 1; ; tries++) {
+      await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1));
+      await select(page, 0);
+      const at = () => press === 'fill'
+        ? page.evaluate(() => { const b = $('fillRest'); b.scrollIntoView({ block: 'center' });
+            const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })
+        : H.cellPoint(page, 4, 4);
+      if (await typeAndPress(page, 'u', '2', at)) break;
+      expect(tries, `${press}: pressed while the 2 waited for its pass`).toBeLessThan(3);
+    }
+    await settle(page);
+    const r = await page.evaluate(() => ({ u: state.u, fill: $('fillSize').textContent,
+      twoWide: B().filter((b) => b.u === 2 && b.v === 1).length }));
+    expect(r, `pressed on ${press === 'fill' ? 'Fill the rest' : 'the map'}`)
+      .toEqual({ u: 1.5, fill: '1.5×1', twoWide: 0 });
+  }
+});
+
+/* A press that grabs another bin draws the map and refreshes the page for the bin it
+   selects, and landing the edit drew them both a moment before: the same pass twice, at
+   about 40 ms a refresh on four layers of 63 bins. The press now draws the landed edit
+   with its own pass. The height still goes to the bin it was typed for, the press still
+   selects the other, and the page is drawn for both, once. Counted from the press to its
+   release, which has a pass of its own. */
+test('a height typed a moment before a press on another bin goes to its bin, and the press draws once', async ({ page }) => {
+  for (let tries = 1; ; tries++) {
+    await openAt(page, 'bl=' + bin(0, 0, 1, 1) + '_' + bin(2, 0, 1, 1));
+    await select(page, 0);
+    await page.evaluate(() => {
+      const pass = window.refresh;
+      window.__refreshed = null;
+      let n = 0;
+      window.refresh = function () { n++; return pass.apply(this, arguments); };
+      addEventListener('pointerdown', () => { n = 0; }, { capture: true, once: true });
+      addEventListener('pointerup', () => { window.__refreshed = n; }, { capture: true, once: true });
+    });
+    if (await typeAndPress(page, 'hUnits', '4', () => H.cellPoint(page, 2, 0))) break;
+    expect(tries, 'pressed while the 4 waited for its pass').toBeLessThan(3);
+  }
+  await settle(page);
+  expect(await page.evaluate(() => ({
+    heights: B().map((b) => b.hUnits), selected, field: $('hUnits').value,
+    grips: [...document.querySelectorAll('#fillmap .grip')].length,
+    tab: $('layerTabs').textContent, types: types().map((t) => typeName(t)).sort(),
+    refreshed: window.__refreshed,
+  }))).toEqual({ heights: [4, 3], selected: 1, field: '3', grips: 4, tab: 'Layer 1 · 2',
+                 types: ['bin-1x1x3-qty1', 'bin-1x1x4-qty1'], refreshed: 1 });
+});
+
+/* The line under the map about a carved shape made half-size is about a bin that is
+   half-size. Pulled back to a whole size in the same drag, the bin is a plain 2 x 2 and
+   the line went on saying a half-size bin cannot be carved. */
+test('the carved-shape line goes once the bin is whole-size again', async ({ page }) => {
+  const L = [3, 3, 2, 2, 3, 1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, '1110', 0, 0, 0, 15].join('-');
+  await openAt(page, 'bl=' + bin(0.5, 0, 1.5, 1) + '_' + L);
+  await select(page, 1);
+  await H.mapInView(page);
+  const g = await gripPoint(page, 'rb');
+  const half = await slotHere(page, 8, 9), whole = await slotHere(page, 9, 9);
+  await page.mouse.move(g.x, g.y);
+  await page.mouse.down();
+  await page.mouse.move(half.x, half.y, { steps: 4 });
+  expect(await page.evaluate(() => [B()[1].u, $('stepWhy').textContent]))
+    .toEqual([1.5, 'A half-size bin cannot be carved.']);
+  await page.mouse.move(whole.x, whole.y, { steps: 4 });
+  await page.mouse.up();
+  await settle(page);
+  expect(await page.evaluate(() => [B()[1].u, B()[1].v, isCarved(B()[1]), $('stepWhy').textContent]))
+    .toEqual([2, 2, false, '']);
+});
+
+/* A press on the map lands an edit still waiting for its pass (landEdit). It read the
+   press's cell in the old grid first and looked it up in the new one: a drawer width
+   typed and pressed on at once found no bin in a column the new grid has not got,
+   selected nothing and threw, and a depth threw at a row it has not got. Only the fields
+   were read, so the map stayed drawn for the old grid, and the address and the saved
+   drawer kept the old size. The edit lands now with its whole pass, and a press aimed at
+   a map that has gone places nothing, and says so under the map, where before the edit
+   landed first it made a bin; the next one goes where it is pressed. */
+for (const [size, field, value, cell, cells, key, next] of [
+  ['width', 'drawerW', 120, [5, 5], [2, 9], 'w=120', [1, 3]],
+  ['depth', 'drawerD', 200, [5, 8], [7, 4], 'd=200', [0, 2]]]) {
+  test(`a drawer ${size} typed a moment before a press on the map lands, and the map is drawn for it`, async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    for (let tries = 1; ; tries++) {
+      await openAt(page, 'bl=' + bin(0, 0, 1, 1));
+      await page.click('#s-drawer .ph button');
+      if (await typeAndPress(page, field, String(value), () => H.cellPoint(page, ...cell))) break;
+      expect(tries, `pressed while the ${value} waited for its pass`).toBeLessThan(3);
+    }
+    await page.waitForTimeout(700);                      // past the save's 400 ms
+    expect(page.__errors, 'the page threw').toEqual([]);
+    const r = await page.evaluate((key) => ({
+      grid: [grid().nx, grid().ny],
+      drawn: $('fillmap').getAttribute('viewBox').split(' ').slice(2).map((n) => n / S),
+      saved: location.hash.slice(1).split('&').includes(key),
+      bins: B().map((b) => [b.x, b.y, b.u, b.v]) }), key);
+    expect(r, `${value} typed, and the map pressed`)
+      .toEqual({ grid: cells, drawn: cells, saved: true, bins: [[0, 0, 1, 1]] });
+    await expect(page.locator('#stepWhy'), 'and why').toHaveText(GRID_MOVED);
+    await H.clickCell(page, ...next);
+    expect(await binsNow(page), 'the next press').toEqual([[0, 0, 1, 1], [...next, 1, 1]]);
+    await expect(page.locator('#stepWhy'), 'which takes the reason away').toHaveText('');
+  });
+}
+
+/* The reason a press was not taken is said in the one line under the map (mapSay), and
+   fits it on a 320 px phone. The press is over as it is said, so any pass after it takes
+   it away, an edit of anything as well as the next press: left to the pass after next,
+   as a refusal in a drag is, it would stay through an edit with nothing to do with it. */
+test('a press lost to a drawer size says why in a line a phone has room for, until the next pass', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  for (let tries = 1; ; tries++) {
+    await openAt(page, 'bl=' + bin(0, 0, 1, 1));
+    await page.click('#s-drawer .ph button');
+    if (await typeAndPress(page, 'drawerW', '120', () => H.cellPoint(page, 5, 5))) break;
+    expect(tries, 'pressed while the 120 waited for its pass').toBeLessThan(3);
+  }
+  const why = page.locator('#stepWhy');
+  await expect(why).toHaveText(GRID_MOVED);
+  await page.setViewportSize({ width: 320, height: 640 });
+  await settle(page);
+  expect(await page.evaluate(() => { const w = $('stepWhy'); return w.scrollWidth <= w.clientWidth; }),
+    'said in full on one line').toBe(true);
+  // the height for the next bin drawn: an edit that is nothing to do with the press
+  await H.setField(page, 'hUnits', 4);
+  await expect(why).toHaveText('');
+});
+
+/* The map card's title is never cut. It was let give way to the Steps switch so that the
+   heading never made the card wider than the map, which cut it to "DRAWER LAYO…" in every
+   drawer under 7 columns, and in a 7-column one wherever the window brings the map to its
+   40 px cells. Now the card is as wide as the whole title and the switch need. Checked
+   at the window sizes it was cut at, from a first visit's drawer, a deep 7-column one and
+   a narrow one, in this machine's font, in the wider DejaVu Sans and in Liberation Sans,
+   which has Arial's widths. Each of those two only where it is not the font this machine
+   draws the page in already, as DejaVu Sans is on many Linux machines: there the pass in
+   it was the first pass again, and only one font was tried. */
+test('the map card\'s title is whole beside the Steps switch, whatever the drawer and window', async ({ page }) => {
+  test.setTimeout(120000);
+  const sizes = [[1281, 680], [1366, 600], [1366, 657], [1366, 700], [1366, 768], [1536, 730], [1920, 1080]];
+  // the title's width in a font, as the heading draws it: null is this machine's own
+  const titleIn = (font) => page.evaluate((f) => {
+    const h3 = document.querySelector('#s-layout h3'), cs = getComputedStyle(h3);
+    const s = document.createElement('span');
+    s.textContent = h3.textContent;
+    Object.assign(s.style, { position: 'absolute', whiteSpace: 'nowrap', fontSize: cs.fontSize,
+      fontWeight: cs.fontWeight, letterSpacing: cs.letterSpacing, textTransform: cs.textTransform,
+      fontFamily: f ? `'${f}'` : cs.fontFamily });
+    document.body.appendChild(s);
+    const w = s.getBoundingClientRect().width;
+    s.remove();
+    return w;
+  }, font);
+  /* The fonts are found on the first visit's own page, not on a page opened for them
+     first: a second visit picks up the layout the first left and says so above the map,
+     which is 42 px the first visit does not have, and took the coverage bar out of view. */
+  let fonts = null;
+  for (const [drawer, hash, barInView] of [['the first visit\'s drawer', '', true],
+                                          ['a deep 7-column drawer', 'w=306&d=600', false],
+                                          ['a 150 mm drawer', 'w=150&d=380', true]]) {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await openAt(page, hash);
+    if (!fonts) {
+      const own = await titleIn(null);
+      fonts = [null];
+      for (const f of ['DejaVu Sans', 'Liberation Sans']) if (Math.abs(await titleIn(f) - own) > 0.01) fonts.push(f);
+      expect(fonts.length, 'a font this machine does not draw the page in').toBeGreaterThan(1);
+    }
+    for (const font of fonts) {
+      if (font) await page.evaluate((f) => { document.documentElement.style.setProperty('--sans', `'${f}'`); }, font);
+      for (const [w, h] of sizes) {
+        await page.setViewportSize({ width: w, height: h });
+        await settle(page);
+        await page.evaluate(() => drawMap());
+        await page.waitForTimeout(100);
+        const m = await page.evaluate(() => {
+          const r = (el) => el.getBoundingClientRect();
+          const h3 = document.querySelector('#s-layout h3'), cs = getComputedStyle(h3);
+          const text = document.createRange();
+          text.selectNodeContents(h3);
+          const title = text.getBoundingClientRect(), steps = document.querySelector('#s-layout .steps');
+          const need = parseFloat(cs.paddingLeft) + title.width + parseFloat(cs.paddingRight);
+          return { onRow: steps.parentElement.matches('.layouthead'),
+                   cut: h3.scrollWidth > h3.clientWidth || need > r(h3).width + 0.5,
+                   clear: title.right <= r(steps).left + 0.5,
+                   card: r($('s-layout')).width, map: r($('fillmap')).width,
+                   row: need + r(steps).width + parseFloat(getComputedStyle(steps).marginRight) + 2,
+                   bar: r(document.querySelector('#s-layout .covbar')).bottom, fold: innerHeight };
+        });
+        const at = `${drawer}, ${font || 'this machine\'s font'}, ${w} x ${h}`;
+        expect(m.onRow, `${at}: the switch on the heading's row`).toBe(true);
+        expect(m.cut, `${at}: the title cut`).toBe(false);
+        expect(m.clear, `${at}: the title clear of the switch`).toBe(true);
+        expect(m.card, `${at}: the card no wider than the map or its heading needs`)
+          .toBeLessThanOrEqual(Math.max(m.map + 30, m.row) + 1);
+        if (barInView && w === 1366 && h === 768)
+          expect(m.bar, `${at}: the coverage bar in view`).toBeLessThanOrEqual(m.fold);
+      }
+    }
+  }
 });
