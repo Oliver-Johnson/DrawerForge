@@ -1120,6 +1120,23 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
       `among them ${fails.slice(0, 4).join('; ')}` : `${rows.length} builds, all clean`));
   if (!exact || fails.length) bad++;
 }
+/* Edges used other than twice once every vertex within `step` of another is one with it,
+   as a slicer may weld them. */
+const weldBad = (polys, step) => {
+  const key = (v) => v.map((x) => Math.round(x / step)).join(',');
+  const edges = new Map();
+  for (const t of G.polysToTriangles(polys)) {
+    const ks = t.map(key);
+    if (ks[0] === ks[1] || ks[1] === ks[2] || ks[0] === ks[2]) continue;   // welded away
+    for (let i = 0; i < 3; i++) {
+      const a = ks[i], b = ks[(i + 1) % 3], k = a < b ? a + '|' + b : b + '|' + a;
+      edges.set(k, (edges.get(k) || 0) + 1);
+    }
+  }
+  let n = 0;
+  for (const c of edges.values()) if (c !== 2) n++;
+  return n;
+};
 /* Just off the shelf's front is as bad once a slicer welds what is close. A face 2 to 5
    µm from it was built as it was, clean at checkManifold's micron, but its corners and
    the shelf's became one at a weld of 5 or 10 µm and the edge was shared again. So the
@@ -1129,21 +1146,6 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
    failed, and 241 of all 2954. */
 {
   const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
-  const weldBad = (polys, step) => {
-    const key = (v) => v.map((x) => Math.round(x / step)).join(',');
-    const edges = new Map();
-    for (const t of G.polysToTriangles(polys)) {
-      const ks = t.map(key);
-      if (ks[0] === ks[1] || ks[1] === ks[2] || ks[0] === ks[2]) continue;   // welded away
-      for (let i = 0; i < 3; i++) {
-        const a = ks[i], b = ks[(i + 1) % 3], k = a < b ? a + '|' + b : b + '|' + a;
-        edges.set(k, (edges.get(k) || 0) + 1);
-      }
-    }
-    let n = 0;
-    for (const c of edges.values()) if (c !== 2) n++;
-    return n;
-  };
   const rows = [];
   for (const v of [0.5, 1, 1.5, 2, 2.5])
     for (let w = 4; w <= 50; w++) {
@@ -1170,6 +1172,80 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
     : fails.length ? `FAILED ${fails.length} welded, among them ${fails.slice(0, 3).join('; ')}`
     : 'welded at 5 and 10 µm, all clean'));
   if (!some.length || fails.length) bad++;
+}
+
+console.log('\nremovable dividers both ways, at every count up to the most that fit');
+/* Removable both ways, the end rails of the two directions end beside each other, each a
+   rail's depth and the clearance out from its wall. Where the end spacing on both axes was
+   a rail and that reach, half a plate, twice the clearance and 2.4 mm, the tip of the end
+   divY rail came to the outer face of the end divX rail at that rail's own tip, and the
+   two shared a vertical edge, used four times: a 1x1 with a 0 or 0.4 mm wall at 10 each
+   way, a half-cell square with a 1 mm wall at 4, a 2x2 with a 2.9 mm wall at 20 and a 3x3
+   with a 1.7 mm wall at 32, all at the usual plate and clearance. The both-ways rows of
+   "as many dividers as the fields allow" build only the most the fields allow, which the
+   limit holds to 11 each way on a 1x1, and so never built them. So those bins are built
+   at every count up to the most that fit. Then, worked out here from what the bin is
+   meant to be rather than read from bin.js, every size from a half-cell square to a 3x3,
+   square or not, at every wall, plate and clearance the fields allow, takes the counts
+   that put the end spacing on both axes within a micron of that reach and a rail, or of
+   a rail's depth and a rail, where the tips stood when the rails reached only a rail's
+   depth. Those that are built as asked are kept, and one in three of them is built. The
+   count found is printed and must not be zero, or the sweep would pass while building
+   none of what it is for. Last, as for the label shelf above, the counts that put it
+   from a micron to 20 µm off, at the reach the rails have now, are welded at 5 and at
+   10 µm, one in 250 of them: with the tips run on only within WELD of a face, 7 of those
+   47 came apart so. */
+{
+  const rows = [];
+  for (const [s, walls] of [[0.5, [0.4, 1, 2]], [1, [0, 0.4, 1, 1.7]], [2, [1, 1.7, 2.9]], [3, [0.4, 1.7, 2.9]]])
+    for (const wall of walls) {
+      const cfg = { u: s, v: s, hUnits: 2, wall, divRemovable: true };
+      const top = dividersBuilt(Object.assign({ divX: 999, divY: 999 }, cfg));
+      for (let k = 1; k <= Math.max(top.divX, top.divY); k++)
+        rows.push([`${s}x${s} wall ${wall} x${k}`, Object.assign({ divX: k, divY: k }, cfg)]);
+    }
+  sweepReport('every count, the usual plate', rows);
+}
+{
+  const field = (cells, wall) => Math.max(0, Math.floor(((cells - 1) * 42 + 41.5 - 2 * wall) / Math.max(wall, 1.2)) - 1);
+  const sizes = [0.5, 1, 1.5, 2, 2.5, 3], rows = [], near = [];
+  let found = 0, close = 0;
+  for (const u of sizes) for (const v of sizes)
+    for (let w = 0; w <= 100; w++) {
+      const wall = w / 10, ix = (u - 1) * 21 + 20.75 - Math.max(0.4, wall), iy = (v - 1) * 21 + 20.75 - Math.max(0.4, wall);
+      for (let t = 8; t <= 50; t += 2)
+        for (let cl = 0; cl <= 100; cl += 5) {
+          const divT = t / 10, divClr = cl / 100;
+          for (const reach of new Set([1.2 + divClr, 1.2])) {
+            const K = divT / 2 + divClr + 1.2 + reach;
+            const nx = Math.round(2 * ix / K - 1), ny = Math.round(2 * iy / K - 1);
+            if (nx < 1 || ny < 1 || nx > field(u, wall) || ny > field(v, wall)) continue;
+            const off = Math.max(Math.abs(2 * ix / (nx + 1) - K), Math.abs(2 * iy / (ny + 1) - K));
+            const on = off <= 0.001, by = !on && off < 0.02 && reach > 1.2 + divClr - 1e-9;
+            if (!on && !by) continue;
+            const cfg = { u, v, hUnits: 3, wall, divX: nx, divY: ny, divRemovable: true, divT, divClr };
+            const built = dividersBuilt(cfg);
+            if (built.divX !== nx || built.divY !== ny) continue;
+            const name = `${u}x${v} wall ${wall}, ${divT} mm plate ${divClr} clear, ${nx}+${ny}`;
+            if (on && found++ % 3 === 0) rows.push([name, cfg]);
+            if (by && close++ % 250 === 0) near.push([name, cfg]);
+          }
+        }
+    }
+  const fails = rows.map(([name, cfg]) => { const f = cleanBuild(cfg); return f ? `${name}: ${f}` : ''; })
+    .filter(Boolean);
+  console.log(`  ${`${found} with both on a face`.padEnd(34)} ` + (!found
+    ? 'NONE FOUND to build' : fails.length ? `FAILED ${fails.length} of ${rows.length}, ` +
+      `among them ${fails.slice(0, 4).join('; ')}` : `${rows.length} builds, all clean`));
+  const welds = [];
+  for (const [name, cfg] of near) {
+    const polys = buildBin(G, cfg).polys, b5 = weldBad(polys, 0.005), b10 = weldBad(polys, 0.01);
+    if (b5 || b10) welds.push(`${name}: ${b5} edges at 5 µm, ${b10} at 10 µm`);
+  }
+  console.log(`  ${`${near.length} of ${close} just off one`.padEnd(34)} ` + (!near.length ? 'NONE FOUND to build'
+    : welds.length ? `FAILED ${welds.length} welded, among them ${welds.slice(0, 3).join('; ')}`
+    : 'welded at 5 and 10 µm, all clean'));
+  if (!found || fails.length || !near.length || welds.length) bad++;
 }
 
 console.log('\ndivider boxes cut to the cavity\'s rounded corner');

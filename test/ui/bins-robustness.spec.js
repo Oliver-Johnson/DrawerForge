@@ -291,6 +291,18 @@ test('a bin with room for one removable divider and no more is built with one', 
   expect(errors).toEqual([]);
 });
 
+/* Both ways, where the end spacing on both axes was a rail and its reach, the tip of the
+   end rail one way met the end rail the other way corner to corner, on one edge used four
+   times: a 1x1 with a 0.4 mm wall and 10 each way at the usual plate and clearance, which
+   Checks said nothing about. */
+test('removable dividers both ways build watertight where the end rails meet at a corner', async ({ page }) => {
+  const errors = await openAt(page, 'bl=0-0-1-1-3-0.4-1.2-10-10-0-1-1-1-1-0-0-0-0-1-0-15&bdt=1.6&bdc=0.25');
+  await settle(page, 600);
+  expect(await page.evaluate(() => builtDivs(B()[0]))).toEqual({ divX: 10, divY: 10 });
+  expect(await page.evaluate(() => checkManifold(geomFor(B()[0]).polys).bad)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
 /* Where the rounded corners set the limit and not the slots' spacing, Checks says so: the
    reason given was that no more left every slot room for a plate, where 17 do. */
 test('Checks says it is the rounded corners when they hold a bin to fewer removable dividers', async ({ page }) => {

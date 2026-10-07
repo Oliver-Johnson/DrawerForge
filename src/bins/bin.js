@@ -1812,12 +1812,36 @@ function buildBin(G, cfg) {
     const shelf = !c.divRemovable && c.label > 0.05 && eB > 0.99 && shelfD > 0.05 ? id - shelfD : NaN;
     // removable ones no more than fit, however many are asked for: see railedMost
     const built = dividersBuilt(c);
-    for (const [a, b] of spans(built.divX, iw))
-      for (const [lo, hi] of reach(id))
+    const xs = spans(built.divX, iw), ys = spans(built.divY, id, shelf);
+    /* Removable both ways, the rails of one direction end in the cavity beside those of
+       the other. Where the end spacing on both axes is a rail and its reach (half a
+       plate, twice the clearance and 2.4 mm), the tip of the end divY rail came to the
+       outer face of the end divX rail, at that rail's own tip: two boxes corner to corner
+       on one vertical edge, used four times (a 1x1 with a 0.4 mm wall, 10 each way, at
+       the usual plate and clearance). Spaced so on one axis, the tip came to the other
+       rail's face, and the two touched face to face. So a rail whose tip comes within
+       ten times WELD of the face of a rail the other way, where the two meet, runs a
+       BLOAT on into that rail, as a divider does into the label shelf. That is the face
+       towards the wall the tip comes from, and the rail is a rail thick, so the tip stays
+       in it, stands in no slot, and holds its plate no less. */
+    const runOn = ([a, b], [lo, hi], others, otherReach) => {
+      if (c.divRemovable && otherReach.some(([p, q]) => a < q + 10 * WELD && b > p - 10 * WELD))
+        for (const [oa, ob] of others) {
+          if (Math.abs(hi - oa) < 10 * WELD) hi = oa + BLOAT;
+          if (Math.abs(lo - ob) < 10 * WELD) lo = ob - BLOAT;
+        }
+      return [lo, hi];
+    };
+    for (const [a, b] of xs)
+      for (const r of reach(id)) {
+        const [lo, hi] = runOn([a, b], r, ys, reach(iw));
         polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
-    for (const [a, b] of spans(built.divY, id, shelf))
-      for (const [lo, hi] of reach(iw))
+      }
+    for (const [a, b] of ys)
+      for (const r of reach(iw)) {
+        const [lo, hi] = runOn([a, b], r, xs, reach(id));
         polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT, Math.abs(a - shelf) < 10 * WELD));
+      }
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */
