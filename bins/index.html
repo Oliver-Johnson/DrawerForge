@@ -8638,8 +8638,9 @@ function shelfNote(cfg) {
  * to 2 to 11% more than the plastic on a plain bin, the most on small bins with thick
  * walls, and up to a quarter more with holes in the feet. Where two parts meet
  * — a divider through the scoop or the label shelf, two dividers crossing, a removable
- * divider's rails both ways, the block of holes across the floor under the label shelf
- * and in the lip's chamfer — the plastic they share is counted once as well.
+ * divider's rails both ways, the block of holes across the floor under the label shelf,
+ * and a divider's ends, its rails and the block where they stand in the lip's chamfer —
+ * the plastic they share is counted once as well.
  *
  * `filament` is what a slicer lays down for it at `infill` (0 to 1). The feet and the
  * floor slab are a thick block that it shells and infills, and so are the scoop and the
@@ -8652,9 +8653,9 @@ function shelfNote(cfg) {
  *
  * Left out, each a few hundredths of a gram on any bin the fields allow:
  *   - the note's raised letters, 0.22 g at the most (a full shelf of the biggest);
- *   - the dividers' and rails' ends where they stand in the lip's chamfer, about 2 mm³
- *     a divider; fixed dividers packed into the cavity's rounded corners are counted
- *     as if the corners were square there, under 1 mm³ a divider;
+ *   - fixed dividers packed into the cavity's rounded corners, which are counted as if
+ *     the corners were square there, under 1 mm³ a divider, and where they or rails
+ *     stand in the lip's chamfer there, as along a straight wall;
  *   - on a carved shape, the inside of each reflex corner, where the wall turns round a
  *     quarter circle rather than a square: (1 - π/4)t² for a wall t thick, 0.3 mm² at
  *     the usual wall, along the corner's height;
@@ -8931,7 +8932,7 @@ function binVolume(cfg, infill) {
   const divPlan = c.divRemovable
     ? railArea(built.divX, iw, id, wall, c.divT, c.divClr) + railArea(built.divY, id, iw, wall, c.divT, c.divClr) - crossing
     : spansLength(xs) * 2 * id + spansLength(ys) * 2 * iw - crossing;
-  const dividers = divPlan * hFull;
+  let dividers = divPlan * hFull;
 
   const scoopR = holesOn ? 0 : scoopBuilt(c, id, H, floorZ), segs = Math.max(4, n);
   const arc = [];
@@ -8991,6 +8992,27 @@ function binVolume(cfg, infill) {
     if (z1 > 0) underLip = (base - wall) / lipDrop * z1 * z1 / 2 * (2 * iw + 2 * Math.min(shelfD, id));
   }
   const shelf = Math.max(0, both - scoop - underLip);
+  /* A divider's ends, and the ribs of a removable one's rails, stand in the lip's chamfer
+     where they meet a wall: counted in the lip, they are taken off the dividers. The
+     chamfer's section is base - wall out from the wall at H, coming in to the wall over
+     lipDrop below it; a rib stands in the part of it within its reach of the wall, a
+     fixed divider in all of it. Where the label shelf stands against a wall, underLip
+     took the chamfer below the shelf's top off the shelf along the whole wall, dividers'
+     ends and all, so there only what is above the shelf's top comes off here. */
+  if (lipDrop > 0 && (xs.length || ys.length)) {
+    const A = base - wall, L = lipDrop;
+    const upTo = (z, d) => {                // the section within d of the wall, z up its drop
+      const zd = d * L / A;
+      return z <= zd ? A * z * z / (2 * L) : A * zd * zd / (2 * L) + d * (z - zd);
+    };
+    const over = (z0, d) => upTo(L, d) - upTo(Math.min(L, Math.max(0, z0)), d);
+    const dX = Math.min(A, !c.divRemovable || deep >= id - BLOAT / 2 ? A : deep);
+    const dY = Math.min(A, !c.divRemovable || deep >= iw - BLOAT / 2 ? A : deep);
+    const z0 = shelfD ? Math.min(H, sh.top) - (H - L) : 0;
+    const yShelf = shelfD ? spansLength(spansClip(ys, shelfFront, id)) : 0;
+    dividers -= spansLength(xs) * (over(0, dX) + over(z0, dX)) +
+                2 * ((spansLength(ys) - yShelf) * over(0, dY) + yShelf * over(z0, dY));
+  }
   /* The block of holes across the floor (holeLayout): the cavity's outline, less the
      holes, from the slab's top to the block's top, which is half a millimetre under the
      rim or under the label shelf's front edge. Its tiles run a BLOAT into the walls and
