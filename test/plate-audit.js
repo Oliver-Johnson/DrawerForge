@@ -321,6 +321,18 @@ const CASES = [
     keyType: 'bowtie', magnets: true, magnetSide: 'top', holeOffset: 3.5, magnetD: 5.1,
     puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 }, tab: { ...G.DEFAULTS.tab, clr: 0.3 }, arcSegs: 6,
     oriQuarantine: 'a 3-corner sliver the weld turned over', oriWorst: { B3: 3, C3: 3 } },
+  /* A cell whose pockets come out open is cut again (see the fastener cut in buildPiece),
+     and here the turned cutters' cut throws: healCsgSeams' T-junction pass limit. Taken
+     unguarded, that one try made the whole plate fail to build, where main builds it open;
+     now the first cut stands. Engine-only again (the sites 2.5 mm in, at 15.5 mm), and
+     open by 3 to 9 edges a piece, where main has 9 and folds on every piece. */
+  { name: 'a retry that throws', pitch: 15.5, drawerW: 3 * 15.5, drawerD: 5 * 15.5, bedW: 400,
+    bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]],
+    connector: 'snap', keyType: 'snap', keyInsert: 'top', magnets: true, screws: true,
+    holeOffset: 2.5, magnetD: 3.3, screwHeadD: 3.3, screwHoleD: 1.7, arcSegs: 6,
+    tab: { ...G.DEFAULTS.tab, clr: 0.3 }, puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 },
+    key: { ...G.DEFAULTS.key, clr: 0.25 }, hclip: { ...G.DEFAULTS.hclip, clr: 0.25 },
+    quarantine: 'pocket slivers with the sites moved in, open as on main', worst: 9 },
 
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 

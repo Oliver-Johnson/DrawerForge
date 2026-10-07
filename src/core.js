@@ -2804,14 +2804,26 @@ function buildPiece(cfg, layout, piece, onStatus) {
            corners of its 14-sided bores where their flats were, the same circle inside
            each for the magnet or screw head to sit against. The first closed result is
            kept; a cell that comes out closed first time, which is nearly every one, is
-           built exactly as before. */
-        if (next.open && kind === 'fastener') {
+           built exactly as before. A try that throws (healCsgSeams' T-junction pass limit,
+           which the turned cutters reach on a few engine-only cells) is passed over and
+           the first cut stands, open as it was rather than a failed build.
+
+           Only a cell open by a sliver or a few is cut again, at most 24 edges: six at
+           each of its four pockets. Every retried cell on a page design was open by 3 or 6
+           (8 cells over 3,893 random mount designs, a second in 25 minutes of building).
+           Over 935 engine-only designs at small pitches with the sites moved in, no cell
+           open by more than 19 ever closed, and the 447 open by more than 24 ran half of
+           all the tries. Each try earns its place: the turned cutters close most, and the
+           faces and cutters both reversed closed three cells there that nothing else
+           did. */
+        if (next.open && next.open <= 24 && kind === 'fastener') {
           const tries = [() => csgSubtract(region, cut.slice().reverse()),
                          () => csgSubtract(region.slice().reverse(), cut),
                          () => csgSubtract(region.slice().reverse(), cut.slice().reverse()),
                          () => csgSubtract(region, fasteners(turnedFastener()))];
           for (const t of tries) {
-            const again = t();
+            let again;
+            try { again = t(); } catch (e) { continue; }   // the first cut stands
             if (!again.open) { next = again; break; }
           }
         }

@@ -279,7 +279,10 @@ construction — was wrong twice over. Overlapping shells do not produce bad edg
 shell is closed on its own, so every edge is still used exactly twice. The 20% was holes,
 and treating it as normal is what let them stay for the life of the project.
 
-Three configurations still leak, all of them corner bosses that abut, and they are
+Four configurations still leak: three of them corner bosses that abut, and one that only
+the engine can build, mounting sites moved in close at a small pitch, whose pockets come
+out open by a few slivers as they do on main (it is there for the retry that throws; see
+the mounting pockets below). They are
 **quarantined by name in `test/plate-audit.js` rather than excused here**, so the summary
 line cannot say "watertight" over them. Do not generalise from them to a new tolerance
 for nonzero counts; the whole point of naming them is that the number for everything else
@@ -606,4 +609,10 @@ currently installed):
   both, and then the cutters turned a 28th of a turn. A cell that closes first time,
   nearly every one, is built exactly as before. Over 3,893 random mount designs (magnets,
   screws or both, from below or above, 42 or 50 mm, one to three cells each way, random
-  margins and corners) none is left open, where main leaves 30.
+  margins and corners) none is left open, where main leaves 30; 8 cells were cut again,
+  each open by 3 or 6 edges, for a second in 25 minutes of building. Only a cell open by
+  at most 24 edges is cut again (six at each of four pockets): over 935 engine-only
+  designs with the sites moved in at small pitches, no cell open by more than 19 ever
+  closed, and the ones open by more than 24 had been running half of all the tries. A try
+  that throws (the turned cutters there reach `healCsgSeams`' T-junction pass limit) is
+  passed over and the first cut stands, where it used to fail the whole build.
