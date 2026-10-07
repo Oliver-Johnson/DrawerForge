@@ -3810,6 +3810,12 @@ function layoutReadme() {
     L.push(`Size: ${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip`);
     if (b.divX || b.divY) L.push(`Compartments: ${(b.divX + 1) * (b.divY + 1)}` +
       (b.divRemovable ? '  (removable divider plates, printed loose)' : ''));
+    /* The note raised on its shelf, as it prints: the lines it comes out as, which a note
+       cut short or left partly off is not the same as the note above. */
+    const raised = printedNote(b);
+    if (raised) L.push(`Raised note: “${raised.fit.lines.join(' / ')}” on the label shelf, ` +
+      `${+raised.fit.cap.toFixed(1)} mm letters on ${raised.fit.lines.length > 1 ? 'two lines' : 'one line'}` +
+      (raised.fit.cut ? ', cut short to fit' : '') + '.');
     if (b.lid && lidFits(b)) L.push('Lid: yes — prints upside down, no supports.');
     L.push(...holesReadme([{ b, qty: 1 }]));
     const job = jobEstimate();
@@ -3842,6 +3848,8 @@ function layoutReadme() {
     L.push(`  ${String(t.qty).padStart(3)} x  ${t.b.u}x${t.b.v}x${t.b.hUnits}` +
       `  (${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip)` +
       `${t.b.solid ? '  solid' : ''}${t.b.divX || t.b.divY ? `  ${(t.b.divX + 1) * (t.b.divY + 1)} compartments` : ''}` +
+      // a part of its own, with its note in letters on the shelf
+      `${printedNote(t.b) ? '  note raised on the shelf' : ''}` +
       // the README is read beside a pile of printed parts, which is exactly when
       // "1x1x3" stops being enough to tell them apart
       `${t.notes && t.notes.length ? `  — ${t.notes.join(', ')}` : ''}` +
