@@ -2437,14 +2437,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * the corner itself, on the plate's edge, so no cut moves and a margin up to 0.1 mm
    * joins. Beside a rounded one the cut steps past each arc vertex within two BLOATs, the
    * next can be within two BLOATs of where it lands, and it goes on until there is a gap
-   * (and past the crossings below): over margins of 0 to 3 mm, in any mix on the four
-   * sides, beside every corner from 0 to 6 mm by 0.01, a cut that stays moved up to
-   * 0.72 mm, and 0.19 where the margin is the same all round. Under a 1.22 mm corner the
-   * arc's vertices are that close all the way along, so the cut runs off the plate and
-   * every margin up to about the radius plus 0.09 joins its cells, 1.3 mm by a 1.21 mm
-   * corner; beside larger corners up to 1.13 mm can join, and up to 0.62 mm by a corner
-   * of 4 mm or more. The plate is the same plate whichever region builds it (and see
-   * wasL below for a skeleton cell).
+   * (and past the crossings below). Where the margin is the same all round, beside every
+   * corner from 0 to 6 mm by 0.01, a cut that stays moves 0.19 mm at most. With the four
+   * margins anything from 0 to 3 mm, it moves further: 0.98 mm with 0.85, 1.81, 0.57 and
+   * 0.77 by a 3.16 mm corner, and up to 1.07 over three million drawn at random. Under a
+   * 1.22 mm corner the arc's vertices are that close all the way along, so the cut runs
+   * off the plate and every margin up to about the radius plus 0.09 joins its cells,
+   * 1.3 mm by a 1.21 mm corner; beside larger corners up to 1.13 mm joined, and 1.02 mm
+   * by a corner of 4 mm or more. The plate is the same plate whichever region builds it
+   * (and see wasL below for a skeleton cell).
    *
    * A vertex less than a hundredth inside two BLOATs is left where it is rather than
    * stepped past. Clearing it would move the cut a hair, and a skeleton cell beside a
