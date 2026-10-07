@@ -262,6 +262,17 @@ const CASES = [
     fit: { lines: 1, cut: false } },
   { name: '1x1x3-note-wall3', u: 1, v: 1, hUnits: 3, wall: 3, label: 12, labelMode: 1, note: 'M3 screws',
     fit: { lines: 1, cut: false } },
+  /* A wall under about 1.15 mm builds the shelf over the cavity's rounded outline, a
+     millimetre lower with letters on it as at any other wall. Across the thin range, with
+     a note cut short so its letters run the band from end to end, and on a half cell. */
+  { name: '1x1x3-note-wall0.8', u: 1, v: 1, hUnits: 3, wall: 0.8, label: 12, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '1x1x3-note-wall1', u: 1, v: 1, hUnits: 3, wall: 1, label: 12, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '1x1x3-note-wall0.4-cut', u: 1, v: 1, hUnits: 3, wall: 0.4, label: 12, labelMode: 1,
+    note: 'Assorted M3 M4 nuts, washers', fit: { cut: true } },
+  { name: '0.5x1x3-note-wall0.4', u: 0.5, v: 1, hUnits: 3, wall: 0.4, label: 12, labelMode: 1, note: 'M2',
+    fit: { lines: 1, cut: false } },
   { name: '0.5x1x3-note', u: 0.5, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'M2',
     fit: { lines: 1, cut: false } },
   { name: '2x1x3-note-mag-scr', u: 2, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Fuses 5A, 10A',
@@ -1189,7 +1200,12 @@ console.log('\nlinks from before half sizes build the same bytes');
  * thing met is the top of the letters, at H - 0.4; through the strip the letters keep
  * clear at the shelf's front, it is the shelf, at H - 1.0, a millimetre lower than a
  * shelf with nothing on it. shelfNote is what the page says about the letters, so it
- * has to agree with what was built: how many lines, and whether it was cut short. */
+ * has to agree with what was built: how many lines, and whether it was cut short.
+ *
+ * And every letter stands on the shelf, all of it: under each corner of every stroke's
+ * outline is the shelf's top. On a thin wall the shelf is the cavity's rounded outline
+ * rather than a prism square to the side walls, and a letter out past it would stand on
+ * nothing in the corner; the outline check above sees only the outside. */
 console.log('\nnotes raised on the label shelf');
 {
   for (const cs of CASES.filter((c) => c.labelMode === 1)) {
@@ -1204,6 +1220,13 @@ console.log('\nnotes raised on the label shelf');
         faults.push(`a letter's top at ${top.toFixed(3)}, not H - 0.4 = ${(H - 0.4).toFixed(2)}`);
       if (Math.abs(shelf - (H - 1.0)) > 1e-6)
         faults.push(`the shelf's top at ${shelf.toFixed(3)}, not H - 1.0 = ${(H - 1).toFixed(2)}`);
+      // the letters as buildBin makes them, but for how high: only where they stand counts
+      const corners = NOTE_TEXT.noteShells(G, s.fit.segs, s.top, H - NOTE_CLEAR)
+        .flatMap((p) => p.verts);
+      const off = corners.filter(([x, y]) => !at(x, y).some((z) => Math.abs(z - s.top) < 1e-6));
+      if (off.length)
+        faults.push(`${off.length} of ${corners.length} letter corners not over the shelf, ` +
+                    `as at ${off[0][0].toFixed(2)}, ${off[0][1].toFixed(2)}`);
       if (cs.fit.lines && s.fit.lines.length !== cs.fit.lines)
         faults.push(`${s.fit.lines.length} lines, not ${cs.fit.lines}`);
       if (s.fit.cut !== cs.fit.cut) faults.push(cs.fit.cut ? 'NOT CUT short' : 'CUT short');
