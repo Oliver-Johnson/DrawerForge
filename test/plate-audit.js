@@ -248,6 +248,23 @@ const CASES = [
     baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
   { name: '3x3 bosses+screws', drawerW: 126, drawerD: 126, screws: true,
     baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
+  /* Watertight, and folded. Where healCsgSeams puts a vertex back into an edge it sits a
+     thousandth or two off, the face it mends comes out with a dent too small to see, and
+     the fan polysToTriangles lays over it from the face's first corner turns a sliver
+     across the dent the wrong way: three coplanar folds in the bed face by a puzzle
+     notch, in the two narrow pieces of the first and on two pieces of the second, where
+     main had edges used four times or nothing wrong at all. It is not the puzzle's: the
+     dent comes wherever the weld has to reach. Fanning such a face from the dent's own
+     corner clears all of these and folds six dovetail plates in a sweep of 960 that had
+     none; fanning it from its average clears the first and not the second. Triangulating
+     a dented face properly is a change to healCsgSeams, which every plate and bin leans
+     on, so they are pinned here until it is made. */
+  { name: 'puzzle 30 rows, folded', pitch: 30, drawerW: 90, drawerD: 90, splitMode: 'manual',
+    rowCuts: [1, 2], colCuts: [[], [], []], connector: 'puzzle', outerRadius: 4, arcSegs: 6,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.2 }, oriQuarantine: 'a sliver fanned across a dent the weld left' },
+  { name: 'puzzle 20 quads, folded', pitch: 20, drawerW: 80, drawerD: 80, splitMode: 'manual',
+    rowCuts: [2], colCuts: [[2], [2]], connector: 'puzzle', outerRadius: 0, arcSegs: 6,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 }, oriQuarantine: 'a sliver fanned across a dent the weld left' },
   /* The bosses with half cells, which add nothing: the loop builds the case again as
      solid margin and requires the same edges used the same number of times. The bosses
      sit on whole cells, so the strips do not meet them. */
