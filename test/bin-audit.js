@@ -2121,6 +2121,8 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
     ['3x2x6, 5 mm walls', { u: 3, v: 2, hUnits: 6, wall: 5 }],
     ['2x2x3 solid, asking for dividers', { u: 2, v: 2, hUnits: 3, solid: true, divX: 2, divY: 1 }],
     ['1x1x1, its floor filling it, asking too', { u: 1, v: 1, hUnits: 1, floorT: 3, divX: 2, divRemovable: true }],
+    ['1x1x3, AAA holes under a 12 mm shelf', { u: 1, v: 1, hUnits: 3, insert: 2, label: 12 }],
+    ['2x2x6, 18650 holes, scoop, dividers', { u: 2, v: 2, hUnits: 6, insert: 3, scoop: 8, divX: 2, divY: 1 }],
     ['carved L, walls lowered, asking too', { u: 2, v: 2, hUnits: 6, cells: L3, divX: 2, divY: 1,
                                               edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 } }],
   ];

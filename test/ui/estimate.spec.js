@@ -529,15 +529,18 @@ const divBin = (x, y, [u, v, h, divX, divY], removable) =>
    left out of every bin: a 2x2x3 with both came to 0.890. And the stacking lip was
    weighed by the bin's area, not round its edge, so the smaller the bin the less of its
    lip there was: a 0.5x0.5x3 came to 0.927. They now come within 1.5%, the most the
-   weight leaves out (the raised note's letters, a few corners: bin.js, binVolume). */
+   weight leaves out (the raised note's letters, a few corners: bin.js, binVolume). And a
+   bin with holes across its floor, whose block runs on under the label shelf through the
+   wedge the shelf fills, is weighed with that wedge once. */
 const BUILT = [
   ['an L of three cells asking for fixed dividers', '0-0-2-2-3-1.2-1.2-2-1-0-1-1-1-1-0-0-1110'],
   ['a 2x2x3 with an 8 mm scoop and a 12 mm label shelf', '2-0-2-2-3-1.2-1.2-0-0-0-1-1-1-1-8-12'],
   ['a 0.5x0.5x3', '4-0-0.5-0.5-3'],
+  ['a 1x1x3 with AAA holes under a 12 mm label shelf', '5-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-0-2-0'],
 ];
 
 test.describe('the weight', () => {
-  test('a bin weighs the plastic it is built of, carved, with scoop and shelf, and half-size', async ({ page }) => {
+  test('a bin weighs the plastic it is built of, carved, with scoop and shelf, half-size, and holed', async ({ page }) => {
     const G = require('../../src/core.js');
     const { buildBin } = require('../../src/bins/bin.js');
     const { enclosedVolume } = require('../enclosed-volume.js');
@@ -547,12 +550,12 @@ test.describe('the weight', () => {
     await page.goto(H.BINS_URL + '#bl=' + BUILT.map(([, link]) => link).join('_'));
     await page.waitForFunction(() => typeof THREE !== 'undefined' && !!document.getElementById('fillmap'));
     const r = await page.evaluate(() => layers[0].bins.map((b) => ({ cfg: binCfg(b), est: volumeMm3(b).raw })));
-    expect(r.map(({ cfg }) => [cfg.u, cfg.v, (cfg.cells || []).length, cfg.divX, cfg.scoop, cfg.label]),
-           'fixture: the three bins as the link has them').toEqual([[2, 2, 3, 2, 0, 0], [2, 2, 0, 0, 8, 12],
-                                                                     [0.5, 0.5, 0, 0, 0, 0]]);
+    expect(r.map(({ cfg }) => [cfg.u, cfg.v, (cfg.cells || []).length, cfg.divX, cfg.scoop, cfg.label, cfg.insert]),
+           'fixture: the four bins as the link has them').toEqual([[2, 2, 3, 2, 0, 0, 0], [2, 2, 0, 0, 8, 12, 0],
+                                                                    [0.5, 0.5, 0, 0, 0, 0, 0], [1, 1, 0, 0, 0, 12, 2]]);
     for (const [i, { cfg, est }] of r.entries()) {
       const mesh = enclosedVolume(buildBin(G, cfg).polys);
-      // each one on its own, so a failure says which of the three are off and by how much
+      // each one on its own, so a failure says which of them are off and by how much
       expect.soft(Math.abs(est / mesh - 1), `${BUILT[i][0]}: ${est.toFixed(0)} of ${mesh.toFixed(0)} mm³`)
         .toBeLessThan(0.015);
     }

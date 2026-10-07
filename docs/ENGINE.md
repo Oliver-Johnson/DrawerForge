@@ -520,7 +520,9 @@ currently installed):
   0.014 mm.
 - **Raw mesh volume is not filament.** The overlapping-shell construction double-counts,
   and slicers infill anything thick. Estimate analytically from parameters: thin features
-  at full density, thick blocks as shell + infill × core.
+  at full density, thick blocks as shell + infill × core. For a bin that is `binVolume`
+  in bins/bin.js, from the numbers `buildBin` builds from, held by the bin audit and
+  estimate.spec to within 1.5% of what the mesh encloses (test/enclosed-volume.js).
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the
