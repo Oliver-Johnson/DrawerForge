@@ -158,8 +158,10 @@ test('a floor that fills the bin leaves no loose divider plates to print', async
 });
 
 /* Each removable divider is a slot between two rails, and closer than a slot and a rail
-   apart a neighbour's rail stood across the slot: the fields allowed 31 on a 1x1, and
-   past 10 no plate went in. */
+   apart a neighbour's rail stands in the slot and takes from its clearance: the fields
+   allowed 31 on a 1x1, and at 11 a plate went in with 0.208 mm of clearance where 0.25
+   was asked for, at 12 not at all. Held to a slot and a rail apart, every slot keeps the
+   whole clearance, and 10 fit. */
 test('removable dividers are held to as many as leave every slot room for a plate', async ({ page }) => {
   const errors = await openAt(page, '');
   await H.dragCells(page, [0, 0], [0, 0]);
@@ -227,7 +229,7 @@ test('a link asking for more removable dividers than fit opens unchanged, and Ch
   expect(await page.evaluate(() => localStorage.getItem('drawerforge:bins:v1'))).toContain('bl=' + bl);
   await H.setField(page, 'note', 'screws');
   expect(await page.evaluate(() => B()[0].divX)).toBe(30);
-  // a number typed in is held to the limit
+  // a number other than the one it asks for, typed in, is held to the limit
   await H.setField(page, 'divX', 50);
   expect(await page.evaluate(() => B()[0].divX)).toBe(10);
   expect(await notes()).toEqual(['2 bins are built with fewer removable dividers than they ask for, as no more ' +
@@ -368,6 +370,83 @@ test('a scoop too big for the plates across to keep their ends is built smaller,
   expect(notes).toEqual(expect.arrayContaining(['Layer 1, the 2×2 bin at column 1 row 1: is built with a 6.6 mm scoop ' +
     'rather than 7.2 mm, so the plates across keep 1 mm of their front ends in their rails.']));
   expect(await page.evaluate(() => checkManifold(geomFor(B()[0]).polys).bad)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+/* One removable divider has no neighbour, so it needs only its slot and a rail either
+   side. Held to a neighbour's spacing as well, a half-cell bin with a 3 mm wall at a 5 mm
+   plate and 1 mm clearance was built with none, its field allowed none, and Checks said
+   none fit. */
+test('a bin with room for one removable divider and no more is built with one', async ({ page }) => {
+  const errors = await openAt(page, 'bl=0-0-0.5-1-3-3-1.2-1-0-0-1-1-1-1-0-0-0-0-1-0-15&bdt=5&bdc=1');
+  await settle(page, 600);
+  expect(await page.evaluate(() => [state.divT, state.divClr, B()[0].divX])).toEqual([5, 1, 1]);
+  expect(await page.evaluate(() => dividerParts().reduce((n, d) => n + d.qty, 0))).toBe(1);
+  expect(await page.evaluate(() => checkManifold(geomFor(B()[0]).polys).bad)).toBe(0);
+  expect((await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent)))
+    .filter((t) => t.includes('removable dividers'))).toEqual([]);
+  await H.clickCell(page, -0.25, 0);
+  await settle(page, 600);
+  expect(await page.inputValue('#divX')).toBe('1');
+  expect(await page.evaluate(() => +document.getElementById('divX').max)).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+/* Where the rounded corners set the limit and not the slots' spacing, Checks says so: the
+   reason given was that no more left every slot room for a plate, where 17 do. */
+test('Checks says it is the rounded corners when they hold a bin to fewer removable dividers', async ({ page }) => {
+  const asks = (x, n) => `${x}-0-1-1-3-0.4-1.2-${n}-0-0-1-1-1-1-0-0-0-0-1-0-15`;
+  const errors = await openAt(page, 'bl=' + asks(0, 17) + '&bdt=0.8&bdc=0.1');
+  await settle(page, 600);
+  const notes = async () => (await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent)))
+    .filter((t) => t.includes('removable dividers'));
+  expect(await page.evaluate(() => dividerParts().reduce((n, d) => n + d.qty, 0))).toBe(12);
+  expect(await notes()).toEqual(['Layer 1, the 1×1 bin at column 1 row 1: is built with 12 removable dividers ' +
+    'across, not the 17 it asks for, as more would stand the end ones in the bin\'s rounded corners, where the ' +
+    'rails cannot hold them, with a 0.8 mm plate at 0.1 mm clearance.']);
+  // and said once for several, for that reason
+  await page.goto('about:blank');
+  await openAt(page, 'bl=' + [0, 1].map((x) => asks(x, 17)).join('_') + '&bdt=0.8&bdc=0.1');
+  await settle(page, 600);
+  expect(await notes()).toEqual(['2 bins are built with fewer removable dividers than they ask for, as more ' +
+    'would stand the end ones in their rounded corners, where the rails cannot hold them, with a 0.8 mm plate ' +
+    'at 0.1 mm clearance: the 1×1 on layer 1 at column 1 row 1 and the 1×1 on layer 1 at column 2 row 1.']);
+  expect(errors).toEqual([]);
+});
+
+/* A type is weighed from its first bin, and two bins built alike are one type whatever
+   each asks for. Weighed as asked, a 1x1 asking for 30 removable dividers and one asking
+   for 10, both built with 10, were one row of two at 72 g, or at 37 g the other way round. */
+test('bins built with the same removable dividers weigh the same, whichever comes first', async ({ page }) => {
+  const asks = (x, n) => `${x}-0-1-1-3-1.2-1.2-${n}-0-0-1-1-1-1-0-0-0-0-1-0-15`;
+  const rows = async (bl) => {
+    await page.goto('about:blank');
+    await openAt(page, 'bl=' + bl);
+    await settle(page, 600);
+    return page.evaluate(() => [...document.querySelectorAll('#typeRows tr')]
+      .map((tr) => [...tr.children].map((td) => td.textContent.trim()).join(' | ')));
+  };
+  // one row: the size and compartments, the measurements, how many, the grams
+  const asTen = await rows(asks(0, 10) + '_' + asks(1, 10));
+  expect(asTen).toHaveLength(1);
+  expect(asTen[0]).toMatch(/^1×1×3 · 11 comp \| .* \| 2 \| \d+ g \| /);
+  expect(await rows(asks(0, 30) + '_' + asks(1, 10))).toEqual(asTen);
+  expect(await rows(asks(0, 10) + '_' + asks(1, 30))).toEqual(asTen);
+});
+
+/* The fields with nothing selected are the next bin drawn, and it is drawn with fixed
+   dividers: the count is taken, Removable is not. Held to the rails of the bin chosen a
+   moment before, a 1x2 asking for 30 removable dividers along, the next bin got 23. */
+test('the next bin drawn takes the dividers asked for, not the removable limit of the last one chosen', async ({ page }) => {
+  const errors = await openAt(page, 'bl=0-0-1-2-3-1.2-1.2-0-30-0-1-1-1-1-0-0-0-0-1-0-15');
+  await settle(page, 600);
+  await H.clickCell(page, 0, 0);
+  await settle(page, 400);
+  expect(await page.inputValue('#divY')).toBe('30');
+  await H.dragCells(page, [3, 0], [3, 1]);
+  await settle(page, 600);
+  const b = await page.evaluate(() => B().map((x) => [x.u, x.v, x.divY, !!x.divRemovable]));
+  expect(b).toEqual([[1, 2, 30, true], [1, 2, 30, false]]);
   expect(errors).toEqual([]);
 });
 

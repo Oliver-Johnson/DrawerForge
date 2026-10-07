@@ -6510,7 +6510,7 @@ function lipRing(G, c, hwO, hdO, H, n) {
  *
  * A piece too short to build, at a corner where a notch from each side comes close, is
  * left out and the two notches run together: less lip there, never a sliver of one. A cut
- * that misses a level altogether (railedLimits keeps every notch inside the lip's socket
+ * that misses a level altogether (railedLimit keeps every notch inside the lip's socket
  * floor, so none does) leaves out the pieces either side of its notch the same way. */
 function notchedLip(G, c, hwO, hdO, H, n, bandsX, bandsY) {
   const { ts, zs } = lipLevels(c, H);
@@ -7350,26 +7350,39 @@ function shelfDepth(c, id, H) {
   return d > 0.05 ? d : 0;
 }
 
-/* The most removable dividers that fit along one direction of a bin: `axis` is 'x' for
- * divX, the ones standing at a fixed x, and 'y' for divY.
+/* The most removable dividers that fit along one direction of a bin, and which rule
+ * stopped there: `axis` is 'x' for divX, the ones standing at a fixed x, and 'y' for divY.
+ * `by` is 'slots' when the spacing below set the count, 'corners' when the rounded
+ * corners brought it down further, and 'lip' or 'shelf' when one of the two things that
+ * stand over a slot did (see the end of this).
  *
  * Each is a slot between two rails RAIL_T thick, so neighbours closer together than a
- * slot and a rail put one's rail across the other's slot, and its plate cannot go in.
- * The divider fields count one wall per divider, as fixed ones are, and allowed 31 on a
- * 1x1 where past 10 no slot took its plate at the usual 1.6 mm plate and 0.25 mm
- * clearance. Exactly that far apart, two neighbours' rails are one rail between their
- * slots, and both plates go in.
+ * slot and a rail put one's rail into the other's slot, where it takes from the plate's
+ * clearance. The divider fields count one wall per divider, as fixed ones are, and
+ * allowed 31 on a 1x1 at the usual 1.6 mm plate and 0.25 mm clearance: at 11 a plate
+ * still went in, with 0.208 mm of clearance where 0.25 was asked for, and at 12 not at
+ * all. Held to a slot and a rail apart, every plate keeps the whole clearance asked for,
+ * and 10 fit. Exactly that far apart, two neighbours' rails are one rail between
+ * their slots, and both plates go in.
+ *
+ * Even spacing stands the end ones as far from the end walls as from each other, which
+ * one alone does not need: with no neighbour, it needs only its slot and a rail either
+ * side inside the cavity. Asked for a neighbour's spacing as well, a half-cell bin with a
+ * 3 mm wall built none at a 5 mm plate and 1 mm clearance, where one fits with room over.
  *
  * The end ones must clear the cavity's rounded corners as well. Spaced so, the plate
  * nearest an end wall stands a slot and a rail from it less half a plate, which with a
  * thin plate and little clearance is inside the corner's radius: 1.8 mm out at 0.8 mm
  * and 0.1, where the corner's radius is up to 3.35. Its plate spans to the clearance
  * from the side walls, so its corner stood up to 0.26 mm into the wall at smoothness 8,
- * and the plate could not go in. The rails were never the trouble there: spaced so,
- * the outer one keeps at least 0.7 mm of its 1.2 inside the cavity. So the count comes
- * down until the end plates' corners are inside the cavity's outline as built, chords
- * and all, or on it. Fewer dividers rather than end plates cut to the corner, because
- * every plate is then the same part, and goes in any slot.
+ * and the plate could not go in. The rails reach a rail's depth along that plate's end
+ * (see reach in buildBin), and the face of the slot on the end wall's side is a
+ * clearance nearer the corner than the plate is: where the corner cuts that face short
+ * of the plate's end, the end sits less than a rail's depth in its rail. So the count
+ * comes down until that face, at the end of the plate's span, is inside the cavity's
+ * outline as built, chords and all, or on it. The plate's own corner, between that face
+ * and the middle, is then inside too. Fewer dividers rather than end plates cut to the
+ * corner, because every plate is then the same part, and goes in any slot.
  *
  * Two more things can stand over a slot, and each brings the count down again where it
  * would. With a stacking lip, each slot is a notch through the lip (notchedLip), cut
@@ -7379,16 +7392,18 @@ function shelfDepth(c, id, H) {
  * depth, parallel to it, would have to be slid in under it, which a plate dropped into
  * rails cannot be, so the last one stays in front of the shelf, slot and all. The plates
  * across pass through notches in the shelf instead, so the shelf limits only these.
- * railedLimits says which brought the count down, for the page to say why.
+ * Both only where there is a plate to go in: see printed below.
  */
-function railedLimits(cfg, axis) {
+function railedLimit(cfg, axis) {
   // the size as it is built, to the nearest half cell (halfSized), as buildBin does
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const inner = axis === 'x' ? hw : hd;
-  const pitch = c.divT + 2 * c.divClr + RAIL_T;
+  const slot = c.divT / 2 + c.divClr, pitch = 2 * slot + RAIL_T;
   let most = Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0;
+  if (!most && inner >= slot + RAIL_T - 1e-9) most = 1;
+  const slots = most;
   // the cavity's corner as roundRect builds it, and whether a point stands out through it
   const r = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(hw, hd) - 0.01));
   const n = c.arcSegs, seg = Math.PI / (2 * n);
@@ -7398,15 +7413,15 @@ function railedLimits(cfg, axis) {
     const a = Math.atan2(dy, dx), mid = (Math.min(n - 1, Math.floor(a / seg)) + 0.5) * seg;
     return Math.hypot(dx, dy) > r * Math.cos(seg / 2) / Math.cos(a - mid) + 1e-9;
   };
-  // the corner of the end plate nearest its wall: its face, at the end of its span
+  // the end plate's slot, its face on the end wall's side, at the end of the plate's span
   const endOut = (k) => {
-    const face = -inner + (2 * inner) / (k + 1) - c.divT / 2;
+    const face = -inner + (2 * inner) / (k + 1) - slot;
     return axis === 'x' ? outside(face, hd - c.divClr) : outside(hw - c.divClr, face);
   };
   while (most > 0 && endOut(most)) most--;
-  const rails = most;
-  // the last slot of k, as buildBin places it, and its half width
-  const last = (k) => -inner + (2 * inner) * k / (k + 1), slot = c.divT / 2 + c.divClr;
+  const corners = most;
+  // the last slot of k, as buildBin places it
+  const last = (k) => -inner + (2 * inner) * k / (k + 1);
   /* Only with a plate to go in: under a millimetre tall the page lists none, and the bin
      keeps its lip and shelf whole (plateLayout). */
   const printed = c.hUnits * SPEC.unitH - (SPEC.footH + builtFloorT(c)) - c.divClr >= 1;
@@ -7416,11 +7431,9 @@ function railedLimits(cfg, axis) {
   const lip = most;
   const shelf = axis === 'y' && full ? shelfDepth(c, hd, c.hUnits * SPEC.unitH) : 0;
   if (shelf) while (most > 0 && last(most) + slot + BLOAT > hd - shelf) most--;
-  return { rails, lip, shelf: most };
+  return { most, by: most < lip ? 'shelf' : most < corners ? 'lip' : most < slots ? 'corners' : 'slots' };
 }
-function railedMost(cfg, axis) {
-  return railedLimits(cfg, axis).shelf;
-}
+const railedMost = (cfg, axis) => railedLimit(cfg, axis).most;
 /* The dividers a bin is built with: as many as it asks for, bar removable ones past the
    most that fit. What a bin asks for is left as it is, in the link and everywhere it is
    kept, so a design from before this held them there opens unchanged; the page says in
@@ -7441,10 +7454,9 @@ function dividersBuilt(cfg) {
   return out;
 }
 /* Why a removable bin is built with fewer dividers than it asks for, along each direction:
-   'rails' when no more leave every slot room for its plate, 'lip' when the end notches
-   would miss the lip's socket floor, 'shelf' when one more along would stand under the
-   label shelf (railedLimits), 'cross' when the plates along would keep under PLATE_END
-   where they stand or cross, and 'corner' when the lip would lose its corners
+   railedLimit's rule where that set the count ('slots', 'corners', 'lip' or 'shelf'),
+   'cross' when the plates along would keep under PLATE_END where they stand or cross,
+   and 'lipCorners' when the notches would leave the lip too little of its corners
    (dividersBuilt). Null where it is built with all it asks for. */
 function dividersWhy(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg), built = dividersBuilt(c), out = { divX: null, divY: null };
@@ -7452,9 +7464,10 @@ function dividersWhy(cfg) {
   for (const [key, axis] of [['divX', 'x'], ['divY', 'y']]) {
     const asked = c[key] || 0;
     if (built[key] >= asked) continue;
-    const L = railedLimits(c, axis);
-    out[key] = asked > L.rails ? 'rails' : asked > L.lip ? 'lip' : asked > L.shelf ? 'shelf'
-      : plateLayout(c, Object.assign({}, built, { [key]: Math.min(asked, L.shelf) })).fitsY ? 'corner' : 'cross';
+    const L = railedLimit(c, axis);
+    out[key] = built[key] < Math.min(asked, L.most)
+      ? (plateLayout(c, Object.assign({}, built, { [key]: Math.min(asked, L.most) })).fitsY ? 'lipCorners' : 'cross')
+      : L.by;
   }
   return out;
 }
@@ -7479,7 +7492,7 @@ function dividersWhy(cfg) {
  *    rails to the rim. Each compartment gets a stretch of shelf of its own to label.
  *    A plate along the depth is parallel to both. Over the scoop it is cut shorter from
  *    below and stands on the scoop; under the shelf it could not go in at all, so the
- *    count keeps them in front of it (railedLimits).
+ *    count keeps them in front of it (railedLimit).
  *  - Removable plates both ways cross. Where they do, the plates across have a slot
  *    from the top and the plates along a slot from the bottom, each half of the height
  *    where they overlap plus the clearance, so they halve together: the plates across go
@@ -8076,7 +8089,10 @@ function buildBin(G, cfg) {
        comes to the shelf's front, or within a BLOAT of it, runs a BLOAT into the shelf,
        as it would into its neighbour. Under the shelf that is up to two BLOAT more
        divider, the most a merge with a neighbour adds. One whose FRONT lies on the
-       shelf's front already runs into the shelf; see box for that one. */
+       shelf's front already runs into the shelf; see box for that one. "On" is to ten
+       times WELD, either side, for both. Held to WELD, a face 2 to 5 µm off the shelf's
+       front was left as it was: clean as built, but welded at 5 to 10 µm, as a slicer may
+       weld, the two shells' corners became one and the edge was shared again. */
     const spans = (n, inner, shelf) => {
       const out = [];
       for (let k = 1; k <= n; k++) {
@@ -8084,7 +8100,7 @@ function buildBin(G, cfg) {
         if (c.divRemovable) out.push([p - rail, p - slot], [p + slot, p + rail]);
         else out.push([p - t, p + t]);
       }
-      for (const s of out) if (s[1] >= shelf - BLOAT && s[1] < shelf + WELD) s[1] = shelf + BLOAT;
+      for (const s of out) if (s[1] >= shelf - BLOAT && s[1] < shelf + 10 * WELD) s[1] = shelf + BLOAT;
       out.sort((a, b) => a[0] - b[0]);
       const merged = [];
       for (const [lo, hi] of out) {
@@ -8095,12 +8111,19 @@ function buildBin(G, cfg) {
       return merged;
     };
     /* Across the cavity for a fixed divider, from wall to wall and BLOAT into each; for a
-       removable one, a rail's depth out from each of the two walls the plate slides
-       between, again BLOAT into the wall. The far rail used to stop exactly on the wall's
-       inner face, the near one BLOAT inside its wall; both now reach in. */
-    const reach = (inner) => (c.divRemovable
-      ? [[-inner - BLOAT, -inner + RAIL_D], [inner - RAIL_D, inner + BLOAT]]
-      : [[-inner - BLOAT, inner + BLOAT]]);
+       removable one, out from each of the two walls the plate slides between, again BLOAT
+       into the wall. The far rail used to stop exactly on the wall's inner face, the near
+       one BLOAT inside its wall; both now reach in.
+       A removable one's rails reach a rail's depth along the plate's end, which stops the
+       clearance short of the wall (dividerPart): so the clearance and a rail's depth out
+       from the wall. Reaching only a rail's depth, they held each end of the plate a rail's
+       depth less the clearance, 0.95 mm at the usual 0.25 and 0.2 mm at 1 mm, where it can
+       twist out. Rails that would meet across a cavity that shallow are one rib across it,
+       rather than two boxes face to face. */
+    const deep = RAIL_D + c.divClr;
+    const reach = (inner) => (!c.divRemovable || deep >= inner - BLOAT / 2
+      ? [[-inner - BLOAT, inner + BLOAT]]
+      : [[-inner - BLOAT, -inner + deep], [inner - deep, inner + BLOAT]]);
     /* A box that would stand out through a rounded corner, as one packed up to a corner
        does (16 pairs of rails across a 1x1 with a 0.4 mm wall: 0.92 mm out; the most
        rails both ways the fields allow, at the usual 1.2: 0.67), is
@@ -8150,7 +8173,7 @@ function buildBin(G, cfg) {
         polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
     for (const [a, b] of spans(built.divY, id, shelf))
       for (const [lo, hi] of reach(iw))
-        polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT, Math.abs(a - shelf) < WELD));
+        polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT, Math.abs(a - shelf) < 10 * WELD));
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */
@@ -8355,7 +8378,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, dividerPart, dividerPlates, plateLayout, railedMost, railedLimits, dividersBuilt, dividersWhy, lipNotched, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, dividerPart, dividerPlates, plateLayout, railedMost, railedLimit, dividersBuilt, dividersWhy, lipNotched, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, binHeights, unitsForInside, unitsForTop, REQUIRED_CORE,
     FOOT_HOLES, SCREW_FLOOR, holeSites, holePlan, builtFloorT, feetBits, feetFrom,
     isHalfSize, binFeet, feetHolesOff,
@@ -8531,7 +8554,8 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          magnetD: state.magnetD, magnetH: state.magnetH,
                          arcSegs: state.arcSegs });
 /* The dividers a bin is built with: removable ones no more than leave every slot room
-   for its plate at the page's plate and clearance (railedMost), however many it asks for.
+   for its plate at the page's plate and clearance and keep the end ones out of the rounded
+   corners (railedMost), however many it asks for.
    The plates, the names and Checks all go by these, so they say what is built. */
 const builtDivs = (b) => dividersBuilt(Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 }));
 // and how many compartments they make, or 0 for a bin with none
@@ -8829,10 +8853,19 @@ function footProfileHalf(z) {
 }
 
 /* The plan area of the rails `n` removable dividers stand in along one direction: each a
-   slot between two ribs RAIL_T thick, standing RAIL_D out from each of the two facing
-   walls its plate slides between, from the floor to the rim. `along` is half the length
-   of those walls inside the cavity, hwI for the dividers that stand at a fixed x (divX),
-   hdI for the others, as buildBin's spans() and reach() take them.
+   slot between two ribs RAIL_T thick, standing out from each of the two facing walls its
+   plate slides between, from the floor to the rim, as deep as buildBin's reach() builds
+   them: a rail's depth and the clearance, or the whole way across a cavity too shallow
+   for two. `along` is half the length of those walls inside the cavity, hwI for the
+   dividers that stand at a fixed x (divX), hdI for the others, as buildBin's spans() and
+   reach() take them, and `across` half the distance between them. The plate and the
+   clearance are the ones buildBin is given for the bin (binCfg), so the two cannot drift.
+   Where the rails stand in the lip's chamfer, the scoop or the label shelf they are
+   counted in full all the same, as if those were not there, so such a bin comes out a
+   little heavy: about 0.2 g on a 1x1x3 or a 2x1x6 with two or three dividers each way, an
+   8 mm scoop and a 10 mm shelf, of which the chamfer is 0.03 g. It grows with the count
+   and with the scoop and the shelf, to about 3.5 g on a 2x1x6 with 23 across and 10
+   along under a 20 mm scoop and a 20 mm shelf.
    Placed, sorted and merged where two meet exactly as spans() does it, so dividers packed
    close enough for one's rail to run into the next count the plastic they share once.
    A rail beside an end wall can stand in the cavity's rounded corner, where buildBin
@@ -8844,9 +8877,10 @@ function footProfileHalf(z) {
    of a square millimetre at the coarsest smoothness). A rail on a straight run is
    counted whole, so at any count that keeps the rails out of the corners the sum is
    exactly the rails' own area. */
-function railArea(n, along, wall) {
+function railArea(n, along, across, wall, divT, divClr) {
   if (!(n > 0) || !(along > 0)) return 0;
-  const slot = state.divT / 2 + state.divClr, rail = slot + RAIL_T;
+  const slot = divT / 2 + divClr, rail = slot + RAIL_T;
+  const deep = RAIL_D + divClr >= across - BLOAT / 2 ? across : RAIL_D + divClr;
   const spans = [];
   for (let k = 1; k <= n; k++) {
     const p = -along + (2 * along) * k / (n + 1);
@@ -8865,12 +8899,12 @@ function railArea(n, along, wall) {
      from the corner's start to t; `upTo` the same from the middle of the wall to x, both
      ways, so a span's area is upTo(hi) - upTo(lo). Past the end wall it adds nothing. */
   const rI = Math.max(0.4, SPEC.r - wall), straight = Math.max(0, along - rI);
-  const tEnd = RAIL_D >= rI ? rI : Math.sqrt(rI * rI - (rI - RAIL_D) * (rI - RAIL_D));
+  const tEnd = deep >= rI ? rI : Math.sqrt(rI * rI - (rI - deep) * (rI - deep));
   const under = (t) => {
     t = Math.min(Math.max(t, 0), tEnd);
-    return (RAIL_D - rI) * t + (t * Math.sqrt(rI * rI - t * t) + rI * rI * Math.asin(t / rI)) / 2;
+    return (deep - rI) * t + (t * Math.sqrt(rI * rI - t * t) + rI * rI * Math.asin(t / rI)) / 2;
   };
-  const upTo = (x) => Math.sign(x) * (RAIL_D * Math.min(Math.abs(x), straight) + under(Math.abs(x) - straight));
+  const upTo = (x) => Math.sign(x) * (deep * Math.min(Math.abs(x), straight) + under(Math.abs(x) - straight));
   return 2 * merged.reduce((a, [lo, hi]) => a + upTo(hi) - upTo(lo), 0);  // both walls
 }
 
@@ -8948,10 +8982,14 @@ function volumeMm3(c) {
      its 20 g of plates the job was 60 g where it is 47 g. A carved bin gets no rails
      (buildBin leaves dividers off a carved shape, as dividerParts does its plates), so a
      removable one counts none. */
-  const built = { divX: c.divX || 0, divY: c.divY || 0 };   // the dividers it is built with
+  /* As many as it is built with: a bin asking for more removable ones than fit has the
+     rails of as many as fit (builtDivs), and weighed as asked, two bins of one type could
+     weigh 72 g or 37 g by which came first. Fixed ones are built as asked. */
+  const built = builtDivs(c), bc = binCfg(c);
   const divs = !c.divRemovable
     ? (built.divX * wall * 2 * hdI + built.divY * wall * 2 * hwI) * (H - floorZ)
-    : isCarved(c) ? 0 : (railArea(built.divX, hwI, wall) + railArea(built.divY, hdI, wall)) * (H - floorZ);
+    : isCarved(c) ? 0 : (railArea(built.divX, hwI, hdI, wall, bc.divT, bc.divClr) +
+                         railArea(built.divY, hdI, hwI, wall, bc.divT, bc.divClr)) * (H - floorZ);
   // less what a removable bin's notches take out of it
   const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 - lipNotchVolume(c) : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
@@ -9545,21 +9583,30 @@ function readControls() {
      dividers that fit a 1x1 are the most any of them can be given. */
   const sizes = sel.length > 1 && !scratch ? sel.map((i) => B()[i]) : [t];
   const minU = Math.min(...sizes.map((x) => x.u)), minV = Math.min(...sizes.map((x) => x.v));
+  /* With nothing selected the fields are the next bin drawn, which is drawn with fixed
+     dividers whatever the box says (it takes the count, not Removable), so they are held
+     to what fixed ones allow. Held to the rails, the bin chosen a moment before left its
+     limit behind: after a 1x2 with removable dividers, the next bin drawn got 23 where 30
+     were asked for. */
+  const own = scratch || b;
   setBinLimits(minU, minV, t.hUnits);
   Object.assign(t, { floorT: mm('floorT', 1.2), scoop: mm('scoop', 0), label: mm('label', 0) });
   /* A bin asking for more removable dividers than fit keeps asking for them: a link or a
      saved drawer from before the limit followed the rails can ask for 31 on a 1x1, where
      10 fit, and is built with 10 (Checks says so). Selecting it, or changing anything
      else about it, must not rewrite the link, so while the field still shows what the bin
-     asks for, that is kept, held only to the limit the link reader holds it to; a number
-     typed in is held to the field's own. */
-  const own = scratch || b;
+     asks for, that is kept, held only to the limit the link reader holds it to. So is
+     the same number typed in again, and the fixed dividers of a bin whose Removable is
+     ticked: the field shows them above its limit, and the bin is built with as many as fit
+     until a plate or a clearance lets more in. Any other number typed in is held to the
+     field's limit. */
   const divCount = (id, most) => {
     const x = count(id, 0), asked = Math.round(num(id, 0));
     return own && asked > x && asked === own[id] ? Math.min(asked, most) : x;
   };
   // the smallest bin's footprint, with what this pass gives every bin it applies to
-  const lim = binCfg(Object.assign({}, t, { u: minU, v: minV, cells: null, divX: 0, divY: 0 }));
+  const lim = binCfg(Object.assign({}, t, { u: minU, v: minV, cells: null, divX: 0, divY: 0,
+                                            divRemovable: t.divRemovable && !!own }));
   setDividerLimit('divX', lim);
   t.divX = divCount('divX', mostDividers(minU, t.wall));
   setDividerLimit('divY', Object.assign(lim, { divX: t.divX }));
@@ -10994,36 +11041,57 @@ function binIssues(b, k, claims) {
     out.push({ note: true, t: `has ${b.wall} mm walls, thicker than the ${lipBase} mm the stacking lip stands on — ` +
       `each side takes ${(b.wall - BIN_DEFAULTS.wall).toFixed(1)} mm more of the inside than the usual ${BIN_DEFAULTS.wall} mm` });
   /* A note, because the bin prints, with fewer removable dividers than it asks for: as
-     many as leave every slot room for its plate (railedMost). A design from before the
-     fields held them there can ask for 31 on a 1x1, where 10 fit at the usual plate and
-     clearance. Its link keeps asking, so a thinner plate or a tighter clearance builds
-     more without it being edited. A whole drawer of such bins says it once (warnings). */
+     many as leave every slot room for its plate and keep the end ones out of the rounded
+     corners (railedLimit), and the note says which of the two stopped it; or as many as
+     go in past the lip and the shelf and keep their plate where they cross, which notes
+     of their own say (dividersWhy). A design from
+     before the fields held them there can ask for 31 on a 1x1, where 10 fit at the usual
+     plate and clearance. Its link keeps asking, so a thinner plate or a tighter clearance
+     builds more without it being edited. A whole drawer of such bins says it once
+     (warnings), once for each reason. */
   const d = builtDivs(b);
-  const short = [['divX', 'across'], ['divY', 'along']].filter(([k]) => d[k] < (b[k] || 0));
+  const short = [['divX', 'across', 'x'], ['divY', 'along', 'y']].filter(([k]) => d[k] < (b[k] || 0));
   if (b.divRemovable && !b.solid && !isCarved(b) && short.length) {
-    /* Said for what brought each direction's count down (dividersWhy), one note for each
-       reason, so a drawer of bins held for one reason says it once. */
-    const why = dividersWhy(Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 }));
-    const room = `every slot room for a ${state.divT} mm plate at ${state.divClr} mm clearance`;
+    /* What brought each direction's count down (dividersWhy). The rails' own two rules,
+       the slots and the rounded corners, are said together as one note; what stands over
+       a slot, the lip and the shelf, and what the plates keep where they cross or stand
+       on the scoop, each in a note of its own. */
+    const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
+    const why = dividersWhy(cfg);
+    const railShort = short.filter(([k]) => why[k] === 'slots' || why[k] === 'corners');
+    if (railShort.length) {
+      const rules = new Set(railShort.map(([k]) => why[k]));
+      const by = rules.size > 1 ? 'both' : [...rules][0], more = railShort.some(([k]) => d[k]);
+      const at = `a ${state.divT} mm plate at ${state.divClr} mm clearance`;
+      const because = (them) => (by === 'slots' ? `${more ? 'no more' : 'none'} leave every slot room for ${at}`
+        : by === 'corners' ? (more ? `more would stand the end ones in ${them} rounded corners, where the rails cannot hold them, with ${at}`
+          : `even one would stand in ${them} rounded corners, where its rails cannot hold it, with ${at}`)
+        : `${more ? 'no more' : 'none'} leave every slot room and keep the end ones out of ${them} rounded corners with ${at}`);
+      out.push({ note: true, group: `rails-${by}`,
+        t: `is built with ${railShort.map(([k, w], i) => `${d[k] || 'no'}${i ? '' : ` removable divider${d[k] === 1 ? '' : 's'}`} ${w}`).join(' and ')}, ` +
+           `not the ${railShort.map(([k]) => b[k]).join(' and ')} it asks for, as ${because("the bin's")}`,
+        many: (n, names) => `${n} bins are built with fewer removable dividers than they ask for, as ` +
+          `${by === 'slots' ? `no more leave every slot room for ${at}` : by === 'corners'
+            ? `more would stand the end ones in their rounded corners, where the rails cannot hold them, with ${at}`
+            : `no more leave every slot room and keep the end ones out of their rounded corners with ${at}`}: ${names}` });
+    }
     const stand = d.divX ? `cross the ones across${b.scoop ? ', or stand on the scoop' : ''}` : 'stand on the scoop';
     const REASON = {
-      rails: (any) => `${any ? 'no more' : 'none'} leave ${room}`,
       lip: (any) => `${any ? 'no more' : 'none'} can have a notch through the stacking lip clear of its corners`,
       shelf: (any) => `${any ? 'no more' : 'none'} fit in front of the label shelf, which a plate along cannot drop in under`,
       cross: (any) => `${any ? 'no more' : 'none'} keep ${PLATE_END} mm of plate where they ${stand}`,
-      corner: (any) => `${any ? 'more' : 'any'} would notch the stacking lip too close to its corners`,
+      lipCorners: (any) => `${any ? 'more' : 'any'} would notch the stacking lip too close to its corners`,
     };
     const MANY = {
-      rails: `no more leave ${room}`,
       lip: 'no more can have a notch through the stacking lip clear of its corners',
       shelf: 'no more along fit in front of the label shelf, which a plate along cannot drop in under',
       cross: `no more along keep ${PLATE_END} mm of plate where they cross the ones across, or stand on the scoop`,
-      corner: 'more along would notch the stacking lip too close to its corners',
+      lipCorners: 'more along would notch the stacking lip too close to its corners',
     };
-    const reasons = [...new Set(short.map(([k]) => why[k] || 'rails'))];
-    for (const r of reasons) {
-      const these = short.filter(([k]) => (why[k] || 'rails') === r);
-      out.push({ note: true, group: r === 'rails' ? 'rails' : 'rails-' + r,
+    for (const r of Object.keys(REASON)) {
+      const these = short.filter(([k]) => why[k] === r);
+      if (!these.length) continue;
+      out.push({ note: true, group: 'rails-' + r,
         t: `is built with ${these.map(([k, w], i) => `${d[k] || 'no'}${i ? '' : ` removable divider${d[k] === 1 ? '' : 's'}`} ${w}`).join(' and ')}, ` +
            `not the ${these.map(([k]) => b[k]).join(' and ')} it asks for, as ${REASON[r](these.some(([k]) => d[k]))}`,
         many: (n, names) => `${n} bins are built with fewer removable dividers than they ask for, as ${MANY[r]}: ${names}` });

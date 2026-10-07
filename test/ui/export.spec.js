@@ -416,11 +416,14 @@ test('half-size bins download under their own sizes, with no holes they cannot h
    Each now has its own file, and the page before half sizes, with that change, gives
    these same digests. And the README's weight and times moved when a bin with removable
    dividers stopped being weighed as if they were walls: the 2x2x3 with one each way
-   weighs its rails, so the total is 369 g, not 373, and nothing else in it changed.
-   Then that 2x2x3 changed on purpose: its lip has a notch at each slot so the plates go
-   in, and its two plates halve where they cross, so they are two parts, one slotted from
-   the top and one from the bottom, which the README lists with how they go in. Nothing
-   else in the ZIP moved. */
+   weighs its rails, so the total is 369 g, not 373, and nothing else in it changed. Then
+   that bin's rails came to reach the clearance deeper, so that each end of its plates sits
+   a whole rail's depth in them: its STL changed and nothing else did, not even the README,
+   whose 369 g they leave as it was. And then that 2x2x3 changed on purpose again: its lip
+   has a notch at each slot so the plates go in, and its two plates halve where they
+   cross, so they are two parts, one slotted from the top and one from the bottom, which
+   the README lists with how they go in. The README still says 369 g: the notches take
+   less than a gram from the lip. Nothing else in the ZIP moved. */
 test('a link from before half sizes downloads the same files, byte for byte', async ({ page }) => {
   const crypto = require('crypto');
   const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
@@ -451,7 +454,8 @@ test('a link from before half sizes downloads the same files, byte for byte', as
     'bin-2x1x3-qty1.stl': '1d5dddd4cc82d4d4',
     'bin-2x1x4-qty1.stl': '4b028774e7cab92a',
     'bin-2x2x2-qty1.stl': 'aa35a25aa8f07fe3',
-    'bin-2x2x3-1x1div-qty1.stl': 'a3760fb8db78dad6',
+    // 366d3d8fa1eefbcf with the deeper rails alone; now its lip is notched at each slot too
+    'bin-2x2x3-1x1div-qty1.stl': '4da44b7875702f1c',
     'bin-3x2x3-qty1.stl': 'fa1c2a7c90637b50',
     'bin-3x2x4-2x1div-magnets-screws-every-cell-qty1.stl': '94cba83351d3eef8',
     'bin-3x2x5-2x1div-qty1.stl': 'c584bd3b0e62f628',

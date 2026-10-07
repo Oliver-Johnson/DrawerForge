@@ -541,8 +541,10 @@ test.describe('the weight', () => {
                rails: noLip(railed) - noLip(plain), notches: (meshPlain - noLip(plain)) - (mesh - noLip(railed)),
                /* The rails as the mesh has them reach a BLOAT into the wall and a BLOAT into
                   the floor, which meshVolume, adding up shells that overlap, counts twice
-                  where the plastic is there once. */
-               trim: RAIL_D / (RAIL_D + BLOAT) * deep / (deep + BLOAT) };
+                  where the plastic is there once. They stand a rail's depth and the
+                  clearance out from the wall, so that the plate's end sits a whole rail's
+                  depth in them. */
+               trim: (RAIL_D + state.divClr) / (RAIL_D + state.divClr + BLOAT) * deep / (deep + BLOAT) };
     }), RAILED);
     for (const [i, x] of r.entries()) {
       const what = `${RAILED[i]}`;
@@ -585,10 +587,12 @@ test.describe('the weight', () => {
     expect(f.fixed[0]).toBeCloseTo(15799.3449, 3);
     expect(f.fixed[1]).toBeCloseTo(42850.1545, 3);
 
-    /* and every total says so: 114 g, where it was 133. 116 until the plates halved where
-       they cross, a slot each, and the lips took a notch at each end of each plate. */
+    /* and every total says so: 115 g, where it was 133. 116 until the plates halved where
+       they cross, a slot each, and the lips took a notch at each end of each plate; the
+       deeper rails, a rail's depth and the clearance out from the wall, keep it at 115
+       rather than 114. */
     const g = f.want.toFixed(0);
-    expect(g).toBe('114');
+    expect(g).toBe('115');
     const t = await binsFigures(page);
     expect(t.totals).toContain(`≈ ${g} g PLA at 15% infill, 9 dividers included`);
     expect(t.plates).toEqual([expect.stringContaining(`4 bins + 9 dividers${g} g`)]);
