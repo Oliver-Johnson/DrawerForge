@@ -468,8 +468,8 @@ Two things the checks must **not** treat as defects, and do not:
   by exactly two triangles, so it never sees them. Measured clean on every quarantined
   case.
 
-Five orientation defects are quarantined by name rather than fixed, on the same terms as
-the leaks. The plate audit holds its four to their size on file, piece by piece or plate
+Four orientation defects are quarantined by name rather than fixed, on the same terms as
+the leaks. The plate audit holds its three to their size on file, piece by piece or plate
 by plate, so a quarantine for a few folds cannot wave through more:
 
 - **The carved bins' reflex fillet**, in `test/bin-audit.js`. One inside-out closed shell
@@ -479,16 +479,6 @@ by plate, so a quarantine for a few folds cannot wave through more:
   reversed, which only traces anticlockwise while `outer` is the larger radius. Convex
   corners pass `[CR, CR - t]` and are right; the reflex fillet passes `[CR, CR + t + OVER]`
   and reverses the loop, with nothing downstream renormalising it.
-- **The top-inserted wall cup for the puzzle key**, in `test/plate-audit.js`. 12 coplanar
-  slivers of about 1e-4 mm² on 3 of the 4 pieces at arcSegs 12 (14 before dented faces
-  were fanned from a point that sees them, below), and **none at the arcSegs 6 the tool
-  ships**. It is the only key housing whose cutter crosses the socket's *corner*
-  cone: a key site is where four cells meet, the wall mount puts the pocket in the rim
-  rather than in a floor pad, and top insert runs the cutter from below the pocket floor up
-  past the plate top. A lobe arc and a cone arc then cross at a shallow angle, and both are
-  made of near-tangent facets. Sensitive enough to be worth a warning: over segment counts
-  17/19/21/25/33 the same plate ranges from 0 folds to 89, with no monotonicity, which is
-  what a sliver lottery looks like from the outside.
 - **The H-clip put in from beneath, at pitches just past where keys meet**, in the joint
   section of `test/plate-audit.js`. Four coplanar folds on a piece, a sliver of the bed
   face by the clip's pocket turned over, no edge open; on main the same plates and the
@@ -502,6 +492,14 @@ by plate, so a quarantine for a few folds cannot wave through more:
   Puzzle tabs at 20 mm keep three on each of two pieces, at a 3-corner sliver the weld
   turned right over, which faces the wrong way however it is laid out; main builds those
   two clean, and the sliver came with the puzzle notch's pole moving into one region.
+
+  The top-inserted wall cup for the puzzle key used to be quarantined here too: 12 coplanar
+  slivers of about 1e-4 mm² on 3 of the 4 pieces at arcSegs 12 (14 on main), none at the
+  arcSegs 6 the tool ships. It is the only key housing whose cutter crosses the socket's
+  *corner* cone, where a lobe arc and a cone arc cross at a shallow angle, both made of
+  near-tangent facets (over segment counts 17/19/21/25/33 the same plate ranged from 0
+  folds to 89, with no monotonicity: a sliver lottery). The slivers stand on edge, and
+  laid out on the finished piece (`unfoldFinished`, below) they fold no more.
 
   The puzzle fit sample used to be quarantined here for six slivers of 5.2e-5 to 5.5e-4 mm²
   on two of its four tiles, and it is clean now. The honest account is that the coupon's
@@ -530,25 +528,57 @@ stand on edge. Laying those out again made some pieces worse through the engine 
 (folds against an H-clip pocket's wall, edges used four times by a bowtie's cup, a
 turned-over sliver re-wound against its neighbours; three rows of the plate audit hold
 them), and dropping the ears instead let a page design fold again (the audit's dent
-between two straight runs). Widening it again, with the checks above, does not pay
-either. Taking as well every face whose fan folds within itself, or turns a triangle
-back, or stands one more than 60 degrees off the face, leaves fewer engine-only pieces
-with any defect (316, 282 and 216 of 2,060 against 410, over the designs named below; the
-last two puzzle folds below go too), but each of the three puts the bowtie cup row's
-edges used four times back, and the wider two open a hole in an engine-only piece that
-only folded.
+between two straight runs). Widening it again inside `healCsgSeams`, with the checks
+above, does not pay either. Taking as well every face whose fan folds within itself, or
+turns a triangle back, or stands one more than 60 degrees off the face, leaves fewer
+engine-only pieces with any defect (316, 282 and 216 of 2,060 against 410, over the
+designs named below), but each of the three puts the bowtie cup row's edges used four
+times back, and the wider two open a hole in an engine-only piece that only folded. A
+face laid out differently there is cut again by whatever comes next, and the next cut
+goes differently: sound triangles do not make a sound cut.
 
-Every face it touches on the page's designs had a fold in its plain fan, by
-`test/orientation.js`'s own test: 740 over 3,893 random mount designs, 195 over 1,200
-random puzzle designs, 188 over the 960 joint designs below. Through the engine alone
-(595 designs at 14.3 to 17.5 mm pitches with the mounting sites moved in) it touches 5,944
-faces, and 10 of them had no such fold: 3 laid a triangle within 3 degrees of back to
-back with the face, 7 one between 3 and 8 degrees. The first version touched 578 like
-that there. A face whose plain fan lies right is laid out exactly as before, and so is
-every plate with no such face.
+Every face `healCsgSeams` lays out again on the page's designs had a fold in its plain
+fan, by `test/orientation.js`'s own test: 740 over 3,893 random mount designs, 195 over
+1,200 random puzzle designs, 188 over the 960 joint designs below. Through the engine
+alone (595 designs at 14.3 to 17.5 mm pitches with the mounting sites moved in) it lays
+out 5,944 faces, and 10 of them had no such fold: 3 laid a triangle within 3 degrees of
+back to back with the face, 7 one between 3 and 8 degrees. The first version laid out
+578 like that there. A face whose plain fan lies right is laid out exactly as before, and
+so is every plate with no such face.
+
+What does pay is the same care on the finished piece, where nothing cuts it again. A
+sliver can stand on edge and fold against the face beside it, or against another sliver
+of its own face, without lying back to back with its own plane: the side of an H-clip
+pocket put in from above, with the clearance at the top of the field, at the pitches
+Checks offers it. With only the faces above laid out again, 68 of 5,202 such plates
+(14.3 to 15.95 mm every 0.05 mm, rows, columns and both, every 0.02 of the field) fold
+more than they did under the first version, though less than on main, and the plate
+audit holds one of them. So `unfoldFinished` takes each polygon of the finished piece
+whose plain fan (from its first corner, as the STL is written) lays a triangle more than
+60 degrees off its plane and has a triangle in a fold, by the orientation test's own
+rule, and lays it out from the first of its corners, or failing those ears in its plane,
+that is sound: every triangle has area and lies within 60 degrees of the plane, no
+diagonal is an edge the piece already has, and no triangle lies back to back with the
+one across its edge (positions keyed to a thousandth, as both checks key them). An edge
+of the polygon stays an edge and a diagonal is new, used by the polygon's own two
+triangles, so it cannot open a hole or use an edge four times, and it adds no fold.
+
+Every polygon it lays out was in a fold, by that rule. It touches none on the 3,893
+random mount designs, the 960 joint designs or the snap wall sweep; 2 over the 1,200
+puzzle designs, the last two puzzle folds; 466 on 183 of the 5,202 H-clip plates from
+above (folded plates 90, against main's 659 and the first version's 231) and 80 on 40 of
+the 5,202 from beneath (27, against 86 and 67); and through the engine alone 592 on 128
+of 595 designs, finding 13 more folded with nothing sound (pieces with any defect 207 of
+2,060, against main's 1,132, the first version's 348, and 410 with only the faces above
+laid out). It also clears the puzzle key's wall cup at arcSegs 12, which was quarantined
+for its slivers (above). No piece it touched is worse in any of them. With nothing to lay
+out it is a scan of the polygons, 2 ms of the 330 the page as it opens takes to build;
+where it lays some out it tables only the edges near those, 3 to 8 ms on the H-clip
+plates.
+
 Over 960 designs of eight joints (five pitches, four clearances, rows and quads, three
 corner radii) main has 528 folds on 134 pieces and this has none; over 1,200 random
-puzzle designs, 2 pieces of 4,686 fold, one fold each, as they do on main.
+puzzle designs none of the 4,686 pieces folds, where 144 of them fold on main.
 
 A warning about writing checks for this file. The rim-cap check originally asserted two
 things and claimed they were complementary: no triangle inverted, and the signed areas

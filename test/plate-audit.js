@@ -97,22 +97,17 @@ const CASES = [
     opens: true },
   { name: '9x9 bowtie wall top', drawerW: 400, drawerD: 400, connector: 'bowtie',
     keyType: 'bowtie', keyMount: 'wall', keyInsert: 'top', opens: true },
-  /* Watertight, and the only key housing in the file that still folds. It is also the
-     only one whose cutter crosses the socket's CORNER cone: a key site sits where four
-     cells meet, the wall mount puts the pocket in the rim rather than in a floor pad, and
-     top insert makes it run from below the pocket floor up past the plate top. So a lobe
-     arc and a cone arc cross at a shallow angle and csgSubtract dices the crossing into
-     slivers a few microns wide, of which healCsgSeams folds a handful — the class
-     ENGINE.md records under the puzzle notch ceiling, and the same one the puzzle fit
-     coupon is quarantined for further down. 12 coplanar folds, 1e-4 mm² each, on 3 of the
-     4 pieces at arcSegs 12, held to the 4, 6 and 2 each has (14 on main, 5, 7 and 2 on
-     the same three, before healCsgSeams fanned a dented face from a point that sees all
-     of it); ZERO at the arcSegs 6 the tool ships. Chasing it means either retuning
-     healCsgSeams, which is load-bearing for everything else, or moving the lobe, which
-     moves the joint. */
+  /* Watertight, and until unfoldFinished the only key housing in the file that still
+     folded. It is also the only one whose cutter crosses the socket's CORNER cone: a key
+     site sits where four cells meet, the wall mount puts the pocket in the rim rather than
+     in a floor pad, and top insert makes it run from below the pocket floor up past the
+     plate top. So a lobe arc and a cone arc cross at a shallow angle and csgSubtract dices
+     the crossing into slivers a few microns wide, which fanned as they come stand on edge
+     and fold: 12 coplanar folds, 1e-4 mm² each, on 3 of the 4 pieces at arcSegs 12 (14 on
+     main), none at the arcSegs 6 the tool ships. It was quarantined for them; laid out on
+     the finished piece they are gone, and the row now holds it clean. */
   { name: '9x9 puzzlekey wall top', drawerW: 400, drawerD: 400, connector: 'puzzlekey',
-    keyType: 'puzzlekey', keyMount: 'wall', keyInsert: 'top', opens: true,
-    oriQuarantine: 'lobe arc crosses the socket corner cone', oriWorst: { A1: 4, A2: 6, B2: 2 } },
+    keyType: 'puzzlekey', keyMount: 'wall', keyInsert: 'top', opens: true },
   { name: '9x9 snap wall top', drawerW: 400, drawerD: 400, connector: 'snap',
     keyType: 'snap', keyMount: 'wall', keyInsert: 'top', opens: true },
   /* The same housing over a floor pad rather than a wall, so the pocket sits 2.8 mm
@@ -321,6 +316,16 @@ const CASES = [
     keyType: 'bowtie', magnets: true, magnetSide: 'top', holeOffset: 3.5, magnetD: 5.1,
     puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 }, tab: { ...G.DEFAULTS.tab, clr: 0.3 }, arcSegs: 6,
     oriQuarantine: 'a 3-corner sliver the weld turned over', oriWorst: { B3: 3, C3: 3 } },
+  /* An H-clip from above with its clearance at the top of the field, at a pitch Checks
+     can offer it at: the side of the clip's pocket fans into slivers standing on edge,
+     folded against the faces beside them (eight coplanar folds on main). Laying out only
+     the faces whose fan folds onto itself, healCsgSeams leaves three on each of two pieces;
+     unfoldFinished lays them out on the finished piece. */
+  { name: 'H-clip above, clearance at the top', pitch: 14.3, drawerW: 3 * 14.3,
+    drawerD: 3 * 14.3, bedW: 400, bedD: 400, splitMode: 'manual', rowCuts: [1, 2],
+    colCuts: [[], [], []], connector: 'hclip', keyInsert: 'top', arcSegs: 6,
+    tab: { ...G.DEFAULTS.tab, clr: 0.98 }, puzzle: { ...G.DEFAULTS.puzzle, clr: 0.98 },
+    key: { ...G.DEFAULTS.key, clr: 0.93 }, hclip: { ...G.DEFAULTS.hclip, clr: 0.93 } },
   /* A cell whose pockets come out open is cut again (see the fastener cut in buildPiece),
      and here the turned cutters' cut throws: healCsgSeams' T-junction pass limit. Taken
      unguarded, that one try made the whole plate fail to build, where main builds it open;
@@ -1802,7 +1807,8 @@ console.log('\nthe joints named in place of keys that meet, wherever they meet:'
      main as it does here, the same plates and the same counts: a sliver of the bed face
      by the clip's pocket turned over, four on a piece, and no edge open. Here it is where
      the pitch is 14.1 mm more than the field; a sweep every 0.05 mm and every 0.02 of
-     the field finds it on 67 plates of 5,202 from 14.3 to 15.95 mm. It is held to the
+     the field finds it on 27 plates of 5,202 from 14.3 to 15.95 mm (86 on main, and 67
+     before unfoldFinished laid out the slivers that stand on edge). It is held to the
      plates on file, as a quarantine is; any other joint named here that folds fails. */
   const FOLDED = { hclip: { plates: 8, most: 8 } };
   const foldNotes = [], foldFails = [];
