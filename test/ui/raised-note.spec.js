@@ -250,6 +250,29 @@ test('dividers along that cut the shelf short print nothing', async ({ page }) =
   await H.setField(page, 'divX', 0);
   expect(await lead(page), 'without the one across it prints').toMatch(/^Prints /);
 });
+
+/* Removable plates along stay in front of the label shelf, and with a note raised on a
+   short bin that shelf is shallower: 7 mm on a 1x2x2 with a 2 mm wall where 8 is asked.
+   Counted against the plain shelf, the bin was built with 7 along and its field offered
+   no more, where 8 stand in front of the shelf it is built with and the note prints. */
+test('removable plates along come up to the shallower shelf a raised note stands on', async ({ page }) => {
+  await page.evaluate(() => startScratch());
+  await settle(page);
+  for (const [id, x] of [['v', 2], ['hUnits', 2], ['wall', 2], ['label', 8], ['divY', 8]]) await H.setField(page, id, x);
+  await page.check('#divRemovable');
+  await settle(page);
+  // no note: in front of the plain shelf, 8 mm deep at the rim
+  expect(await page.evaluate(() => [builtDivs(scratch), +document.getElementById('divY').max])).toEqual([{ divX: 0, divY: 7 }, 7]);
+  await raise(page);
+  await note(page, 'M3');
+  await H.setField(page, 'divY', 8);
+  expect(await page.evaluate(() => [scratch.labelMode, scratch.label, builtDivs(scratch), +document.getElementById('divY').max]))
+    .toEqual([1, 8, { divX: 0, divY: 8 }, 8]);
+  expect(await lead(page)).toMatch(/^Prints /);
+  expect(await page.evaluate(() => { const s = shelfNote(binCfg(scratch)); return s.fit ? +s.depth.toFixed(2) : s.why; }),
+    'the shelf it is built with').toBe(7);
+  await expect(checks(page)).not.toContainText('removable dividers');
+});
 // a shelf 6 mm deep is shallow by itself: the letters print, under 3 mm, and Checks says so
 test('letters under 3 mm on a shallow shelf are named in Checks', async ({ page }) => {
   await page.evaluate(() => startScratch());

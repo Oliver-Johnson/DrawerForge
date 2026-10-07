@@ -2296,6 +2296,48 @@ console.log('\nnotes raised on the label shelf');
     if (fails.length || printed < NOTE_PLATES.length / 2) bad++;
   }
 
+  /* Removable plates along stay in front of the label shelf as built (shelfBuilt), which
+     with a note raised on a short bin is up to a millimetre shallower than the plain one:
+     every one of them in front of it, and as many as stand there, which is what the same
+     bin takes asked for a shelf that deep. Counted against the plain shelf, a 1x2x2 with
+     a 2 mm wall and an 8 mm shelf, built 7 mm deep under its note, took 7 along where 8
+     stand in front of it with the note printing. Never fewer than with no note, and where
+     the note does not print, the shelf is the plain one, and they are in front of that. */
+  {
+    const fails = [];
+    let n = 0, printed = 0, lowered = 0, more = 0;
+    for (const [u, v] of [[1, 1], [1, 2], [2, 2], [1.5, 1.5], [2, 1], [3, 2]])
+      for (const hUnits of [2, 3])
+        for (const wall of [0.8, 1.2, 2])
+          for (const label of [8, 10, 12, 14])
+            for (const scoop of [0, 8])
+              for (const divX of [0, 1, 2]) {
+                const cfg = { u, v, hUnits, wall, label, scoop, divX, divY: 99, divRemovable: true, labelMode: 1, note: 'M3' };
+                n++;
+                if (shelfNote(cfg).fit) printed++;
+                const c = Object.assign({}, BIN_DEFAULTS, cfg), H = hUnits * SPEC.unitH;
+                const iw = (u - 1) * SPEC.pitch / 2 + SPEC.half - wall, id = (v - 1) * SPEC.pitch / 2 + SPEC.half - wall;
+                const sh = shelfBuilt(c, iw, id, H), plain = shelfBuilt(Object.assign({}, c, { labelMode: 0 }), iw, id, H);
+                const built = dividersBuilt(cfg), L = plateLayout(cfg, built), name = `${u}x${v}x${hUnits} wall ${wall}, ` +
+                  `${label} mm shelf${scoop ? ', scoop' : ''}, ${divX} across`, out = [];
+                const under = L.pY.filter((q) => q + L.slot + 0.05 > id - sh.depth + 1e-9).length;
+                if (under) out.push(`${under} along under the shelf`);
+                const bare = dividersBuilt(Object.assign({}, cfg, { labelMode: 0 })).divY;
+                if (built.divY < bare) out.push(`${built.divY} along, ${bare} with no note`);
+                if (sh.depth < plain.depth - 1e-9) {
+                  lowered++;
+                  if (built.divY > bare) more++;
+                  const same = Object.assign({}, cfg, { label: sh.depth }), k = dividersBuilt(same).divY;
+                  if (shelfNote(same).fit && k !== built.divY) out.push(`${built.divY} along, ${k} on a shelf asked ${sh.depth.toFixed(2)} deep`);
+                }
+                if (out.length) fails.push(`${name}: ${out.join(', ')}`);
+              }
+    console.log(`  ${'plates along'.padEnd(22)} ` + (fails.length ? `${fails.length} FAILED: ${fails.slice(0, 4).join('; ')}`
+      : `${n} bins asking for every plate along, ${printed} printing the note: all in front of the shelf as built; ` +
+        `${lowered} on a shallower one, ${more} of them with more along than with no note, as many as a shelf asked that deep`));
+    if (fails.length || !more) bad++;
+  }
+
   /* Each glyph alone, so a fault is pinned to the character that has it: watertight,
      oriented, and every shell whole. A shell is one extrudePoly of a convex outline,
      and earTriangulate gives up on a polygon silently, so each of its two caps has to be
