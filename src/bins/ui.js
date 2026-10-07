@@ -2610,18 +2610,30 @@ function binIssues(b, k, claims) {
     out.push({ note: true, t: `has ${b.wall} mm walls, thicker than the ${lipBase} mm the stacking lip stands on — ` +
       `each side takes ${(b.wall - BIN_DEFAULTS.wall).toFixed(1)} mm more of the inside than the usual ${BIN_DEFAULTS.wall} mm` });
   /* A note, because the bin prints, with fewer removable dividers than it asks for: as
-     many as leave every slot room for its plate (railedMost). A design from before the
-     fields held them there can ask for 31 on a 1x1, where 10 fit at the usual plate and
-     clearance. Its link keeps asking, so a thinner plate or a tighter clearance builds
-     more without it being edited. A whole drawer of such bins says it once (warnings). */
+     many as leave every slot room for its plate and keep the end ones out of the rounded
+     corners (railedLimit), and the note says which of the two stopped it. A design from
+     before the fields held them there can ask for 31 on a 1x1, where 10 fit at the usual
+     plate and clearance. Its link keeps asking, so a thinner plate or a tighter clearance
+     builds more without it being edited. A whole drawer of such bins says it once
+     (warnings), once for each reason. */
   const d = builtDivs(b);
-  const short = [['divX', 'across'], ['divY', 'along']].filter(([k]) => d[k] < (b[k] || 0));
+  const short = [['divX', 'across', 'x'], ['divY', 'along', 'y']].filter(([k]) => d[k] < (b[k] || 0));
   if (b.divRemovable && !b.solid && !isCarved(b) && short.length) {
-    const room = `every slot room for a ${state.divT} mm plate at ${state.divClr} mm clearance`;
-    out.push({ note: true, group: 'rails',
+    const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
+    const rules = new Set(short.map(([, , ax]) => railedLimit(cfg, ax).by));
+    const by = rules.size > 1 ? 'both' : [...rules][0], more = short.some(([k]) => d[k]);
+    const at = `a ${state.divT} mm plate at ${state.divClr} mm clearance`;
+    const why = (them) => (by === 'slots' ? `${more ? 'no more' : 'none'} leave every slot room for ${at}`
+      : by === 'corners' ? (more ? `more would stand the end ones in ${them} rounded corners, where the rails cannot hold them, with ${at}`
+        : `even one would stand in ${them} rounded corners, where its rails cannot hold it, with ${at}`)
+      : `${more ? 'no more' : 'none'} leave every slot room and keep the end ones out of ${them} rounded corners with ${at}`);
+    out.push({ note: true, group: `rails-${by}`,
       t: `is built with ${short.map(([k, w], i) => `${d[k] || 'no'}${i ? '' : ` removable divider${d[k] === 1 ? '' : 's'}`} ${w}`).join(' and ')}, ` +
-         `not the ${short.map(([k]) => b[k]).join(' and ')} it asks for, as ${short.some(([k]) => d[k]) ? 'no more' : 'none'} leave ${room}`,
-      many: (n, names) => `${n} bins are built with fewer removable dividers than they ask for, as no more leave ${room}: ${names}` });
+         `not the ${short.map(([k]) => b[k]).join(' and ')} it asks for, as ${why("the bin's")}`,
+      many: (n, names) => `${n} bins are built with fewer removable dividers than they ask for, as ` +
+        `${by === 'slots' ? `no more leave every slot room for ${at}` : by === 'corners'
+          ? `more would stand the end ones in their rounded corners, where the rails cannot hold them, with ${at}`
+          : `no more leave every slot room and keep the end ones out of their rounded corners with ${at}`}: ${names}` });
   }
   return out;
 }

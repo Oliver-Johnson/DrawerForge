@@ -291,6 +291,28 @@ test('a bin with room for one removable divider and no more is built with one', 
   expect(errors).toEqual([]);
 });
 
+/* Where the rounded corners set the limit and not the slots' spacing, Checks says so: the
+   reason given was that no more left every slot room for a plate, where 17 do. */
+test('Checks says it is the rounded corners when they hold a bin to fewer removable dividers', async ({ page }) => {
+  const asks = (x, n) => `${x}-0-1-1-3-0.4-1.2-${n}-0-0-1-1-1-1-0-0-0-0-1-0-15`;
+  const errors = await openAt(page, 'bl=' + asks(0, 17) + '&bdt=0.8&bdc=0.1');
+  await settle(page, 600);
+  const notes = async () => (await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent)))
+    .filter((t) => t.includes('removable dividers'));
+  expect(await page.evaluate(() => dividerParts().reduce((n, d) => n + d.qty, 0))).toBe(12);
+  expect(await notes()).toEqual(['Layer 1, the 1×1 bin at column 1 row 1: is built with 12 removable dividers ' +
+    'across, not the 17 it asks for, as more would stand the end ones in the bin\'s rounded corners, where the ' +
+    'rails cannot hold them, with a 0.8 mm plate at 0.1 mm clearance.']);
+  // and said once for several, for that reason
+  await page.goto('about:blank');
+  await openAt(page, 'bl=' + [0, 1].map((x) => asks(x, 17)).join('_') + '&bdt=0.8&bdc=0.1');
+  await settle(page, 600);
+  expect(await notes()).toEqual(['2 bins are built with fewer removable dividers than they ask for, as more ' +
+    'would stand the end ones in their rounded corners, where the rails cannot hold them, with a 0.8 mm plate ' +
+    'at 0.1 mm clearance: the 1×1 on layer 1 at column 1 row 1 and the 1×1 on layer 1 at column 2 row 1.']);
+  expect(errors).toEqual([]);
+});
+
 /* A type is weighed from its first bin, and two bins built alike are one type whatever
    each asks for. Weighed as asked, a 1x1 asking for 30 removable dividers and one asking
    for 10, both built with 10, were one row of two at 72 g, or at 37 g the other way round. */
