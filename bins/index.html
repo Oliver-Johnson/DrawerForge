@@ -7407,7 +7407,10 @@ function railedLimits(cfg, axis) {
   const rails = most;
   // the last slot of k, as buildBin places it, and its half width
   const last = (k) => -inner + (2 * inner) * k / (k + 1), slot = c.divT / 2 + c.divClr;
-  const full = isHalfSize(c) || isFullRect(c);
+  /* Only with a plate to go in: under a millimetre tall the page lists none, and the bin
+     keeps its lip and shelf whole (plateLayout). */
+  const printed = c.hUnits * SPEC.unitH - (SPEC.footH + builtFloorT(c)) - c.divClr >= 1;
+  const full = (isHalfSize(c) || isFullRect(c)) && printed;
   if (full && lipNotched(c))
     while (most > 0 && last(most) + slot + 2 * BLOAT > inner + c.wall - LIP[0][1]) most--;
   const lip = most;
@@ -7572,7 +7575,7 @@ function plateLayout(cfg, counts) {
     return { q, zb, zs: (base + ztop) / 2, keep: pX.length ? (ztop - base) / 2 - clr : ztop - zb };
   });
   const fitsY = !printed || along.every((a) => a.keep >= PLATE_END - 1e-9 && ztop - a.zb >= PLATE_END - 1e-9);
-  const lip = railed && (pX.length || pY.length) ? lipNotched(c) : false;
+  const lip = railed && printed && (pX.length || pY.length) ? lipNotched(c) : false;
   /* Whether the lip keeps its corners. A notch near a corner is cut into its arc, and with
      plates both ways a notch from each side can meet round it: notchedLip then runs the
      two together and the corner of the lip is gone, which is where a bin stacked on top
@@ -8026,12 +8029,12 @@ function buildBin(G, cfg) {
                                 : scoopPrism(G, iw, id, floorZ, rS, Math.max(4, n))));
     const d = shelfDepth(c, id, H);
     if (d) {
-      /* With removable plates across, in pieces between notches at their slots, so the
-         plates pass the shelf on their way down (see plateLayout). Each notch is the slot
-         and half a BLOAT more each side: the lip's notches above are a BLOAT more, so the
-         ends of the two never stand in one plane. */
+      /* With removable plates across the page prints, in pieces between notches at their
+         slots, so the plates pass the shelf on their way down (see plateLayout). Each
+         notch is the slot and half a BLOAT more each side: the lip's notches above are a
+         BLOAT more, so the ends of the two never stand in one plane. */
       const cuts = [-iw - BLOAT];
-      for (const p of fit.pX) cuts.push(p - fit.slot - BLOAT / 2, p + fit.slot + BLOAT / 2);
+      for (const p of fit.printed ? fit.pX : []) cuts.push(p - fit.slot - BLOAT / 2, p + fit.slot + BLOAT / 2);
       cuts.push(iw + BLOAT);
       for (let k = 0; k < cuts.length; k += 2) {
         const whole = cuts.length === 2, x0 = cuts[k], x1 = cuts[k + 1];
