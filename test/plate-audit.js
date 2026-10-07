@@ -203,6 +203,13 @@ const CASES = [
   { name: 'puzzle, four margins', pitch: 20, drawerW: 80.25, drawerD: 60.55, mLeft: 0.05,
     mRight: 0.2, mFront: 0.4, mBack: 0.15, connector: 'puzzle', outerRadius: 4,
     bedW: 50, bedD: 50, arcSegs: 6 },
+  /* A skeleton plate whose far cuts moved half a thousandth, clear of a vertex 0.0995 mm
+     from them, so the strip its cells keep solid where the margin was ended a hair from
+     the margin's own region: four edges each used four times. A cut that moves now moves
+     at least a hundredth (clearCut in buildPiece). */
+  { name: 'skeleton, cut a hair', drawerW: 85.25, drawerD: 85.25, mLeft: 0.417,
+    mRight: 0.833, mFront: 0.417, mBack: 0.833, outerRadius: 6, connector: 'none',
+    plateStyle: 'skeleton', arcSegs: 6 },
 
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 
@@ -1328,13 +1335,17 @@ function sectionArea(polys, z, dy) {
  * the other axis, a BLOAT either side of a cut, every region along that line has the same
  * point. With 2.2 mm margins front and back, side margins of 0.54 to 0.8 mm beside a 4 or
  * 4.88 mm corner put one of those in the band once their cuts had moved, 58 plates of the
- * row below, solid and skeleton.
+ * row below, solid and skeleton. And a skeleton cell beside a moved cut hollows only as
+ * far as the margin was cut before, so where the arc runs through that corner of the
+ * hollow the solid strip around it pinched to a point: 0.69 mm margins left and front and
+ * 1.38 right and back, by a 4.88 mm corner.
  *
  * So every margin from none to 1 mm, a hundredth at a time, on all four sides of one cell,
  * beside square corners, the default radius and the largest the cap allows; the same past
- * a strip of half cells, which is a margin cut of its own; and on the sides only, beside
- * 2.2 mm front and back; each as a solid plate and as a skeleton. Every one has to come
- * back with no bad edge at all, open or touching. And
+ * a strip of half cells, which is a margin cut of its own; on the sides only, beside
+ * 2.2 mm front and back; and on the left and front, with twice that on the right and
+ * back; each as a solid plate and as a skeleton. Every one has to come back with no bad
+ * edge at all, open or touching. And
  * the shape: the area of each plate's cross-section just off the bed, at 1.3 mm, and at
  * 3.1 mm above the hollow, summed over each row of 101 plates, has to be what it was
  * before any cut could move — measured on main at 21b1dc4, whose cuts were where its
@@ -1364,6 +1375,12 @@ console.log('\na margin of any width beside a corner:');
     'skeleton beside 2.2 mm margins r4': [34299.969, 34586.071, 48571.049],
     'solid beside 2.2 mm margins r4.88': [64932.168, 56843.085, 47883.224],
     'skeleton beside 2.2 mm margins r4.88': [33656.240, 33942.342, 47883.224],
+    'solid twice that right and back r0': [56692.937, 48601.749, 39640.806],
+    'skeleton twice that right and back r0': [25425.585, 25708.862, 39640.806],
+    'solid twice that right and back r4': [55287.689, 47196.501, 38235.558],
+    'skeleton twice that right and back r4': [29749.751, 28540.591, 38235.558],
+    'solid twice that right and back r4.88': [54600.540, 46509.353, 37548.409],
+    'skeleton twice that right and back r4.88': [34032.406, 31496.592, 37548.409],
   };
   const sums = {};
   let builds = 0;
@@ -1378,6 +1395,9 @@ console.log('\na margin of any width beside a corner:');
         // where a moved cut's clip lines cross the arc beside a margin of another width
         'beside 2.2 mm margins': { drawerW: 42 + 2 * m, drawerD: 42 + 4.4, mLeft: m, mRight: m,
                                    mFront: 2.2, mBack: 2.2 },
+        // and where the arc runs through the corner of what a skeleton cell hollows
+        'twice that right and back': { drawerW: 42 + 3 * m, drawerD: 42 + 3 * m, mLeft: m,
+                                       mRight: 2 * m, mFront: m, mBack: 2 * m },
       };
       for (const plateStyle of ['solid', 'skeleton'])
         for (const [dn, d] of Object.entries(DESIGNS)) {

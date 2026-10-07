@@ -1628,8 +1628,9 @@ function triangulateRing(outer, inner) {
    crosses it, and a corner of `open` it passes within `tol` of. A vertex within `tol` of a
    side is moved onto it, so no two points of this shell are closer than the edge-matching
    tolerance anyone reading the mesh uses (1e-3 in checkManifold). It moves the outline
-   by no more than that, inside this shell only: a cut beside it is two BLOATs clear of
-   every outline vertex, and so is any other shell's edge. */
+   by no more than that, inside this shell only: the margin's region beside the strip
+   starts at least a hundredth past the strip's side (clearCut), so it has none of the
+   vertices moved. */
 function openSplit(loop, open, tol) {
   let C = loop.map((p) => [p[0], p[1]]);
   const corners = [];
@@ -1693,6 +1694,7 @@ function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin, open) {
   /* With `open`, the bulk is left out of `under`, the part of the region inside it, rather
      than the whole region, and the outline gains the points the solid strip's edges need. */
   let under = clipped, clip = null;
+  const nicks = [];
   const inOpen = (p) => !open || (p[0] >= open[0] - 1e-9 && p[0] <= open[2] + 1e-9 &&
                                   p[1] >= open[1] - 1e-9 && p[1] <= open[3] + 1e-9);
   if (open) {
@@ -1707,6 +1709,30 @@ function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin, open) {
                                                  Math.abs(q[1] - p[1]) < 1e-7) || p);
     };
     under = clip(open[0], open[1], open[2], open[3]);
+    /* Where the outline runs through a corner of `open` itself — 1.38 mm margins by a
+       4.88 mm corner put the arc through it — `under` meets the outline at that one point
+       and the strip either side is pinched to nothing there: one edge with four faces on
+       it. So that corner of the bulk left out is cut off NICK inside, which leaves
+       0.0005 mm² of plastic the margin never had, and the strip goes round it. */
+    if (under) {
+      const onOutline = new Set(clipped.map((p) => `${p}`));
+      const outlineEdge = new Set(clipped.map((p, i) => `${p}|${clipped[(i + 1) % clipped.length]}`));
+      const NICK = 0.03, nicked = [];
+      for (let i = 0; i < under.length; i++) {
+        const p = under[(i + under.length - 1) % under.length], q = under[i];
+        const r = under[(i + 1) % under.length];
+        const along = (s) => (s[0] === q[0] || s[1] === q[1]) &&
+                             Math.hypot(s[0] - q[0], s[1] - q[1]) > 2 * NICK;
+        if (onOutline.has(`${q}`) && !outlineEdge.has(`${p}|${q}`) && !outlineEdge.has(`${q}|${r}`) &&
+            along(p) && along(r)) {
+          const toward = (s) => [q[0] + Math.sign(s[0] - q[0]) * NICK, q[1] + Math.sign(s[1] - q[1]) * NICK];
+          const a = toward(p), b = toward(r);
+          nicked.push(a, b);
+          nicks.push([a, q, b]);
+        } else nicked.push(q);
+      }
+      under = nicked;
+    }
   }
   const zs = prof.zs.slice(1, 5), ds = prof.ds.slice(1, 5);
   const ringAt = (i, off) => {
@@ -1761,28 +1787,32 @@ function skeletonCellRegion(clipped, prof, cx, cy, H, arcSegs, skin, open) {
     const a = under[i], b = under[(i + 1) % under.length];
     if (!edges.has(`${a}|${b}`)) wall(b, a, 0, zs[2]);
   }
-  /* Its underside, in convex pieces either side of the open rectangle, each piece given
-     the corners of it that the piece beside it ends at, so their edges meet point for
-     point. */
+  /* Its underside, in convex pieces either side of the open rectangle and a triangle at
+     each nick, each piece given the points of the pieces beside it that fall along one
+     of its edges — the open rectangle's corners, the ends of a nick — so their edges
+     meet point for point. */
   const [ox0, oy0, ox1, oy1] = open;
-  const pieces = [];
-  if (isFinite(ox0)) pieces.push([clip(-Infinity, -Infinity, ox0, Infinity), ox0]);
-  if (isFinite(ox1)) pieces.push([clip(ox1, -Infinity, Infinity, Infinity), ox1]);
-  if (isFinite(oy0)) pieces.push([clip(ox0, -Infinity, ox1, oy0)]);
-  if (isFinite(oy1)) pieces.push([clip(ox0, oy1, ox1, Infinity)]);
-  for (const [piece, x] of pieces) {
+  const pieces = nicks.slice();
+  if (isFinite(ox0)) pieces.push(clip(-Infinity, -Infinity, ox0, Infinity));
+  if (isFinite(ox1)) pieces.push(clip(ox1, -Infinity, Infinity, Infinity));
+  if (isFinite(oy0)) pieces.push(clip(ox0, -Infinity, ox1, oy0));
+  if (isFinite(oy1)) pieces.push(clip(ox0, oy1, ox1, Infinity));
+  const ends = [[ox0, oy0], [ox0, oy1], [ox1, oy0], [ox1, oy1]]
+    .filter(([x, y]) => isFinite(x) && isFinite(y))
+    .concat(...nicks.map(([a, , b]) => [a, b]));
+  for (const piece of pieces) {
     if (!piece) continue;
     let pts = piece;
-    if (x !== undefined)
-      for (const y of [oy0, oy1]) {
-        if (!isFinite(y)) continue;
-        const k = pts.findIndex((p, i) => {
-          const q = pts[(i + 1) % pts.length];
-          return p[0] === x && q[0] === x && Math.min(p[1], q[1]) < y - 1e-9 &&
-                 Math.max(p[1], q[1]) > y + 1e-9;
-        });
-        if (k >= 0) pts = pts.slice(0, k + 1).concat([[x, y]], pts.slice(k + 1));
-      }
+    for (const s of ends) {
+      const k = pts.findIndex((p, i) => {
+        const q = pts[(i + 1) % pts.length];
+        return (p[0] === s[0] && q[0] === s[0] && Math.min(p[1], q[1]) < s[1] - 1e-9 &&
+                Math.max(p[1], q[1]) > s[1] + 1e-9) ||
+               (p[1] === s[1] && q[1] === s[1] && Math.min(p[0], q[0]) < s[0] - 1e-9 &&
+                Math.max(p[0], q[0]) > s[0] + 1e-9);
+      });
+      if (k >= 0) pts = pts.slice(0, k + 1).concat([s], pts.slice(k + 1));
+    }
     const { pts: P, tris } = earTriangulate(pts);
     for (const t of tris) {
       const p = makePoly([[P[t[2]][0], P[t[2]][1], 0], [P[t[1]][0], P[t[1]][1], 0],
@@ -2314,17 +2344,27 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * next can be within two BLOATs of where it lands, and it goes on until there is a gap
    * (and past the crossings below): over margins of 0 to 3 mm, in any mix on the four
    * sides, beside every corner from 0 to 6 mm by 0.01, a cut that stays moved up to
-   * 0.75 mm. Under a 1.28 mm corner the arc's vertices are that close all the way along,
-   * so the cut runs off the plate and every margin up to the radius plus 0.1 joins its
-   * cells, 1.37 mm by a 1.27 mm corner; beside larger corners up to 1.2 mm can join, and
-   * up to 0.63 mm by a corner of 4 mm or more. The plate is the same plate whichever
-   * region builds it (and see wasL below for a skeleton cell). */
-  const CLEAR = 2 * BLOAT;
+   * 0.72 mm, and 0.19 where the margin is the same all round. Under a 1.22 mm corner the
+   * arc's vertices are that close all the way along, so the cut runs off the plate and
+   * every margin up to about the radius plus 0.09 joins its cells, 1.3 mm by a 1.21 mm
+   * corner; beside larger corners up to 1.13 mm can join, and up to 0.62 mm by a corner
+   * of 4 mm or more. The plate is the same plate whichever region builds it (and see
+   * wasL below for a skeleton cell).
+   *
+   * A vertex less than a hundredth inside two BLOATs is left where it is rather than
+   * stepped past. Clearing it would move the cut a hair, and a skeleton cell beside a
+   * moved cut keeps the strip it gained solid out to where the margin was cut before
+   * (wasL below): that strip's side and the margin region's would be a hair apart, two
+   * shells' faces closer than the mesh's own tolerance tells apart — 0.0005 mm on a
+   * skeleton plate with 0.42 mm margins by a 6 mm corner, four edges each used four
+   * times. So a cut that moves, moves at least a hundredth, and the vertex it leaves is
+   * still four hundredths outside the band. The plate's edge is held to the full two. */
+  const CLEAR = 2 * BLOAT, HAIR = 0.01;
   const clearCut = (c, edge, vs) => {
     const toward = edge < c ? -1 : 1;
-    vs = vs.concat(edge);
     for (;;) {
-      const hit = vs.filter((v) => Math.abs(v - c) <= CLEAR + 1e-9);
+      if (Math.abs(edge - c) <= CLEAR + 1e-9) return null;
+      const hit = vs.filter((v) => Math.abs(v - c) < CLEAR - HAIR);
       if (!hit.length) return c;
       c = toward < 0 ? Math.min(...hit) - CLEAR - 1e-6 : Math.max(...hit) + CLEAR + 1e-6;
       if (toward < 0 ? c <= edge : c >= edge) return null;
