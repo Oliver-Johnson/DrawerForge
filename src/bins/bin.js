@@ -335,7 +335,9 @@ function noteOnShelf(c, iw, id, H, footAt) {
     return gaps.reduce((w, g) => (!w || g[1] - g[0] > w[1] - w[0] + 1e-9 ? g : w), null);
   };
   const y0 = id - depth + S.front, y1 = id - m;
-  const xs = widest(-iw + m, iw - m, c.divX, iw), across = divided, ys = widest(y0, y1, c.divY, id);
+  // the dividers as built: removable ones no more than fit (dividersBuilt)
+  const built = dividersBuilt(c);
+  const xs = widest(-iw + m, iw - m, built.divX, iw), across = divided, ys = widest(y0, y1, built.divY, id);
   const fitIn = (x, y) => NOTE_TEXT.noteFit(text, { x0: x[0], x1: x[1], y0: y[0], y1: y[1] });
   const prints = (f) => f.readable && f.cap > 0;
   /* Nothing printed, and why: the dividers along the bin only when the shelf's whole
@@ -1442,10 +1444,12 @@ function railedLimit(cfg, axis) {
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const inner = axis === 'x' ? hw : hd;
   const slot = c.divT / 2 + c.divClr, pitch = 2 * slot + RAIL_T;
-  let most = Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0;
+  let most = Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0, why = '';
   if (!most && inner >= slot + RAIL_D + c.divClr + 10 * WELD - 1e-9) most = 1;
+  // its slot and a rail would go in, but not the room for the rails the other way
+  else if (!most && inner >= slot + RAIL_T - 1e-9) why = 'lone';
   // none where the clearance at the plate's ends leaves it no length (see dividerPart)
-  if ((axis === 'x' ? hd : hw) - c.divClr < WELD) most = 0;
+  if ((axis === 'x' ? hd : hw) - c.divClr < WELD) { most = 0; why = 'length'; }
   const slots = most;
   // the cavity's corner as roundRect builds it, and whether a point stands out through it
   const r = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(hw, hd) - 0.01));
@@ -1462,7 +1466,7 @@ function railedLimit(cfg, axis) {
     return axis === 'x' ? outside(face, hd - c.divClr) : outside(hw - c.divClr, face);
   };
   while (most > 0 && endOut(most)) most--;
-  return { most, by: most < slots ? 'corners' : 'slots' };
+  return { most, by: why || (most < slots ? 'corners' : 'slots') };
 }
 const railedMost = (cfg, axis) => railedLimit(cfg, axis).most;
 /* The dividers a bin is built with: as many as it asks for, bar removable ones past the
@@ -1918,9 +1922,12 @@ function buildBin(G, cfg) {
         ? G.extrudePoly(cut, floorZ - BLOAT, H) : [];
     };
     /* Where the label shelf's front stands, for a fixed divider to meet it: the depth the
-       shelf above was built to, by the same sum. Nothing, when there is no shelf. */
+       shelf above was built to, by the same sum, or the depth noteOnShelf gave it when a
+       note is raised on it, which keeps a millimetre more under the rim. Nothing, when
+       there is no shelf. */
     const shelfFoot = plan && plan.screws ? FOOT_HOLES.screwTop + BLOAT : bodyBase + BLOAT;
-    const shelfD = Math.min(c.label, id * 0.8, H - c.labelT - shelfFoot);
+    const raisedOn = noteOnShelf(c, iw, id, H, shelfFoot);
+    const shelfD = raisedOn.fit ? raisedOn.depth : Math.min(c.label, id * 0.8, H - c.labelT - shelfFoot);
     const shelf = !c.divRemovable && c.label > 0.05 && eB > 0.99 && shelfD > 0.05 ? id - shelfD : NaN;
     // removable ones no more than fit, however many are asked for: see railedMost
     const built = dividersBuilt(c);
@@ -1934,8 +1941,11 @@ function buildBin(G, cfg) {
        rail's face, and the two touched face to face. So a rail whose tip comes within
        ten times WELD of the face of a rail the other way, where the two meet, runs a
        BLOAT on into that rail, as a divider does into the label shelf. That is the face
-       towards the wall the tip comes from, and the rail is a rail thick, so the tip stays
-       in it, stands in no slot, and holds its plate no less. */
+       towards the wall the tip comes from, and the rail is a rail thick, so the tip ends
+       in it, stands in no slot, and holds its plate no less. Where the two only meet
+       corner to corner, or overlap in part, the tip's run-on also adds up to 0.66 mm²
+       of footprint in the open cavity beside the other rail, about 0.01 g, outside every
+       slot. */
     const runOn = ([a, b], [lo, hi], others, otherReach) => {
       if (c.divRemovable && otherReach.some(([p, q]) => a < q + 10 * WELD && b > p - 10 * WELD))
         for (const [oa, ob] of others) {

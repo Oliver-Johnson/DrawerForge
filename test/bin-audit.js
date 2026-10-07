@@ -306,6 +306,11 @@ const CASES = [
     note: 'Fuses 5A, 10A', fit: { lines: 1, cut: false } },
   { name: '2x2x4-note-rails-both', u: 2, v: 2, hUnits: 4, label: 16, divX: 1, divY: 5, divRemovable: true,
     labelMode: 1, note: 'Fuses 5A, 10A', fit: { lines: 1, cut: false } },
+  /* A removable divider asked for where none fits (a half cell with 5 mm walls and a 5 mm
+     plate) is not built, so the note has the shelf to itself: it was fitted between
+     dividers that are not there, and refused as if they were. */
+  { name: '0.5x1x4-note-rails-none', u: 0.5, v: 1, hUnits: 4, wall: 5, label: 12, divX: 1, divRemovable: true,
+    divT: 5, divClr: 1, labelMode: 1, note: 'M3 screws', fit: { lines: 2, cut: true } },
   { name: '2x1x3-note-mag-scr', u: 2, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Fuses 5A, 10A',
     magnets: true, screws: true, fit: { lines: 1, cut: false } },
   ...NOTE_GLYPHS.map((note, i) => ({ name: `4x1x3-glyphs-${i + 1}`, u: 4, v: 1, hUnits: 3, label: 12,
@@ -1317,6 +1322,21 @@ console.log('\nremovable dividers both ways, at every count up to the most that 
   if (!found || fails.length || !near.length || welds.length) bad++;
 }
 
+/* The lone divider keeps ten times WELD over the room it needs for the rails the other
+   way, as well as room for them. Without the margin a half-cell square with a 4.65 mm
+   wall, one each way at a 5 mm plate and 0.95 clearance, was built 1 + 1 with the tips of
+   each one's rails flush on the other's slot face: a rail each way on one corner edge,
+   used four times. With it, neither is built. A wall of 4.65 can be typed, or come in a
+   link; on the field's 0.1 steps the margin never decides it, so nothing above builds it. */
+{
+  const cfg = { u: 0.5, v: 0.5, hUnits: 3, wall: 4.65, divX: 1, divY: 1, divRemovable: true, divT: 5, divClr: 0.95 };
+  const built = dividersBuilt(cfg), b = G.checkManifold(buildBin(G, cfg).polys).bad;
+  const ok = built.divX === 0 && built.divY === 0 && b === 0;
+  console.log(`  ${'one each way at the margin'.padEnd(34)} ` + (ok ? 'none built, no bad edges'
+    : `FAILED: built ${built.divX} + ${built.divY}, ${b} bad edges`));
+  if (!ok) bad++;
+}
+
 console.log('\ndivider boxes cut to the cavity\'s rounded corner');
 /* A divider or rail box that would stand out through a rounded corner is the cavity's
    outline cut to the box, and both of the faults that cut could make leave the mesh
@@ -1770,7 +1790,11 @@ console.log('\nnotes raised on the label shelf');
          evenly across the cavity, not from what built it. */
       const wall = cs.wall !== undefined ? cs.wall : BIN_DEFAULTS.wall;
       const iw = (cs.u - 1) * SPEC.pitch / 2 + SPEC.half - wall;
-      const half = cs.divRemovable ? BIN_DEFAULTS.divT / 2 + BIN_DEFAULTS.divClr + 1.2 : wall / 2;
+      const dT = cs.divT !== undefined ? cs.divT : BIN_DEFAULTS.divT;
+      const dC = cs.divClr !== undefined ? cs.divClr : BIN_DEFAULTS.divClr;
+      const half = cs.divRemovable ? dT / 2 + dC + 1.2 : wall / 2;
+      // the dividers as built: removable ones no more than fit
+      const built = dividersBuilt(cs);
       const offDiv = (n, inner, v) => {
         let d = Infinity;
         for (let k = 1; k <= n; k++) d = Math.min(d, Math.abs(v - (-inner + 2 * inner * k / (n + 1))) - half);
@@ -1778,7 +1802,7 @@ console.log('\nnotes raised on the label shelf');
       };
       divClear = Infinity;
       for (const [cx, cy] of corners)
-        divClear = Math.min(divClear, offDiv(cs.divX || 0, iw, cx), offDiv(cs.divY || 0, id, cy));
+        divClear = Math.min(divClear, offDiv(built.divX, iw, cx), offDiv(built.divY, id, cy));
       if (divClear < 0.4 - 1e-6)
         faults.push(divClear < 0 ? `a letter ${(-divClear).toFixed(2)} mm into a divider's footprint`
           : `a letter only ${divClear.toFixed(2)} mm off a divider`);

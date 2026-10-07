@@ -2808,11 +2808,21 @@ function binIssues(b, k, claims) {
   if (b.divRemovable && !b.solid && !isCarved(b) && short.length) {
     const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
     const rules = new Set(short.map(([, , ax]) => railedLimit(cfg, ax).by));
-    const by = rules.size > 1 ? 'both' : [...rules][0], more = short.some(([k]) => d[k]);
+    /* 'lone': room for one divider's slot and a rail either side, but not for the rails
+       the other way beside it, which are kept room for whether or not it has any, so
+       that dividers the other way never take it away. 'length': the clearance at a
+       plate's two ends takes the whole cavity. Either would read wrongly as "none leave
+       every slot room", as the slot itself has room. */
+    const by = rules.size < 2 ? [...rules][0]
+      : [...rules].every((r) => r === 'slots' || r === 'corners') ? 'both' : 'fit';
+    const more = short.some(([k]) => d[k]);
     const at = `a ${state.divT} mm plate at ${state.divClr} mm clearance`;
     const why = (them) => (by === 'slots' ? `${more ? 'no more' : 'none'} leave every slot room for ${at}`
       : by === 'corners' ? (more ? `more would stand the end ones so far into ${them} rounded corners that a plate would lose the clearance at its corner, with ${at}`
         : `even one would stand so far into ${them} rounded corners that its plate would lose the clearance at its corner, with ${at}`)
+      : by === 'lone' ? `even one would leave too little room beside its slot for the rails of dividers the other way, with ${at}`
+      : by === 'length' ? `the clearance at a plate's ends would leave it no length, with ${at}`
+      : by === 'fit' ? `no more fit with ${at}`
       : `${more ? 'no more' : 'none'} leave every slot room and keep the end ones out of ${them} rounded corners with ${at}`);
     out.push({ note: true, group: `rails-${by}`,
       t: `is built with ${short.map(([k, w], i) => `${d[k] || 'no'}${i ? '' : ` removable divider${d[k] === 1 ? '' : 's'}`} ${w}`).join(' and ')}, ` +
@@ -2820,6 +2830,7 @@ function binIssues(b, k, claims) {
       many: (n, names) => `${n} bins are built with fewer removable dividers than they ask for, as ` +
         `${by === 'slots' ? `no more leave every slot room for ${at}` : by === 'corners'
           ? `more would stand the end ones so far into their rounded corners that a plate would lose the clearance at its corner, with ${at}`
+          : by === 'lone' || by === 'length' || by === 'fit' ? why('their')
           : `no more leave every slot room and keep the end ones out of their rounded corners with ${at}`}: ${names}` });
   }
   /* The note raised on the label shelf. Notes, not faults: the bin prints either way,

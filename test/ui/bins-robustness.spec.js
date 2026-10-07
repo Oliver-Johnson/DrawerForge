@@ -301,6 +301,11 @@ test('one removable divider is not built where the rails the other way would sta
   await settle(page, 600);
   expect(await page.evaluate(() => [B()[0].divX, B()[0].divY, builtDivs(B()[0])])).toEqual([1, 2, { divX: 0, divY: 2 }]);
   expect(await page.evaluate(() => dividerParts().reduce((n, d) => n + d.qty, 0))).toBe(2);
+  // and Checks gives that as the reason, not that no slot has room
+  expect((await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent)))
+    .filter((t) => t.includes('removable dividers'))).toEqual(['Layer 1, the 0.5×1 bin at column 1 row 1: is built with ' +
+    'no removable dividers across, not the 1 it asks for, as even one would leave too little room beside its slot ' +
+    'for the rails of dividers the other way, with a 5 mm plate at 1 mm clearance.']);
   expect(errors).toEqual([]);
 });
 
