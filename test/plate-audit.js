@@ -1659,11 +1659,20 @@ console.log('\nthe smallest pitch the page allows:');
  * where it is named from: it has to leak still, or the bound can come down, and Checks
  * must not name it. 006ea48 named all but the cup, which it never named.
  *
- * Then what it does name, built: every 0.4 mm from 13.5 to 15.9, the last pitch anything
- * is refused at, and at each joint's own bound; rows one cell deep, and rows beside
- * columns one cell wide in one drawer; the field at 0, 0.3 and as far as the joint in use
- * goes; each cut down to the ceiling of the joint named, as the page cuts it when that
- * joint is chosen. A plate that leaks, or that keysMeet refuses after all, fails it. */
+ * Then what it does name, built the way it is named, insert and all: the H-clip put in
+ * from beneath, the snap clip inside the walls from above. Every 0.4 mm from 13.5 to
+ * 15.9, the last pitch anything is refused at, and at each joint's own bound; rows one
+ * cell deep, and rows beside columns one cell wide in one drawer; the field every 0.1
+ * from 0, and 0.74, as far as the joint in use goes. The joint named is built at that
+ * field, or at its own ceiling where that is lower: the page refuses a field over the
+ * ceiling ("Fit clearance must be ... or less") until it is lowered, and the ceiling is
+ * as far as it has to come. A plate that leaks, or that keysMeet refuses after all,
+ * fails it.
+ *
+ * The fields were 0, 0.3 and the ceiling, and the H-clip was named with the design's
+ * own insert: after a key put in from above it was the H-clip from above, which leaks
+ * at a field of 0.74 at every pitch (see KEY_ALTERNATIVES), and none of the three met
+ * it. Built here as it was named then, this section fails on it at 14.3 mm. */
 console.log('\nthe joints named in place of keys that meet, wherever they meet:');
 {
   const LAYS = {
@@ -1676,10 +1685,11 @@ console.log('\nthe joints named in place of keys that meet, wherever they meet:'
     'puzzlekey wall top': { connector: 'puzzlekey', keyMount: 'wall', keyInsert: 'top' },
   };
   const OVER = {
-    dovetail: { connector: 'dovetail' }, puzzle: { connector: 'puzzle' }, hclip: { connector: 'hclip' },
+    dovetail: { connector: 'dovetail' }, puzzle: { connector: 'puzzle' },
+    hclip: { connector: 'hclip', keyInsert: 'bottom' },
     wall: { keyMount: 'wall', keyInsert: 'bottom' }, cup: { keyMount: 'wall', keyInsert: 'top' },
   };
-  // the joint named, built as the page builds it once chosen
+  // the joint named, at the field as it stands or at the joint's own ceiling if lower
   const named = (p, lay, conf, f, over) => {
     const base = { pitch: p, ...lay(p), ...conf, ...over };
     return { ...base, clr: Math.min(f, G.connClrCeiling(designCfg(base)).max) };
@@ -1704,14 +1714,16 @@ console.log('\nthe joints named in place of keys that meet, wherever they meet:'
 
   const pitches = new Set([14.3, 14.5, 15.3]);
   for (let p = 13.5; p <= 15.9 + 1e-9; p = Math.round((p + 0.4) * 10) / 10) pitches.add(p);
-  const built = new Set(), leaks = [], names = {};
+  const built = new Set(), leaks = [], names = {}, folded = {};
   let refused = 0;
   const t0 = Date.now();
   for (const p of [...pitches].sort((a, b) => a - b))
     for (const [ln, lay] of Object.entries(LAYS))
       for (const [cn, conf] of Object.entries(IN_USE)) {
         const most = G.connClrCeiling(designCfg({ pitch: p, ...lay(p), ...conf })).max;
-        for (const f of new Set([0, Math.min(0.3, most), most])) {
+        const fields = [0.74];
+        for (let i = 0; i <= 10; i++) fields.push(i / 10);
+        for (const f of new Set(fields.map((x) => Math.min(x, most)))) {
           const cfg = designCfg({ pitch: p, ...lay(p), ...conf, clr: f });
           const L = G.computeLayout(cfg);
           if (!G.keysMeet(cfg, L).length) continue;
@@ -1725,6 +1737,10 @@ console.log('\nthe joints named in place of keys that meet, wherever they meet:'
             const meets = G.keysMeet(r.cfg, r.L).length > 0;
             if (r.bad || meets)
               leaks.push(`${j.id} for ${cn} at ${p} mm, ${ln}, field ${over.clr}: ${meets ? 'REFUSED' : leakText(r)}`);
+            // once a plate: the same H-clip is built again for each key it stands in for
+            const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+            const at = `${p} mm ${ln} ${over.clr}`, xs = folded[j.id] = folded[j.id] || [];
+            if (folds && !xs.some((x) => x.at === at)) xs.push({ at, folds });
           }
         }
       }
@@ -1734,6 +1750,27 @@ console.log('\nthe joints named in place of keys that meet, wherever they meet:'
                               (leaks.length > 6 ? ` and ${leaks.length - 6} more` : '')
                             : 'every one watertight'));
   bad += leaks.length + (refused && built.size ? 0 : 1);
+  /* And folds, which an edge count cannot see. The H-clip put in from beneath has them on
+     main as it does here, the same plates and the same counts: a sliver of the bed face
+     by the clip's pocket turned over, four on a piece, and no edge open. Here it is where
+     the pitch is 14.1 mm more than the field; a sweep every 0.05 mm and every 0.02 of
+     the field finds it on 67 plates of 5,202 from 14.3 to 15.95 mm. It is held to the
+     plates on file, as a quarantine is; any other joint named here that folds fails. */
+  const FOLDED = { hclip: { plates: 8, most: 8 } };
+  const foldNotes = [], foldFails = [];
+  for (const [id, xs] of Object.entries(folded)) {
+    if (!xs.length) continue;
+    const on = FOLDED[id], most = Math.max(...xs.map((x) => x.folds));
+    const say = `${id} on ${xs.length} plates, up to ${most} folds (${xs.slice(0, 3).map((x) => x.at).join('; ')}` +
+                `${xs.length > 3 ? '; ...' : ''})`;
+    if (!on) foldFails.push(`${say}, NONE ON FILE`);
+    else if (xs.length > on.plates || most > on.most) foldFails.push(`${say}, WORSE than ${on.plates} plates and ${on.most} on file`);
+    else foldNotes.push(`${say}, known`);
+  }
+  for (const id of Object.keys(FOLDED))
+    if (!(folded[id] || []).length) foldFails.push(`${id} NOW CLEAN — take it off the folds on file`);
+  console.log(`  folded: ${foldNotes.join('; ') || 'none'}` + (foldFails.length ? `   FAIL: ${foldFails.join('; ')}` : ''));
+  bad += foldFails.length;
 }
 
 console.log('\nthe other limits, built at their ends:');

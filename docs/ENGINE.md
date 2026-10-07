@@ -455,9 +455,9 @@ Two things the checks must **not** treat as defects, and do not:
   by exactly two triangles, so it never sees them. Measured clean on every quarantined
   case.
 
-Two orientation defects are quarantined by name rather than fixed, on the same terms as
-the leaks. The plate audit holds its one to its size on file, piece by piece, so a
-quarantine for a few folds cannot wave through more:
+Three orientation defects are quarantined by name rather than fixed, on the same terms as
+the leaks. The plate audit holds its two to their size on file, piece by piece or plate
+by plate, so a quarantine for a few folds cannot wave through more:
 
 - **The carved bins' reflex fillet**, in `test/bin-audit.js`. One inside-out closed shell
   of 212 triangles per reflex corner, −214.259 mm³ (−282.322 on the taller `bigL-5x4`), so
@@ -476,6 +476,12 @@ quarantine for a few folds cannot wave through more:
   made of near-tangent facets. Sensitive enough to be worth a warning: over segment counts
   17/19/21/25/33 the same plate ranges from 0 folds to 89, with no monotonicity, which is
   what a sliver lottery looks like from the outside.
+- **The H-clip put in from beneath, at pitches just past where keys meet**, in the joint
+  section of `test/plate-audit.js`. Four coplanar folds on a piece, a sliver of the bed
+  face by the clip's pocket turned over, no edge open; on main the same plates and the
+  same counts. The section builds every joint Checks names in place of keys that meet,
+  and finds it on 8 of the H-clips it builds, wherever the pitch is 14.1 mm more than the
+  field.
 
   The puzzle fit sample used to be quarantined here for six slivers of 5.2e-5 to 5.5e-4 mm²
   on two of its four tiles, and it is clean now. The honest account is that the coupon's

@@ -158,8 +158,8 @@ test.describe('ranges on the geometry fields', () => {
      joints it names are the ones that clear at this pitch and were swept clean there
      (jointsThatFit), and the audit builds each. */
   const rows = (p, w) => `#pi=${p}&w=${w}&d=${w}&sp=manual&rc=1,2&cc=__&cn=bowtie`;
-  const instead = 'or use a joint that fits at 13\\.5 mm: snap clips put in from above or ' +
-    'bowtie keys inside the walls, put in from beneath\\.';
+  const instead = 'or use a joint that fits at 13\\.5 mm: snap clips inside the walls, put in ' +
+    'from above; or bowtie keys inside the walls, put in from beneath\\.';
   test('keys that meet across a piece one cell deep are a check, not a plate', async ({ page }) => {
     const errors = await openAt(page, rows(13.5, 40.5));
     expect(await page.evaluate(() => layout.pieces.map((pc) => `${pc.id} ${pc.nx}x${pc.ny}`)),
@@ -195,8 +195,8 @@ test.describe('ranges on the geometry fields', () => {
       '#pi=13.6&w=40.8&d=40.8&mm=custom&ml=0&mr=0&mf=0&mb=0&sp=manual&rc=1,2&cc=__&cn=bowtie&cl=0.3');
     const said = await text(page, 'warnings');
     expect(said).toMatch(/Piece A2 is one cell deep between two seams/);
-    expect(said).toMatch(new RegExp('or use a joint that fits at 13\\.6 mm: snap clips put in ' +
-      'from above or bowtie keys inside the walls, put in from beneath\\.'));
+    expect(said).toMatch(new RegExp('or use a joint that fits at 13\\.6 mm: snap clips inside ' +
+      'the walls, put in from above; or bowtie keys inside the walls, put in from beneath\\.'));
     expect(said).not.toMatch(/dovetail tabs|H-clips|puzzle tabs/);
     expect(errors).toEqual([]);
   });
@@ -205,10 +205,45 @@ test.describe('ranges on the geometry fields', () => {
   test('the joints come back at the pitch they build clean from', async ({ page }) => {
     const errors = await openAt(page, rows(14.5, 43.5) + '&cl=0.3');
     expect(await text(page, 'warnings')).toMatch(new RegExp('or use a joint that fits at ' +
-      '14\\.5 mm: dovetail tabs, H-clips, snap clips put in from above or bowtie keys inside ' +
-      'the walls, put in from beneath or above\\.'));
+      '14\\.5 mm: dovetail tabs; H-clips put in from beneath; snap clips inside the walls, ' +
+      'put in from above; or bowtie keys inside the walls, put in from beneath or above\\.'));
     expect(errors).toEqual([]);
   });
+
+  /* Each joint is named the way it builds watertight, insert and all. The H-clip was
+     named with the design's own insert, so from a key put in from above it named H-clips,
+     and the H-clip from above leaks at a field of 0.74 (six bad edges on two of three
+     rows at 42 mm, on main as well); from beneath it is watertight, and following the
+     words clears the check. */
+  test('the H-clip is named put in from beneath, and that one clears the check', async ({ page }) => {
+    const errors = await openAt(page, '#pi=14.38&w=43.14&d=43.14&mm=custom&ml=0&mr=0&mf=0&mb=0' +
+      '&sp=manual&rc=&cc=1.2&cn=bowtie&km=wall&ki=top&cl=0.74');
+    expect(await text(page, 'warnings')).toMatch(new RegExp('Piece B1 is one cell wide .* ' +
+      'or use a joint that fits at 14\\.38 mm: H-clips put in from beneath; snap clips inside ' +
+      'the walls, put in from above; or bowtie keys inside the walls, put in from beneath\\.'));
+    await page.selectOption('#connector', 'hclip');
+    expect(await page.locator('#keyInsert').inputValue(), 'fixture: the design is put in from above')
+      .toBe('top');
+    await page.selectOption('#keyInsert', 'bottom');
+    await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent));
+    expect(await text(page, 'warnings')).not.toMatch(/between two seams/);
+    expect(errors).toEqual([]);
+  });
+
+  /* On a snap plate the snap clip from above is the snap clip inside the walls from
+     above, so it is named once: it was named as "snap clips put in from above" and again
+     as "snap clips inside the walls, put in from above". */
+  for (const [p, w, rest] of [['15.29', '45.87', 'or snap clips inside the walls, put in from above'],
+                              ['15.3', '45.9', 'or snap clips inside the walls, put in from beneath or above']])
+    test(`a snap plate at ${p} mm names the snap clip once`, async ({ page }) => {
+      const errors = await openAt(page, `#pi=${p}&w=${w}&d=${w}&mm=custom&ml=0&mr=0&mf=0&mb=0` +
+        '&sp=manual&rc=1,2&cc=__&cn=snap&cl=1');
+      // the whole list, from the pitch to its full stop, so nothing is named twice
+      const named = (await text(page, 'warnings')).split('or use a joint that fits at ')[1] || '';
+      expect(named).toMatch(new RegExp(`^${p.replace('.', '\\.')} mm: dovetail tabs; H-clips put ` +
+        `in from beneath; ${rest}\\.`));
+      expect(errors).toEqual([]);
+    });
 
   /* Rows one cell deep and columns one cell wide in one drawer. It said "Pieces A2 and
      B3 have one cell between two seams … Move a cut so they have two", which left you to

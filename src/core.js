@@ -2330,11 +2330,20 @@ function keysMeet(cfg, layout) {
   return out;
 }
 /* Joints that would fit where keysMeet refuses, as [{ id, over }], `over` being the
-   settings that make it: the dovetail tab, which has no housing to meet; the H-clip; a
-   snap clip put in from above; and the same key housed in the wall, put in from beneath
-   (its slim key reaches 6.6 mm) or from above (the cup). Each is put to keysMeet on the
-   design as it stands, so one is only named where it is clear, and only from the pitch
-   it was measured to build clean at, `from`.
+   settings that make it: the dovetail tab, which has no housing to meet; the H-clip put
+   in from beneath; a snap clip in the wall put in from above; and the same key housed in
+   the wall, put in from beneath (its slim key reaches 6.6 mm) or from above (the cup).
+   Each is put to keysMeet on the design as it stands, so one is only named where it is
+   clear, and only from the pitch it was measured to build clean at, `from`.
+
+   `over` is the whole of what has to change, insert direction included. The H-clip was
+   named with the design's own insert, so after a key put in from above it was the H-clip
+   from above, which leaks at a field of 0.74 at every pitch tried (103 of 111 plates
+   from 14.3 to 15.95 mm and at 20, 30 and 42, the same on main). From beneath it has no
+   open edge at any field from 0 to 1 by 0.02, every 0.05 mm from 14.3 to 15.95: 5,202
+   plates. The snap clip from above is housed in the wall because that is where the page
+   offers it: the insert control is only there for a key in the wall. On a snap plate it
+   is the cup itself, so the cup is not named there twice.
 
    Clear is not clean. At pitches this small the joints leak on their own, a few open
    edges at a time and at no pitch or clearance that a rule could pick out, and naming
@@ -2343,23 +2352,25 @@ function keysMeet(cfg, layout) {
    each joint it clears instead: pitches 13.5 to 15.94 mm by 0.01, the last that refuses
    anything (a snap clip in the floor with a field of 1); the field every 0.1 from 0 to
    1, and at 0.05, 0.15 and 0.25 below 14.4 mm and 0.25 and 0.35 above, as far as the
-   joint in use allows, and for the joint named cut down to its own ceiling, as the page
-   cuts it when that joint is chosen; rows one cell deep, columns one cell wide, and both
-   in one drawer; with every key and housing that is refused. 32,000 plates. The snap
-   clip from above, in the floor or in the wall, and a bowtie in the wall from beneath
-   never leaked. The rest leaked up to: the dovetail 14.44 mm, the H-clip 14.2,
-   a puzzle key in the wall from beneath 14.48 and a snap clip 15.24, a bowtie or puzzle
-   key in the wall from above 14.44, and puzzle tabs 15.94, which is the whole range, so
-   they are not offered at all. `from` is the next tenth up from each, and
-   test/plate-audit.js builds every joint this names over that range again, on a
-   coarser grid. Whether a leaking joint should have a check of its own at these
-   pitches is a separate question; this only stops sending people to one. */
+   joint in use allows, and for the joint named no higher than its own ceiling, since the
+   page refuses a field over it ("Fit clearance must be ... or less") until it is lowered;
+   rows one cell deep, columns one cell wide, and both in one drawer; with every key and
+   housing that is refused. 32,000 plates. The snap clip from above, in the floor or in
+   the wall, and a bowtie in the wall from beneath never leaked. The rest leaked up to:
+   the dovetail 14.44 mm, the H-clip from beneath 14.2, a puzzle key in the wall from
+   beneath 14.48 and a snap clip 15.24, a bowtie or puzzle key in the wall from above
+   14.44, and puzzle tabs 15.94, which is the whole range, so they are not offered at
+   all. `from` is the next tenth up from each, and test/plate-audit.js builds every
+   joint this names over that range again, on a coarser grid. Whether a leaking joint
+   should have a check of its own at these pitches is a separate question; this only
+   stops sending people to one. */
 const KEY_ALTERNATIVES = [
   ['dovetail', { connector: 'dovetail' }, 14.5],
-  ['hclip', { connector: 'hclip' }, 14.3],
-  ['snap top', { connector: 'snap', keyType: 'snap', keyInsert: 'top' }, 0],
+  ['hclip', { connector: 'hclip', keyInsert: 'bottom' }, 14.3],
+  ['snap top', { connector: 'snap', keyType: 'snap', keyMount: 'wall', keyInsert: 'top' }, 0],
   ['wall', { keyMount: 'wall', keyInsert: 'bottom' }, { bowtie: 0, puzzlekey: 14.5, snap: 15.3 }],
-  ['cup', { keyMount: 'wall', keyInsert: 'top' }, { bowtie: 14.5, puzzlekey: 14.5, snap: 0 }],
+  // none for a snap plate: its cup is the snap clip from above, named once as 'snap top'
+  ['cup', { keyMount: 'wall', keyInsert: 'top' }, { bowtie: 14.5, puzzlekey: 14.5 }],
 ];
 function jointsThatFit(cfg, layout) {
   const keyed = ['bowtie', 'puzzlekey', 'snap'].includes(cfg.connector);
@@ -2367,6 +2378,7 @@ function jointsThatFit(cfg, layout) {
     if (typeof from !== 'number') {
       if (!keyed) return false;          // a key in the wall is the key in use, moved
       from = from[cfg.connector];
+      if (from === undefined) return false;
     }
     return cfg.pitch >= from && keysMeet(Object.assign({}, cfg, over), layout).length === 0;
   }).map(([id, over]) => ({ id, over }));

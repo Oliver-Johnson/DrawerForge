@@ -507,21 +507,30 @@ function warningsList() {
         : `${pieces(across('deep'), 'P')} ${across('deep').length > 1 ? 'are' : 'is'} one cell deep ` +
           `and ${pieces(across('wide'), 'p')} one cell wide`;
       const keyName = { bowtie: 'bowtie keys', puzzlekey: 'puzzle keys', snap: 'snap clips' }[state.connector];
-      const JOINT = { dovetail: 'dovetail tabs', hclip: 'H-clips',
-                      'snap top': 'snap clips put in from above',
+      /* Each named the way it is set: the insert direction is part of the joint (an H-clip
+         from above leaks where one from beneath is watertight), and a snap clip goes in
+         from above only from inside the walls, where the page has the insert control. */
+      const JOINT = { dovetail: 'dovetail tabs', hclip: 'H-clips put in from beneath',
+                      'snap top': 'snap clips inside the walls, put in from above',
                       wall: `${keyName} inside the walls, put in from beneath`,
                       cup: `${keyName} inside the walls, put in from above` };
-      const ok = jointsThatFit(state, layout).map((j) => j.id);
+      // on a snap plate the snap clip from above is the key in use in the wall from above
+      const ok = jointsThatFit(state, layout)
+        .map((j) => (state.connector === 'snap' && j.id === 'snap top' ? 'cup' : j.id));
       // the key in the wall both ways is one item, not the same words twice over
       if (ok.includes('wall') && ok.includes('cup'))
         JOINT.wall = `${keyName} inside the walls, put in from beneath or above`;
       const fit = ok.filter((id) => !(id === 'cup' && ok.includes('wall'))).map((id) => JOINT[id]);
+      // items that have a comma of their own are kept apart with semicolons
+      const named = fit.some((t) => t.includes(','))
+        ? (fit.length < 2 ? fit.join('') : `${fit.slice(0, -1).join('; ')}; or ${fit[fit.length - 1]}`)
+        : list(fit);
       out.push({ err: true, t: `${is} between two seams, and at this ${state.pitch} mm pitch ` +
         `the keys on ${one ? 'its' : 'their'} two sides are too close: their housings run into ` +
         'each other, which leaves holes in the plate. Move a cut so ' +
         (dir ? `${one ? 'it is' : 'they are'} two cells ${dir}` : 'each has two cells between its seams') +
         `, use a pitch of ${needs} mm or more` +
-        (fit.length ? `, or use a joint that fits at ${state.pitch} mm: ${list(fit)}.` : '.') });
+        (fit.length ? `, or use a joint that fits at ${state.pitch} mm: ${named}.` : '.') });
     }
   }
   if (layout.pieces.some(pc => pc.nx*pc.ny === 1 && !pc.hR && !pc.hB))
