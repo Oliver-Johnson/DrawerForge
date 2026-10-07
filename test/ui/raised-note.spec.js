@@ -228,16 +228,25 @@ test('dividers along that cut the shelf short print nothing', async ({ page }) =
   expect(await lead(page)).toBe('Prints 4.2 mm tall on one line.');
   await H.setField(page, 'divY', 3);
   expect(await lead(page)).toBe(
-    "The dividers along the bin leave too little of the label shelf's depth for letters 3 mm tall, so nothing prints.");
+    'The dividers along the bin cut the label shelf too short from front to back for the note, so nothing prints.');
   await expect(hint(page).locator('.moretext')).toHaveText(
-    'They stand through the shelf, and the letters keep clear of each one. Fewer of them, or a bin deeper from front to back, leaves room.');
+    'They stand through the shelf, and the letters keep clear of each one; where they cut it short, letters print only 3 mm tall ' +
+    'or more. Fewer of them, or a bin deeper from front to back, leaves room.');
   await expect(checks(page)).toContainText(
-    "has dividers along it that leave too little of its label shelf's depth for its note, so its note is not printed");
+    'has dividers along it that cut its label shelf too short for its note, so its note is not printed');
   expect(await page.evaluate(() => typeKey(scratch).includes('-n')), 'the plain part').toBe(false);
   await page.check('#divRemovable');
   await settle(page);
   expect(await lead(page)).toBe(
-    "The dividers along the bin leave too little of the label shelf's depth for letters 3 mm tall, so nothing prints.");
+    'The dividers along the bin cut the label shelf too short from front to back for the note, so nothing prints.');
+
+  /* ...but only where they are what is in the way. Half a cell deep and 3 units tall, with
+     a divider across as well, the space between the ones across is too narrow for the note
+     at the shelf's whole depth: those are what to change, and the hint said the ones along. */
+  for (const [id, x] of [['hUnits', 3], ['label', 8], ['divX', 1], ['divY', 1]]) await H.setField(page, id, x);
+  expect(await lead(page)).toBe('The dividers leave no space on the label shelf wide enough for the note, so nothing prints.');
+  await H.setField(page, 'divX', 0);
+  expect(await lead(page), 'without the one across it prints').toMatch(/^Prints /);
 });
 // a shelf 6 mm deep is shallow by itself: the letters print, under 3 mm, and Checks says so
 test('letters under 3 mm on a shallow shelf are named in Checks', async ({ page }) => {

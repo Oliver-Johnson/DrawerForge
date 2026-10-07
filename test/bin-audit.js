@@ -1372,6 +1372,14 @@ console.log('\nnotes raised on the label shelf');
      { labelMode: 1, note: 'M3 screws' }, 'dividers along'],
     ['six removable ones along', { u: 1, v: 1, hUnits: 6, label: 12, divY: 6, divRemovable: true },
      { labelMode: 1, note: 'M3 screws' }, 'dividers along'],
+    /* ...and only those along, where they are what is in the way: here the space between
+       the ones across takes no note at the shelf's whole depth either, and the hint sent
+       people to the ones along. With walls 7 mm thick it is the walls. */
+    ['ones across in the way, ones along as well',
+     { u: 1, v: 0.5, hUnits: 3, label: 8, divX: 1, divY: 1, divRemovable: true },
+     { labelMode: 1, note: 'M3 screws' }, 'dividers'],
+    ['walls in the way, dividers along as well', { u: 0.5, v: 1, hUnits: 3, label: 12, wall: 7, divY: 3 },
+     { labelMode: 1, note: 'M3 screws' }, 'narrow'],
   ];
   const moved = SAME.map(([name, cfg, extra, why]) => {
     const withIt = Object.assign({}, cfg, extra), say = shelfNote(withIt);
@@ -1402,13 +1410,18 @@ console.log('\nnotes raised on the label shelf');
           const s = shelfNote(Object.assign({}, base, { [k]: n })), at = `${u}x${v} label ${label} ${k} ${n}` +
             `${divRemovable ? ' removable' : ''} "${note}"`;
           tried++;
+          // nothing printed: the dividers along are named exactly when the note fits without them
+          if (!s.fit && k === 'divY' && !!s.along !== !!alone.fit)
+            squeezed.push(`${at}: says ${s.why}${s.along ? ' along' : ''}, and without them it ${alone.fit ? 'prints' : 'says ' + alone.why}`);
           if (!s.fit) continue;
           printed++;
           if (!(s.fit.cap > 0)) squeezed.push(`${at}: ${s.fit.cap.toFixed(2)} mm`);
           else if (s.fit.cap < S.capMin - 1e-9 && !(alone.fit && s.fit.cap >= alone.fit.cap - 1e-9))
             squeezed.push(`${at}: ${s.fit.cap.toFixed(2)} mm, under what the shelf alone gives`);
+          // nor a word broken over two lines and then cut ("As / s...")
+          const broken = s.fit.lines.length > 1 && !/\s/.test(note.slice(0, s.fit.lines[0].length + 1));
           if (s.fit.cut && (kept(s.fit.lines) < Math.min(3, note.replace(/\s/g, '').length) ||
-                            s.fit.lines.includes('...')))
+                            s.fit.lines.includes('...') || broken))
             squeezed.push(`${at}: prints "${s.fit.lines.join(' / ')}"`);
         }
       }

@@ -276,8 +276,8 @@ function noteHintSay(b) {
                  offMore)];
   }
   if (s.why === 'dividers' && s.along)
-    return [`The dividers along the bin leave too little of the label shelf's depth for letters ${S.capMin} mm tall, so nothing prints.` + off,
-            rest('They stand through the shelf, and the letters keep clear of each one. Fewer of them, or a bin deeper from front to back, leaves room.', offMore)];
+    return ['The dividers along the bin cut the label shelf too short from front to back for the note, so nothing prints.' + off,
+            rest(`They stand through the shelf, and the letters keep clear of each one; where they cut it short, letters print only ${S.capMin} mm tall or more. Fewer of them, or a bin deeper from front to back, leaves room.`, offMore)];
   if (s.why === 'dividers')
     return ['The dividers leave no space on the label shelf wide enough for the note, so nothing prints.' + off,
             rest('They stand through the shelf, and the letters keep clear of each one. Fewer dividers, a bigger bin or a shorter note leaves room.', offMore)];
@@ -2770,7 +2770,7 @@ function binIssues(b, k, claims) {
         (s.why === 'back' ? 'its back wall is lowered, so it has none' : 'it has none') });
     if (s.why === 'dividers' || s.why === 'narrow')
       out.push({ note: true, t: s.along
-        ? `has dividers along it that leave too little of its label shelf's depth for its note, so its note is not printed`
+        ? 'has dividers along it that cut its label shelf too short for its note, so its note is not printed'
         : `has ${s.why === 'dividers' ? 'dividers across its label shelf too close together'
         : 'walls too thick'} for its note to fit between them, so its note is not printed` });
   }

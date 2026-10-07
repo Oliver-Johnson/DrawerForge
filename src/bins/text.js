@@ -172,17 +172,21 @@ function noteCut(text, W, Hh) {
   let lines;
   if (n === 1) lines = [cutTo(text)];
   else {
-    let k = text.length;
+    let k = text.length, inWord = false;
     while (k > 0 && !fits(text.slice(0, k).trimEnd())) k--;
     if (k < text.length && text[k] !== ' ') {
       const sp = text.lastIndexOf(' ', k - 1);
       if (sp > 0) k = sp;
+      else inWord = true;
     }
     const first = text.slice(0, k).trimEnd(), rest = text.slice(k).trimStart();
     const second = rest ? cutTo(rest) : '';
-    /* A second line of nothing but the ellipsis is not a line: the note goes on one,
-       cut to fit. In a gap between dividers "M3 screws" came out "M / ...". */
-    lines = !rest ? [first] : second === NOTE_ELLIPSIS ? [cutTo(text)] : [first, second];
+    /* A second line of nothing but the ellipsis is not a line, and a word broken over
+       two lines and then cut short reads as two words: the note goes on one line, cut to
+       fit. Between dividers "M3 screws" came out "M / ..." and "Assorted M3 M4 nuts,
+       washers" "As / s...". A word broken with nothing cut ("Resis / tors") stays. */
+    lines = !rest ? [first]
+      : second === NOTE_ELLIPSIS || (inWord && second !== rest) ? [cutTo(text)] : [first, second];
   }
   return { lays: lines.map(noteLine), s, cut };
 }

@@ -300,9 +300,9 @@ function labelRounded(G, hwI, hdI, wall, H, depth, t, n) {
  * nothing in it prints, 'shallow' when the lowered shelf is under 6 mm deep (with its
  * depth, and `by`: 'asked' for a shelf asked for that shallow, 'inside' for one held to
  * 0.8 of the inside's depth, 'height' for one held to the room above the floor),
- * 'dividers' when the dividers leave no space the note fits (with `along` when it was
- * the ones along the bin that cut the shelf's depth short) and 'narrow' when the walls
- * do (both with its depth); otherwise { why: '', top, depth, text, fit, divided }, `fit`
+ * 'dividers' when the dividers leave no space the note fits (with `along` when it is
+ * the ones along the bin: the shelf's whole depth would take it) and 'narrow' when the
+ * walls do (both with its depth); otherwise { why: '', top, depth, text, fit, divided }, `fit`
  * being noteFit's answer and `divided` whether dividers narrowed the space it was fitted
  * to. */
 const NOTE_CLEAR = 0.4;      // letters stop this far under H
@@ -334,12 +334,19 @@ function noteOnShelf(c, iw, id, H, footAt) {
     }
     return gaps.reduce((w, g) => (!w || g[1] - g[0] > w[1] - w[0] + 1e-9 ? g : w), null);
   };
-  const xs = widest(-iw + m, iw - m, c.divX, iw), ys = widest(id - depth + S.front, id - m, c.divY, id);
-  if (!xs || !ys) return Object.assign({ why: 'dividers', depth }, ys ? {} : { along: true });
-  const fit = NOTE_TEXT.noteFit(text, { x0: xs[0], x1: xs[1], y0: ys[0], y1: ys[1] });
-  const along = ys[1] - ys[0] < (id - m) - (id - depth + S.front) - 1e-9;
-  if (!fit.readable || !(fit.cap > 0) || (along && fit.cap < S.capMin - 1e-9))
-    return Object.assign({ why: divided ? 'dividers' : 'narrow', depth }, along ? { along } : {});
+  const y0 = id - depth + S.front, y1 = id - m;
+  const xs = widest(-iw + m, iw - m, c.divX, iw), across = divided, ys = widest(y0, y1, c.divY, id);
+  const fitIn = (x, y) => NOTE_TEXT.noteFit(text, { x0: x[0], x1: x[1], y0: y[0], y1: y[1] });
+  const prints = (f) => f.readable && f.cap > 0;
+  /* Nothing printed, and why: the dividers along the bin only when the shelf's whole
+     depth, between the same dividers across, would have taken the note. Said whenever
+     they cut the shelf short, it sent people to take out dividers that were not in the
+     way: a 1 x 0.5 with one divider each way had no room between the ones across. */
+  const refuse = (cut) => (cut && xs && prints(fitIn(xs, [y0, y1]))
+    ? { why: 'dividers', depth, along: true } : { why: across ? 'dividers' : 'narrow', depth });
+  if (!xs || !ys) return refuse(!ys);
+  const fit = fitIn(xs, ys), cut = ys[1] - ys[0] < y1 - y0 - 1e-9;
+  if (!prints(fit) || (cut && fit.cap < S.capMin - 1e-9)) return refuse(cut);
   return { why: '', top, depth, text, fit, divided };
 }
 
