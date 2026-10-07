@@ -58,6 +58,8 @@ let pendingScratch = null;  // a packed loose bin from the hash
 let pendingScratchNote = null;  // ...and its note, which travels beside it (bsn)
 let noteHeld = new WeakSet();   // bins whose raised note is past RAISED_MAX (holdNotes)
 let notesOver = 0;              // ...and how many different notes that is
+let insertHeld = new WeakSet(); // bins whose holes are past HOLES_MAX for the layout (holdHoles)
+let holesOver = { used: 0, kinds: 0, holes: 0 };   // ...what was built, and what was not
 const geoCache = new Map();
 
 const B = () => layers[cur].bins;
@@ -170,12 +172,22 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          /* the note goes in only to be raised on the shelf (labelMode 1),
                             and not past the most one layout raises (holdNotes) */
                          labelMode: noteHeld.has(b) ? 0 : b.labelMode, note: b.note,
+                         /* holes across the floor are per bin, their clearance the page's,
+                            and not past the most one layout builds (holdHoles) */
+                         insert: insertHeld.has(b) ? 0 : b.insert, insertDepth: b.insertDepth,
+                         holeClr: state.holeClr,
                          arcSegs: state.arcSegs });
 /* The dividers a bin is built with: removable ones no more than leave every slot room
    for its plate at the page's plate and clearance and keep the end ones out of the rounded
    corners (railedMost), however many it asks for.
-   The plates, the names and Checks all go by these, so they say what is built. */
-const builtDivs = (b) => dividersBuilt(Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 }));
+   The plates, the names and Checks all go by these, so they say what is built. None on a
+   bin with holes across its floor, which the holes divide, as buildBin builds it: asked
+   here and not in dividersBuilt, which noteOnShelf asks, which the holes ask in turn.
+   Worked out as holesIn does it, with the new-bin settings at a 1x1 as these are. */
+const builtDivs = (b) => {
+  const c = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
+  return +c.insert > 0 && !c.solid && insertPlan(c).n ? { divX: 0, divY: 0 } : dividersBuilt(c);
+};
 // and how many compartments they make, or 0 for a bin with none
 const compartments = (b) => {
   const d = builtDivs(b);
@@ -198,8 +210,118 @@ const holesText = (b) => {
   return [h.magnets ? plural(h.magnets, 'magnet') : '', h.screws ? plural(h.screws, 'screw') : '']
     .filter(Boolean).join(', ');
 };
+/* ---------- holes across the floor -----------------------------------------
+   A bin set to hold batteries, cells or hex bits (insert) is built with a block of holes
+   across its floor: bin.js decides how many, where and how deep (insertPlan), and leaves
+   the dividers and the scoop off a bin that has them. What a bin really gets, insertPlan's
+   answer, or null when it gets no holes: none asked for, a solid block, a carved shape,
+   or none that fit. Worked out without building anything, so it is cheap to ask. */
+const holesIn = (b) => {
+  if (!(+b.insert > 0) || b.solid) return null;
+  const h = insertPlan(binCfg(b));
+  return h.n ? h : null;
+};
+// "16 holes for AA batteries", for the rows and the README, or ''
+const insertText = (b) => { const h = holesIn(b); return h ? `${plural(h.n, 'hole')} for ${h.p.items}` : ''; };
+/* A bin with holes is a part of its own (typeKey): which kind, the hole as built (the
+   page's clearance is in it, as the rails' sizes are in a railed bin's key) and how deep.
+   Its dividers and scoop are not built, so they leave its key; a bin asked for holes that
+   it does not get is the plain part, and keyed as one. */
+const insertKey = (b) => {
+  const h = holesIn(b);
+  return h ? `-i${+b.insert}w${+h.d.toFixed(3)}d${+h.depth.toFixed(3)}` : '';
+};
+/* The holes' hint under the menu: what is built, or why nothing is. [lead, rest], the
+   rest for behind "more". Written with textContent, through DF.hint, like the note's. `b`
+   is the bin the panel shows, or the settings for new bins. */
+function insertHintSay(b) {
+  const S = INSERT_SPEC, mm = (x) => +x.toFixed(1);
+  /* Held for its own count, or after one that was: the first holes are the first in the
+     layout, so a few that would fit after a kind that did not are held as well. */
+  if (insertHeld.has(b)) {
+    const n = insertPlan(Object.assign(binCfg(b), { insert: b.insert })).n;
+    return [holesOver.used + n > HOLES_MAX
+      ? `This layout already builds ${holesOver.used} holes across other bins' floors, and this bin's ` +
+        `${n} would take it past the ${HOLES_MAX} one layout builds, so it is built without them.`
+      : `Bins before this one in the layout already ask for more holes than the ${HOLES_MAX} one layout ` +
+        `builds, so this bin is built without its ${plural(n, 'hole')}.`,
+    'Set some of the others to Nothing, or print some bins as a layout of their own.'];
+  }
+  const h = insertPlan(binCfg(b));
+  if (h.why === 'off' || h.why === 'solid') return ['', ''];
+  const p = h.p;
+  if (h.why === 'carved') return ['Holes need a rectangle, so a carved shape is built without them.', ''];
+  const size = `Each hole is ${+h.d.toFixed(2)} mm ${p.shape === 'hex' ? 'across the flats' : 'across'}, ` +
+    `the largest ${p.items} with ${+(h.d - p.size).toFixed(2)} mm to spare.`;
+  const under = h.under === 'shelf' ? 'the label shelf' : 'the rim';
+  if (h.why === 'short')
+    return [`This bin has room for holes ${h.room > 0.05 ? `only ${mm(h.room)} mm deep` : 'no depth at all'} ` +
+            `under ${under}, and they need ${S.minDepth} mm, so it has none.`,
+            `A taller bin has room for them${h.shelf ? ', and so has one without a label shelf' : ''}.`];
+  if (h.why === 'none')
+    return h.byShelf
+      ? [`The label shelf leaves no room in front of it for even one hole for ${p.items}.`,
+         `A shallower shelf, or none, has room for them. ${size}`]
+      : [`Not one hole for ${p.items} fits in a bin this size.`, size];
+  if (h.why === 'many')
+    return [`A bin this size would have ${h.count} holes for ${p.items}, more than the ${HOLES_MAX} one bin ` +
+            'is built with, so it has none.', `Smaller bins have fewer: each is built with up to ${HOLES_MAX}. ${size}`];
+  const want = h.asked ? +b.insertDepth : Math.max(S.autoMin, p.len / 3);
+  /* Below the rim is under where a bin stacked on this one comes down, S.seat under it.
+     Items stopping between the two are under the rim and still in that bin's way, so
+     they are said to need the taller bin, and the rest says why. */
+  const lead = `${plural(h.n, 'hole')}, ${mm(h.depth)} mm deep. ${p.say} are ${p.len} mm long, ` +
+    (h.over > 1e-9 ? `so this bin needs ${plural(h.units, 'unit')} to keep them below the rim.`
+      : 'so they stay below the rim.');
+  const off = [b.divX || b.divY ? 'Dividers' : '', b.scoop ? 'the scoop' : ''].filter(Boolean);
+  const rest = [
+    size,
+    h.over > 1e-9 && !(h.above > 1e-9) ? `They stop ${mm(-h.above)} mm under the rim, and a bin stacked ` +
+      `on this one comes down ${S.seat} mm into it.` : '',
+    h.capped ? `${h.asked ? `${mm(want)} mm` : `A third of their length, ${mm(want)} mm,`} is more than ` +
+      `this bin has room for, so the holes stop ${S.headroom} mm under ${under}.`
+      : !h.asked ? `Left blank, the depth is a third of their length, at least ${S.autoMin} mm.` : '',
+    off.length ? `${off.length > 1 ? 'Dividers and the scoop are' : off[0] === 'Dividers' ? 'Dividers are'
+      : 'The scoop is'} left off a bin with holes.` : '',
+  ].filter(Boolean).join(' ');
+  return [lead, rest];
+}
+/* The most holes one layout builds, over its different parts in layout order, as
+   holdNotes holds raised notes: a bin is built from its part, so two alike cost one
+   build. Every bin can have up to HOLES_MAX (bin.js), and a drawer of different ones
+   could ask for them all at once; past the count, a bin whose part is not among the
+   first is built without holes, keeps its setting so the link and the saved drawer still
+   say what was asked, and Checks says so. In layout order and no further: once one kind
+   is held, so is every new kind after it, so "the first" means the first. Worked out at
+   the start of every pass, after holdNotes, whose held notes are in a part's key. */
+function holdHoles() {
+  insertHeld = new WeakSet();
+  const seen = new Map();
+  let used = 0, full = false, kinds = 0, holes = 0;
+  for (const L of layers) for (const b of L.bins) {
+    const h = holesIn(b);
+    if (!h) continue;
+    const k = typeKey(b);
+    if (!seen.has(k)) {
+      const ok = !full && used + h.n <= HOLES_MAX;
+      if (ok) used += h.n; else { full = true; kinds++; holes += h.n; }
+      seen.set(k, ok);
+    }
+    if (!seen.get(k)) insertHeld.add(b);
+  }
+  holesOver = { used, kinds, holes };
+}
+/* How a bin carries what stands on it, from its base: `pitch`, where the bin stacked on
+   it stands, its height H, or higher when what stands in its holes reaches past where
+   that bin comes down (INSERT_SPEC.seat under H), since it then rests on them; its
+   height `H`, and `items`, the top of those items, 0 for none. For stackHeight and
+   support, which add them up a column at a time. */
+function binReach(b) {
+  const H = b.hUnits * SPEC.unitH, h = holesIn(b), items = h ? h.floor + h.p.len : 0;
+  return { H, items, pitch: h ? Math.max(H, items + INSERT_SPEC.seat) : H };
+}
 /* The dividers as built: a bin asking for more removable ones than fit is the same part
-   as one asking for as many as fit. */
+   as one asking for as many as fit, and a bin with holes across its floor has none. */
 const divKey = (b) => {
   const d = builtDivs(b);
   return d.divX || d.divY ? `-d${d.divX}.${d.divY}${b.divRemovable ? `r${state.divT}.${state.divClr}` : ''}` : '';
@@ -337,7 +459,7 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
    (allFullEdges(b) ? '' : `-e${edgeSig(b)}`) +
    /* A solid block has no cavity for a scoop or a shelf (buildBin builds neither), so
       a solid with one is the same part as a solid without. */
-   (b.scoop ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '')) +
+   (b.scoop && !holesIn(b) ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '')) +
   // a mask covering every cell (a hand-written link can say so) is no shape at all
   (maskBits(b) ? `-c${maskBits(b)}` : '') +
   /* A holed bin is a different part from the plain one, and from one holed for another
@@ -346,7 +468,7 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
      (feetHolesOff), so it is the plain part and is named as one. */
   (holesBuilt(b) ? `-h${feetBits({ magnets: b.magnets, screws: b.screws })}` +
     (everyMatters(b) ? 'e' : '') + (b.magnets ? `m${state.magnetD}.${state.magnetH}` : '') : '') +
-  noteKey(b);
+  noteKey(b) + insertKey(b);
 
 /* ---------- half cells -----------------------------------------------------
    A bin's position and size are counted in cells, and since half-size bins they may end
@@ -413,12 +535,13 @@ function support(k) {
   const top = Array.from({ length: D }, () => new Array(W).fill(0));
   const ok = Array.from({ length: D }, () => new Array(W).fill(true));
   for (let L = 0; L < k; L++) {
-    const occ = occupancyOf(L);
+    // each bin's once: on what stands in its holes, if that is higher (binReach)
+    const occ = occupancyOf(L), pitch = layers[L].bins.map((b) => binReach(b).pitch);
     for (let y = 0; y < D; y++)
       for (let x = 0; x < W; x++) {
         const i = occ[y][x];
         if (i === -1) ok[y][x] = false;
-        else top[y][x] += layers[L].bins[i].hUnits * SPEC.unitH;
+        else top[y][x] += pitch[i];
       }
   }
   return { top, ok };
@@ -703,10 +826,12 @@ function volumeMm3(c) {
      removable dividers across and two along was 41 g of bin where it is 27 g, and with
      its 20 g of plates the job was 60 g where it is 47 g. A carved bin gets no rails
      (buildBin leaves dividers off a carved shape, as dividerParts does its plates), so a
-     removable one counts none. */
+     removable one counts none. A bin with holes across its floor has no dividers at all
+     (builtDivs), and its holes are counted below. */
   /* As many as it is built with: a bin asking for more removable ones than fit has the
      rails of as many as fit (builtDivs), and weighed as asked, two bins of one type could
      weigh 72 g or 37 g by which came first. Fixed ones are built as asked. */
+  const holes = holesIn(c);
   const built = builtDivs(c), bc = binCfg(c);
   const divs = !c.divRemovable
     ? (built.divX * wall * 2 * hdI + built.divY * wall * 2 * hwI) * (H - floorZ)
@@ -714,7 +839,30 @@ function volumeMm3(c) {
                          railArea(built.divY, hdI, hwI, wall, bc.divT, bc.divClr)) * (H - floorZ);
   const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
-  return { raw: baseRaw + thin, filament: baseFil + thin };
+  /* The block the holes are in fills the cavity to their depth, less the holes: a thick
+     part like the base, so a shell round its outside and every hole, a top skin, and the
+     infill inside that. The webs between holes are thinner than two shells, so most of a
+     dense grid comes out solid, which the min() keeps. */
+  let blockRaw = 0, blockFil = 0;
+  if (holes) {
+    const rI = Math.max(0.4, SPEC.r - wall);
+    const top = Math.max(0, areaRR(hwI, hdI, rI) - holes.n * holes.shape.area);
+    blockRaw = top * holes.depth;
+    /* Under a label shelf the block runs on to the back wall, through the wedge the
+       shelf's 45 degree underside already fills, from its foot up to the block's top: a
+       triangle in section, as wide as the shelf. That plastic is the shelf's, so the
+       block does not add it again; counted, a 1x1x3 with AAA holes and a 12 mm shelf
+       weighed 26% more block than it has. */
+    const sh = holes.shelf;
+    if (sh) {
+      const foot = sh.top - (c.labelT || BIN_DEFAULTS.labelT) - sh.depth;
+      const lo = Math.max(holes.floor, foot), hi = holes.top;
+      if (hi > lo) blockRaw = Math.max(0, blockRaw - ((hi - foot) ** 2 - (lo - foot) ** 2) / 2 * 2 * hwI);
+    }
+    const shell = (perimRR(hwI, hdI, rI) + holes.n * holes.shape.perim) * SHELL_T * holes.depth + top * SKIN_T;
+    blockFil = Math.min(blockRaw, shell + infill * Math.max(0, blockRaw - shell));
+  }
+  return { raw: baseRaw + thin + blockRaw, filament: baseFil + thin + blockFil };
 }
 
 /* The volume a closed mesh encloses: the signed volume of the tetrahedron each triangle
@@ -1077,6 +1225,7 @@ function startScratch() {
               divX: state.divX, divY: state.divY, solid: state.solid,
               scoop: state.scoop, label: state.label, labelMode: state.labelMode, note: '',
               magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
+              insert: state.insert, insertDepth: state.insertDepth,
               edges: Object.assign({}, state.edges) };
   sUndoStack.length = 0; sRedoStack.length = 0;
   focused = true; carving = false;
@@ -1165,10 +1314,12 @@ const mostDividers = (cells, wall) => Math.max(0,
 /* The limits that depend on the bin itself, written onto the fields: the floor and the
    scoop up to the bin's height, the label shelf up to its depth, the dividers up to
    what fits across, and removable ones up to as many as leave every slot room for its
-   plate, which moves with the plate and the clearance. */
+   plate, which moves with the plate and the clearance. A hole is never deeper than the
+   bin is tall either, which is the limit the link holds it to; the engine stops it under
+   the rim besides. */
 function setBinLimits(u, v, hUnits, wall, removable) {
   const H = hUnits * SPEC.unitH;
-  $('floorT').max = H; $('scoop').max = H;
+  $('floorT').max = H; $('scoop').max = H; $('insertDepth').max = H;
   $('label').max = v * SPEC.pitch;
   const rails = { u, v, wall, divT: state.divT, divClr: state.divClr, arcSegs: state.arcSegs };
   $('divX').max = Math.min(mostDividers(u, wall), removable ? railedMost(rails, 'x') : Infinity);
@@ -1210,6 +1361,11 @@ function readControls() {
   state.magnetH = fieldClamp('magnetH', num('magnetH', md.h));
   for (const id of ['magnetD', 'magnetH'])
     if (document.activeElement !== $(id) && parseFloat($(id).value) !== state[id]) $(id).value = state[id];
+  /* And one fit for every hole across a floor, added to each kind's own room. Held to the
+     field's limits, which bin.js holds it to as well (INSERT_SPEC.clr). */
+  state.holeClr = fieldClamp('holeClr', num('holeClr', 0));
+  if (document.activeElement !== $('holeClr') && parseFloat($('holeClr').value) !== state.holeClr)
+    $('holeClr').value = state.holeClr;
   state.bedW = mm('bedW', 256);
   state.bedD = mm('bedD', 256);
   state.bedH = mm('bedH', 256);
@@ -1228,6 +1384,8 @@ function readControls() {
     lid: $('lid').checked,
     magnets: $('magnets').checked, screws: $('screws').checked,
     holesEvery: $('holesWhere').value === 'every',
+    // a menu, so only a kind it offers; anything else is none
+    insert: Math.max(0, Math.min(INSERTS.length - 1, parseInt($('insert').value, 10) || 0)),
     lidSides: { f: $('lidF').checked, b: $('lidB').checked,
                 l: $('lidL').checked, r: $('lidR').checked },
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
@@ -1325,6 +1483,14 @@ function readControls() {
   for (const id of BIN_FIELDS)
     if (t[id] !== undefined && document.activeElement !== $(id) && parseFloat($(id).value) !== t[id])
       $(id).value = t[id];
+  /* The holes' depth: blank, or nothing above 0, is automatic (0), and the box goes
+     blank again once it is left; a depth typed is held to the field's limits, after the
+     height that sets the top one. */
+  const hd = parseFloat($('insertDepth').value);
+  t.insertDepth = isFinite(hd) && hd > 0 ? fieldClamp('insertDepth', hd) : 0;
+  if (document.activeElement !== $('insertDepth') &&
+      $('insertDepth').value !== (t.insertDepth ? String(t.insertDepth) : ''))
+    $('insertDepth').value = t.insertDepth || '';
   /* Whether a bin has been printed is a fact about one sitting in the drawer. A loose
      bin is not in a drawer, so the question does not arise. */
   $('doneRow').style.display = sel.length && !scratch ? '' : 'none';
@@ -1406,7 +1572,7 @@ function readControls() {
   /* The note raised on the shelf: the menu sits with the shelf it prints on, the hint
      under the note it describes, saying what will print. A solid block has no shelf. */
   $('labelModeRow').style.display = t.solid ? 'none' : '';
-  holdNotes();
+  holdNotes(); holdHoles();
   const raise = t.labelMode === 1 && !t.solid;
   $('noteHint').style.display = raise ? '' : 'none';
   /* Emptied, not only hidden, once nothing is raised: the note's field is described by
@@ -1417,6 +1583,21 @@ function readControls() {
     const [lead, rest] = noteHintSay(target);
     if (rest) DF.hint($('noteHint'), lead, rest);
     else $('noteHint').textContent = lead;
+  }
+  /* Holes across the floor. The depth and the clearance only once there are holes to be
+     that deep or that loose; the hint says what the bin the panel shows gets, as the
+     feet's count does, or why it gets none. A solid block has no floor to put them in. */
+  $('insertRow').style.display = t.solid ? 'none' : '';
+  const ins = !t.solid && t.insert > 0;
+  $('insertDepthRow').style.display = ins ? '' : 'none';
+  $('holeClrHint').style.display = ins ? '' : 'none';
+  $('insertHint').style.display = ins ? '' : 'none';
+  // emptied once there are none, as the note's is, since the menu is still described by it
+  if (!ins) $('insertHint').textContent = '';
+  else {
+    const [lead, rest] = insertHintSay(holed);
+    if (rest) DF.hint($('insertHint'), lead, rest);
+    else $('insertHint').textContent = lead;
   }
   $('presetTray').style.display = t.solid ? 'none' : '';
   $('selActions').style.display = selected >= 0 ? '' : 'none';
@@ -1492,6 +1673,8 @@ function writeControls(src) {
   $('lid').checked = !!src.lid;
   $('magnets').checked = !!src.magnets; $('screws').checked = !!src.screws;
   $('holesWhere').value = src.holesEvery ? 'every' : 'corners';
+  $('insert').value = String(Number.isInteger(+src.insert) && INSERTS[+src.insert] ? +src.insert : 0);
+  $('insertDepth').value = src.insertDepth > 0 ? src.insertDepth : '';
   for (const [id, k] of [['lidF', 'f'], ['lidB', 'b'], ['lidL', 'l'], ['lidR', 'r']])
     $(id).checked = !src.lidSides || src.lidSides[k] !== false;
   $('note').value = src.note || '';
@@ -2280,6 +2463,7 @@ function initMap() {
                    solid: state.solid, scoop: state.scoop, label: state.label,
                    labelMode: state.labelMode, note: '',
                    magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
+                   insert: state.insert, insertDepth: state.insertDepth,
                    edges: Object.assign({}, state.edges) });
         selected = B().length - 1;
         writeControls(B()[selected]);
@@ -2329,6 +2513,7 @@ $('fillRest').addEventListener('click', () => {
                  solid: state.solid, scoop: state.scoop, label: state.label,
                  labelMode: state.labelMode, note: '',
                  magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
+                 insert: state.insert, insertDepth: state.insertDepth,
                  edges: Object.assign({}, state.edges) });
       for (const [px, py] of slotsOf(probe)) taken[py][px] = B().length - 1;
       return;
@@ -2427,6 +2612,7 @@ $('applyAll').addEventListener('click', () => {
     hUnits: s.hUnits, wall: s.wall, floorT: s.floorT,
     divX: s.divX, divY: s.divY, solid: s.solid, scoop: s.scoop, label: s.label,
     labelMode: s.labelMode, magnets: !!s.magnets, screws: !!s.screws, holesEvery: !!s.holesEvery,
+    insert: +s.insert || 0, insertDepth: +s.insertDepth || 0,
     edges: Object.assign({}, s.edges) });
   drawMap(); refresh();
 });
@@ -2475,8 +2661,9 @@ function settingsChange(b, t, nu, nv) {
   for (const k of ['hUnits', 'wall', 'floorT', 'divX', 'divY']) if (!sameNum(t[k], b[k])) return k;
   for (const k of ['solid', 'divRemovable', 'lid', 'magnets', 'screws', 'holesEvery'])
     if (!!t[k] !== !!b[k]) return k;
-  for (const k of ['scoop', 'label']) if (!sameNum(t[k] || 0, b[k] || 0)) return k;
+  for (const k of ['scoop', 'label', 'insertDepth']) if (!sameNum(t[k] || 0, b[k] || 0)) return k;
   if ((+t.labelMode || 0) !== (+b.labelMode || 0)) return 'labelMode';
+  if ((+t.insert || 0) !== (+b.insert || 0)) return 'insert';
   if ((t.note || '') !== (b.note || '')) return 'note';
   if (lidSideBits(t.lidSides) !== lidSideBits(b.lidSides)) return 'lidSides';
   return EDGES.some((k) => !sameNum(edgeAt(t, k), edgeAt(b, k))) ? 'edges' : '';
@@ -2691,11 +2878,12 @@ function binIssues(b, k, claims) {
     // two beams. What it cannot do is rest on one side only, or on nothing.
     // Counted in half slots, and measured in cells from the bin's own corner.
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, any = false;
-    const X = slot(b.x), Y = slot(b.y);
+    const X = slot(b.x), Y = slot(b.y), under = new Set();
     for (let j = 0; j < slot(b.v); j++)
       for (let i = 0; i < slot(b.u); i++) {
         if (occB[Y + j][X + i] === -1) continue;
         any = true;
+        under.add(occB[Y + j][X + i]);
         x0 = Math.min(x0, i / 2); x1 = Math.max(x1, (i + 1) / 2);
         y0 = Math.min(y0, j / 2); y1 = Math.max(y1, (j + 1) / 2);
       }
@@ -2730,6 +2918,16 @@ function binIssues(b, k, claims) {
         if (!allFullEdges(bb))
           out.push('the bin below has a lowered wall, so it has no stacking lip to sit on');
       }
+    }
+    /* What stands in the holes of a bin below, past where this one comes down onto its
+       lip (binReach): it stands on them instead, higher than its layer, with nothing to
+       hold it. Said whatever else holds it up or does not. */
+    for (const i of under) {
+      const bb = layers[k - 1].bins[i], h = bb && holesIn(bb);
+      if (h && h.over > 1e-9)
+        out.push(`stands on the ${h.p.items} in the ${bb.u}×${bb.v} bin below, ${+h.over.toFixed(1)} mm ` +
+          `higher than that bin's lip would hold it, so nothing keeps it in place; at ` +
+          `${plural(h.units, 'unit')} that bin keeps them below its rim`);
     }
   }
   /* Bins print upright, so height is a bed constraint too — and an easy one to miss,
@@ -2802,10 +3000,12 @@ function binIssues(b, k, claims) {
      the two stopped it. A design from before the fields held them there can ask for 31
      on a 1x1, where 10 fit at the usual plate and clearance. Its link keeps asking, so a
      thinner plate or a tighter clearance builds more without it being edited. A whole
-     drawer of such bins says it once (warnings), once for each reason. */
+     drawer of such bins says it once (warnings), once for each reason. Not of a bin with
+     holes across its floor: it is built with no dividers at all, not as many as fit, and
+     insertIssues says that its dividers are left off. */
   const d = builtDivs(b);
   const short = [['divX', 'across', 'x'], ['divY', 'along', 'y']].filter(([k]) => d[k] < (b[k] || 0));
-  if (b.divRemovable && !b.solid && !isCarved(b) && short.length) {
+  if (b.divRemovable && !b.solid && !isCarved(b) && !holesIn(b) && short.length) {
     const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
     const rules = new Set(short.map(([, , ax]) => railedLimit(cfg, ax).by));
     /* 'lone': room for one divider's slot and a rail either side, but not for the rails
@@ -2866,6 +3066,80 @@ function binIssues(b, k, claims) {
         : `has ${s.why === 'dividers' ? 'dividers across its label shelf too close together'
         : 'walls too thick'} for its note to fit between them, so its note is not printed` });
   }
+  out.push(...insertIssues(b, loose ? null : st.z));
+  return out;
+}
+/* Holes across the floor, for binIssues: notes, not faults, as the spec has them, bar
+ * one. The bin prints either way; these say what it does not get, and what the things
+ * standing in it do above it. The one fault is items that reach past the drawer's room
+ * above the baseplate: the drawer would not shut on them, which is what the drawer
+ * height check is there to say about a bin. `z` is where the bin stands, or null for a
+ * loose bin, which has no drawer.
+ *
+ * Notes a whole drawer of bins would each repeat carry a `group`, and Checks says those
+ * once for all the bins it fits (warnings): "Fill the rest" with holes for AA batteries
+ * would otherwise put the same sentence under the map once a bin. `many(n, names)` is
+ * that sentence for n bins. A solid block has no menu to have set. */
+function insertIssues(b, z) {
+  if (!(+b.insert > 0) || b.solid) return [];
+  const h = insertPlan(binCfg(b)), out = [], mm = (x) => +x.toFixed(1);
+  if (h.why === 'off' || h.why === 'solid') return out;
+  const p = h.p;
+  if (h.why === 'carved') {
+    out.push({ note: true, t: `is a carved shape, so its holes for ${p.items} are left off: holes need a rectangle` });
+    return out;
+  }
+  if (h.why === 'short' || h.why === 'none') {
+    const under = h.under === 'shelf' ? 'its label shelf' : 'its rim';
+    out.push(h.why === 'short'
+      ? { note: true, group: `short:${b.insert}:${h.under}`, t: `is too short for holes for ${p.items}, so it has none: ` +
+          `it has room for ${h.room > 0.05 ? `${mm(h.room)} mm` : 'none'} under ${under}, and a hole needs ${INSERT_SPEC.minDepth} mm`,
+          many: (n, names) => `${n} bins are too short for holes for ${p.items}, so they have none: ${names}` }
+      : h.byShelf
+        ? { note: true, group: `noroom:${b.insert}`, t: `has a label shelf too deep to leave room in front of it for ` +
+            `even one hole for ${p.items}, so it has none`,
+            many: (n, names) => `${n} bins have label shelves too deep to leave room in front of them for even ` +
+              `one hole for ${p.items}, so they have none: ${names}` }
+        : { note: true, group: `none:${b.insert}`, t: `is too small for even one hole for ${p.items}, so it has none`,
+            many: (n, names) => `${n} bins are too small for even one hole for ${p.items}, so they have none: ${names}` });
+    return out;
+  }
+  /* More than one bin is built with (HOLES_MAX in bin.js): a fault, as the most notes one
+     layout raises is, since what was asked for is not built. */
+  if (h.why === 'many') {
+    out.push({ err: true, group: `many:${b.insert}`, t: `would have ${h.count} holes for ${p.items}, more than ` +
+        `the ${HOLES_MAX} one bin is built with, so it has none`,
+      many: (n, names) => `${n} bins would have more holes for ${p.items} than the ${HOLES_MAX} one bin is ` +
+        `built with, so they have none: ${names}` });
+    return out;
+  }
+  const divs = !!(b.divX || b.divY), off = [divs ? 'dividers' : '', b.scoop ? 'scoop' : ''].filter(Boolean);
+  if (off.length)
+    out.push({ note: true, group: `off:${off.join()}`,
+      t: `has holes for ${p.items}, so its ${off.join(' and ')} ${divs ? 'are' : 'is'} left off`,
+      many: (n, names) => `${n} bins have holes across their floors, so their ` +
+        `${divs ? 'dividers' : ''}${off.length > 1 ? ' and ' : ''}${b.scoop ? 'scoops' : ''} are left off: ${names}` });
+  /* Past where a bin stacked on this one comes down, INSERT_SPEC.seat under the rim, the
+     items are in its way, and in a lid's. Most stand above the rim, and are said to; the
+     few that stop between the two are said to reach just under it. A bin with a lowered
+     wall has no lip for either, so it is only worth saying of one that has. */
+  if (h.over > 1e-9 && allFullEdges(b)) {
+    const lid = !!b.lid && lidFits(b), up = h.above > 1e-9;
+    const stand = up ? `standing ${mm(h.above)} mm above its rim` : `reaching to ${mm(-h.above)} mm under ` +
+      `its rim, where a bin stacked on it comes ${INSERT_SPEC.seat} mm down`;
+    out.push({ note: true, group: `above:${b.insert}:${h.units}:${lid}:${up}`,
+      t: `has ${p.items} ${stand}, so nothing can stack on it` +
+         `${lid ? ' and its lid will not go on' : ''}; at ${plural(h.units, 'unit')} they stay below the rim`,
+      many: (n, names) => `${n} bins have ${p.items} standing ${up ? 'above their rims' : 'just under their rims'}, ` +
+        `so nothing can stack on them${lid ? ' and their lids will not go on' : ''}: ${names}. ` +
+        `At ${plural(h.units, 'unit')} they stay below the rim` });
+  }
+  if (z !== null) {
+    const reach = z + h.floor + p.len, avail = grid().avail;
+    if (reach > avail + 0.001)
+      out.push(`has ${p.items} reaching ${mm(reach)} mm above the baseplate, past the ${mm(avail)} mm ` +
+        'available, so the drawer would not shut over them');
+  }
   return out;
 }
 
@@ -2875,17 +3149,25 @@ function stackHeight() {
   /* Each layer's occupancy once, not once per cell: rebuilt inside the cell loop it was
      cells squared times layers, 4.2 s a redraw on a 100 × 100 grid of five layers. */
   const occs = layers.map((_, L) => occupancyOf(L));
+  /* A bin stacked on one whose holes hold things standing past where it comes down
+     rests on them, and things standing in the top bin's holes can be the highest of all
+     (binReach): an AA bin of 3 units with a 3-unit bin on it was counted 46.0 mm where
+     the stack is 81.7. Without them each layer is its height, and the top its lip. */
+  const reach = layers.map((L) => L.bins.map(binReach));
   let top = 0;
   for (let y = 0; y < 2 * g.ny; y++)          // every half slot: see slotsOf
     for (let x = 0; x < 2 * g.nx; x++) {
-      let h = 0;
+      let h = 0, t = 0;
       for (let L = 0; L < layers.length; L++) {
         const i = occs[L][y][x];
-        if (i !== -1) h += layers[L].bins[i].hUnits * SPEC.unitH;
+        if (i === -1) continue;
+        const r = reach[L][i];
+        t = Math.max(t, h + r.H + LIP_H, r.items ? h + r.items : 0);
+        h += r.pitch;
       }
-      if (h > top) top = h;
+      if (t > top) top = t;
     }
-  return top ? top + LIP_H : 0;
+  return top;
 }
 function warnings() {
   const g = grid(), out = [];
@@ -2907,6 +3189,9 @@ function warnings() {
   // the most different notes one layout raises (holdNotes), said the way the drawer's is
   if (notesOver)
     out.push({ err: true, t: `${RAISED_MAX + notesOver} different notes are set to print raised on label shelves, more than the ${RAISED_MAX} one layout prints, so the bins with the ${plural(notesOver, 'note')} after the first ${RAISED_MAX} print plain. Set some to Nothing; print a layout this labelled in parts.` });
+  // and the most holes one layout builds (holdHoles), said the same way
+  if (holesOver.kinds)
+    out.push({ err: true, t: `${holesOver.used + holesOver.holes} holes are set across the floors of different bins, more than the ${HOLES_MAX} one layout builds, so the bins of the ${plural(holesOver.kinds, 'kind')} after the first ${holesOver.used} holes are built without them. Set some to Nothing; print a layout with this many holes in parts.` });
   /* Custom margins can leave the drawer no room for a cell. The Baseplates page builds
      nothing from a design like that, and says why; this page drew its one cell anyway,
      because grid() never draws fewer, and said nothing, so the design looked sound here
@@ -2952,7 +3237,8 @@ function warnings() {
      some 23,000 characters, between the faults that matter. One such bin keeps its own. */
   const thin = [];
   /* Likewise any note a whole drawer of bins would each repeat: it carries a `group`, and
-     is said once for all the bins it fits, by its `many(n, names)`. */
+     is said once for all the bins it fits, by its `many(n, names)`. The holes' notes are
+     among them, each kind once for all its bins (insertIssues). */
   const groups = new Map();
   layers.forEach((L, k) => L.bins.forEach((b) => {
     for (const it of binIssues(b, k, claims)) {
@@ -2975,13 +3261,15 @@ function warnings() {
       `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}. On a standard ` +
       'baseplate the bins beside each one hold it in place; on its own one can slide about 21 mm in its socket.' });
   }
+  // each said once, a fault when what was asked is not built (insertIssues' 'many')
   for (const list of groups.values()) {
-    if (list.length === 1) { out.push({ note: true, t: `${where(list[0].b, list[0].k)}: ${list[0].it.t}.` }); continue; }
+    const say = (t) => (list[0].it.err ? { err: true, t } : { note: true, t });
+    if (list.length === 1) { out.push(say(`${where(list[0].b, list[0].k)}: ${list[0].it.t}.`)); continue; }
     const named = list.slice(0, 3).map(({ b, k }) =>
       `the ${b.u}×${b.v} on layer ${k + 1} at column ${b.x + 1} row ${b.y + 1}`);
     if (list.length > 3) named.push(`${list.length - 3} more`);
-    out.push({ note: true, t: list[0].it.many(list.length,
-      `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`) + '.' });
+    out.push(say(list[0].it.many(list.length,
+      `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`) + '.'));
   }
 
   if (!allBins().length)
@@ -3047,7 +3335,8 @@ function drawWarnings() {
    filesystem-safe — a note with a slash in it has no business in a filename. */
 const B_DIV = (b, axis) => dividerPart(G, binCfg(b), axis);
 const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
-  (t.b.solid ? ' solid' : '') + (holesText(t.b) ? `, ${holesText(t.b)} each` : '') +
+  (t.b.solid ? ' solid' : '') + (insertText(t.b) ? `, ${insertText(t.b)}` : '') +
+  (holesText(t.b) ? `, ${holesText(t.b)} each` : '') +
   (t.qty > 1 ? ` × ${t.qty}` : '') +
   (t.notes && t.notes.length ? ` — ${t.notes.join(', ')}` : '');
 
@@ -3102,7 +3391,8 @@ function dividerParts() {
        the bin is tall, which the floor field allows, made a plate of negative height:
        an STL turned inside out. */
     if (!t.b.divRemovable || t.b.solid || isCarved(t.b)) continue;
-    // as many plates as the bin has slots for, which is not always as many as it asks for
+    /* as many plates as the bin has slots for, which is not always as many as it asks for,
+       and none for one with holes across its floor, which has no dividers (builtDivs) */
     const built = builtDivs(t.b);
     for (const [axis, n] of [['y', built.divX], ['x', built.divY]]) {
       if (!n) continue;
@@ -3142,7 +3432,7 @@ function types() {
   return [...m.values()].sort((a, b) => b.qty - a.qty);
 }
 function refresh() {
-  holdNotes();
+  holdNotes(); holdHoles();
   const g = grid();
   // the tallest bin is capped by the drawer OR the printer's Z, whichever bites first
   const zUnits = Math.max(1, Math.floor((state.bedH - LIP_H) / SPEC.unitH));
@@ -3202,6 +3492,7 @@ function refresh() {
     const gm = geomFor(t.b);
     const g = gramsOf(gm.vol * t.qty);
     return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${compartments(t.b) ? ` · ${compartments(t.b)} comp` : ''}` +
+      `${insertText(t.b) ? ` · ${asText(insertText(t.b))}` : ''}` +
       `${holesText(t.b) ? ` · ${asText(holesText(t.b))}` : ''}` +
       /* what it is for, beside what it is — the row is how you tell four identical
          shapes apart when they come off the plate */
@@ -3935,10 +4226,16 @@ const holeTag = (b) => (!holesBuilt(b) ? ''
    "bin-1x1x3-solid-qty1", a solid block's name. A note that does not print stays out of
    the name, as it always has. */
 const noteTag = (b) => { const p = printedNote(b); return p ? '-note-' + noteSlug(p.fit.lines.join(' ')) : ''; };
+/* A bin with holes across its floor says what for, "bin-1x1x3-aa-holes-qty2.stl", and
+   not the dividers it is built without; ahead of its note, which comes last, so the name
+   reads "bin-1x1x3-aa-holes-note-aa-cells-qty1". One asked for holes it does not get is
+   the plain bin, and is named as one. */
+const insertTag = (b) => { const h = holesIn(b); return h ? `-${h.p.tag}-holes` : ''; };
 function typeName(t) {
   const d = builtDivs(t.b);
   return `bin-${t.b.u}x${t.b.v}x${t.b.hUnits}${t.b.solid ? '-solid' : ''}` +
-         `${d.divX || d.divY ? `-${d.divX}x${d.divY}div` : ''}${holeTag(t.b)}${noteTag(t.b)}-qty${t.qty}`;
+         `${d.divX || d.divY ? `-${d.divX}x${d.divY}div` : ''}${insertTag(t.b)}` +
+         `${holeTag(t.b)}${noteTag(t.b)}-qty${t.qty}`;
 }
 /* typeName leaves out the walls and floor, lowered walls, a carved shape, the scoop and
    the label shelf, so two kinds of bin could share a name: a scooped 1x1x3 and a plain
@@ -3959,9 +4256,12 @@ const VARIANT_TAGS = [
     : 'low-' + EDGES.filter((k) => edgeOf(b, k) < 1).map((k) => k + Math.round(edgeOf(b, k) * 100)).join('-')),
   // the cells it keeps, as hex: the same shape is the same name wherever it is drawn
   (b) => (maskBits(b) ? `shaped-${BigInt('0b' + maskBits(b)).toString(16)}` : ''),
-  (b) => (!b.solid && b.scoop ? `scoop${b.scoop}` : ''),
+  // a bin with holes across its floor is built without its scoop and dividers (holesIn)
+  (b) => (!b.solid && b.scoop && !holesIn(b) ? `scoop${b.scoop}` : ''),
   (b) => (!b.solid && b.label ? `label${b.label}` : ''),
   (b) => (!b.solid && b.divRemovable && (builtDivs(b).divX || builtDivs(b).divY) ? 'loose-dividers' : ''),
+  // two bins holed for the same thing to different depths
+  (b) => { const h = holesIn(b); return h ? `depth${+h.depth.toFixed(1)}` : ''; },
 ];
 function typeNames() {
   const groups = new Map();
@@ -4022,8 +4322,11 @@ function layoutReadme() {
     L.push('');
     L.push(`Bin: ${b.u}x${b.v}x${b.hUnits}` + (b.note ? `  — ${b.note}` : ''));
     L.push(`Size: ${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip`);
+    const holes = holesIn(b);
     if (compartments(b)) L.push(`Compartments: ${compartments(b)}` +
       (b.divRemovable ? '  (removable divider plates, printed loose)' : ''));
+    if (holes) L.push(`Holes: ${holes.n} for ${holes.p.items}, ${+holes.d.toFixed(2)} mm ` +
+      `${holes.p.shape === 'hex' ? 'across the flats' : 'across'}, ${+holes.depth.toFixed(1)} mm deep`);
     /* The note raised on its shelf, as it prints: the lines it comes out as, which a note
        cut short or left partly off is not the same as the note above. */
     const raised = printedNote(b);
@@ -4062,6 +4365,7 @@ function layoutReadme() {
     L.push(`  ${String(t.qty).padStart(3)} x  ${t.b.u}x${t.b.v}x${t.b.hUnits}` +
       `  (${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip)` +
       `${t.b.solid ? '  solid' : ''}${compartments(t.b) ? `  ${compartments(t.b)} compartments` : ''}` +
+      `${insertText(t.b) ? `  ${insertText(t.b)}` : ''}` +
       // a part of its own, with its note in letters on the shelf
       `${printedNote(t.b) ? '  note raised on the shelf' : ''}` +
       // the README is read beside a pile of printed parts, which is exactly when
@@ -4295,8 +4599,13 @@ const heightSrc = () => scratch || (selected >= 0 && B()[selected] ? B()[selecte
    drawn with fixed dividers whatever Removable says (readControls), so they are asked
    with fixed ones: held to the removable limit, a half-cell bin with its walls halved
    and one divider was quoted at the walls' height, where the bin drawn stands full
-   height on its divider. */
-const heightCfg = (b) => ({ floorT: b.floorT, screws: b.screws, solid: b.solid, edges: b.edges,
+   height on its divider.
+   A bin with holes across its floor takes everything else besides: it has no dividers
+   to stand it full height (builtDivs), and the block its holes are in stands as high as
+   they go, which the walls, the label shelf and the note on it all have a say in
+   (binTop). */
+const heightCfg = (b) => Object.assign(+b.insert > 0 && !b.solid ? binCfg(b) : {}, {
+                            floorT: b.floorT, screws: b.screws, solid: b.solid, edges: b.edges,
                             ...builtDivs(b === state ? Object.assign({}, b, { divRemovable: false }) : b),
                             u: b.u || 1, v: b.v || 1,
                             cells: isHalfSize(b) ? null : b.cells || null });
@@ -4570,6 +4879,10 @@ function descriptor() {
   o.bl = packLayers(layers);
   o.bseg = state.arcSegs;
   o.bdt = state.divT; o.bdc = state.divClr;
+  /* The holes' clearance only when it is not 0, so every link from before there were
+     holes, and every one since without a clearance set, comes out byte for byte as it
+     did. loadFromHash reads its absence as 0. */
+  if (state.holeClr) o.bhc = state.holeClr;
   // only a size someone set: an unset one follows the baseplate's (magnetDefault)
   const md = magnetDefault();
   if (state.magnetD !== md.d) o.bmd = state.magnetD;
@@ -4848,6 +5161,7 @@ function loadFromHash(src) {
     }
     if (k === 'bdt') { $('divT').value = val; continue; }
     if (k === 'bdc') { $('divClr').value = val; continue; }
+    if (k === 'bhc') continue;                    // below, with its absence
     if (k === 'bmd' || k === 'bmh') continue;     // below, once the plate's size is known
     // a checkbox, so it cannot ride the generic .value path below
     if (k === 'dv') { $('showDrawer').checked = val === '1'; continue; }
@@ -4879,12 +5193,17 @@ function loadFromHash(src) {
     const x = Number(q[k]);
     $(id).value = String(q[k] !== undefined && q[k] !== '' && isFinite(x) ? x : d);
   }
+  /* The holes' clearance is written only when it is not 0 (descriptor), so a design
+     without one is a design at 0, not one that keeps whatever the field held before it.
+     readControls holds a number to the field's limits; anything else is 0. */
+  const hc = Number(q.bhc);
+  $('holeClr').value = String(q.bhc !== undefined && q.bhc !== '' && isFinite(hc) ? hc : 0);
 }
 /* Saved drawers live in src/shared-ui/drawers.js, shared with the baseplates page. What
    this page tells it is which keys of the design string are its own to write: exactly the
    ones loadFromHash above takes for itself rather than parking in hashExtras, so if one is
    added there it belongs here too. */
-const BINS_OWN = new Set(['v', ...Object.keys(KEYS), 'pr', 'dv', 'bl', 'bseg', 'bdt', 'bdc',
+const BINS_OWN = new Set(['v', ...Object.keys(KEYS), 'pr', 'dv', 'bl', 'bseg', 'bdt', 'bdc', 'bhc',
                           'bmd', 'bmh', 'bnotes', 'bf', 'bs', 'bsn']);
 const drawers = DRAWERS.create({
   tool: 'bins',
@@ -4962,13 +5281,15 @@ for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', '
                   'edgeF', 'edgeB', 'edgeL', 'edgeR', 'scoop', 'label', 'note',
                   'divRemovable', 'divT', 'divClr',
                   'lid', 'lidF', 'lidB', 'lidL', 'lidR',
-                  'magnets', 'screws', 'holesWhere', 'magnetD', 'magnetH'])
+                  'magnets', 'screws', 'holesWhere', 'magnetD', 'magnetH',
+                  'insert', 'insertDepth', 'holeClr'])
   $(id).addEventListener('input', schedule);
 /* The bin's number fields too: leaving one is when a value typed past its limit is put
    back to the one in use, and leaving fires change, not input. */
 for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable',
                   'lid', 'lidF', 'lidB', 'lidL', 'lidR',
-                  'magnets', 'screws', 'holesWhere', 'magnetD', 'magnetH', ...BIN_FIELDS])
+                  'magnets', 'screws', 'holesWhere', 'magnetD', 'magnetH',
+                  'insert', 'insertDepth', 'holeClr', ...BIN_FIELDS])
   $(id).addEventListener('change', schedule);
 /* Choosing the note raised on a bin with no label shelf gives it one, 12 mm deep: the
    letters have nowhere else to go, and 12 is the depth the shelf's own hint suggests.
@@ -5127,7 +5448,7 @@ halfSteps = readKey(STEPS_KEY) === 'half';
    are left out always: how the design is looked at is not what it is. */
 // the drawer, the bed and its printer, and the infill: drawers.js keeps the same list
 const SHARED_KEYS = new Set([...DRAWERS.SHARED].filter((k) => k !== 'v'));
-const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bsn', 'bseg', 'bdt', 'bdc', 'bmd', 'bmh', 'bnotes']
+const OWN_KEYS = [...Object.keys(KEYS), 'pr', 'bl', 'bs', 'bsn', 'bseg', 'bdt', 'bdc', 'bhc', 'bmd', 'bmh', 'bnotes']
   .filter((k) => k !== 'ph' && !VIEW_KEYS.includes(k));
 function sameDesign(a, b, skip = []) {
   const p = parseHash(a), q = parseHash(b);
