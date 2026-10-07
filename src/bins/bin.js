@@ -1299,35 +1299,49 @@ function holedCell(G, rings, zs, cx, cy, s, columns) {
 
 /* ---------- the bin ------------------------------------------------------- */
 
-/* The most removable dividers that fit along one direction of a bin: `axis` is 'x' for
- * divX, the ones standing at a fixed x, and 'y' for divY.
+/* The most removable dividers that fit along one direction of a bin, and which rule
+ * stopped there: `axis` is 'x' for divX, the ones standing at a fixed x, and 'y' for divY.
+ * `by` is 'slots' when the spacing below set the count, 'corners' when the rounded
+ * corners brought it down further.
  *
  * Each is a slot between two rails RAIL_T thick, so neighbours closer together than a
- * slot and a rail put one's rail across the other's slot, and its plate cannot go in.
- * The divider fields count one wall per divider, as fixed ones are, and allowed 31 on a
- * 1x1 where past 10 no slot took its plate at the usual 1.6 mm plate and 0.25 mm
- * clearance. Exactly that far apart, two neighbours' rails are one rail between their
- * slots, and both plates go in.
+ * slot and a rail put one's rail into the other's slot, where it takes from the plate's
+ * clearance. The divider fields count one wall per divider, as fixed ones are, and
+ * allowed 31 on a 1x1 at the usual 1.6 mm plate and 0.25 mm clearance: at 11 a plate
+ * still went in, with 0.208 mm of clearance where 0.25 was asked for, and at 12 not at
+ * all. Held to a slot and a rail apart, every plate keeps the whole clearance asked for,
+ * and 10 fit. Exactly that far apart, two neighbours' rails are one rail between
+ * their slots, and both plates go in.
+ *
+ * Even spacing stands the end ones as far from the end walls as from each other, which
+ * one alone does not need: with no neighbour, it needs only its slot and a rail either
+ * side inside the cavity. Asked for a neighbour's spacing as well, a half-cell bin with a
+ * 3 mm wall built none at a 5 mm plate and 1 mm clearance, where one fits with room over.
  *
  * The end ones must clear the cavity's rounded corners as well. Spaced so, the plate
  * nearest an end wall stands a slot and a rail from it less half a plate, which with a
  * thin plate and little clearance is inside the corner's radius: 1.8 mm out at 0.8 mm
  * and 0.1, where the corner's radius is up to 3.35. Its plate spans to the clearance
  * from the side walls, so its corner stood up to 0.26 mm into the wall at smoothness 8,
- * and the plate could not go in. The rails were never the trouble there: spaced so,
- * the outer one keeps at least 0.7 mm of its 1.2 inside the cavity. So the count comes
- * down until the end plates' corners are inside the cavity's outline as built, chords
- * and all, or on it. Fewer dividers rather than end plates cut to the corner, because
- * every plate is then the same part, and goes in any slot.
+ * and the plate could not go in. The rails reach a rail's depth along that plate's end
+ * (see reach in buildBin), and the face of the slot on the end wall's side is a
+ * clearance nearer the corner than the plate is: where the corner cuts that face short
+ * of the plate's end, the end sits less than a rail's depth in its rail. So the count
+ * comes down until that face, at the end of the plate's span, is inside the cavity's
+ * outline as built, chords and all, or on it. The plate's own corner, between that face
+ * and the middle, is then inside too. Fewer dividers rather than end plates cut to the
+ * corner, because every plate is then the same part, and goes in any slot.
  */
-function railedMost(cfg, axis) {
+function railedLimit(cfg, axis) {
   // the size as it is built, to the nearest half cell (halfSized), as buildBin does
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
   const hw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const inner = axis === 'x' ? hw : hd;
-  const pitch = c.divT + 2 * c.divClr + RAIL_T;
+  const slot = c.divT / 2 + c.divClr, pitch = 2 * slot + RAIL_T;
   let most = Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0;
+  if (!most && inner >= slot + RAIL_T - 1e-9) most = 1;
+  const slots = most;
   // the cavity's corner as roundRect builds it, and whether a point stands out through it
   const r = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(hw, hd) - 0.01));
   const n = c.arcSegs, seg = Math.PI / (2 * n);
@@ -1337,14 +1351,15 @@ function railedMost(cfg, axis) {
     const a = Math.atan2(dy, dx), mid = (Math.min(n - 1, Math.floor(a / seg)) + 0.5) * seg;
     return Math.hypot(dx, dy) > r * Math.cos(seg / 2) / Math.cos(a - mid) + 1e-9;
   };
-  // the corner of the end plate nearest its wall: its face, at the end of its span
+  // the end plate's slot, its face on the end wall's side, at the end of the plate's span
   const endOut = (k) => {
-    const face = -inner + (2 * inner) / (k + 1) - c.divT / 2;
+    const face = -inner + (2 * inner) / (k + 1) - slot;
     return axis === 'x' ? outside(face, hd - c.divClr) : outside(hw - c.divClr, face);
   };
   while (most > 0 && endOut(most)) most--;
-  return most;
+  return { most, by: most < slots ? 'corners' : 'slots' };
 }
+const railedMost = (cfg, axis) => railedLimit(cfg, axis).most;
 /* The dividers a bin is built with: as many as it asks for, bar removable ones past the
    most that fit. What a bin asks for is left as it is, in the link and everywhere it is
    kept, so a design from before this held them there opens unchanged; the page says in
@@ -1737,12 +1752,19 @@ function buildBin(G, cfg) {
       return merged;
     };
     /* Across the cavity for a fixed divider, from wall to wall and BLOAT into each; for a
-       removable one, a rail's depth out from each of the two walls the plate slides
-       between, again BLOAT into the wall. The far rail used to stop exactly on the wall's
-       inner face, the near one BLOAT inside its wall; both now reach in. */
-    const reach = (inner) => (c.divRemovable
-      ? [[-inner - BLOAT, -inner + RAIL_D], [inner - RAIL_D, inner + BLOAT]]
-      : [[-inner - BLOAT, inner + BLOAT]]);
+       removable one, out from each of the two walls the plate slides between, again BLOAT
+       into the wall. The far rail used to stop exactly on the wall's inner face, the near
+       one BLOAT inside its wall; both now reach in.
+       A removable one's rails reach a rail's depth along the plate's end, which stops the
+       clearance short of the wall (dividerPart): so the clearance and a rail's depth out
+       from the wall. Reaching only a rail's depth, they held each end of the plate a rail's
+       depth less the clearance, 0.95 mm at the usual 0.25 and 0.2 mm at 1 mm, where it can
+       twist out. Rails that would meet across a cavity that shallow are one rib across it,
+       rather than two boxes face to face. */
+    const deep = RAIL_D + c.divClr;
+    const reach = (inner) => (!c.divRemovable || deep >= inner - BLOAT / 2
+      ? [[-inner - BLOAT, inner + BLOAT]]
+      : [[-inner - BLOAT, -inner + deep], [inner - deep, inner + BLOAT]]);
     /* A box that would stand out through a rounded corner, as one packed up to a corner
        does (16 pairs of rails across a 1x1 with a 0.4 mm wall: 0.92 mm out; the most
        rails both ways the fields allow, at the usual 1.2: 0.67), is
@@ -1996,7 +2018,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, dividerPart, railedMost, dividersBuilt, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, dividerPart, railedMost, railedLimit, dividersBuilt, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, binHeights, unitsForInside, unitsForTop, REQUIRED_CORE,
     FOOT_HOLES, SCREW_FLOOR, holeSites, holePlan, builtFloorT, feetBits, feetFrom,
     isHalfSize, binFeet, feetHolesOff,

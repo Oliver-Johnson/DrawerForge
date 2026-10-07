@@ -166,7 +166,8 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          magnetD: state.magnetD, magnetH: state.magnetH,
                          arcSegs: state.arcSegs });
 /* The dividers a bin is built with: removable ones no more than leave every slot room
-   for its plate at the page's plate and clearance (railedMost), however many it asks for.
+   for its plate at the page's plate and clearance and keep the end ones out of the rounded
+   corners (railedMost), however many it asks for.
    The plates, the names and Checks all go by these, so they say what is built. */
 const builtDivs = (b) => dividersBuilt(Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 }));
 // and how many compartments they make, or 0 for a bin with none
@@ -464,10 +465,12 @@ function footProfileHalf(z) {
 }
 
 /* The plan area of the rails `n` removable dividers stand in along one direction: each a
-   slot between two ribs RAIL_T thick, standing RAIL_D out from each of the two facing
-   walls its plate slides between, from the floor to the rim. `along` is half the length
-   of those walls inside the cavity, hwI for the dividers that stand at a fixed x (divX),
-   hdI for the others, as buildBin's spans() and reach() take them.
+   slot between two ribs RAIL_T thick, standing out from each of the two facing walls its
+   plate slides between, from the floor to the rim, as deep as buildBin's reach() builds
+   them: a rail's depth and the clearance, or the whole way across a cavity too shallow
+   for two. `along` is half the length of those walls inside the cavity, hwI for the
+   dividers that stand at a fixed x (divX), hdI for the others, as buildBin's spans() and
+   reach() take them, and `across` half the distance between them.
    Placed, sorted and merged where two meet exactly as spans() does it, so dividers packed
    close enough for one's rail to run into the next count the plastic they share once.
    A rail beside an end wall can stand in the cavity's rounded corner, where buildBin
@@ -479,9 +482,10 @@ function footProfileHalf(z) {
    of a square millimetre at the coarsest smoothness). A rail on a straight run is
    counted whole, so at any count that keeps the rails out of the corners the sum is
    exactly the rails' own area. */
-function railArea(n, along, wall) {
+function railArea(n, along, across, wall) {
   if (!(n > 0) || !(along > 0)) return 0;
   const slot = state.divT / 2 + state.divClr, rail = slot + RAIL_T;
+  const deep = RAIL_D + state.divClr >= across - BLOAT / 2 ? across : RAIL_D + state.divClr;
   const spans = [];
   for (let k = 1; k <= n; k++) {
     const p = -along + (2 * along) * k / (n + 1);
@@ -500,12 +504,12 @@ function railArea(n, along, wall) {
      from the corner's start to t; `upTo` the same from the middle of the wall to x, both
      ways, so a span's area is upTo(hi) - upTo(lo). Past the end wall it adds nothing. */
   const rI = Math.max(0.4, SPEC.r - wall), straight = Math.max(0, along - rI);
-  const tEnd = RAIL_D >= rI ? rI : Math.sqrt(rI * rI - (rI - RAIL_D) * (rI - RAIL_D));
+  const tEnd = deep >= rI ? rI : Math.sqrt(rI * rI - (rI - deep) * (rI - deep));
   const under = (t) => {
     t = Math.min(Math.max(t, 0), tEnd);
-    return (RAIL_D - rI) * t + (t * Math.sqrt(rI * rI - t * t) + rI * rI * Math.asin(t / rI)) / 2;
+    return (deep - rI) * t + (t * Math.sqrt(rI * rI - t * t) + rI * rI * Math.asin(t / rI)) / 2;
   };
-  const upTo = (x) => Math.sign(x) * (RAIL_D * Math.min(Math.abs(x), straight) + under(Math.abs(x) - straight));
+  const upTo = (x) => Math.sign(x) * (deep * Math.min(Math.abs(x), straight) + under(Math.abs(x) - straight));
   return 2 * merged.reduce((a, [lo, hi]) => a + upTo(hi) - upTo(lo), 0);  // both walls
 }
 
@@ -567,7 +571,7 @@ function volumeMm3(c) {
   const built = { divX: c.divX || 0, divY: c.divY || 0 };   // the dividers it is built with
   const divs = !c.divRemovable
     ? (built.divX * wall * 2 * hdI + built.divY * wall * 2 * hwI) * (H - floorZ)
-    : isCarved(c) ? 0 : (railArea(built.divX, hwI, wall) + railArea(built.divY, hdI, wall)) * (H - floorZ);
+    : isCarved(c) ? 0 : (railArea(built.divX, hwI, hdI, wall) + railArea(built.divY, hdI, hwI, wall)) * (H - floorZ);
   const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
   return { raw: baseRaw + thin, filament: baseFil + thin };

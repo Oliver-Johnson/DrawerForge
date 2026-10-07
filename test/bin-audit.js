@@ -1210,20 +1210,30 @@ console.log('\nthe outline at other smoothnesses and with extra clearance');
 console.log('\nremovable dividers: every plate goes into its slot');
 /* A removable divider is a slot between two rails on each wall it runs between, and the
    plate dividerPart makes, dropped into it. It goes in only if nothing stands where it
-   stands. Spaced closer than a slot and a rail apart, a neighbour's rail ran across the
-   slot: the fields allowed 31 on a 1x1, and past 10 no slot would take its plate. With a
+   stands. Spaced closer than a slot and a rail apart, a neighbour's rail stands in the
+   slot and takes from its clearance: the fields allowed 31 on a 1x1, and at 11 a plate
+   went in with 0.208 mm of clearance where 0.25 was asked for, at 12 not at all. With a
    thin plate and little clearance the end plates' corners stood in the cavity's rounded
-   corners, up to 0.26 mm into the wall at a 0.8 mm plate and 0.1 clearance. So
-   each plate a bin is built for is set in its slot, as wide, thick and tall as
-   dividerPart makes it and standing on the floor, and the bin's triangles must keep out
-   of it, to a micron either way; and on both faces at both ends a rail must stand from
-   the floor to the rim along at least half a rail's depth of the plate's edge, or there
-   is nothing to hold it. Asked for as many as the fields allow, a bin is built with as
-   many as fit, and one more would not: set out the same way against the same bin with
-   no dividers, the plates of one more must crowd a neighbour's slot or meet the wall.
+   corners, up to 0.26 mm into the wall at a 0.8 mm plate and 0.1 clearance. So each plate
+   a bin is built for is set in its slot, as wide, thick and tall as dividerPart makes it
+   and standing on the floor, and the bin's triangles must keep out of it, to a micron
+   either way. Then each face of its slot, at each end of the plate, must have a rail
+   standing from the floor to the rim along a full rail's depth of that end: the rails
+   reached only a rail's depth from the wall while the plate stops the clearance short of
+   it, so at 1 mm clearance a plate end sat 0.2 mm in its rails and could twist out. Each
+   end is measured on its own: measured from the middle out, the far wall's rail counted
+   for the near end, and a bin with rails on one wall only passed most of the rows.
+   Asked for as many as the fields allow, a bin is built with as many as fit, and one more
+   would not. One more is set out the same way in the same bin with no dividers, and fits
+   if its plates and the rails that would hold them, a rail thick across and a rail's
+   depth along, are clear of the walls and the floor, and no two stand closer than a slot
+   and a rail. A lone divider has no neighbour, so what decides it is room for its rails
+   alone: the limit asked it for a neighbour's spacing, and built none on a half-cell bin
+   with a 3 mm wall at a 5 mm plate, where one fits. Some of the rows below are just that.
    That is done at both ends of the plate and the clearance the page takes, and at its
-   three smoothnesses, which set the corners' chords. The lip is left off. Its chamfer stands over the top of every plate's ends, which is
-   a matter of the lip and not of where the dividers stand. */
+   three smoothnesses, which set the corners' chords. The lip is left off. Its chamfer
+   stands over the top of every plate's ends, which is a matter of the lip and not of
+   where the dividers stand. */
 {
   const triBox = (c, h, t) => {
     const v = t.map((p) => [p[0] - c[0], p[1] - c[1], p[2] - c[2]]);
@@ -1253,14 +1263,14 @@ console.log('\nremovable dividers: every plate goes into its slot');
   };
   const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
   const RAIL_T = 1.2, RAIL_D = 1.2, E = 1e-6;
+  const innerOf = (c, ax) => (ax ? (c.v - 1) * 21 + 20.75 : (c.u - 1) * 21 + 20.75) - Math.max(0.4, c.wall);
   const bare = new Map();
   /* The plates of n dividers along axis ax (0: the ones across, at a fixed x), as boxes
      each with where its slot's faces are. A plate may touch the floor it stands on and,
      with no clearance, the walls at its ends, so it is a micron short of both; through
      its thickness it is grown by `grow`, a micron either way. */
   const platesOf = (c, r, n, ax, grow) => {
-    const wall = Math.max(0.4, c.wall);
-    const inner = (ax ? (c.v - 1) * 21 + 20.75 : (c.u - 1) * 21 + 20.75) - wall;
+    const inner = innerOf(c, ax);
     const d = dividerPart(G, c, ax ? 'x' : 'y').meta, floor = r.meta.floorZ + 0.05;
     const out = [];
     for (let k = 1; k <= n; k++) {
@@ -1272,15 +1282,35 @@ console.log('\nremovable dividers: every plate goes into its slot');
     }
     return out;
   };
+  /* Where a plate's rails must stand to hold it, a micron inside: a rail thick out from
+     each face of its slot, and a rail's depth back from each end of the plate, floor to
+     rim. Or the plate's whole half, when that is shorter than a rail's depth. */
+  const railsOf = (pl, ax, H) => {
+    const out = [], along = Math.min(RAIL_D, pl.end);
+    for (const [a, b] of [[pl.faces[0] - RAIL_T, pl.faces[0]], [pl.faces[1], pl.faces[1] + RAIL_T]])
+      for (const [c, d] of [[-pl.end, -pl.end + along], [pl.end - along, pl.end]]) {
+        const lo = [0, 0, pl.lo[2]], hi = [0, 0, H - E];
+        lo[ax] = a + E; hi[ax] = b - E; lo[1 - ax] = c + E; hi[1 - ax] = d - E;
+        out.push({ lo, hi });
+      }
+    return out;
+  };
+  let least = Infinity, lone = 0, short = 0;
   const faults = (cfg) => {
     const c = Object.assign({}, BIN_DEFAULTS, cfg), H = c.hUnits * SPEC.unitH;
     const r = buildBin(G, cfg), tris = trisOf(r.polys), built = dividersBuilt(cfg), out = [];
     const bareKey = JSON.stringify(Object.assign({}, cfg, { divX: 0, divY: 0, divRemovable: false }));
     if (!bare.has(bareKey)) bare.set(bareKey, trisOf(buildBin(G, JSON.parse(bareKey)).polys));
+    /* Clear of every triangle, and inside the cavity's rectangle: a box wholly inside a
+       wall meets no triangle either. */
+    const room = [innerOf(c, 0), innerOf(c, 1)];
+    const inside = (box) => [0, 1].every((a) => box.lo[a] >= -room[a] && box.hi[a] <= room[a]);
+    const clear = (box) => inside(box) && !blocked(bare.get(bareKey), box.lo, box.hi);
     let plates = 0;
     for (const [key, ax] of [['divX', 0], ['divY', 1]]) {
-      const n = built[key];
+      const n = built[key], inner = innerOf(c, ax), pitch = c.divT + 2 * c.divClr + RAIL_T;
       if (n > (c[key] || 0)) out.push(`${n} ${key} built of ${c[key]} asked`);
+      if (n === 1 && inner < pitch) lone++;
       // rail faces standing on the plane ax = x, as [x, from, to] along the other axis
       const faces = [];
       for (const p of r.polys) {
@@ -1292,25 +1322,32 @@ console.log('\nremovable dividers: every plate goes into its slot');
       }
       for (const pl of platesOf(c, r, n, ax, -E)) {
         plates++;
-        if (blocked(tris, pl.lo, pl.hi)) { out.push(`${key} plate ${pl.k} of ${n} blocked`); continue; }
+        if (pl.end < RAIL_D) short++;
+        if (!inside(pl) || blocked(tris, pl.lo, pl.hi)) { out.push(`${key} plate ${pl.k} of ${n} blocked`); continue; }
+        // each face of the slot, at each end on its own: from the middle to that end
+        const need = Math.min(RAIL_D, pl.end) - 1e-6;
         for (const x of pl.faces) for (const s of [-1, 1]) {
           const hold = Math.max(0, ...faces.filter((f) => Math.abs(f[0] - x) < 1e-7)
-            .map(([, a, b]) => (s > 0 ? Math.min(b, pl.end) - a : b - Math.max(a, -pl.end))));
-          if (hold < RAIL_D / 2) { out.push(`${key} plate ${pl.k} of ${n} held ${hold.toFixed(2)} mm`); break; }
+            .map(([, a, b]) => (s > 0 ? Math.min(b, pl.end) - Math.max(a, 0) : Math.min(b, 0) - Math.max(a, -pl.end))));
+          if (pl.end >= RAIL_D) least = Math.min(least, hold);
+          if (hold < need) { out.push(`${key} plate ${pl.k} of ${n} held ${hold.toFixed(2)} mm at one end`); break; }
         }
       }
-      // one more: crowded by a neighbour, or into the wall of the bare bin
+      // one more: crowded by a neighbour, or its plates or their rails into a wall of the bare bin
       if (n < (c[key] || 0)) {
-        const inner = (ax ? (c.v - 1) * 21 + 20.75 : (c.u - 1) * 21 + 20.75) - Math.max(0.4, c.wall);
-        const crowded = 2 * inner / (n + 2) < c.divT + 2 * c.divClr + RAIL_T - 1e-9;
-        if (!crowded && !platesOf(c, r, n + 1, ax, E).some((pl) => blocked(bare.get(bareKey), pl.lo, pl.hi)))
-          out.push(`${key}: ${n + 1} would have fit, ${n} built`);
+        const k = n + 1, crowded = k > 1 && 2 * inner / (k + 1) < pitch - 1e-9;
+        if (!crowded && platesOf(c, r, k, ax, E).every((pl) => clear(pl) && railsOf(pl, ax, H).every(clear)))
+          out.push(`${key}: ${k} would have fit, ${n} built`);
       }
     }
     return { out, plates };
   };
   const rows = [];
-  for (const [divT, divClr] of [[1.6, 0.25], [0.8, 0], [0.8, 0.1], [0.8, 1], [5, 0], [5, 1]])
+  const pairs = [[1.6, 0.25], [0.8, 0], [0.8, 0.1], [0.8, 1], [5, 0], [5, 1]];
+  const label = (u, v, wall, n, key, divT, divClr, arcSegs) => `${u}x${v} wall ${wall}, ${n} ` +
+    `${key === 'divX' ? 'across' : 'along'}${divT === 1.6 && divClr === 0.25 ? '' : `, ${divT} mm plate ${divClr} clear`}` +
+    `${arcSegs === 12 ? '' : ` at ${arcSegs}`}`;
+  for (const [divT, divClr] of pairs)
     for (const arcSegs of [8, 12, 24])
       for (const [a, b] of [[0.5, 1], [1, 1], [1.5, 1], [2, 1], [3, 1]])
         for (const wall of [0.4, 0.8, 1.2, 2, 3.5, 5])
@@ -1318,22 +1355,37 @@ console.log('\nremovable dividers: every plate goes into its slot');
             const top = most((a - 1) * 42 + 41.5 - 2 * wall, wall);
             const [u, v] = key === 'divX' ? [a, b] : [b, a];
             for (const n of new Set([top, Math.ceil(top / 2)])) if (n)
-              rows.push([`${u}x${v} wall ${wall}, ${n} ${key === 'divX' ? 'across' : 'along'}` +
-                         `${divT === 1.6 && divClr === 0.25 ? '' : `, ${divT} mm plate ${divClr} clear`}` +
-                         `${arcSegs === 12 ? '' : ` at ${arcSegs}`}`,
+              rows.push([label(u, v, wall, n, key, divT, divClr, arcSegs),
                          { u, v, hUnits: 3, wall, divRemovable: true, lip: false, divT, divClr, arcSegs, [key]: n }]);
           }
+  /* Half a cell across with thick walls: room for one divider and its rails, or for none;
+     and the plates spanning that half cell, as short as the rails are deep or shorter,
+     where the rails from its two walls meet and are one rib across. */
+  for (const [divT, divClr] of pairs)
+    for (const wall of [2.5, 3, 4, 5, 6, 7, 8, 9])
+      for (const key of ['divX', 'divY'])
+        for (const [a, b] of [[0.5, 1], [2, 0.5]]) {
+          const top = most((a - 1) * 42 + 41.5 - 2 * wall, wall), [u, v] = key === 'divX' ? [a, b] : [b, a];
+          for (const n of new Set([1, top])) if (n)
+            rows.push([label(u, v, wall, n, key, divT, divClr, 12),
+                       { u, v, hUnits: 3, wall, divRemovable: true, lip: false, divT, divClr, arcSegs: 12, [key]: n }]);
+        }
   let plates = 0;
-  const fails = [];
+  const fails = [], kinds = {};
   for (const [name, cfg] of rows) {
     const f = faults(cfg);
     plates += f.plates;
     if (f.out.length) fails.push(`${name}: ${f.out[0]}${f.out.length > 1 ? ` and ${f.out.length - 1} more` : ''}`);
+    for (const k of new Set(f.out.map((t) => t.replace(/.*\b(blocked|held|would have fit|asked)\b.*/, '$1'))))
+      kinds[k] = (kinds[k] || 0) + 1;
   }
-  console.log(`  ${rows.length} bins, ${plates} plates: ` + (fails.length
-    ? `${fails.length} FAILED, ${fails.slice(0, 4).join('; ')}${fails.length > 4 ? ` and ${fails.length - 4} more` : ''}`
-    : 'every one in its slot'));
-  if (fails.length) bad++;
+  console.log(`  ${rows.length} bins, ${plates} plates, ${lone} with one divider where two would not go: ` + (fails.length
+    ? `${fails.length} FAILED (${Object.entries(kinds).map(([k, n]) => `${k} in ${n}`).join(', ')}), ` +
+      `${fails.slice(0, 4).join('; ')}${fails.length > 4 ? ` and ${fails.length - 4} more` : ''}`
+    : !lone ? 'NONE with a lone divider, so that was not tried'
+    : `every one in its slot, each end held ${least.toFixed(2)} mm or more, ` +
+      `or along its whole half in the ${short} shorter than two rails' depth`));
+  if (fails.length || !lone) bad++;
 }
 
 /* The label shelf's underside runs down at 45 degrees, so the deeper the shelf the
@@ -1404,7 +1456,9 @@ console.log('\nlabel shelves as deep as the bin\'s height allows');
  * hex digits of the SHA-256 of its STL as that engine built it, at the page's default
  * settings. Read through unpackBin, so the link is checked along with the geometry.
  * A change that MEANS to alter whole bins will fail here: check that it should, then put
- * in the digests this prints, and say so in the commit. */
+ * in the digests this prints, and say so in the commit. One did: the 2x2x3 with removable
+ * dividers has rails reaching the clearance deeper, so that each end of its plates sits a
+ * full rail's depth in them (reach in buildBin), and nothing else in it changed. */
 console.log('\nlinks from before half sizes build the same bytes');
 {
   const crypto = require('crypto');
@@ -1412,7 +1466,7 @@ console.log('\nlinks from before half sizes build the same bytes');
     ['1x1x3', '0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15-0', 'a6b5ca988bcf9ec4'],
     ['1x1x1', '4-1-1-1-1-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15-0', '055b9aa96e86b515'],
     ['3x2x5, dividers, scoop and label', '1-2-3-2-5-1.2-1.2-2-1-0-1-1-1-1-6-10-0-0-0-0-15-0', '66c515b3c3ab2fcc'],
-    ['2x2x3, removable dividers', '0-0-2-2-3-1.2-1.2-1-1-0-1-1-1-1-0-0-0-0-1-0-15-0', '857e407d5b6d51d2'],
+    ['2x2x3, removable dividers', '0-0-2-2-3-1.2-1.2-1-1-0-1-1-1-1-0-0-0-0-1-0-15-0', '7b838b800b92ce03'],
     ['2x1x3, front at half, left at a quarter', '0-0-2-1-3-1.2-1.2-0-0-0-0.5-1-0.25-1-0-0-0-0-0-0-15-0', '1838902a9b3e1fda'],
     ['2x2x2 tray', '0-0-2-2-2-1.2-1.2-0-0-0-0-0-0-0-0-0-0-0-0-0-15-0', '16583a72aa4bdfc9'],
     ['1x1x3 solid', '0-0-1-1-3-1.2-1.2-0-0-1-1-1-1-1-0-0-0-0-0-0-15-0', 'c6e857cede8b8d80'],

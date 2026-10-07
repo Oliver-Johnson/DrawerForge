@@ -158,8 +158,10 @@ test('a floor that fills the bin leaves no loose divider plates to print', async
 });
 
 /* Each removable divider is a slot between two rails, and closer than a slot and a rail
-   apart a neighbour's rail stood across the slot: the fields allowed 31 on a 1x1, and
-   past 10 no plate went in. */
+   apart a neighbour's rail stands in the slot and takes from its clearance: the fields
+   allowed 31 on a 1x1, and at 11 a plate went in with 0.208 mm of clearance where 0.25
+   was asked for, at 12 not at all. Held to a slot and a rail apart, every slot keeps the
+   whole clearance, and 10 fit. */
 test('removable dividers are held to as many as leave every slot room for a plate', async ({ page }) => {
   const errors = await openAt(page, '');
   await H.dragCells(page, [0, 0], [0, 0]);
@@ -267,6 +269,25 @@ test('half-size bins are held to the removable dividers that fit them, and Check
   expect(await page.inputValue('#divX')).toBe('4');
   expect(await notes()).toEqual(['Layer 1, the 1.5×1 bin at column 2 row 1: is built with 17 removable dividers ' +
     'across, not the 30 it asks for, as no more leave every slot room for a 1.6 mm plate at 0.25 mm clearance.']);
+  expect(errors).toEqual([]);
+});
+
+/* One removable divider has no neighbour, so it needs only its slot and a rail either
+   side. Held to a neighbour's spacing as well, a half-cell bin with a 3 mm wall at a 5 mm
+   plate and 1 mm clearance was built with none, its field allowed none, and Checks said
+   none fit. */
+test('a bin with room for one removable divider and no more is built with one', async ({ page }) => {
+  const errors = await openAt(page, 'bl=0-0-0.5-1-3-3-1.2-1-0-0-1-1-1-1-0-0-0-0-1-0-15&bdt=5&bdc=1');
+  await settle(page, 600);
+  expect(await page.evaluate(() => [state.divT, state.divClr, B()[0].divX])).toEqual([5, 1, 1]);
+  expect(await page.evaluate(() => dividerParts().reduce((n, d) => n + d.qty, 0))).toBe(1);
+  expect(await page.evaluate(() => checkManifold(geomFor(B()[0]).polys).bad)).toBe(0);
+  expect((await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent)))
+    .filter((t) => t.includes('removable dividers'))).toEqual([]);
+  await H.clickCell(page, -0.25, 0);
+  await settle(page, 600);
+  expect(await page.inputValue('#divX')).toBe('1');
+  expect(await page.evaluate(() => +document.getElementById('divX').max)).toBe(1);
   expect(errors).toEqual([]);
 });
 
