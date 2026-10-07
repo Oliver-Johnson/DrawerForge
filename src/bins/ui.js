@@ -476,8 +476,8 @@ function footProfileHalf(z) {
    counted in full all the same, as if those were not there, so such a bin comes out a
    little heavy: about 0.2 g on a 1x1x3 or a 2x1x6 with two or three dividers each way, an
    8 mm scoop and a 10 mm shelf, of which the chamfer is 0.03 g. It grows with the count
-   and with the scoop and the shelf, to about 3.5 g on a 2x1x6 with 23 across and 10
-   along under a 20 mm scoop and a 20 mm shelf.
+   and with the scoop and the shelf, to 1.9 g on a 2x1x6 with 23 across and 10 along
+   under a 20 mm scoop and a 20 mm shelf, measured off the bin as built.
    Placed, sorted and merged where two meet exactly as spans() does it, so dividers packed
    close enough for one's rail to run into the next count the plastic they share once.
    A rail beside an end wall can stand in the cavity's rounded corner, where buildBin
