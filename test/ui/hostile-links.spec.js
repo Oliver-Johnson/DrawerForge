@@ -264,6 +264,108 @@ test('notes from a link are one clean line of at most 28 characters', async ({ p
   expect(b).toBe('🙂'.repeat(14));       // whole emoji, never half of one
 });
 
+/* A note that is printed on its bin reaches more than the screen: the part's key, which
+   is the object's name in a 3MF, the STL's file name, the hint and Checks. One written to
+   break each of them, arriving by a link with the note raised (the 23rd field), leaves
+   the page working, the hint and Checks showing it as text, the 3MF well-formed XML and
+   every name made of plain characters. */
+test('a note full of markup and emoji, raised on its shelf, breaks nothing it reaches', async ({ page }) => {
+  const errors = watch(page);
+  const hostile = '<i>M3</i> & "x" \u{1F642}</script>';
+  const notes = encodeURIComponent(JSON.stringify([[hostile]]));
+  await arrive(page, H.BINS_URL + '#bl=0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-1&bnotes=' + notes);
+  expect(await page.evaluate(() => [B()[0].labelMode, B()[0].note])).toEqual([1, hostile.slice(0, 28)]);
+
+  await H.clickCell(page, 0, 0);
+  await page.waitForTimeout(400);
+  await expect(page.locator('#noteHint')).toContainText('cannot print, so it is left off');
+  await expect(page.locator('#warnings')).toContainText('left off: \u{1F642}');
+  expect(await page.locator('#noteHint *:not(span):not(button), #warnings i, #warnings script').count()).toBe(0);
+
+  const out = await page.evaluate(() => {
+    const t = types()[0];
+    const x = build3mfXML(platePolysAndItems(0)).model;
+    const doc = new DOMParser().parseFromString(x, 'application/xml');
+    return { key: t.key, name: typeName(t), bad: doc.getElementsByTagName('parsererror').length,
+             objects: [...doc.getElementsByTagName('object')].map((o) => o.getAttribute('name')) };
+  });
+  expect(out.bad, 'the 3MF parses as XML').toBe(0);
+  expect(out.objects).toEqual([out.key]);
+  expect(out.key).toMatch(/^[\w.,-]+$/);
+  expect(out.name).toMatch(/^bin-1x1x3-[a-z0-9-]+-qty1$/);
+  expect(errors).toEqual([]);
+});
+
+/* A loose bin's note arrives beside it (bsn), cleaned as a layer's note is: one line of
+   at most 28 characters, shown as text. A note with no loose bin to go on is nothing. */
+test('a loose bin\'s note from a link is one clean line, as a layer\'s is', async ({ page }) => {
+  const errors = watch(page);
+  const bin = '0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-1';
+  await arrive(page, H.BINS_URL + '#bs=' + bin + '&bsn=' +
+    encodeURIComponent('one\ntwo\u0007<b>three</b>' + '\u{1F642}'.repeat(40)));
+  const n = await page.evaluate(() => scratch.note);
+  expect(n).toBe('one two <b>three</b>' + '\u{1F642}'.repeat(4));
+  await expect(page.locator('#noteHint')).toContainText('cannot print, so it is left off');
+  expect(await page.locator('#noteHint b, #warnings b').count()).toBe(0);
+  const bins = (await page.evaluate(() => layoutReadme())).split('\n').filter((l) => l.startsWith('Bin: '));
+  expect(bins).toEqual(['Bin: 1x1x3  — ' + n]);
+
+  await arrive(page, H.BINS_URL + '#bl=0-0-1-1-3&bsn=stray');
+  expect(await page.evaluate(() => [scratch, B()[0].note || ''])).toEqual([null, '']);
+  expect(errors).toEqual([]);
+});
+
+/* A link can ask for as many raised notes as it has bins, and each is a part to build and
+   hold: 256 took the page to 1.3 GB and 20 s. The first hundred print, layer by layer and
+   bin by bin, the rest print plain, and Checks says so the way it does for a drawer past
+   the most the page lays out. The bins keep the setting, so the save still says what the
+   link asked for. */
+test('a link raising more different notes than one layout prints raises the first hundred', async ({ page }) => {
+  const errors = watch(page);
+  const bins = [], notes = [];
+  for (let i = 0; i < 103; i++) {
+    bins.push(`${i % 11}-${Math.floor(i / 11)}-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-1`);
+    notes.push(`N${i}`);
+  }
+  await arrive(page, H.BINS_URL + '#w=462&d=462&bl=' + bins.join('_') +
+    '&bnotes=' + encodeURIComponent(JSON.stringify([notes])));
+  const out = await page.evaluate(() => ({
+    asked: B().filter((b) => b.labelMode === 1 && b.note).length,
+    raised: types().filter((t) => printedNote(t.b)).length,
+    plain: types().filter((t) => !printedNote(t.b)).map((t) => t.qty),
+    held: B().filter((b) => !printedNote(b)).map((b) => b.note),
+  }));
+  expect(out).toEqual({ asked: 103, raised: 100, plain: [3], held: ['N100', 'N101', 'N102'] });
+  await expect(page.locator('#warnings .w.err')).toContainText(
+    '103 different notes are set to print raised on label shelves, more than the 100 one layout prints, ' +
+    'so the bins with the 3 notes after the first 100 print plain.');
+  expect(await stored(page, BINS)).toContain(encodeURIComponent('"N102"'));
+
+  // and the bin says why, where its note is
+  await H.clickCell(page, 102 % 11, Math.floor(102 / 11));
+  await page.waitForTimeout(400);
+  await expect(page.locator('#noteHint')).toContainText(
+    'This layout already raises 100 other notes, the most one layout prints, so this one prints plain.');
+  expect(errors).toEqual([]);
+});
+
+/* A bin whose note cannot print builds no part for it, so it takes none of the hundred:
+   a hundred bins with no shelf to print on held back the one note that could print, and
+   Checks counted 101 different notes. */
+test('notes that cannot print take none of the hundred', async ({ page }) => {
+  const errors = watch(page);
+  const bins = [], notes = [];
+  for (let i = 0; i < 101; i++) {
+    bins.push(`${i % 11}-${Math.floor(i / 11)}-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-${i === 100 ? 12 : 0}-0-0-0-0-15-0-1`);
+    notes.push(`N${i}`);
+  }
+  await arrive(page, H.BINS_URL + '#w=462&d=462&bl=' + bins.join('_') +
+    '&bnotes=' + encodeURIComponent(JSON.stringify([notes])));
+  expect(await page.evaluate(() => types().filter((t) => printedNote(t.b)).map((t) => t.b.note))).toEqual(['N100']);
+  await expect(page.locator('#warnings')).not.toContainText('different notes');
+  expect(errors).toEqual([]);
+});
+
 test('a fractional position is rounded rather than thrown on', async ({ page }) => {
   const errors = watch(page);
   await arrive(page, H.BINS_URL + '#bl=0-0.5-1-1-3');

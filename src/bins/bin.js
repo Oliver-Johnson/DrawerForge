@@ -41,6 +41,12 @@ const SPEC = {
 
 const BLOAT = 0.05;     // shell overlap; never rely on coincident faces
 
+/* A bin's note as raised letters on its label shelf: which characters print, how they
+   fit and the letters as shells all live in text.js. On the page it is spliced in ahead
+   of this file, so its functions are already defined there. */
+const NOTE_TEXT = typeof module !== 'undefined' ? require('./text.js')
+  : { NOTE_SPEC, notePrintable, noteFit, noteShells };
+
 /* Rails for a removable divider: how thick each rib is, and how far it stands proud of
    the wall. 1.2 is two perimeters at a 0.4 nozzle, so a rib prints solid and stiff
    rather than as two skins with a void between them. */
@@ -79,6 +85,8 @@ const BIN_DEFAULTS = {
   scoop: 0,             // radius of the front scoop fillet, 0 = none
   label: 0,             // depth of the label shelf at the back, 0 = none
   labelT: 1.2,          // thickness of the label shelf
+  labelMode: 0,         // what the shelf carries: 0 nothing, 1 the note as raised letters
+  note: '',             // what goes in the bin, as typed; printed only with labelMode 1
   magnets: false,       // magnet pockets in the feet
   screws: false,        // M3 screw holes in the feet
   holesEvery: false,    // holes in every cell, rather than the bin's outer corners
@@ -108,13 +116,14 @@ function scoopPrism(G, hwI, hdI, floorZ, r, segs) {
   prof.push([y0 - BLOAT, floorZ + r], [y0 - BLOAT, floorZ - BLOAT], [y0, floorZ - BLOAT]);
   return G.profilePrism(prof, -hwI - BLOAT, hwI + BLOAT, (u, v) => [v, u]);
 }
-/* From side wall to side wall, a BLOAT into each, or from x0 to x1: one piece of a shelf
+/* The shelf with its top at `top`: H, or lower with a note raised on it (noteOnShelf).
+   From side wall to side wall, a BLOAT into each, or from x0 to x1: one piece of a shelf
    notched for removable plates to pass (see plateLayout). */
-function labelPrism(G, hwI, hdI, H, depth, t, x0 = -hwI - BLOAT, x1 = hwI + BLOAT) {
+function labelPrism(G, hwI, hdI, top, depth, t, x0 = -hwI - BLOAT, x1 = hwI + BLOAT) {
   const yb = hdI;
   const prof = [
-    [yb + BLOAT, H - t - depth], [yb + BLOAT, H], [yb - depth, H],
-    [yb - depth, H - t],
+    [yb + BLOAT, top - t - depth], [yb + BLOAT, top], [yb - depth, top],
+    [yb - depth, top - t],
   ];
   return G.profilePrism(prof, x0, x1, (u, v) => [v, u]);
 }
@@ -273,6 +282,90 @@ function labelRounded(G, hwI, hdI, wall, H, depth, t, n, xs) {
   }
   return bandSolid(G, ring, yb - depth, Infinity, [],
                    () => H, piecewise([[yb - depth, H - t], [yb + BLOAT, H - t - depth]]));
+}
+
+/* The note raised on the label shelf (labelMode 1).
+ *
+ * A bin stacked on this one comes down into its lip until the chamfers of its feet meet
+ * the lip's, 0.25 mm below H (the spec's clearance, on 45 degree faces: stack-check.js),
+ * unless something stops it first, and a shelf with its top at H does. Letters standing
+ * on a shelf there would hold that bin up and be crushed by it. So with letters on it
+ * the shelf drops to H - 1.0, and they stand 0.6 on it and top out at H - 0.4: 0.15 mm
+ * under the feet of a bin seated above. Without letters nothing moves: every other bin
+ * is built exactly as it was.
+ *
+ * The letters go where they can be read from above. At the back and the sides that is
+ * clear of the stacking lip, whose chamfer leans in over the shelf to 2.70 from the
+ * outside at H: the band stops there, which at the letters' top, 0.4 lower, is 0.4 clear
+ * of the chamfer too. At the front they keep 0.6 off the shelf's edge.
+ *
+ * Dividers stand from the floor to H, through the shelf and anything on it (buildBin), so
+ * the letters keep 0.4 off each one that crosses the band: a fixed divider is a wall
+ * thick, and a removable one has a rail each side of the slot its plate slides down,
+ * which is where the plate goes too. They go in the widest space left across the shelf
+ * and, where dividers the other way cross it, the deepest from front to back. A space
+ * that will not take the note at the usual sizes (noteFit's readable) takes nothing. The
+ * walls alone leave one that narrow only on a half-size bin with walls past about 6.5 mm,
+ * where letters came out half a millimetre tall. noteFit lets letters under 3 mm stand
+ * where the depth it is given is the shelf's, and a space cut short by dividers along the
+ * bin is not: there they came out a millimetre tall, or under nothing and mirrored, and a
+ * space like that takes letters only 3 mm tall or more.
+ *
+ * `footAt` is how low the shelf's slope may reach, which buildBin works out. Returns what
+ * goes on the shelf: { why } with why 'off' when no note was asked for, 'empty' when
+ * nothing in it prints, 'shallow' when the lowered shelf is under 6 mm deep (with its
+ * depth, and `by`: 'asked' for a shelf asked for that shallow, 'inside' for one held to
+ * 0.8 of the inside's depth, 'height' for one held to the room above the floor),
+ * 'dividers' when the dividers leave no space the note fits (with `along` when it is
+ * the ones along the bin: the shelf's whole depth would take it) and 'narrow' when the
+ * walls do (both with its depth); otherwise { why: '', top, depth, text, fit, divided }, `fit`
+ * being noteFit's answer and `divided` whether dividers narrowed the space it was fitted
+ * to. */
+const NOTE_CLEAR = 0.4;      // letters stop this far under H
+const NOTE_DIV_CLEAR = 0.4;  // ...and this far off a divider, its rails or its plate's slot
+function noteOnShelf(c, iw, id, H, footAt) {
+  if (+c.labelMode !== 1) return { why: 'off' };
+  const text = NOTE_TEXT.notePrintable(c.note).text;
+  if (!text) return { why: 'empty' };
+  const S = NOTE_TEXT.NOTE_SPEC, top = H - NOTE_CLEAR - S.relief;
+  const inside = id * 0.8, room = top - c.labelT - footAt;
+  const depth = Math.min(c.label, inside, room);
+  if (!(depth >= S.shelfMin))
+    return { why: 'shallow', depth: Math.max(0, depth),
+             by: depth === c.label ? 'asked' : depth === inside ? 'inside' : 'height' };
+  const m = Math.max(0.5, LIP[0][1] - c.wall);
+  /* The widest stretch of lo..hi clear of n dividers spread across -inner..inner as
+     buildBin spreads them, `half` either side of each centre line, the first of equals;
+     null when nothing is left. `divided` says whether any of them crossed it. */
+  const half = (c.divRemovable ? c.divT / 2 + c.divClr + RAIL_T : c.wall / 2) + NOTE_DIV_CLEAR;
+  let divided = false;
+  const widest = (lo, hi, n, inner) => {
+    let gaps = [[lo, hi]];
+    for (let k = 1; k <= n; k++) {
+      const p = -inner + (2 * inner) * k / (n + 1), a = p - half, b = p + half;
+      if (b <= lo || a >= hi) continue;
+      divided = true;
+      gaps = gaps.flatMap(([u, v]) => [[u, Math.min(v, a)], [Math.max(u, b), v]])
+        .filter(([u, v]) => v - u > 1e-9);
+    }
+    return gaps.reduce((w, g) => (!w || g[1] - g[0] > w[1] - w[0] + 1e-9 ? g : w), null);
+  };
+  const y0 = id - depth + S.front, y1 = id - m;
+  // the dividers as built: removable ones no more than fit (dividersBuilt)
+  const built = dividersBuilt(c);
+  const xs = widest(-iw + m, iw - m, built.divX, iw), across = divided, ys = widest(y0, y1, built.divY, id);
+  const fitIn = (x, y) => NOTE_TEXT.noteFit(text, { x0: x[0], x1: x[1], y0: y[0], y1: y[1] });
+  const prints = (f) => f.readable && f.cap > 0;
+  /* Nothing printed, and why: the dividers along the bin only when the shelf's whole
+     depth, between the same dividers across, would have taken the note. Said whenever
+     they cut the shelf short, it sent people to take out dividers that were not in the
+     way: a 1 x 0.5 with one divider each way had no room between the ones across. */
+  const refuse = (cut) => (cut && xs && prints(fitIn(xs, [y0, y1]))
+    ? { why: 'dividers', depth, along: true } : { why: across ? 'dividers' : 'narrow', depth });
+  if (!xs || !ys) return refuse(!ys);
+  const fit = fitIn(xs, ys), cut = ys[1] - ys[0] < y1 - y0 - 1e-9;
+  if (!prints(fit) || (cut && fit.cap < S.capMin - 1e-9)) return refuse(cut);
+  return { why: '', top, depth, text, fit, divided };
 }
 
 /* Stacking lip.
@@ -1559,8 +1652,8 @@ function scoopRadius(c, H, floorZ, id, plate) {
   const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF), plate === undefined ? Infinity : plate);
   return r > 0.05 ? r : 0;
 }
-/* The label shelf's depth as buildBin builds it, 0 for none.
-   Limited by height as well as depth. The shelf's underside runs down at 45
+/* The label shelf's depth with nothing on it, 0 for none: as buildBin builds it but for
+   a note raised on it (shelfBuilt). Limited by height as well as depth. The shelf's underside runs down at 45
    degrees, so a shelf deeper than the bin is tall pokes its foot through the
    floor and out among the feet: 4 open edges from 8 mm on a 1-unit bin. Into
    the floor is fine, it is solid, and overlap is how every shell here meets the
@@ -1571,11 +1664,26 @@ function scoopRadius(c, H, floorZ, id, plate) {
    cleanly: a 14 mm label on a 1x1x3 came out 13.65.
    With screws the foot stops above the screws' ends instead, for the reason the
    wall ring does: behind a wall over 5 mm thick it reaches in over a hole. */
+const shelfFootAt = (c) => (c.screws && !feetHolesOff(c) ? FOOT_HOLES.screwTop : SPEC.footH) + BLOAT;
 function shelfDepth(c, id, H) {
   if (!(c.label > 0.05 && wallEdge(c, 'b') > 0.99)) return 0;
-  const footAt = c.screws && !feetHolesOff(c) ? FOOT_HOLES.screwTop + BLOAT : SPEC.footH + BLOAT;
-  const d = Math.min(c.label, id * 0.8, H - c.labelT - footAt);
+  const d = Math.min(c.label, id * 0.8, H - c.labelT - shelfFootAt(c));
   return d > 0.05 ? d : 0;
+}
+/* The label shelf as buildBin builds it, { depth, top, note }, depth 0 for none: the one
+   answer to where it stands, for buildBin's shelf and the notches removable plates pass
+   it by, for the fixed dividers that come to its front, and for the audit. Its top is H,
+   or a millimetre lower with a note raised on it, and its depth then the note's, on a
+   short bin up to a millimetre less than shelfDepth's (noteOnShelf). `note` is
+   noteOnShelf's answer, null with no shelf. Whether the note fits depends on the dividers,
+   so how many removable plates along stay in front of the shelf is counted against
+   shelfDepth's (railedLimit), the deepest the shelf is built: they are in front of this
+   one either way. */
+function shelfBuilt(c, iw, id, H) {
+  const plain = shelfDepth(c, id, H);
+  if (!plain) return { depth: 0, top: H, note: null };
+  const note = noteOnShelf(c, iw, id, H, shelfFootAt(c));
+  return note.fit ? { depth: note.depth, top: note.top, note } : { depth: plain, top: H, note };
 }
 
 /* The most removable dividers that fit along one direction of a bin, and which rule
@@ -1632,6 +1740,9 @@ function shelfDepth(c, id, H) {
  * depth, parallel to it, would have to be slid in under it, which a plate dropped into
  * rails cannot be, so the last one stays in front of the shelf, slot and all. The plates
  * across pass through notches in the shelf instead, so the shelf limits only these.
+ * With a note raised on it the shelf is a millimetre lower, and on a short bin up to a
+ * millimetre shallower (shelfBuilt); whether the note fits depends on the dividers, so
+ * the count keeps them in front of the shelf with nothing on it, the deepest it is built.
  * Both only where there is a plate to go in: see printed below.
  */
 function railedLimit(cfg, axis) {
@@ -1641,10 +1752,12 @@ function railedLimit(cfg, axis) {
   const hd = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
   const inner = axis === 'x' ? hw : hd;
   const slot = c.divT / 2 + c.divClr, pitch = 2 * slot + RAIL_T;
-  let most = Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0;
+  let most = Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0, why = '';
   if (!most && inner >= slot + RAIL_D + c.divClr + 10 * WELD - 1e-9) most = 1;
+  // its slot and a rail would go in, but not the room for the rails the other way
+  else if (!most && inner >= slot + RAIL_T - 1e-9) why = 'lone';
   // none where the clearance at the plate's ends leaves it no length (see dividerPart)
-  if ((axis === 'x' ? hd : hw) - c.divClr < WELD) most = 0;
+  if ((axis === 'x' ? hd : hw) - c.divClr < WELD) { most = 0; why = 'length'; }
   const slots = most;
   // the cavity's corner as roundRect builds it, and whether a point stands out through it
   const r = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(hw, hd) - 0.01));
@@ -1673,7 +1786,7 @@ function railedLimit(cfg, axis) {
   const lip = most;
   const shelf = axis === 'y' && full ? shelfDepth(c, hd, c.hUnits * SPEC.unitH) : 0;
   if (shelf) while (most > 0 && last(most) + slot + BLOAT > hd - shelf) most--;
-  return { most, by: most < lip ? 'shelf' : most < corners ? 'lip' : most < slots ? 'corners' : 'slots' };
+  return { most, by: why || (most < lip ? 'shelf' : most < corners ? 'lip' : most < slots ? 'corners' : 'slots') };
 }
 const railedMost = (cfg, axis) => railedLimit(cfg, axis).most;
 /* The dividers a bin is built with: as many as it asks for, bar removable ones past the
@@ -1845,8 +1958,7 @@ function plateLayout(cfg, counts) {
     });
   }
   return { c, H, hwO, hdO, iw, id, floorZ, zf, ztop, tall, t, clr, slot, printed, railed,
-           pX, pY, r, scoopFree, arc, S, spanX, spanY, chainX, along, fitsY, corners,
-           shelf: railed ? shelfDepth(c, id, H) : 0, lip };
+           pX, pY, r, scoopFree, arc, S, spanX, spanY, chainX, along, fitsY, corners, lip };
 }
 
 /* One plate's outline, in the bin's frame: [u, z] along the plate and up, as a bottom and
@@ -2282,7 +2394,10 @@ function buildBin(G, cfg) {
     const rS = c.divRemovable ? fit.r : scoopRadius(c, H, floorZ, id);
     if (rS) polys.push(...(poke ? scoopRounded(G, iw, id, c.wall, floorZ, rS, Math.max(4, n), n)
                                 : scoopPrism(G, iw, id, floorZ, rS, Math.max(4, n))));
-    const d = shelfDepth(c, id, H);
+    /* The shelf as built (shelfBuilt): its top is H, or lower with a note raised on it
+       (noteOnShelf), and on a thin wall it is built over the cavity's rounded outline
+       (cornersPoke) whichever height it is at. */
+    const shelfAt = shelfBuilt(c, iw, id, H), d = shelfAt.depth;
     if (d) {
       /* With removable plates across the page prints, in pieces between notches at their
          slots, so the plates pass the shelf on their way down (see plateLayout). Each
@@ -2293,10 +2408,14 @@ function buildBin(G, cfg) {
       cuts.push(iw + BLOAT);
       for (let k = 0; k < cuts.length; k += 2) {
         const whole = cuts.length === 2, x0 = cuts[k], x1 = cuts[k + 1];
-        if (poke) polys.push(...labelRounded(G, iw, id, c.wall, H, d, c.labelT, n,
+        if (poke) polys.push(...labelRounded(G, iw, id, c.wall, shelfAt.top, d, c.labelT, n,
                                              whole ? null : [k ? x0 : null, k + 2 < cuts.length ? x1 : null]));
-        else polys.push(...labelPrism(G, iw, id, H, d, c.labelT, x0, x1));
+        else polys.push(...labelPrism(G, iw, id, shelfAt.top, d, c.labelT, x0, x1));
       }
+      /* The letters, in the widest space the dividers leave across the shelf, clear of
+         every notch, rail and slot (noteOnShelf). */
+      if (shelfAt.note && shelfAt.note.fit)
+        polys.push(...NOTE_TEXT.noteShells(G, shelfAt.note.fit.segs, shelfAt.note.top - BLOAT, H - NOTE_CLEAR));
     }
 
     /* Dividers — separate overlapping shells, never unioned.
@@ -2407,7 +2526,10 @@ function buildBin(G, cfg) {
         ? G.extrudePoly(cut, floorZ - BLOAT, H) : [];
     };
     /* Where the label shelf's front stands, for a fixed divider to meet it: the depth the
-       shelf above was built to. Nothing, when there is no shelf. */
+       shelf above was built to (shelfBuilt), the depth noteOnShelf gave it when a note is
+       raised on it. That shelf is a millimetre lower, and on a short bin up to a
+       millimetre shallower too, so a divider that came to the plain shelf's front would
+       stop short of it, or flush with it. Nothing, when there is no shelf. */
     const shelf = !c.divRemovable && d ? id - d : NaN;
     // removable ones no more than fit, however many are asked for: built, at the top
     const xs = spans(built.divX, iw), ys = spans(built.divY, id, shelf);
@@ -2420,8 +2542,11 @@ function buildBin(G, cfg) {
        rail's face, and the two touched face to face. So a rail whose tip comes within
        ten times WELD of the face of a rail the other way, where the two meet, runs a
        BLOAT on into that rail, as a divider does into the label shelf. That is the face
-       towards the wall the tip comes from, and the rail is a rail thick, so the tip stays
-       in it, stands in no slot, and holds its plate no less. */
+       towards the wall the tip comes from, and the rail is a rail thick, so the tip ends
+       in it, stands in no slot, and holds its plate no less. Where the two only meet
+       corner to corner, or overlap in part, the tip's run-on also adds up to 0.66 mm²
+       of footprint in the open cavity beside the other rail, about 0.01 g, outside every
+       slot. */
     const runOn = ([a, b], [lo, hi], others, otherReach) => {
       if (c.divRemovable && otherReach.some(([p, q]) => a < q + 10 * WELD && b > p - 10 * WELD))
         for (const [oa, ob] of others) {
@@ -2471,6 +2596,29 @@ function buildBin(G, cfg) {
   return { polys: G.clampZ(polys, 0), meta };
 }
 
+/* What buildBin puts on a bin's label shelf, worked out without building it, for the page
+   to say: noteOnShelf's answer, settled the way buildBin settles a bin. When there is no
+   shelf for letters to stand on, why says which of the reasons buildBin has for building
+   none: 'carved' (a carved shape gets no shelf), 'solid', 'back' (the back wall is
+   lowered) or 'noshelf' (none was asked for). `dropped` is every character of the note
+   that cannot print, whatever the shelf. */
+function shelfNote(cfg) {
+  const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg || {})));
+  c.floorT = builtFloorT(c);
+  if (isHalfSize(c)) c.cells = null;
+  const dropped = NOTE_TEXT.notePrintable(c.note).dropped;
+  const say = (o) => Object.assign(o, { dropped });
+  if (+c.labelMode !== 1) return say({ why: 'off' });
+  if (!isFullRect(c)) return say({ why: 'carved' });
+  if (builtSolid(c)) return say({ why: 'solid' });
+  if (c.edges && c.edges.b !== undefined && !(c.edges.b > 0.99)) return say({ why: 'back' });
+  if (!(c.label > 0.05)) return say({ why: 'noshelf' });
+  const H = c.hUnits * SPEC.unitH;
+  const iw = (c.u - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
+  const id = (c.v - 1) * SPEC.pitch / 2 + SPEC.half - c.shrink - c.wall;
+  return say(noteOnShelf(c, iw, id, H, shelfFootAt(c)));
+}
+
 /* ---------- layout packing -------------------------------------------------
  * Bins travel in the URL hash, so the encoding has to be compact. It also has to
  * survive the values it carries: the original separator was '.', and wall
@@ -2478,8 +2626,8 @@ function buildBin(G, cfg) {
  * back with dividers it never had. Separators are now characters that cannot
  * occur in a plain non-negative decimal, and packBin writes every number as one.
  *
- * Field positions are the format. A bin is 21 fields, 22 when its feet have holes,
- * and everything after a change
+ * Field positions are the format. A bin is 21 fields, 22 when its feet have holes, 23
+ * when its label shelf carries its note, and everything after a change
  * shifts, so adding or removing one invalidates every link already in circulation.
  * Growing it is safe only at the end: a link from before reads the fields it lacks as
  * absent, and each field's absent value has to mean what such a link always meant.
@@ -2545,7 +2693,13 @@ function packBin(b) {
        and the README link the first time it was opened, and the page then said the
        link had replaced the layout. A bin without holes is 21 fields, exactly as it
        was; unpackBin reads the absent 22nd as none. */
-    .concat(feetBits(b) ? [feetBits(b)] : []);
+    .concat(feetBits(b) || b.labelMode ? [feetBits(b)] : [])
+    /* What the label shelf carries, the 23rd field, and for the same reason only on a bin
+       that has it set: one without it is the 21 or 22 fields it always was. It needs the
+       22nd in place to stand 23rd, so a bin with a note raised and no holes writes its
+       feet as 0. 0 is nothing, 1 the note raised on the shelf; 2 is kept for a label
+       slot, which unpackBin reads as 1 until there is one. */
+    .concat(b.labelMode ? [b.labelMode] : []);
   /* Still checked, but answered with a 0 rather than a throw: a bad field then costs
      that one field, where a separator inside it would shift every field after it. */
   const seps = Object.values(SEP);
@@ -2636,7 +2790,8 @@ function unpackBin(t) {
            edges, scoop: numAt(p, 14, 0, H), label: numAt(p, 15, 0, v * SPEC.pitch),
            cells: half ? null : bitsToCells(mask, u, v),
            done: !!p[17], divRemovable: !!p[18],
-           lid: !!p[19], lidSides: lidSidesFrom(p[20]), ...feetFrom(p[21]) };
+           lid: !!p[19], lidSides: lidSidesFrom(p[20]), ...feetFrom(p[21]),
+           labelMode: countAt(p, 22, 0, 0, 1) };
 }
 const packLayers = (layers) =>
   layers.map((L) => L.bins.map(packBin).join(SEP.bin)).join(SEP.layer);
@@ -2649,5 +2804,5 @@ if (typeof module !== 'undefined') {
     FOOT_HOLES, SCREW_FLOOR, holeSites, holePlan, builtFloorT, feetBits, feetFrom,
     isHalfSize, binFeet, feetHolesOff,
     maskOf, maskCheck, isFullRect, cellKey, maskBits, bitsToCells,
-    packBin, unpackBin, packLayers, unpackLayers, LINK_MAX };
+    packBin, unpackBin, packLayers, unpackLayers, LINK_MAX, shelfNote, shelfBuilt, NOTE_CLEAR };
 }

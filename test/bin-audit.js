@@ -8,7 +8,9 @@ const path = require('path');
 const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
-        unpackBin, binFeet, dividersBuilt, plateLayout } = require('../src/bins/bin.js');
+        unpackBin, binFeet, dividersBuilt, plateLayout, shelfNote, shelfBuilt, NOTE_CLEAR } = require('../src/bins/bin.js');
+const NOTE_TEXT = require('../src/bins/text.js');
+const HERSHEY = require('../src/bins/font.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
 // the browser hand-assembles its own G; make sure core still exports everything
@@ -150,6 +152,13 @@ function holeFaults(r, cfg) {
 const outDir = process.argv[2] || path.join(__dirname, '..', 'out');
 fs.mkdirSync(outDir, { recursive: true });
 
+/* Every character the font draws, written down here rather than read from it: the 94
+   printable ASCII characters after the space, and the six past ASCII. In four notes of
+   25, one line each on a 4x1x3. */
+const ALL_GLYPHS = Array.from({ length: 94 }, (_, i) => String.fromCharCode(33 + i))
+  .concat(['µ', 'Ω', '°', '±', '×', 'Ø']);
+const NOTE_GLYPHS = [0, 1, 2, 3].map((k) => ALL_GLYPHS.slice(25 * k, 25 * k + 25).join(''));
+
 const CASES = [
   { name: '1x1x3', u: 1, v: 1, hUnits: 3 },
   { name: '1x1x6', u: 1, v: 1, hUnits: 6 },
@@ -241,6 +250,78 @@ const CASES = [
   { name: '1.5x1x3-scoop-label', u: 1.5, v: 1, hUnits: 3, scoop: 8, label: 10 },
   { name: '1.5x1x3-openfront', u: 1.5, v: 1, hUnits: 3, edges: { f: 0 } },
   { name: '3.5x2.5x5-everything', u: 3.5, v: 2.5, hUnits: 5, divX: 2, divY: 1, scoop: 6, label: 10 },
+  /* A bin's note raised on its label shelf: the shelf a millimetre lower and the letters
+     standing on it, every stroke a pile of convex shells (text.js). On one line and on
+     two, cut short, at both ends of the wall's range, on a half-size bin and over holes
+     in the feet, and every glyph the font has in the four after those. `fit` is what the
+     section on raised notes further down expects of each; it probes them all. */
+  { name: '1x1x3-note', u: 1, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '2x1x2-note', u: 2, v: 1, hUnits: 2, label: 12, labelMode: 1, note: 'Drill bits 1-6 mm',
+    fit: { lines: 1, cut: false } },
+  { name: '4x1x3-note', u: 4, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Assorted M3 M4 nuts, washers',
+    fit: { lines: 1, cut: false } },
+  { name: '1x1x3-note-2lines', u: 1, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Resistors 10k to 100k',
+    fit: { lines: 2, cut: false } },
+  { name: '1x1x3-note-cut', u: 1, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Assorted M3 M4 nuts, washers',
+    fit: { cut: true } },
+  { name: '1x1x3-note-wall0.4', u: 1, v: 1, hUnits: 3, wall: 0.4, label: 12, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '1x1x3-note-wall3', u: 1, v: 1, hUnits: 3, wall: 3, label: 12, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  /* A wall under about 1.15 mm builds the shelf over the cavity's rounded outline, a
+     millimetre lower with letters on it as at any other wall. Across the thin range, with
+     a note cut short so its letters run the band from end to end, and on a half cell. */
+  { name: '1x1x3-note-wall0.8', u: 1, v: 1, hUnits: 3, wall: 0.8, label: 12, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '1x1x3-note-wall1', u: 1, v: 1, hUnits: 3, wall: 1, label: 12, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '1x1x3-note-wall0.4-cut', u: 1, v: 1, hUnits: 3, wall: 0.4, label: 12, labelMode: 1,
+    note: 'Assorted M3 M4 nuts, washers', fit: { cut: true } },
+  { name: '0.5x1x3-note-wall0.4', u: 0.5, v: 1, hUnits: 3, wall: 0.4, label: 12, labelMode: 1, note: 'M2',
+    fit: { lines: 1, cut: false } },
+  { name: '0.5x1x3-note', u: 0.5, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'M2',
+    fit: { lines: 1, cut: false } },
+  /* Dividers stand from the floor to H, through the shelf and anything on it, so the
+     letters go in the widest space between them and keep 0.4 mm off each: a fixed one is
+     a wall thick, a removable one the rails either side of the slot its plate slides
+     down. Ones across the other way that cross the shelf split it front from back, and
+     the letters take the deeper part. The section on raised notes holds every corner of
+     every letter 0.4 clear of each divider's footprint, worked out from the bin's own
+     numbers; a bin whose dividers leave no room for any of it is with the bins that
+     print nothing. */
+  { name: '1x1x3-note-div1', u: 1, v: 1, hUnits: 3, label: 12, divX: 1, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 2, cut: false } },
+  { name: '3x1x3-note-div2', u: 3, v: 1, hUnits: 3, label: 12, divX: 2, labelMode: 1,
+    note: 'Assorted M3 M4 nuts', fit: { lines: 2, cut: false } },
+  { name: '1x1x3-note-wall0.4-div1', u: 1, v: 1, hUnits: 3, wall: 0.4, label: 12, divX: 1, labelMode: 1,
+    note: 'M3 screws', fit: { lines: 2, cut: false } },
+  { name: '2x1x3-note-rails1', u: 2, v: 1, hUnits: 3, label: 12, divX: 1, divRemovable: true,
+    labelMode: 1, note: 'M3 screws', fit: { lines: 1, cut: false } },
+  { name: '1x1x3-note-rails2', u: 1, v: 1, hUnits: 3, label: 12, divX: 2, divRemovable: true,
+    labelMode: 1, note: 'M2 nuts', fit: { lines: 2, cut: true } },
+  { name: '1x1x3-note-divY3', u: 1, v: 1, hUnits: 3, label: 12, divY: 3, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '2x2x4-note-div-both', u: 2, v: 2, hUnits: 4, label: 16, divX: 1, divY: 5, labelMode: 1,
+    note: 'Fuses 5A, 10A', fit: { lines: 1, cut: false } },
+  { name: '2x2x4-note-rails-both', u: 2, v: 2, hUnits: 4, label: 16, divX: 1, divY: 5, divRemovable: true,
+    labelMode: 1, note: 'Fuses 5A, 10A', fit: { lines: 1, cut: false } },
+  /* A removable divider asked for where none fits (a half cell with 5 mm walls and a 5 mm
+     plate) is not built, so the note has the shelf to itself: it was fitted between
+     dividers that are not there, and refused as if they were. */
+  { name: '0.5x1x4-note-rails-none', u: 0.5, v: 1, hUnits: 4, wall: 5, label: 12, divX: 1, divRemovable: true,
+    divT: 5, divClr: 1, labelMode: 1, note: 'M3 screws', fit: { lines: 2, cut: true } },
+  /* Removable plates along stay in front of the label shelf (railedLimit): asked for 3
+     on a 1 x 0.5 and 6 on a 1 x 1, these are built with one, and the note prints behind
+     it, where the ones asked for would have cut the shelf too short for it. */
+  { name: '1x0.5x6-note-rails-along', u: 1, v: 0.5, hUnits: 6, label: 12, divY: 3, divRemovable: true,
+    labelMode: 1, note: 'M3 screws', fit: { lines: 1, cut: false } },
+  { name: '1x1x6-note-rails-along6', u: 1, v: 1, hUnits: 6, label: 12, divY: 6, divRemovable: true,
+    labelMode: 1, note: 'M3 screws', fit: { lines: 1, cut: false } },
+  { name: '2x1x3-note-mag-scr', u: 2, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Fuses 5A, 10A',
+    magnets: true, screws: true, fit: { lines: 1, cut: false } },
+  ...NOTE_GLYPHS.map((note, i) => ({ name: `4x1x3-glyphs-${i + 1}`, u: 4, v: 1, hUnits: 3, label: 12,
+                                      labelMode: 1, note, fit: { lines: 1, cut: false } })),
 ];
 
 /* Every carved footprint builds one outer fillet per reflex corner, and every one of
@@ -1172,6 +1253,72 @@ const weldBad = (polys, step) => {
     : 'welded at 5 and 10 µm, all clean'));
   if (!some.length || fails.length) bad++;
 }
+/* With a note raised on it the shelf stands a millimetre lower, and on a short bin it is
+   shallower too: on a 2-unit bin it is 7 mm deep where a plain one is 8. So a fixed
+   divider whose back comes to the raised shelf's front has to run on into that front,
+   not the plain one's. Missing it leaves no shared edge, as the shelf's top is a
+   millimetre under the divider's, so neither checkManifold nor a weld finds it: the
+   divider stands flush against the shelf's front, or a slit of up to 10 x WELD short of
+   it (a 1x1x2 with a 3.375 mm wall, a 10 mm shelf and 3 along stood flush; with a 3.36
+   mm wall and a 7.5 mm shelf, 15 µm short). So the divider's back is measured where it
+   is built, at the rim, against the front of the shelf shelfNote says the note is on,
+   every 5 µm of wall on 2- and 3-unit bins, wherever the note still prints with the
+   dividers in. Each one from flush to 20 µm short must reach a BLOAT into the shelf. The count of those flush and short is printed and must
+   not be zero. */
+{
+  const WELD = 0.002, BLOAT = 0.05;
+  const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
+  // the furthest back the bin reaches at its rim this near the shelf's front: the divider
+  const builtBack = (cfg, from, front) => {
+    const H = cfg.hUnits * SPEC.unitH;
+    let back = -Infinity;
+    for (const t of G.polysToTriangles(buildBin(G, cfg).polys))
+      for (const [, y, z] of t)
+        if (Math.abs(z - H) < 1e-6 && y >= from - 1e-6 && y <= front + 2 * BLOAT) back = Math.max(back, y);
+    return back;
+  };
+  const rows = [
+    ['1x1x2, wall 3.375, 10 mm shelf, 3 along', { u: 1, v: 1, hUnits: 2, wall: 3.375, label: 10, labelMode: 1, note: 'M3', divY: 3 }],
+    ['1x1x2, wall 3.36, 7.5 mm shelf, 3 along', { u: 1, v: 1, hUnits: 2, wall: 3.36, label: 7.5, labelMode: 1, note: 'M3', divY: 3 }],
+  ].map(([name, cfg]) => [name, cfg, null]);
+  for (const v of [0.5, 1, 1.5, 2])
+    for (const hUnits of [2, 3])
+      for (const label of [7.5, 10, 15])
+        for (let w = 80; w <= 1000; w++) {
+          const wall = w / 200, inner = (v - 1) * SPEC.pitch / 2 + 20.75 - wall;
+          const cfg = { u: 1, v, hUnits, wall, label, labelMode: 1, note: 'M3' };
+          const note = shelfNote(cfg);
+          if (!note.fit) continue;
+          const front = inner - note.depth;
+          for (let n = 1; n <= most(2 * inner, wall); n++) {
+            if (2 * inner / (n + 1) - wall < 0.5) break;
+            for (let k = 1; k <= n; k++) {
+              const back = -inner + 2 * inner * k / (n + 1) + wall / 2;
+              // only where the note still prints with them, on a shelf as deep
+              const withDivs = Object.assign({}, cfg, { divY: n }), raised = shelfNote(withDivs);
+              if (back >= front - 10 * WELD && back <= front + 1e-6 && raised.fit &&
+                  Math.abs(raised.depth - note.depth) < 1e-9)
+                rows.push([`${v} deep x${hUnits}, wall ${wall}, ${label} mm shelf, ${n} along`, withDivs, back]);
+            }
+          }
+        }
+  let flush = 0;
+  const fails = [], some = rows.filter((r, i) => !r[2] || i % 3 === 0);
+  for (const [name, cfg, at] of some) {
+    const raised = shelfNote(cfg), inner = (cfg.v - 1) * SPEC.pitch / 2 + 20.75 - cfg.wall;
+    const front = inner - raised.depth, from = at === null ? front - 10 * WELD : at;
+    if (!raised.fit) { fails.push(`${name}: its note is not raised`); continue; }
+    if (Math.abs(from - front) < 1e-6) flush++;
+    const back = builtBack(cfg, from, front);
+    if (!(back >= front + BLOAT - 1e-6))
+      fails.push(`${name}: back ${back === -Infinity ? 'not found' : `${((back - front) * 1000).toFixed(1)} µm from`} the shelf's front`);
+  }
+  console.log(`  ${`${flush} flush, ${some.length - flush} short of a raised one`.padEnd(34)} ` +
+    (some.length < 3 || !flush ? 'NONE FOUND to build' : fails.length
+      ? `FAILED ${fails.length} of ${some.length}, among them ${fails.slice(0, 3).join('; ')}`
+      : `${some.length} builds, each run into the shelf`));
+  if (some.length < 3 || !flush || fails.length) bad++;
+}
 
 console.log('\nremovable dividers both ways, at every count up to the most that fit');
 /* Removable both ways, the end rails of the two directions end beside each other, each a
@@ -1245,6 +1392,21 @@ console.log('\nremovable dividers both ways, at every count up to the most that 
     : welds.length ? `FAILED ${welds.length} welded, among them ${welds.slice(0, 3).join('; ')}`
     : 'welded at 5 and 10 µm, all clean'));
   if (!found || fails.length || !near.length || welds.length) bad++;
+}
+
+/* The lone divider keeps ten times WELD over the room it needs for the rails the other
+   way, as well as room for them. Without the margin a half-cell square with a 4.65 mm
+   wall, one each way at a 5 mm plate and 0.95 clearance, was built 1 + 1 with the tips of
+   each one's rails flush on the other's slot face: a rail each way on one corner edge,
+   used four times. With it, neither is built. A wall of 4.65 can be typed, or come in a
+   link; on the field's 0.1 steps the margin never decides it, so nothing above builds it. */
+{
+  const cfg = { u: 0.5, v: 0.5, hUnits: 3, wall: 4.65, divX: 1, divY: 1, divRemovable: true, divT: 5, divClr: 0.95 };
+  const built = dividersBuilt(cfg), b = G.checkManifold(buildBin(G, cfg).polys).bad;
+  const ok = built.divX === 0 && built.divY === 0 && b === 0;
+  console.log(`  ${'one each way at the margin'.padEnd(34)} ` + (ok ? 'none built, no bad edges'
+    : `FAILED: built ${built.divX} + ${built.divY}, ${b} bad edges`));
+  if (!ok) bad++;
 }
 
 console.log('\ndivider boxes cut to the cavity\'s rounded corner');
@@ -1958,6 +2120,229 @@ console.log('\nlinks from before half sizes build the same bytes');
   console.log('  ' + (moved.length ? 'CHANGED: ' + moved.join('; ')
     : `${OLD.length} links, each the same STL to the byte`));
   if (moved.length) bad++;
+}
+
+/* A note raised on the label shelf (labelMode 1, text.js).
+ *
+ * Built, not merely closed: a bin with no letters on it is just as watertight. So every
+ * case above with a note is probed. Straight down through a point of a stroke, the first
+ * thing met is the top of the letters, at H - 0.4; through the strip the letters keep
+ * clear at the shelf's front, it is the shelf, at H - 1.0, a millimetre lower than a
+ * shelf with nothing on it. shelfNote is what the page says about the letters, so it
+ * has to agree with what was built: how many lines, and whether it was cut short.
+ *
+ * And every letter stands on the shelf, all of it: under each corner of every stroke's
+ * outline is the shelf's top. On a thin wall the shelf is the cavity's rounded outline
+ * rather than a prism square to the side walls, and a letter out past it would stand on
+ * nothing in the corner; the outline check above sees only the outside. */
+console.log('\nnotes raised on the label shelf');
+{
+  for (const cs of CASES.filter((c) => c.labelMode === 1)) {
+    const r = buildBin(G, cs), at = prober(r.polys), s = shelfNote(cs), faults = [];
+    let divClear = Infinity;
+    const H = cs.hUnits * SPEC.unitH;
+    const id = (cs.v - 1) * SPEC.pitch / 2 + SPEC.half - (cs.wall || BIN_DEFAULTS.wall);
+    if (!s.fit) faults.push(`NO LETTERS (${s.why})`);
+    else {
+      // the shelf through the strip in front of the letters, beside one: clear of dividers
+      const [x, y] = s.fit.segs[0][0];
+      const top = at(x, y).pop(), shelf = at(x, id - s.depth + 0.3).pop();
+      if (Math.abs(top - (H - NOTE_CLEAR)) > 1e-6)
+        faults.push(`a letter's top at ${top.toFixed(3)}, not H - 0.4 = ${(H - 0.4).toFixed(2)}`);
+      if (Math.abs(shelf - (H - 1.0)) > 1e-6)
+        faults.push(`the shelf's top at ${shelf.toFixed(3)}, not H - 1.0 = ${(H - 1).toFixed(2)}`);
+      // the letters as buildBin makes them, but for how high: only where they stand counts
+      const corners = NOTE_TEXT.noteShells(G, s.fit.segs, s.top, H - NOTE_CLEAR)
+        .flatMap((p) => p.verts);
+      const off = corners.filter(([x, y]) => !at(x, y).some((z) => Math.abs(z - s.top) < 1e-6));
+      if (off.length)
+        faults.push(`${off.length} of ${corners.length} letter corners not over the shelf, ` +
+                    `as at ${off[0][0].toFixed(2)}, ${off[0][1].toFixed(2)}`);
+      /* ...and 0.4 clear of every divider: a fixed one a wall thick, a removable one 1.2
+         mm of rail each side of a slot as wide as the plate and its clearance, which is
+         where the plate goes down too. Measured from the bin's numbers, centre lines
+         evenly across the cavity, not from what built it. */
+      const wall = cs.wall !== undefined ? cs.wall : BIN_DEFAULTS.wall;
+      const iw = (cs.u - 1) * SPEC.pitch / 2 + SPEC.half - wall;
+      const dT = cs.divT !== undefined ? cs.divT : BIN_DEFAULTS.divT;
+      const dC = cs.divClr !== undefined ? cs.divClr : BIN_DEFAULTS.divClr;
+      const half = cs.divRemovable ? dT / 2 + dC + 1.2 : wall / 2;
+      // the dividers as built: removable ones no more than fit
+      const built = dividersBuilt(cs);
+      const offDiv = (n, inner, v) => {
+        let d = Infinity;
+        for (let k = 1; k <= n; k++) d = Math.min(d, Math.abs(v - (-inner + 2 * inner * k / (n + 1))) - half);
+        return d;
+      };
+      divClear = Infinity;
+      for (const [cx, cy] of corners)
+        divClear = Math.min(divClear, offDiv(built.divX, iw, cx), offDiv(built.divY, id, cy));
+      if (divClear < 0.4 - 1e-6)
+        faults.push(divClear < 0 ? `a letter ${(-divClear).toFixed(2)} mm into a divider's footprint`
+          : `a letter only ${divClear.toFixed(2)} mm off a divider`);
+      if (cs.fit.lines && s.fit.lines.length !== cs.fit.lines)
+        faults.push(`${s.fit.lines.length} lines, not ${cs.fit.lines}`);
+      if (s.fit.cut !== cs.fit.cut) faults.push(cs.fit.cut ? 'NOT CUT short' : 'CUT short');
+      // uncut, every character of the note is on the shelf
+      if (!s.fit.cut && s.fit.lines.join(' ') !== cs.note) faults.push(`printed "${s.fit.lines.join(' / ')}"`);
+      if (!s.fit.cut && s.fit.cap < NOTE_TEXT.NOTE_SPEC.capMin) faults.push(`only ${s.fit.cap.toFixed(2)} mm tall`);
+    }
+    console.log(`  ${cs.name.padEnd(22)} ${s.fit ? (s.fit.cap.toFixed(2) + ' mm, ' + s.fit.lines.length +
+      (s.fit.lines.length > 1 ? ' lines' : ' line') + (s.fit.cut ? ', cut' : '')).padEnd(20) : ''.padEnd(20)} ` +
+      (faults.length ? faults.join('; ') : 'letters at H - 0.4 on a shelf at H - 1.0' +
+        (isFinite(divClear) ? `, ${divClear.toFixed(2)} off the nearest divider` : '')));
+    if (faults.length) bad++;
+  }
+
+  /* Each glyph alone, so a fault is pinned to the character that has it: watertight,
+     oriented, and every shell whole. A shell is one extrudePoly of a convex outline,
+     and earTriangulate gives up on a polygon silently, so each of its two caps has to be
+     the n - 2 triangles a convex n-gon is: one short is a hole a closed check may not see
+     if a neighbouring shell happens to cover it. */
+  const band = { x0: -18, x1: 18, y0: 8, y1: 18 };
+  const fails = [];
+  let shells = 0;
+  for (const ch of ALL_GLYPHS) {
+    const calls = [];
+    const rec = Object.assign({}, G, { extrudePoly: (pts, z0, z1) => {
+      const p = G.extrudePoly(pts, z0, z1);
+      calls.push({ n: pts.length, z1, polys: p });
+      return p;
+    } });
+    const polys = NOTE_TEXT.noteShells(rec, NOTE_TEXT.noteFit(ch, band).segs, 10, 10.6);
+    const m = G.checkManifold(polys), o = checkOrientation(polys);
+    const torn = calls.filter((c) => {
+      const caps = c.polys.filter((p) => p.verts.length === 3);
+      const up = caps.filter((p) => p.verts.every((w) => w[2] === c.z1)).length;
+      return up !== c.n - 2 || caps.length - up !== c.n - 2 || c.polys.length - caps.length !== c.n;
+    });
+    shells += calls.length;
+    if (!calls.length || m.bad || !o.ok || torn.length)
+      fails.push(`${JSON.stringify(ch)}: ${calls.length} shells, ${m.bad} bad edges, ${orientationNote(o)}` +
+                 (torn.length ? `, ${torn.length} with a cap short` : ''));
+  }
+  console.log(`  every glyph alone      ` + (fails.length ? 'FAILED: ' + fails.join('; ')
+    : `${ALL_GLYPHS.length} glyphs, ${shells} shells, each watertight, oriented, every cap n - 2 triangles`));
+  if (fails.length) bad++;
+
+  /* The font's data goes into the page inside a script tag, where a less-than sign and a
+     slash together could end the script. None of it may hold one, and the file may not
+     either. And the four notes above have to be every glyph the font draws, or "every
+     glyph" is not. */
+  const strings = HERSHEY.ascii.concat(Object.values(HERSHEY.more));
+  const fontFile = fs.readFileSync(path.join(__dirname, '..', 'src', 'bins', 'font.js'), 'utf8');
+  const dataOk = strings.every((t) => /^[ B-b]+$/.test(t)) && !fontFile.includes('</') &&
+    HERSHEY.ascii.length === 95 && Object.keys(HERSHEY.more).length === 6;
+  const drawn = ALL_GLYPHS.filter((ch) => NOTE_TEXT.noteGlyph(ch));
+  const covered = drawn.length === ALL_GLYPHS.length &&
+    Object.keys(HERSHEY.more).every((ch) => ALL_GLYPHS.includes(ch));
+  console.log(`  the font's data        ${dataOk ? 'spaces and B to b only, no </ anywhere in font.js' : 'UNSAFE IN A SCRIPT TAG, or not 95 + 6 glyphs'}` +
+              `${covered ? '' : '; NOT EVERY GLYPH IS IN THE NOTES ABOVE'}`);
+  if (!dataOk || !covered) bad++;
+
+  /* Opt-in, and only when there are letters to print: every other bin is built to the
+     byte as it was, whatever its note says. Each row is a bin that has to come out the
+     same as the bin beside it without labelMode or note, and the reason shelfNote gives
+     the page for printing nothing. */
+  const crypto = require('crypto');
+  const digest = (cfg) => crypto.createHash('sha256')
+    .update(Buffer.from(G.stlBinary(buildBin(G, cfg).polys, 'b'))).digest('hex');
+  const one = { u: 1, v: 1, hUnits: 3, label: 12 };
+  const SAME = [
+    ['not asked for', one, { labelMode: 0, note: 'M3 screws' }, 'off'],
+    ['an empty note', one, { labelMode: 1, note: '' }, 'empty'],
+    ['spaces only', one, { labelMode: 1, note: '   ' }, 'empty'],
+    ['nothing in it prints', one, { labelMode: 1, note: '\u{1F642}é' }, 'empty'],
+    ['a 1-unit bin, too shallow', Object.assign({}, one, { hUnits: 1 }), { labelMode: 1, note: 'M3' }, 'shallow'],
+    ['no shelf asked for', Object.assign({}, one, { label: 0 }), { labelMode: 1, note: 'M3' }, 'noshelf'],
+    ['back wall lowered', Object.assign({}, one, { edges: { b: 0.5 } }), { labelMode: 1, note: 'M3' }, 'back'],
+    ['solid', Object.assign({}, one, { solid: true }), { labelMode: 1, note: 'M3' }, 'solid'],
+    ['carved', { u: 3, v: 3, hUnits: 3, label: 12, cells: cellsExcept(3, 3, [[2, 2]]) },
+     { labelMode: 1, note: 'M3' }, 'carved'],
+    // 4.9 mm between centre lines: no space between them takes even "..." at 3 mm
+    ['dividers too close for any of it', Object.assign({}, one, { divX: 7 }),
+     { labelMode: 1, note: 'M3 screws' }, 'dividers'],
+    ['removable ones too close', Object.assign({}, one, { divX: 4, divRemovable: true }),
+     { labelMode: 1, note: 'M3 screws' }, 'dividers'],
+    // a half cell with 8 mm walls is 4 mm across inside: its letters were 0.5 mm tall
+    ['walls too thick for any of it', Object.assign({}, one, { u: 0.5, wall: 8 }),
+     { labelMode: 1, note: 'M3 screws' }, 'narrow'],
+    // ...and with 7 mm walls only "M / ..." went in, which is not a note
+    ['walls leaving room for one letter', Object.assign({}, one, { u: 0.5, wall: 7 }),
+     { labelMode: 1, note: 'M3 screws' }, 'narrow'],
+    ['dividers leaving room for one letter', Object.assign({}, one, { divX: 4 }),
+     { labelMode: 1, note: 'M3 screws' }, 'dividers'],
+    /* Dividers along the bin cross the shelf and cut its depth short. Letters sized to
+       what was left came out 1.05 mm tall here, -0.25 mm (mirrored, outside the lip's
+       opening) with removable ones, and 0.46 mm on the 1x1. */
+    ['dividers along cutting the shelf short', { u: 1, v: 0.5, hUnits: 6, label: 12, divY: 3 },
+     { labelMode: 1, note: 'M3 screws' }, 'dividers along'],
+    /* Removable plates along stay in front of the shelf, which they could not drop in
+       under (railedLimit), so they cut it short only where the rails of the last one, and
+       the clearance the letters keep off them, reach over a shelf as shallow as letters
+       take. The two that cut it short before, 3 along on a 1 x 0.5 and 6 on a 1 x 1, both
+       six units tall with a 12 mm shelf, are built with one in front of it and print
+       their notes (with the cases above). */
+    ['removable ones along, past nothing', { u: 1, v: 1, hUnits: 3, label: 6, divY: 4, divRemovable: true },
+     { labelMode: 1, note: 'M3 screws' }, 'dividers along'],
+    ['six removable ones along', { u: 1, v: 1, hUnits: 2, label: 6, divY: 6, divRemovable: true },
+     { labelMode: 1, note: 'M3 screws' }, 'dividers along'],
+    /* ...and only those along, where they are what is in the way: here the space between
+       the ones across takes no note at the shelf's whole depth either, and the hint sent
+       people to the ones along. With walls 7 mm thick it is the walls. */
+    ['ones across in the way, ones along as well',
+     { u: 1, v: 0.5, hUnits: 3, label: 8, divX: 1, divY: 1, divRemovable: true },
+     { labelMode: 1, note: 'M3 screws' }, 'dividers'],
+    ['walls in the way, dividers along as well', { u: 0.5, v: 1, hUnits: 3, label: 12, wall: 7, divY: 3 },
+     { labelMode: 1, note: 'M3 screws' }, 'narrow'],
+  ];
+  const moved = SAME.map(([name, cfg, extra, why]) => {
+    const withIt = Object.assign({}, cfg, extra), say = shelfNote(withIt);
+    const got = say.why + (say.along ? ' along' : '');
+    if (digest(cfg) !== digest(withIt)) return `${name}: BUILT DIFFERENTLY`;
+    return got === why ? '' : `${name}: shelfNote says ${got}, not ${why}`;
+  }).filter(Boolean);
+  console.log(`  bins with nothing to print ` + (moved.length ? 'FAILED: ' + moved.join('; ')
+    : `${SAME.length} kinds, each the same STL to the byte, and the page told why`));
+  if (moved.length) bad++;
+
+  /* What the dividers leave has to be a note, over the bins people make most: letters at
+     least 3 mm tall wherever dividers along the bin cut the shelf short (only a shelf
+     shallow by itself prints smaller, and then no smaller than it alone would), and no
+     cut that keeps fewer than three characters or a line of nothing but "...". Squeezed
+     by dividers along, 78 of the first 252 printed under 3 mm and passed as readable, 15
+     at nothing or under it; across, 44 of 448 printed "M / ..." or the like. */
+  const S = NOTE_TEXT.NOTE_SPEC, squeezed = [];
+  let tried = 0, printed = 0;
+  const kept = (lines) => lines.join(' ').replace(/\.\.\.$/, '').replace(/\s/g, '').length;
+  for (const [u, v] of [[1, 1], [2, 1], [1, 2], [2, 2], [3, 1], [1, 0.5], [2, 0.5], [0.5, 1]])
+    for (const label of [8, 12, 15]) for (const divRemovable of [false, true])
+      for (const note of ['M3 screws', 'M2', 'Drill bits 1-6 mm']) {
+        const base = { u, v, hUnits: 6, label, labelMode: 1, note, divRemovable };
+        const alone = shelfNote(base);
+        for (const [k, n] of [['divY', 1], ['divY', 2], ['divY', 3], ['divY', 4], ['divY', 5], ['divY', 6],
+                              ['divX', 1], ['divX', 2], ['divX', 3], ['divX', 4], ['divX', 5], ['divX', 6]]) {
+          const s = shelfNote(Object.assign({}, base, { [k]: n })), at = `${u}x${v} label ${label} ${k} ${n}` +
+            `${divRemovable ? ' removable' : ''} "${note}"`;
+          tried++;
+          // nothing printed: the dividers along are named exactly when the note fits without them
+          if (!s.fit && k === 'divY' && !!s.along !== !!alone.fit)
+            squeezed.push(`${at}: says ${s.why}${s.along ? ' along' : ''}, and without them it ${alone.fit ? 'prints' : 'says ' + alone.why}`);
+          if (!s.fit) continue;
+          printed++;
+          if (!(s.fit.cap > 0)) squeezed.push(`${at}: ${s.fit.cap.toFixed(2)} mm`);
+          else if (s.fit.cap < S.capMin - 1e-9 && !(alone.fit && s.fit.cap >= alone.fit.cap - 1e-9))
+            squeezed.push(`${at}: ${s.fit.cap.toFixed(2)} mm, under what the shelf alone gives`);
+          // nor a word broken over two lines and then cut ("As / s...")
+          const broken = s.fit.lines.length > 1 && !/\s/.test(note.slice(0, s.fit.lines[0].length + 1));
+          if (s.fit.cut && (kept(s.fit.lines) < Math.min(3, note.replace(/\s/g, '').length) ||
+                            s.fit.lines.includes('...') || broken))
+            squeezed.push(`${at}: prints "${s.fit.lines.join(' / ')}"`);
+        }
+      }
+  console.log(`  between dividers         ` + (squeezed.length ? `${squeezed.length} FAILED: ` +
+    squeezed.slice(0, 6).join('; ') : `${printed} of ${tried} everyday bins print their note, each one readable`));
+  if (squeezed.length) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');
