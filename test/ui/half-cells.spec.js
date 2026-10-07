@@ -624,12 +624,6 @@ test('a reason under the map stays on the front marker\'s line, at any window si
   await page.setViewportSize({ width: 1366, height: 768 });
   await openAt(page, hash);
   await select(page, 1);
-  /* Past the save select() set off, 400 ms on, before the drag. Arriving on a link with
-     another layout saved, the page shows the 43 px "set aside" line above the map until
-     a save finds the design changed; landing in the drag, after its first step, that
-     save took the line away and the map moved up under the pointer, and the bin came
-     out 1.5 x 1 now and then. */
-  await page.waitForTimeout(500);
   const g = await gripPoint(page, 'rb');
   const to = await slotHere(page, 8, 9);
   await page.mouse.move(g.x, g.y);
