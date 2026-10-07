@@ -5174,6 +5174,12 @@ const DRAWERS = (function () {
        link, untouched since it arrived. */
     const stamp = (h, link) => ({ drawerforge: { tool: o.tool, fp: fingerprint(h), id: attached || '',
                                                  link: !!link, ours, theirs } });
+    // marks the address the page is at, if it is `h`, as this tab's own, leaving it as it is
+    function markHere(h) {
+      if ((location.hash || '').replace(/^#/, '') !== h) return;
+      try { history.replaceState(stamp(h), ''); }
+      catch (err) { /* refused on file://: a reload goes by the tab's record instead */ }
+    }
     // the marks for a note: this tool's `mine`, and the other's as this page has it
     const marksFor = (mine) => ({ [o.tool]: mine, [otherTool]: theirs });
     /* Whether the drawer has saved this tool's half since the page's copy `h`, which was
@@ -5403,10 +5409,7 @@ const DRAWERS = (function () {
       savedInto(d.id);
       /* The address was marked as no drawer's when it was written. It is this one's now,
          so a reload comes back to it. A save still waiting marks its own address. */
-      if ((location.hash || '').replace(/^#/, '') === h) {
-        try { history.replaceState(stamp(h), ''); }
-        catch (err) { /* refused on file://: a reload goes by the tab's record instead */ }
-      }
+      markHere(h);
       el.input.value = '';
       render();
       say(`Saved as “${name}”. From now on it keeps itself up to date as you work, here and on ${other}.`);
@@ -5683,6 +5686,15 @@ const DRAWERS = (function () {
               d.marks[o.tool] = fp;
               if (saveAll(s)) ours = fp;
               savedInto(d.id);
+              /* And the address it arrived at is marked as this tab's own now, as that first
+                 save would mark it: a reload before the save is this tab's page come back,
+                 not someone's link. A reload takes the address as it stands when it starts,
+                 and the save can still land before the page goes. The drawer then had the
+                 mark of the address the save writes, the reload had the one the page arrived
+                 at, and with no mark of its own the page came back unsaved; marked, it
+                 reopens onto the drawer as that save left it. Not while it holds a link's
+                 settings, which a save marks as the link's (see ownMark). */
+              if (!(Array.isArray(next.link) && next.link.length)) markHere(arrivedWith);
             }
           }
         }

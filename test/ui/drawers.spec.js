@@ -107,6 +107,107 @@ test('a reload straight after the hand-over is still the drawer that was handed 
     expect(errors).toEqual([]);
   });
 
+/* Reloads the next page to load at `path` in this tab as soon as it has arrived, before
+   its first save, 400 ms on, can run. With `save`, that save runs first, as a reload that
+   started just before it finds it: into the drawer, with the address left as it was. For
+   page.addInitScript, with the page told which by reloadOnArrival. */
+function onArrival() {
+  let race = null;
+  try { race = JSON.parse(sessionStorage.getItem('race')); } catch (err) { race = null; }
+  if (!Array.isArray(race) || race[0] !== location.pathname) return;
+  sessionStorage.removeItem('race');
+  addEventListener('DOMContentLoaded', () => {
+    const at = location.href;
+    if (race[1]) {
+      const write = history.replaceState;
+      history.replaceState = () => {};     // the reload has the address already
+      try { saveNow(); } finally { history.replaceState = write; }
+    }
+    sessionStorage.setItem('raced', JSON.stringify([at, location.href]));
+    location.reload();
+  });
+}
+async function reloadOnArrival(page, path, save, go) {
+  await page.evaluate((r) => sessionStorage.setItem('race', JSON.stringify(r)), [path, save]);
+  await page.click(go);
+  let raced = null;
+  await expect.poll(async () => (raced = await page.evaluate(() =>
+    JSON.parse(sessionStorage.getItem('raced'))).catch(() => null)), { timeout: 20000 }).not.toBeNull();
+  expect(raced[1], 'the address is still the one the page arrived at').toBe(raced[0]);
+  // the page can reload again, onto the drawer, before it settles
+  await expect.poll(() => page.textContent('#drawerName').catch(() => ''),
+    { message: 'still the drawer', timeout: 20000 }).toBe('Kitchen');
+  if (path === '/') await platesReady(page); else await binsReady(page);
+}
+
+/* A reload takes the address as it stands when it starts, and the page's first save can
+   still land before the page goes: the save waiting is dropped only when the page is told
+   it is going, a few milliseconds later. Landing then, the save put the mark of the
+   address it writes into the drawer, while the reload had the address the page was handed
+   over at, which had no mark of its own. The page came back unsaved. Those milliseconds
+   cannot be hit on purpose, so the save runs as the reload would find it. */
+for (const tool of ['bins', 'plates']) {
+  test(`a ${tool} page reloaded as its first save lands is still the drawer that was handed over`,
+    async ({ page }) => {
+      await page.addInitScript(onArrival);
+      const errors = await openPlates(page);
+      await H.setField(page, 'drawerW', '400');
+      await saveAs(page, 'Kitchen');
+      if (tool === 'bins') await reloadOnArrival(page, '/bins/', true, '#navBins');
+      else {
+        await toBins(page);
+        await settle(page);
+        await reloadOnArrival(page, '/', true, '#navPlates');
+      }
+      await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+      await expect(page.locator('#drawerW')).toHaveValue('400');
+      await expect(page.locator('#setAside')).toBeHidden();
+      expect(errors).toEqual([]);
+    });
+}
+
+/* The same reload with no save landing, onto a layout another drawer holds. The page is
+   your own drawer handed over, and the reload is that page again: it used to say someone's
+   link had replaced your layout, and count the drawer's settings as that link's. */
+for (const tool of ['bins', 'plates']) {
+  test(`a ${tool} page reloaded before its first save after a hand-over is not a link`,
+    async ({ page }) => {
+      await page.addInitScript(onArrival);
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(String(e)));
+      // this tool's save on the device is another drawer's
+      if (tool === 'bins') {
+        await page.goto(base + 'bins/');
+        await binsReady(page);
+        await H.dragCells(page, [0, 0], [1, 1]);
+      } else {
+        await page.goto(base);
+        await platesReady(page);
+        await H.setField(page, 'drawerW', '410');
+      }
+      await saveAs(page, 'Other');
+      await settle(page);
+      if (tool === 'bins') {
+        await page.goto(base);
+        await platesReady(page);
+        await H.setField(page, 'drawerW', '400');
+        await saveAs(page, 'Kitchen');
+        await reloadOnArrival(page, '/bins/', false, '#navBins');
+      } else {
+        await page.goto(base + 'bins/');
+        await binsReady(page);
+        await H.setField(page, 'drawerW', '400');
+        await saveAs(page, 'Kitchen');
+        await reloadOnArrival(page, '/', false, '#navPlates');
+      }
+      await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+      await expect(page.locator('#setAside')).toBeHidden();
+      expect(await page.evaluate((k) => localStorage.getItem(k + ':linked'),
+        tool === 'bins' ? 'drawerforge:bins:v1' : 'drawerforge:plates:v1'), 'nothing is a link').toBeFalsy();
+      expect(errors).toEqual([]);
+    });
+}
+
 /* The page saves 400 ms after a change, and a page being reloaded runs on until the new
    one arrives. On a slow connection that save landed after the reload had taken the
    address from before it, and the page came back unsaved. The server is slowed here so
