@@ -509,6 +509,25 @@ function railArea(n, along, wall) {
   return 2 * merged.reduce((a, [lo, hi]) => a + upTo(hi) - upTo(lo), 0);  // both walls
 }
 
+/* What the notches take out of a removable bin's lip: one through it at each end of each
+   plate (notchedLip), the lip's own profile across, as lipLevels gives it, and as wide
+   as the slot and a BLOAT either side along it. Exactly what they take where they stand
+   on the lip's straight runs, which is all of them but the end ones of a bin packed into
+   its corners, and there within a fraction of a percent. None without a notched lip. */
+function lipNotchVolume(b) {
+  if (!b.divRemovable || isCarved(b)) return 0;
+  const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
+  const L = plateLayout(cfg, dividersBuilt(cfg));
+  if (!L.lip) return 0;
+  const { ts, zs, lipH } = lipLevels(L.c, L.H);
+  const prof = [[0, zs[0]]].concat(ts.map((t, i) => [t, zs[i]]), [[0, L.H + lipH]]);
+  const area = Math.abs(prof.reduce((a, p, i) => {
+    const q = prof[(i + 1) % prof.length];
+    return a + p[0] * q[1] - q[0] * p[1];
+  }, 0)) / 2;
+  return area * 2 * (L.slot + BLOAT) * 2 * (L.pX.length + L.pY.length);
+}
+
 // { raw, filament } in mm3
 function volumeMm3(c) {
   const C = SPEC.centre;
@@ -568,7 +587,8 @@ function volumeMm3(c) {
   const divs = !c.divRemovable
     ? (built.divX * wall * 2 * hdI + built.divY * wall * 2 * hwI) * (H - floorZ)
     : isCarved(c) ? 0 : (railArea(built.divX, hwI, wall) + railArea(built.divY, hdI, wall)) * (H - floorZ);
-  const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
+  // less what a removable bin's notches take out of it
+  const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 - lipNotchVolume(c) : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
   return { raw: baseRaw + thin, filament: baseFil + thin };
 }
