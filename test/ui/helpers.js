@@ -62,16 +62,31 @@ async function forgetSaved(page) {
   }, SAVE_KEYS);
 }
 
+/* Scroll the map to the middle of the viewport, and wait until it stops moving.
+   page.mouse works in viewport coordinates, and the map sits well down a long page —
+   measuring before scrolling gives coordinates that are off-screen, so the drag lands
+   nowhere and the test sees an empty drawer rather than the bug it was written for.
+   Until it stops, because the first scroll can be cut short at the foot of the page and
+   the page grows once it has scrolled, so a second one goes further: a drag measured
+   after one and pressed after the other started half a cell off — below the map
+   entirely, for the front row. */
+async function mapInView(page) {
+  for (let i = 0, top = NaN; i < 4; i++) {
+    const now = await page.evaluate(() => {
+      const map = document.getElementById('fillmap');
+      map.scrollIntoView({ block: 'center' });
+      return map.getBoundingClientRect().top;
+    });
+    await page.waitForTimeout(80);
+    if (now === top) break;
+    top = now;
+  }
+}
+
 /* Viewport coordinates of the centre of grid cell (gx, gy). Front of the drawer is
    the bottom of the map, so grid y counts up from there while SVG y counts down. */
 async function cellPoint(page, gx, gy) {
-  /* Scroll first, then measure. page.mouse works in viewport coordinates, and the
-     map sits well down a long page — measuring before scrolling gives coordinates
-     that are off-screen, so the drag lands nowhere and the test sees an empty
-     drawer rather than the bug it was written for. */
-  await page.evaluate(() =>
-    document.getElementById('fillmap').scrollIntoView({ block: 'center' }));
-  await page.waitForTimeout(80);
+  await mapInView(page);
   return page.evaluate(({ gx, gy, CELL }) => {
     const svg = document.getElementById('fillmap');
     const ny = svg.getAttribute('viewBox').split(' ').map(Number)[3] / CELL;
@@ -185,5 +200,5 @@ async function serveRoot() {
   return site;
 }
 
-module.exports = { openBins, openPlates, cellPoint, dragCells, clickCell, bins, setField,
+module.exports = { openBins, openPlates, mapInView, cellPoint, dragCells, clickCell, bins, setField,
                    forgetSaved, serveRoot, SAVE_KEYS, BINS_URL, PLATES_URL, CELL, ROOT };

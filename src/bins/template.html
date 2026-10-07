@@ -250,8 +250,19 @@ try {
   <button type="button" class="sheetx" id="binSheetClose" title="Close — lets go of the selected bin" aria-label="Close the bin settings">×</button>
   <div class="body" id="b-bin">
     <div class="row" id="sizeRow">
-      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="1" min="1" max="50" value="1"></label>
-      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="1" min="1" max="50" value="1"></label>
+      <label class="f"><b>Width (cells)</b><input id="u" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint sizeWhy"></label>
+      <label class="f"><b>Depth (cells)</b><input id="v" type="number" step="0.5" min="0.5" max="50" value="1" aria-describedby="sizeHalfHint sizeWhy"></label>
+    </div>
+    <!-- Half sizes need no special baseplate: a quarter foot seats in the corner of an
+         ordinary socket, two to a side. sizeWhy says why a size typed here was put back
+         when the map cannot show it — a whole size for a bin standing on a half step. It
+         is always there, empty when there is nothing to say, so that a screen reader
+         hears what comes into it; the two share one grid item, or the empty one would
+         still open a gap of the panel's spacing under the hint. The half cell's length
+         is written in the drawer's unit by refresh(). -->
+    <div>
+      <div class="hint" id="sizeHalfHint">A half cell is <span id="halfCellLen">21 mm</span>. Half-size bins have small feet that fit any Gridfinity baseplate, two to a socket.</div>
+      <div class="hint" id="sizeWhy" role="status"></div>
     </div>
     <!-- Height three ways. Someone sizing a bin for a part knows the part in millimetres,
          not in 7 mm units, so the height can be typed as units, as millimetres overall,
@@ -320,6 +331,7 @@ try {
       <label class="tog"><input id="magnets" type="checkbox"> Magnet holes</label>
       <label class="tog"><input id="screws" type="checkbox"> Screw holes</label>
     </div>
+    <div class="hint" id="feetOff" style="display:none"></div>
     <label class="f" id="holesWhereRow" style="display:none"><b>Feet: where the holes go</b><select id="holesWhere">
       <option value="corners">Corners of the bin</option>
       <option value="every">Every cell</option></select></label>
@@ -383,6 +395,7 @@ try {
     <div class="hint" id="carveHint" style="display:none">Click cells of this bin to cut them out, and click a gap to put one back — that is how you make an L, a U or a notch. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden><span class="haskeys">Alt-click does the same thing without turning the mode on. </span>Press <span class="haskeys">Escape or </span>the button again when you are done.</span></div>
     <button class="act" id="mergeBins" style="display:none">Merge into one bin</button>
     <div class="hint" id="mergeHint" style="display:none">Combines the selected bins into a single bin of whatever shape they make together — the other way to build an L or a U. <button type="button" class="more" aria-expanded="false">more</button><span class="moretext" hidden>It keeps the first bin's settings, and loses the stacking lip, dividers, scoop and label, which all need a rectangle.</span></div>
+    <div class="hint" id="shapeOff" style="display:none"></div>
     <div class="row" id="selActions" style="display:none">
       <button class="ghost" id="applyAll">Apply to all bins</button>
       <button class="ghost" id="delBin">Delete selected</button>
@@ -404,8 +417,28 @@ try {
 <div class="stagetop">
 
 <div class="stagecard" id="s-layout">
-  <h3>Drawer layout</h3>
-  <div style="padding:10px 14px 0"><div class="seg" id="layerTabs"></div></div>
+  <!-- The heading's row. On a wider window the Steps switch below moves up into it,
+       beside the heading and not in it (placeSteps): inside the <h3> its label and its
+       group's name were read as part of the heading, "Drawer layout Steps Steps", and its
+       buttons were in a heading. -->
+  <div class="layouthead"><h3>Drawer layout</h3></div>
+  <!-- Whole cells or half cells: what the map draws, drags and resizes in. Kept in this
+       browser, never in the link, and turned on by itself when the layout holds a
+       half-size bin. On a wider window it moves up onto the heading's row (placeSteps),
+       where it costs the map no height. On a phone it stays here, on the layer tabs' row,
+       beside them while the tabs leave room, so the map does not move down the page:
+       there it has about 150 px above the fold to spare, and a row of its own took 50 of
+       them. -->
+  <div class="maptools" style="padding:10px 14px 0">
+    <div class="seg" id="layerTabs"></div>
+    <div class="steps">
+      <span class="hint" id="stepsLabel">Steps</span>
+      <div class="seg" role="group" aria-labelledby="stepsLabel">
+        <button type="button" id="stepWhole" class="on" aria-pressed="true">Whole cells</button>
+        <button type="button" id="stepHalf" aria-pressed="false">Half cells</button>
+      </div>
+    </div>
+  </div>
   <!-- The map and the preview both start with a label describing an empty drawer;
        drawMap and showScene rewrite it from the real state on every draw, so it says
        what is actually there rather than what the markup guessed. -->
@@ -414,7 +447,17 @@ try {
        paragraph of help below it. The cut map on the baseplates page has carried this
        marker from the start; the two maps share the convention, so they share the
        label. It is static because it is always true. -->
-  <div class="hint" style="text-align:center;padding:2px 14px 0">▾ front of drawer</div>
+  <!-- Why the map refused a place, when the map cannot show it: a whole-size bin dropped
+       on a half step looks like free cells. Under the map rather than above it, so a
+       reason appearing mid-drag never moves the map out from under the pointer, and on
+       the marker's line, over it while there is a reason: a line of its own pushed the
+       coverage bar under a 1366 × 768 window, and the map has no room to give there
+       (drawMap). Always there, empty when there is nothing to say, so that a screen
+       reader hears what comes into it. -->
+  <div class="mapfoot">
+    <div class="hint" style="text-align:center;padding:2px 14px 0">▾ front of drawer</div>
+    <div class="hint" id="stepWhy" role="status"></div>
+  </div>
   <div class="covbar"><i id="covfill" style="width:0%"></i></div>
   <div class="body">
     <!-- Errors, under the map, where the baseplates page puts them. The Checks panel

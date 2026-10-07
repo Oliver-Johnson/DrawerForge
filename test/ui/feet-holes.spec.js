@@ -80,6 +80,24 @@ test('ticking a hole box makes a different part, and says what it takes', async 
   expect(await holesOf(page)).toEqual(['magnets+holesEvery']);
 });
 
+/* The selection goes with an Undo, so afterwards the panel is "New bins", holding the bin
+   it last showed. It went on holding the screws the Undo had just taken off that bin, and
+   being the panel for new bins, it handed them to the next bin drawn. */
+test('undoing a holes tick shows the bin without it at once', async ({ page }) => {
+  await H.dragCells(page, [0, 0], [1, 0]);
+  await tick(page, 'magnets');
+  await tick(page, 'screws');
+  await page.locator('#undoBtn').click();
+  await page.waitForTimeout(300);
+  expect(await holesOf(page)).toEqual(['magnets']);
+  expect(await page.evaluate(() => ['magnets', 'screws'].map((id) => document.getElementById(id).checked)),
+    'the boxes still showed the step the Undo took back').toEqual([true, false]);
+  expect(await page.evaluate(() => document.getElementById('screwHint').style.display)).toBe('none');
+  // and the next bin drawn takes what the panel shows
+  await H.dragCells(page, [3, 0], [3, 0]);
+  expect(await holesOf(page)).toEqual(['magnets', 'magnets']);
+});
+
 test('a 1x1 is the same part with holes in its corners or in every cell', async ({ page }) => {
   await H.dragCells(page, [0, 0], [0, 0]);
   await tick(page, 'magnets');

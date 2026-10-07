@@ -228,3 +228,67 @@ test('an address with no settings in it does not replace the saved layout', asyn
   expect((await H.bins(page)).length).toBe(1);
   await expect(page.locator('#restored')).toBeVisible();
 });
+
+/* The Steps switch above the map is how this person likes to draw, not part of the
+   drawer: it is kept in this browser and never written into the link, so a link sent to
+   someone else opens on their own choice. Turning on by itself for a half-size bin is
+   the page's doing, not a choice, so that is not kept either. */
+const halfBin = (x, y, u, v) =>
+  [x, y, u, v, 3, 1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 15].join('-');
+const stepsNow = (page) => page.evaluate(() => ({
+  half: halfSteps,
+  pressed: document.getElementById('stepHalf').getAttribute('aria-pressed'),
+  kept: localStorage.getItem('drawerforge:bins:steps'),
+}));
+
+test('the steps choice is kept in this browser and never in the link', async ({ page }) => {
+  await H.openBins(page);
+  await H.dragCells(page, [0, 0], [1, 1]);
+  await settle(page);
+  const link = await page.evaluate(() => descString());
+  expect((await stepsNow(page)).half).toBe(false);
+
+  await page.click('#stepHalf');
+  await settle(page);
+  expect(await stepsNow(page)).toEqual({ half: true, pressed: 'true', kept: 'half' });
+  expect(await page.evaluate(() => descString())).toBe(link);
+  expect(await page.evaluate(() => location.hash)).not.toMatch(/step/i);
+
+  await page.reload();
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await stepsNow(page)).toEqual({ half: true, pressed: 'true', kept: 'half' });
+  expect((await H.bins(page)).map((b) => [b.x, b.y, b.u, b.v])).toEqual([[0, 0, 2, 2]]);
+
+  await page.click('#stepWhole');
+  await page.reload();
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await stepsNow(page)).toEqual({ half: false, pressed: 'false', kept: 'whole' });
+});
+
+test('half steps turning on for a half-size bin is not kept as a choice', async ({ page }) => {
+  await H.openBins(page);
+  await page.goto('about:blank');
+  await page.goto(H.BINS_URL + '#bl=' + halfBin(0.5, 0, 1.5, 1));
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await stepsNow(page)).toEqual({ half: true, pressed: 'true', kept: null });
+});
+
+test('a layout with half-size bins comes back after a reload', async ({ page }) => {
+  await H.openBins(page);
+  await page.goto('about:blank');
+  await page.goto(H.BINS_URL + '#bl=' + halfBin(0.5, 0, 1.5, 1) + '_' + halfBin(2, 0.5, 0.5, 2.5) +
+    '&bs=' + halfBin(0, 0, 2.5, 0.5));
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  const before = await page.evaluate(() => [B().map((b) => [b.x, b.y, b.u, b.v]), [scratch.u, scratch.v]]);
+  expect(before).toEqual([[[0.5, 0, 1.5, 1], [2, 0.5, 0.5, 2.5]], [2.5, 0.5]]);
+
+  await page.goto(page.url().split('#')[0]);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await settle(page);
+  expect(await page.evaluate(() => [B().map((b) => [b.x, b.y, b.u, b.v]), [scratch.u, scratch.v]]))
+    .toEqual(before);
+});
