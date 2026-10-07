@@ -1425,6 +1425,10 @@ function sizeSay(t) {
    with room to spare, as WHOLE_ON_WHOLE does. */
 const SHAPE_DROPPED = 'A half-size bin cannot keep a carved shape, so this one is a plain rectangle now. Undo brings the shape back.';
 const SHAPE_DROPPED_MAP = 'A half-size bin cannot be carved.';
+/* A press on the map that lands a drawer size typed a moment before is not taken: the
+   map is drawn again for the new grid under the pointer (initMap). Said under the map,
+   since a press that does nothing looks lost; one line on a 320 px phone. */
+const GRID_MOVED = 'The drawer changed size. Press again.';
 const dropsShape = (b, nu, nv) => isCarved(b) && isHalfSize({ u: nu, v: nv });
 
 /* Width and Depth while they are being typed into. A size refused under the caret was
@@ -1916,10 +1920,25 @@ function initMap() {
        the one before it. Read first, a drawer width or depth typed and pressed on the
        map at once looked a cell up in the old grid and then in the new, smaller one,
        and threw. And where it changed the grid, the press goes no further: the map was
-       drawn again under the pointer, and the cell aimed at has moved, or is gone. */
-    const was = grid(), landed = landEdit();
+       drawn again under the pointer, and the cell aimed at has moved, or is gone.
+       The edit is only read in here. A press that selects or moves a bin draws the map
+       and refreshes the page straight after, and drawing the edit a moment before that
+       was the same work twice: about 40 ms of the 80 such a press took, at four layers
+       of 63 bins. So that press draws the edit with its own pass, and every other press
+       draws it first (drawLanded), as it always was. */
+    const was = grid(), landed = landEdit(false);
+    let owed = landed;
+    const drawLanded = () => { if (owed) { owed = false; drawLayerTabs(); drawMap(); refresh(); } };
     mapSay('');
-    if (landed && (grid().nx !== was.nx || grid().ny !== was.ny)) return;
+    if (landed && (grid().nx !== was.nx || grid().ny !== was.ny)) {
+      drawLanded();
+      /* Said, or the press looks lost: the same press made a bin before the edit landed
+         first. The press is over as it is said, so the next pass of any kind takes it
+         away, not only the next press on the map (mapSay). */
+      mapSay(GRID_MOVED);
+      stepSaid = false;
+      return;
+    }
     const c = cellFromEvent(e);
     const handle = e.target && e.target.dataset ? e.target.dataset.handle : null;
 
@@ -1927,6 +1946,7 @@ function initMap() {
        L. While carving they have to yield, or the one cell you most want to remove
        is the one cell you cannot. */
     if (handle && !e.altKey && !carving && selected >= 0 && B()[selected]) {
+      drawLanded();
       const b = B()[selected], st = stepOf();
       /* The anchor is the step at the far corner, which stays put. In half steps the
          grips resize in halves; in whole ones a half-size bin keeps its far edge where
@@ -1944,6 +1964,7 @@ function initMap() {
     /* Alt-click carves. Inside the selected bin it removes a cell; on a cell the bin
        once covered it puts one back, so a carve can be undone by the same gesture. */
     if ((e.altKey || carving) && selected >= 0 && B()[selected]) {
+      drawLanded();
       const b = B()[selected];
       // carving counts whole cells, whatever the steps
       const dx = c.cell.x - b.x, dy = c.cell.y - b.y;
@@ -1964,6 +1985,7 @@ function initMap() {
     const hit = occupancy()[c.slot.y][c.slot.x];
     if (hit !== -1) {
       if (e.ctrlKey || e.metaKey) {                      // add or remove from the set
+        drawLanded();
         if (hit === selected) {                          // dropping the primary promotes another
           const rest = [...selExtra]; selExtra.delete(rest[0]);
           selected = rest.length ? rest[0] : -1;
@@ -1981,10 +2003,12 @@ function initMap() {
       drag = { mode: 'move', idx: hit, dx: c.x - b.x, dy: c.y - b.y, moved: false,
                snap: snapshot() };
       if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
-      readControls(); drawMap(); refresh();
+      // the landed edit's drawing too, which is all of this and the layer tabs
+      readControls(); if (owed) drawLayerTabs(); drawMap(); refresh();
       return;
     }
 
+    drawLanded();
     clearSel();                                          // draw a new bin
     drag = { mode: 'create', st: stepOf(), x0: c.x, y0: c.y, x1: c.x, y1: c.y };
     if (svg.setPointerCapture) svg.setPointerCapture(e.pointerId);
@@ -2068,6 +2092,14 @@ function initMap() {
   /* and a sheet kept up for a drag that never finished goes the way a release over
      nothing would put it */
   svg.addEventListener('pointercancel', () => { drag = null; applySheet(); drawMap(); refresh(); });
+  /* and so does one whose release never reaches the page: let go in another window after
+     an alt-tab, the map gets neither of the two above, only the capture going. The drag
+     stayed on, the bin followed a pointer with no button held, and since the save waits
+     for a press to be let go, nothing more was saved until the next press on the map.
+     After an ordinary release or cancel the drag is already over and this does nothing. */
+  svg.addEventListener('lostpointercapture', () => {
+    if (drag) { drag = null; applySheet(); drawMap(); refresh(); }
+  });
 }
 
 /* ---------- actions ------------------------------------------------------- */
@@ -4414,11 +4446,21 @@ function showSetAside(msg, canPutBack, canTry) {
 $('putBack').addEventListener('click', putBack);
 $('tryAnyway').addEventListener('click', tryAnyway);
 
+/* Not while a press on the map is held (drag): the save waits for the release, which
+   refreshes, and so sets it going again from there. On a link that set a layout aside,
+   the first save to find the design changed takes the set-aside line above the map away
+   (below), and a press that grabs a bin sets a save going. A drag held 400 ms met it:
+   the save found the bin half moved, the map went up 43 px under the pointer, and the
+   bin landed a row off. The save is the one thing that runs on a clock while a press is
+   held (an edit still waiting lands at the press, landEdit), so holding it holds all a
+   save changes above the map, the drawer bar's "not saving" too, rather than each line
+   being held on its own. And what a save keeps is a design someone has let go of, not
+   a bin half way across the map. */
 function rememberState() {
   if (!hashReady) return;
   clearTimeout(hashSaveT);
   addEventListener('beforeunload', dropSave);
-  hashSaveT = setTimeout(saveNow, 400);
+  hashSaveT = setTimeout(() => { if (!drag) saveNow(); }, 400);
 }
 function saveNow() {
   clearTimeout(hashSaveT);
@@ -4582,11 +4624,13 @@ const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { timer =
    size, the refusal never having run. The whole pass, the map and the save with it:
    with the fields read alone, a drawer width typed and pressed on the map at once left
    the map drawn for the old grid, its grips and all, and the address and the saved
-   drawer on the old width until the next edit. True when there was one to land. */
-function landEdit() {
+   drawer on the old width until the next edit. True when there was one to land.
+   With `draw` false the edit is only read in, and the caller draws the rest of the pass
+   (drawLayerTabs, drawMap, refresh): the map press, which draws them anyway. */
+function landEdit(draw = true) {
   if (timer === null) return false;
   clearTimeout(timer); timer = null;
-  editPass();
+  if (draw) editPass(); else readControls();
   return true;
 }
 for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', 'bedD', 'bedH', 'gap',
