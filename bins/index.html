@@ -9939,10 +9939,16 @@ function geomFor(b) {
   const k = geoKey(b);
   let r = geoCache.get(k);
   if (!r) { r = buildBin(G, binCfg(b)); geoCache.set(k, r); }
-  /* Read fresh every time rather than cached with the mesh: it moves with the infill
-     setting, which the key deliberately leaves out, and it is arithmetic, not a build. */
-  const vv = volumeMm3(b);
-  r.vol = vv.filament; r.rawVol = vv.raw;
+  /* Weighed once a part, and again when the infill moves. The key names all binVolume
+     reads but the infill, which it leaves out so that a new infill rebuilds nothing; so
+     the weight is kept with the build, and goes when pruneGeometry drops it. Weighed
+     afresh on every call, a drawer of 1,600 bins of 700 parts asked binVolume 3,700
+     times a refresh, about 200 ms of it. */
+  const infill = state.infill === undefined ? 15 : state.infill;
+  if (r.volInfill !== infill) {
+    const vv = volumeMm3(b);
+    r.vol = vv.filament; r.rawVol = vv.raw; r.volInfill = infill;
+  }
   return r;
 }
 /* Forget builds no bin uses any more, and hand their buffers back to the GPU. Clearing
