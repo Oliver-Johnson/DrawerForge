@@ -13,6 +13,31 @@ three.min.js   603445 bytes   sha256 9274bbcec8d96168…
 jszip.min.js    97630 bytes   sha256 acc7e41455a80765…
 ```
 
+## Font data kept outside this folder
+
+The bins page prints a bin's note on its label shelf in the Hershey Simplex fonts.
+The glyphs are not a library and are spliced into the page with its own code, so they
+live in `src/bins/font.js` rather than here, but they are third-party data all the
+same and keep their own terms, which allow any use and ask for these acknowledgements
+to be distributed with the data:
+
+- The Hershey Fonts were originally created by Dr. A. V. Hershey while working at the
+  U. S. National Bureau of Standards.
+- The format of the Font data in this distribution was originally created by
+  James Hurt, Cognition, Inc., 900 Technology Park Drive, Billerica, MA 01821
+  (mit-eddie!ci-dandelion!hurt)
+
+| Data | From | Terms |
+|---|---|---|
+| Printable ASCII | `futural.jhf`, Simplex Roman | Hershey fonts licence, above |
+| µ Ω ° | `greeks.jhf` glyphs 638, 550, 718 | Hershey fonts licence, above |
+| ± × Ø | drawn for Drawerforge in the same format | AGPL-3.0-or-later |
+
+Both files are from the hershey-fonts distribution packaged by Kamal Mostafa,
+https://github.com/kamalmostafa/hershey-fonts. Each glyph is kept exactly as the
+distribution writes it, in Hurt's format; the terms forbid only conversion into the
+format the U.S. NTIS distributed. See `NOTICE` and the comment at the top of the file.
+
 ## Why they are here rather than on a CDN
 
 Every page states that nothing is uploaded and nothing is tracked. That was true of

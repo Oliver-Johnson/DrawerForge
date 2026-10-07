@@ -142,36 +142,58 @@ async function linePoint(page, selector) {
   return p;
 }
 
+/* The page's save, run when the test says rather than 400 ms on. rememberState's timer
+   is the only one that long on the baseplates page, so it is kept instead of set going:
+   the save the first click below sets going then comes due while the second line is
+   held, however long the build that click starts holds the page up. Timed, it came due
+   before the second press on a busy machine, and six goes in a row could all miss: 7
+   runs in 8 failed with 4 workers. */
+const keepSave = (page) => page.evaluate(() => {
+  const later = setTimeout;
+  window.__save = null;
+  window.setTimeout = (f, ms, ...a) => (ms === 400 ? ((window.__save = f), 0) : later(f, ms, ...a));
+});
+const saveDue = (page) => page.evaluate(() => {
+  const f = window.__save;
+  window.__save = null;
+  if (f) f();
+  return !!f;
+});
+
 /* A first click on a grid line switches the split to Manual, a change, and the second
-   line is pressed inside the 400 ms that set the save going for and held past them. Both
-   points are found before the first click: the build that click sets going holds the
-   page up, and a look at the page in between can let the save in first. Under load the
-   save can still come first now and then, so this one is given more goes. */
+   line is pressed before that click's save and held while it comes due. Both points are
+   found before the first click: the build that click sets going holds the page up. */
 test('a cut-map line pressed and held on a link that set yours aside still takes the click', async ({ page }) => {
   const rows = () => page.evaluate(() => state.splitMode === 'manual' ? state.rowCuts.slice() : null);
-  for (let tries = 1; ; tries++) {
-    await arriveOverYours(page, H.openPlates, () => H.setField(page, 'drawerW', '420'),
-      H.PLATES_URL + '#w=300&d=300');
-    // the pieces built, so that the build is not holding the page up when the clicks come
-    await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
-      null, { timeout: 20000 });
-    await page.evaluate(() => document.getElementById('cutmap').scrollIntoView({ block: 'center' }));
-    const first = await linePoint(page, '#cutmap .hitline[data-row="1"]');
-    const second = await linePoint(page, '#cutmap .hitline[data-row="3"]');
-    // the first click seeds the manual split with the cuts the layout has now
-    const seeded = await page.evaluate(() => layout.rowCuts.slice());
-    await watch(page, 'cutmap');
-    await page.mouse.click(first.x, first.y);
-    const { held, presses: [, p] } = await holdAndLet(page, 'cutmap', second, second);
-    if (p.lineUp && p.changed) {
-      expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
-      const toggle = (cuts, j) => cuts.includes(j) ? cuts.filter((k) => k !== j) : [...cuts, j].sort((a, b) => a - b);
-      expect(await rows(), 'both clicks took').toEqual(toggle(toggle(seeded, 1), 3));
-      await expect(page.locator('#setAside')).toBeHidden();
-      break;
-    }
-    expect(tries, 'pressed the second line while the first click\'s save still waited').toBeLessThan(6);
-  }
+  await arriveOverYours(page, H.openPlates, () => H.setField(page, 'drawerW', '420'),
+    H.PLATES_URL + '#w=300&d=300');
+  // the pieces built, so that the build is not holding the page up when the clicks come
+  await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
+    null, { timeout: 20000 });
+  await page.evaluate(() => document.getElementById('cutmap').scrollIntoView({ block: 'center' }));
+  const first = await linePoint(page, '#cutmap .hitline[data-row="1"]');
+  const second = await linePoint(page, '#cutmap .hitline[data-row="3"]');
+  // the first click seeds the manual split with the cuts the layout has now
+  const seeded = await page.evaluate(() => layout.rowCuts.slice());
+  await keepSave(page);
+  await watch(page, 'cutmap');
+  await page.mouse.click(first.x, first.y);
+  await page.waitForFunction(() => window.__save !== null);
+  await page.mouse.move(second.x, second.y);
+  await page.mouse.down();
+  expect(await saveDue(page), 'the first click set a save going').toBe(true);
+  const held = await page.evaluate(() => document.getElementById('cutmap').getBoundingClientRect().top);
+  await page.mouse.move(second.x + 2, second.y + 1);
+  await page.mouse.up();
+  const [, p] = await page.evaluate(() => window.__presses);
+  expect(p.lineUp && p.changed, 'the second press came on a changed design, the line still up').toBe(true);
+  expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
+  const toggle = (cuts, j) => cuts.includes(j) ? cuts.filter((k) => k !== j) : [...cuts, j].sort((a, b) => a - b);
+  await expect.poll(rows, { message: 'both clicks took' }).toEqual(toggle(toggle(seeded, 1), 3));
+  // the release sets the save going again, and that one takes the line away
+  await page.waitForFunction(() => window.__save !== null);
+  await saveDue(page);
+  await expect(page.locator('#setAside')).toBeHidden();
 });
 
 /* A release the page never hears of: the button let go in another window after an
