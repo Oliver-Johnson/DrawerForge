@@ -344,3 +344,115 @@ for (const [name, rel, tool] of [
     expect(bad.tiny, 'tap targets below 40px').toEqual([]);
   });
 }
+
+/* ---------- half-size bins, and the links from before them ----------------- */
+
+// one bin as a link writes it: 21 fields, and a 22nd only when it asks for holes
+const binAt = (x, y, u, v, h, rest = [1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 15]) =>
+  [x, y, u, v, h, ...rest].join('-');
+const holed = (x, y, u, v, h) => binAt(x, y, u, v, h, [1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 15, 1]);
+async function zipOf(page, hash) {
+  page.__errors = await H.openBins(page);
+  await page.goto('about:blank');
+  await page.goto(H.BINS_URL + '#' + hash);
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await page.waitForTimeout(600);
+  await page.locator('#openExport').click();
+  const [dl] = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('#exFiles [data-ex="zip"]').click(),
+  ]);
+  return JSZip.loadAsync(fs.readFileSync(await dl.path()));
+}
+
+/* A half-size bin is named by its size like any other, 1.5 and all, and two the same are
+   one file with a count. One whose holes boxes are ticked is built without them, since
+   its quarter feet have no room, so its name does not promise magnets either. In the
+   README, the layer holding half-size bins is mapped one letter per half cell, and a
+   layer without any keeps the map it always had. */
+test('half-size bins download under their own sizes, with no holes they cannot have',
+  async ({ page }) => {
+    const zip = await zipOf(page, 'bl=' + [binAt(0, 0, 1.5, 1, 3), binAt(1.5, 0, 1.5, 1, 3),
+      holed(3, 0, 0.5, 2, 3), holed(4, 0, 2, 1, 3)].join('_') + '~' + binAt(0, 0, 3, 1, 2));
+    expect(Object.keys(zip.files).sort()).toEqual([
+      'README.txt', 'bin-0.5x2x3-qty1.stl', 'bin-1.5x1x3-qty2.stl',
+      'bin-2x1x3-magnets-qty1.stl', 'bin-3x1x2-qty1.stl']);
+
+    const readme = (await zip.file('README.txt').async('string')).split('\n');
+    const layer = (k) => {
+      const at = readme.findIndex((l) => l.startsWith(`LAYER ${k} `));
+      return readme.slice(at, readme.indexOf('', at));
+    };
+    const one = layer(1), two = layer(2);
+    expect(one[0]).toBe('LAYER 1 (front of the drawer at the bottom, one letter per half cell):');
+    // a row per half cell, 9 cells deep; the front row last: A and B a cell and a half
+    // wide, C half a cell wide and two cells deep, D two whole cells
+    expect(one.slice(1, 19)).toHaveLength(18);
+    expect(one[19]).toMatch(/^ {4}A = /);
+    expect(one.slice(15, 19)).toEqual([
+      '  . . . . . . C . . . . . . .',
+      '  . . . . . . C . . . . . . .',
+      '  A A A B B B C . D D D D . .',
+      '  A A A B B B C . D D D D . .',
+    ]);
+    expect(two[0]).toBe('LAYER 2 (front of the drawer at the bottom):');
+    expect(two[10]).toMatch(/^ {4}A = /);
+    expect(two[9]).toBe('  A  A  A   .  .  .  .');
+    expect(page.__errors, 'the page threw while being driven').toEqual([]);
+  });
+
+/* A link from before half sizes downloads exactly what it did: every file in the ZIP the
+   same to the byte, the README the same to the byte but for the page's own address, and
+   the same link written back. Whole bins on two layers with the things a bin can have
+   (dividers loose and printed in, a scoop and a label, a carved L with magnets, holes in
+   every cell, a lid, a solid bin, lowered walls, notes), so the map, the half-slot
+   occupancy under it and the README all had to come out unchanged.
+
+   Each digest is the first 16 hex digits of the SHA-256, recorded from the page as it
+   was before half-size bins reached the bins page (the README since it gained print
+   cost and time). A change that MEANS to alter these will fail here: check that it
+   should, then put in the digests this prints. One did: the plain 2x1x3 and the one with
+   lowered walls shared the name "bin-2x1x3-qty1.stl", so the ZIP held only the second.
+   Each now has its own file, and the page before half sizes, with that change, gives
+   these same digests. */
+test('a link from before half sizes downloads the same files, byte for byte', async ({ page }) => {
+  const crypto = require('crypto');
+  const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
+  const OLD = 'w=306&d=380&dh=84&bl=' + [
+    binAt(0, 0, 2, 1, 3),
+    binAt(2, 0, 3, 2, 5, [1.2, 1.2, 2, 1, 0, 1, 1, 1, 1, 6, 10, 0, 0, 0, 0, 15]),
+    binAt(0, 1, 2, 2, 3, [1.2, 1.2, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 15]),
+    binAt(4, 3, 3, 3, 3, [1.2, 1.2, 0, 0, 0, 1, 1, 1, 1, 0, 0, '111111110', 0, 0, 0, 15, 1]),
+    binAt(0, 3, 3, 2, 4, [1.2, 1.2, 2, 1, 0, 1, 1, 1, 1, 8, 12, 0, 0, 0, 0, 15, 7]),
+    binAt(0, 5, 2, 1, 4, [0.85, 2.35, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 14]),
+    binAt(3, 6, 1, 1, 3, [1.2, 1.2, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 15]),
+    binAt(5, 7, 2, 1, 3, [1.2, 1.2, 0, 0, 0, 0.5, 1, 0.25, 1, 0, 0, 0, 0, 0, 0, 15]),
+  ].join('_') + '~' + [binAt(0, 0, 2, 2, 2), binAt(2, 0, 3, 2, 3)].join('_') +
+    '&bnotes=' + encodeURIComponent(JSON.stringify([['pens', '', 'M3 screws'], ['', 'bits']]));
+  const zip = await zipOf(page, OLD);
+  const got = {};
+  for (const name of Object.keys(zip.files).sort()) {
+    let buf = await zip.file(name).async('nodebuffer');
+    // the README ends with a link to this page, wherever this checkout is
+    if (name === 'README.txt')
+      buf = Buffer.from(buf.toString('utf8').replace(/^Layout link: [^#\n]*#/m, 'Layout link: <page>#'));
+    got[name] = sha(buf);
+  }
+  got.link = sha(await page.evaluate(() => descString()));
+  expect(got).toEqual({
+    'README.txt': 'ccd56de89186e081',
+    'bin-2x1x3-low-f50-l25-qty1.stl': '4f879f2b46d2fef3',
+    'bin-2x1x3-qty1.stl': '1d5dddd4cc82d4d4',
+    'bin-2x1x4-qty1.stl': '4b028774e7cab92a',
+    'bin-2x2x2-qty1.stl': 'aa35a25aa8f07fe3',
+    'bin-2x2x3-1x1div-qty1.stl': 'e75df6c3575a97a8',
+    'bin-3x2x3-qty1.stl': 'fa1c2a7c90637b50',
+    'bin-3x2x4-2x1div-magnets-screws-every-cell-qty1.stl': '94cba83351d3eef8',
+    'bin-3x2x5-2x1div-qty1.stl': 'c584bd3b0e62f628',
+    'bin-3x3x3-magnets-qty1.stl': 'c87e863e972d676a',
+    'divider-80.6x14.8x1.6mm.stl': '80621d18f770f536',
+    'lid-2x1-lrb.stl': 'c29d7ff271cfed07',
+    link: 'fea2dd5a633c087e',
+  });
+  expect(page.__errors, 'the page threw while being driven').toEqual([]);
+});

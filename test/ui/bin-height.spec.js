@@ -217,6 +217,59 @@ test('a lowered bin is quoted as tall as the engine builds it', async ({ page })
   expect(rows[8].q.top).toBe(21);                // a carved L at half walls is walled full height
 });
 
+/* A half-size bin is quoted as it is built. buildBin drops a half-size bin's mask, since a
+   mask counts whole cells, and builds its walls where its edges say; asked with a mask,
+   the quote took it for a carved bin, walled full height. So the quote, buildBin's
+   figures and the mesh are held together for a few, one of them with a mask left on it,
+   and the line beside the field says the same for one on the map. Screws raise no floor
+   on a half-size bin, which has no holes yet. */
+test('a half-size bin is quoted as the engine builds it', async ({ page }) => {
+  page.__errors = await H.openBins(page);
+  const rows = await page.evaluate(() => {
+    const half = { f: 0.5, b: 0.5, l: 0.5, r: 0.5 };
+    return [
+      { u: 0.5, v: 0.5, hUnits: 3 }, { u: 1.5, v: 1, hUnits: 6, edges: half },
+      { u: 1.5, v: 0.5, hUnits: 4, screws: true }, { u: 0.5, v: 2, hUnits: 2, edges: { f: 0, b: 0, l: 0, r: 0 } },
+      { u: 2.5, v: 1, hUnits: 6, edges: half, cells: [[0, 0], [1, 0]] },
+      { u: 0.5, v: 0.5, hUnits: 2, edges: half, cells: [[0, 0]] },
+    ].map((c) => {
+      const q = binHeights(c), built = buildBin(G, c), m = built.meta;
+      let zmax = -Infinity;
+      for (const p of built.polys) for (const v of p.verts) zmax = Math.max(zmax, v[2]);
+      const flatUp = built.polys.filter((p) => p.plane.n[2] > 0.999 &&
+        p.verts.every((v) => Math.abs(v[2] - p.verts[0][2]) < 1e-9)).map((p) => p.verts[0][2]);
+      const slab = Math.min(...flatUp.filter((z) => z > SPEC.footH + 0.06));
+      return { c, q, m: { H: m.H, floorZ: m.floorZ, lipH: m.lipH, top: m.totalH - m.lipH, carved: m.carved },
+               zmax: zmax - m.lipH, slab };
+    });
+  });
+  for (const { c, q, m, zmax, slab } of rows) {
+    const what = JSON.stringify(c);
+    expect(m.carved, what).toBe(false);
+    expect([q.H, q.floorZ, q.lipH, q.top], what).toEqual([m.H, m.floorZ, m.lipH, m.top]);
+    expect(zmax, what).toBeCloseTo(q.top, 1);
+    if (q.hollow) expect(q.inside, what).toBeCloseTo(q.top - slab, 9);
+    else expect(q.inside, what).toBe(0);         // the tray: its slab, and nothing inside
+  }
+  expect(rows[1].q.top).toBeCloseTo(24, 9);      // 6 to the slab, then half of the 36 above it
+  expect(rows[2].q.floorZ).toBe(rows[0].q.floorZ);   // screws, and the floor not raised
+  expect(rows[4].q.top).toBeCloseTo(24, 9);      // the mask ignored: half walls, as built
+  // 2 units at half walls stand 10 mm, and hold 4: quoted 14 overall and 8 inside with the mask
+  expect(rows[5].q.top).toBeCloseTo(10, 9);
+  expect(rows[5].q.inside).toBeCloseTo(4, 9);
+
+  // and on the map, selected, the line says so, and asked with a mask the page says the same
+  await page.goto('about:blank');
+  await page.goto(H.BINS_URL + '#bl=0-0-1.5-1-6-1.2-1.2-0-0-0-0.5-0.5-0.5-0.5-0-0-0-0-0-0-15');
+  await page.waitForFunction(() => typeof THREE !== 'undefined');
+  await page.waitForTimeout(300);
+  await H.clickCell(page, 0, 0);
+  await page.waitForTimeout(300);
+  expect(await result(page)).toBe('6 units · 24 mm tall · 18 mm inside');
+  expect(await page.evaluate(() => heightsOf(Object.assign({}, B()[0], { cells: [[0, 0]] })).top))
+    .toBeCloseTo(24, 9);
+});
+
 /* Dividers are not walls: a fixed one, and the rails of a removable one, run to the full
    height whatever the walls do, and a carved bin's walls are built full height whatever
    its edges say. Quoted from the walls alone, a tray with a divider read 6 mm tall for a
@@ -246,6 +299,46 @@ test('dividers and carving stand a bin full height, and a tray keeps its units',
   expect(await page.evaluate(() => heightsOf(Object.assign({}, B()[0], {
     divX: 0, hUnits: 3, cells: [[0, 0], [1, 0], [0, 1]],
     edges: { f: 0.5, b: 0.5, l: 0.5, r: 0.5 } })).top)).toBe(21);
+});
+
+/* Dividers stand to H whatever the walls do, so a bin with them stands H tall; but what
+   holds a part standing in it is its walls, not the dividers between its compartments.
+   So its inside is measured to the tallest wall, as for the same bin without dividers:
+   half walls with dividers at 6 units were quoted 36 mm inside, with the walls stopping
+   at 24. Typed as an inside depth, the units are worked out the same way. */
+test('the inside is measured to the walls, not to the dividers', async ({ page }) => {
+  await oneBin(page);
+  await H.setField(page, 'hUnits', 6);
+  for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) await page.selectOption(`#${id}`, '0.5');
+  await H.setField(page, 'divX', 1);
+  await page.waitForTimeout(300);
+  expect(await result(page)).toBe('6 units · 42 mm overall · 18 mm inside');
+  await page.selectOption('#hMode', 'inside');
+  await expect(page.locator('#hMm')).toHaveValue('18');
+  await typeHeight(page, 18.01);
+  expect(await units(page)).toBe(7);
+  await leave(page);
+
+  // the same inside as without the dividers, at any height, and the inverse agrees with it
+  const ok = await page.evaluate(() => {
+    const half = { f: 0.5, b: 0.5, l: 0.5, r: 0.5 };
+    for (const div of [{ divX: 1 }, { divY: 2, divRemovable: true }])
+      for (const edges of [half, { f: 0.25, b: 0.5, l: 0, r: 0 }, null]) {
+        for (let n = 1; n <= 12; n++) {
+          const w = binHeights(Object.assign({ hUnits: n, edges }, div)), wo = binHeights({ hUnits: n, edges });
+          if (w.top !== w.H) return `${n} units ${JSON.stringify(div)}: stands ${w.top}, not ${w.H}`;
+          if (w.inside !== wo.inside) return `${n} units ${JSON.stringify(div)}: ${w.inside} inside, ${wo.inside} without`;
+        }
+        const cfg = Object.assign({ edges }, div);
+        for (let d = 0.5; d < 80; d += 0.37) {
+          const n = unitsForInside(d, cfg), at = (k) => binHeights(Object.assign({ hUnits: k }, cfg)).inside;
+          if (at(n) < d - 1e-9) return `${d} on ${JSON.stringify(cfg)}: ${n} too shallow`;
+          if (n > 1 && at(n - 1) >= d) return `${d} on ${JSON.stringify(cfg)}: ${n} not the fewest`;
+        }
+      }
+    return 'ok';
+  });
+  expect(ok).toBe('ok');
 });
 
 /* A lowered wall stops short of H, and with every wall open the bin is its slab and

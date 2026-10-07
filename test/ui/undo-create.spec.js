@@ -101,6 +101,35 @@ test('a drag that lands on an occupied cell files no undo entry', async ({ page 
   expect(errors).toEqual([]);
 });
 
+/* Clicking a bin only selects it, and a selection is not an edit. The press filed an undo
+   step before it knew whether the bin would move, so after a click the next Undo spent
+   itself on a layout that had not changed, and the click threw Redo away. */
+test('selecting a bin is not an undo step, and moving it is one', async ({ page }) => {
+  const errors = await H.openBins(page);
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await H.dragCells(page, [3, 0], [3, 0]);
+  expect(await H.bins(page)).toHaveLength(2);
+  // one step spent and waiting on Redo, which a click must not throw away
+  await undoBtn(page).click();
+  await page.waitForTimeout(150);
+  expect(await H.bins(page)).toHaveLength(1);
+  const depth = () => page.evaluate(() => [undoStack.length, redoStack.length]);
+  const before = await depth();
+
+  await H.clickCell(page, 0, 0);
+  expect(await page.evaluate(() => selected), 'the click has to select the bin').toBe(0);
+  expect(await depth(), 'a click filed an undo step, or threw away Redo').toEqual(before);
+  await expect(page.locator('#redoBtn')).toBeEnabled();
+
+  // a real move is a step, and one Undo takes it back
+  await H.dragCells(page, [0, 0], [1, 1]);
+  expect((await H.bins(page))[0]).toMatchObject({ x: 1, y: 1 });
+  await undoBtn(page).click();
+  await page.waitForTimeout(150);
+  expect((await H.bins(page))[0]).toMatchObject({ x: 0, y: 0 });
+  expect(errors).toEqual([]);
+});
+
 /* The Drawers dialog sits over the drawer, and Ctrl+Z on one of its buttons used to take
    back a step of the layout behind it, which the dialog's Save would then have stored. */
 test('Ctrl+Z with a dialog open leaves the drawer behind it alone', async ({ page }) => {

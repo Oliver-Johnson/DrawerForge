@@ -39,6 +39,14 @@ console.log('round trip');
         { x: 2, y: 0, u: 1, v: 1, hUnits: 3, wall: 1.2, floorT: 1.85, divX: 0, divY: 0,
           magnets: true, cells: null }] }])],
       ['bmd', '5.5'], ['bmh', '2.5'], ['v', '2']]) },
+    /* Half-size bins: the same four fields, ending in .5, and nothing else about them. */
+    { name: 'Half sizes', hash: D.encodePairs([['w', '306'], ['d', '380'],
+      ['bl', packLayers([{ bins: [
+        { x: 0.5, y: 0, u: 1.5, v: 1, hUnits: 3, wall: 1.2, floorT: 1.2, divX: 0, divY: 0 },
+        { x: 2, y: 0.5, u: 0.5, v: 2.5, hUnits: 3, wall: 1.2, floorT: 1.2, divX: 1, divY: 0 },
+      ] }, { bins: [{ x: 0, y: 0, u: 2, v: 1, hUnits: 2, wall: 1.2, floorT: 1.2, divX: 0, divY: 0 }] }])],
+      ['bs', packLayers([{ bins: [{ x: 0, y: 0, u: 2.5, v: 0.5, hUnits: 4, wall: 1.2, floorT: 1.2,
+        divX: 0, divY: 0 }] }])], ['v', '2']]) },
   ];
   const text = D.designFile(designs, new Date('2026-01-02T03:04:05Z'));
   const back = D.readDesignFile(text).drawers;
@@ -51,6 +59,11 @@ console.log('round trip');
     holed.length === 2 && holed[0].magnets && holed[0].screws && holed[0].holesEvery &&
     holed[1].magnets && !holed[1].screws && !holed[1].holesEvery,
     JSON.stringify(holed.map((b) => [b.magnets, b.screws, b.holesEvery])));
+  const half = new URLSearchParams(back[3].hash);
+  const sizes = (ls) => JSON.stringify(unpackLayers(ls).map((L) => L.bins.map((b) => [b.x, b.y, b.u, b.v])));
+  check('half-size bins come back at their half sizes and places',
+    sizes(half.get('bl')) === '[[[0.5,0,1.5,1],[2,0.5,0.5,2.5]],[[0,0,2,1]]]' &&
+    sizes(half.get('bs')) === '[[[0,0,2.5,0.5]]]', sizes(half.get('bl')) + ' ' + sizes(half.get('bs')));
   const parsed = JSON.parse(text);
   check('settings are readable in the file, not a link string',
     parsed.drawers[1].design.bnotes === notes && parsed.drawers[0].design.rc === '2,5');
