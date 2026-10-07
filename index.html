@@ -1831,92 +1831,29 @@ function healCsgSeams(polys) {
    *
    * Convex is not quite what a weld leaves, though. Moving a vertex a thousandth or two
    * onto its group can put it just across the line of its neighbours: a dent too small
-   * to see, and a face that is not flat by the test below, so it goes out as it is. Fan
-   * that from its first corner and one sliver can turn against the face, which a slicer
-   * sees as a coplanar fold (a mounting pocket's side extended across a bottom face full
-   * of seam vertices; a puzzle notch's ceiling). So a mended face whose first-corner fan
-   * would turn a triangle backwards is fanned from the first point that turns none: its
-   * vertex average, as a flat face is, and failing that one of its own corners. A flat
-   * face can be dented too, and then its average can turn a sliver back (the side of a
-   * puzzle tab at 18 mm, where a corner sits a few microns in from its neighbours): it
-   * is fanned from a corner that turns none and lays no triangle of nothing along the
-   * straight run, when it has one. A face with no such point (a dent between two
-   * straight runs, in the bottom face beside a screw hole) is cut into ears in its own
-   * plane by earTriangulate, which lays no triangle across a dent or along a straight
-   * run. A face whose fan already lies right is left exactly as it was, and so is every
-   * plate with no such face. */
-  const turnsBack = (a, vs, k0, nn) => {
-    const n = vs.length;
-    for (let i = 0; i < n; i++) {
-      const b = vs[(k0 + i) % n], d = vs[(k0 + i + 1) % n];
-      if (b === a || d === a) continue;
-      if (V.dot(V.cross(V.sub(b, a), V.sub(d, a)), nn) < -1e-10) return true;
-    }
-    return false;
-  };
-  // the face cut into ears in its own plane, every one turned its way and none of them
-  // empty; null when that cannot be done, and the face goes out as before
-  const clipEars = (vs, nn) => {
-    const n = vs.length, m = nn.map(Math.abs);
-    const ax = m[0] > m[1] ? (m[0] > m[2] ? 0 : 2) : (m[1] > m[2] ? 1 : 2);
-    const { pts, tris } = earTriangulate(vs.map((v, i) => [v[(ax + 1) % 3], v[(ax + 2) % 3], i]));
-    if (tris.length !== n - 2) return null;
-    const ts = tris.map((t) => t.map((j) => vs[pts[j][2]]));
-    const turns = ts.map((t) => {
-      const c = V.cross(V.sub(t[1], t[0]), V.sub(t[2], t[0]));
-      return V.dot(c, c) < 1e-18 ? 0 : Math.sign(V.dot(c, nn));
-    });
-    if (!turns.every((s) => s && s === turns[0])) return null;
-    return turns[0] > 0 ? ts : ts.map((t) => [t[0], t[2], t[1]]);
-  };
-  const out = [];
-  for (let fi = 0; fi < faces.length; fi++) {
-    const f = faces[fi], n = f.length, vs = f.map((i) => verts[i]);
-    let flat = false, from = 0;
-    if (dirty[fi])
-      for (let i = 0; i < n && !flat; i++) {
-        const u = V.sub(vs[(i + 1) % n], vs[i]);
-        const w = V.sub(vs[(i + 2) % n], vs[(i + 1) % n]);
-        const c = V.cross(u, w);
-        if (V.dot(c, c) < 1e-18) flat = true;
-      }
-    const average = () => {
-      const c = [0, 0, 0];
-      for (const v of vs) { c[0] += v[0]/n; c[1] += v[1]/n; c[2] += v[2]/n; }
-      return c;
-    };
-    const nn = planes[fi].n;
-    let ears = null;
-    if (dirty[fi] && !flat && turnsBack(vs[0], vs, 0, nn)) {
-      if (!turnsBack(average(), vs, 0, nn)) flat = true;
-      else {
-        for (let k = 1; k < n && !from; k++) if (!turnsBack(vs[k], vs, k, nn)) from = k;
-        if (!from) ears = clipEars(vs, nn);
-      }
-    } else if (flat && turnsBack(average(), vs, 0, nn)) {
-      // a flat face with a dent the average cannot see past: a corner that sees all of it
-      // and makes no triangle of nothing, if it has one
-      for (let k = 0; k < n && flat; k++) {
-        if (turnsBack(vs[k], vs, k, nn)) continue;
-        let thin = false;
-        for (let i = 1; i < n - 1 && !thin; i++) {
-          const c = V.cross(V.sub(vs[(k + i) % n], vs[k]), V.sub(vs[(k + i + 1) % n], vs[k]));
-          thin = V.dot(c, c) < 1e-18;
-        }
-        if (!thin) { flat = false; from = k; }
-      }
-      if (flat) ears = clipEars(vs, nn);
-    }
-    if (ears) { for (const t of ears) out.push({ verts: t, plane: planes[fi] }); continue; }
-    if (!flat) { out.push({ verts: from ? vs.slice(from).concat(vs.slice(0, from)) : vs, plane: planes[fi] }); continue; }
-    const c = average();
-    for (let i = 0; i < n; i++)
-      out.push({ verts: [c, vs[i], vs[(i + 1) % n]], plane: planes[fi] });
-  }
-  /* And whether the result is closed: a polygon edge not used exactly twice is a hole the
-     repairs above could not close. Counted on the ids already to hand, so it costs a pass
-     over the edges; buildPiece reads it to cut a cell's mounting pockets again when they
-     come out open (see the fastener cut there). */
+   * to see. Fanned as above, from its first corner or, when it is flat, from its average,
+   * such a face can lay a sliver back to back with itself, which a slicer sees as a
+   * coplanar fold (a mounting pocket's side extended across a bottom face full of seam
+   * vertices; a puzzle notch's ceiling; the side of a puzzle tab at 18 mm, where a corner
+   * sits a few microns in from its neighbours). So a mended face whose plain fan lays a
+   * triangle within 8 degrees of back to back with the face is laid out again, from the
+   * first of these that is sound: each of its corners in turn, then ears cut in its own
+   * plane by earTriangulate (a dent between two straight runs, in the bottom face beside a
+   * screw hole, leaves no corner that sees all of it). Sound means every triangle has
+   * area, keeps the face's own winding and lies within 60 degrees of the face, and no
+   * diagonal between two corners is already an edge of another face, which would then be
+   * used four times. A face with nothing sound goes out as it was (a sliver the weld
+   * turned right over faces the wrong way however it is laid out).
+   *
+   * Nothing else is touched. A sliver that only leans, or stands on edge, can turn back by
+   * the sign of its normal without lying back to back with anything, and laying those out
+   * again made pieces worse: a corner's fan stood triangles in the plane of an H-clip's
+   * wall, where they folded against it; ears re-wound a sliver the weld had turned over,
+   * against its neighbours; a corner's diagonal was an edge another face already had. Nor
+   * is the face's own average tried: where the plates come from the page it lays out
+   * nothing a corner does not, and where only the engine reaches it traded folds for open
+   * edges on two pieces, which nothing else here does. A face whose plain fan lies right
+   * is laid out exactly as before, and so is every plate with no such face. */
   const use = new Map();
   for (const f of faces)
     for (let i = 0; i < f.length; i++) {
@@ -1924,6 +1861,73 @@ function healCsgSeams(polys) {
       const k = a < b ? a * EKEY + b : b * EKEY + a;
       use.set(k, (use.get(k) || 0) + 1);
     }
+  // triangles as corner indices into the face; sound as above
+  const sound = (f, vs, tris, nn) => {
+    const n = f.length;
+    for (const t of tris) {
+      const p = t.map((i) => vs[i]);
+      const x = V.cross(V.sub(p[1], p[0]), V.sub(p[2], p[0])), l = Math.sqrt(V.dot(x, x));
+      if (l < 1e-9 || V.dot(x, nn) < 0.5 * l) return false;
+      for (let e = 0; e < 3; e++) {
+        const i = t[e], j = t[(e + 1) % 3];
+        if ((i + 1) % n === j || (j + 1) % n === i) continue;
+        const a = f[i], b = f[j];
+        if (use.has(a < b ? a * EKEY + b : b * EKEY + a)) return false;
+      }
+    }
+    return true;
+  };
+  // the face laid out again as above: polygons to push, or null for nothing sound
+  const relay = (f, vs, nn) => {
+    const n = f.length;
+    for (let k = 0; k < n; k++) {
+      const t = [];
+      for (let i = 2; i < n; i++) t.push([k, (k + i - 1) % n, (k + i) % n]);
+      if (sound(f, vs, t, nn)) return [k ? vs.slice(k).concat(vs.slice(0, k)) : vs];
+    }
+    const m = nn.map(Math.abs);
+    const ax = m[0] > m[1] ? (m[0] > m[2] ? 0 : 2) : (m[1] > m[2] ? 1 : 2);
+    const proj = vs.map((v, i) => [v[(ax + 1) % 3], v[(ax + 2) % 3], i]);
+    const { pts, tris } = earTriangulate(proj);
+    if (tris.length !== n - 2) return null;
+    // earTriangulate turns them anticlockwise in the projection; the face's own way round
+    const back = polyArea2D(proj) < 0;
+    const t = tris.map((e) => (back ? [e[0], e[2], e[1]] : e).map((j) => pts[j][2]));
+    return sound(f, vs, t, nn) ? t.map((e) => e.map((i) => vs[i])) : null;
+  };
+  const out = [];
+  for (let fi = 0; fi < faces.length; fi++) {
+    const f = faces[fi], n = f.length, vs = f.map((i) => verts[i]);
+    let flat = false;
+    if (dirty[fi])
+      for (let i = 0; i < n && !flat; i++) {
+        const u = V.sub(vs[(i + 1) % n], vs[i]);
+        const w = V.sub(vs[(i + 2) % n], vs[(i + 1) % n]);
+        const c = V.cross(u, w);
+        if (V.dot(c, c) < 1e-18) flat = true;
+      }
+    const c = [0, 0, 0];
+    if (flat) for (const v of vs) { c[0] += v[0]/n; c[1] += v[1]/n; c[2] += v[2]/n; }
+    if (dirty[fi] && n > 3) {
+      // does the plain fan lay a triangle back to back with the face?
+      const nn = planes[fi].n;
+      let folds = false;
+      for (let i = flat ? 0 : 1; i < (flat ? n : n - 1) && !folds; i++) {
+        const a = flat ? c : vs[0], b = vs[i], d = vs[(i + 1) % n];
+        const x = V.cross(V.sub(b, a), V.sub(d, a)), l = Math.sqrt(V.dot(x, x));
+        folds = l > 1e-12 && V.dot(x, nn) / l < -0.99;
+      }
+      const again = folds && relay(f, vs, nn);
+      if (again) { for (const p of again) out.push({ verts: p, plane: planes[fi] }); continue; }
+    }
+    if (!flat) { out.push({ verts: vs, plane: planes[fi] }); continue; }
+    for (let i = 0; i < n; i++)
+      out.push({ verts: [c, vs[i], vs[(i + 1) % n]], plane: planes[fi] });
+  }
+  /* And whether the result is closed: a polygon edge not used exactly twice is a hole the
+     repairs above could not close. Counted on the ids already to hand (the use above), so
+     it costs a pass over the edges; buildPiece reads it to cut a cell's mounting pockets
+     again when they come out open (see the fastener cut there). */
   let open = 0;
   for (const u of use.values()) if (u !== 2) open++;
   out.open = open;
@@ -4190,14 +4194,26 @@ function buildPiece(cfg, layout, piece, onStatus) {
            corners of its 14-sided bores where their flats were, the same circle inside
            each for the magnet or screw head to sit against. The first closed result is
            kept; a cell that comes out closed first time, which is nearly every one, is
-           built exactly as before. */
-        if (next.open && kind === 'fastener') {
+           built exactly as before. A try that throws (healCsgSeams' T-junction pass limit,
+           which the turned cutters reach on a few engine-only cells) is passed over and
+           the first cut stands, open as it was rather than a failed build.
+
+           Only a cell open by a sliver or a few is cut again, at most 24 edges: six at
+           each of its four pockets. Every retried cell on a page design was open by 3 or 6
+           (8 cells over 3,893 random mount designs, a second in 25 minutes of building).
+           Over 935 engine-only designs at small pitches with the sites moved in, no cell
+           open by more than 19 ever closed, and the 447 open by more than 24 ran half of
+           all the tries. Each try earns its place: the turned cutters close most, and the
+           faces and cutters both reversed closed three cells there that nothing else
+           did. */
+        if (next.open && next.open <= 24 && kind === 'fastener') {
           const tries = [() => csgSubtract(region, cut.slice().reverse()),
                          () => csgSubtract(region.slice().reverse(), cut),
                          () => csgSubtract(region.slice().reverse(), cut.slice().reverse()),
                          () => csgSubtract(region, fasteners(turnedFastener()))];
           for (const t of tries) {
-            const again = t();
+            let again;
+            try { again = t(); } catch (e) { continue; }   // the first cut stands
             if (!again.open) { next = again; break; }
           }
         }
