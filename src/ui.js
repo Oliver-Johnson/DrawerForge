@@ -2064,9 +2064,12 @@ $('startFresh').addEventListener('click', startFresh);
    whatever this browser had stored, which is the one case that must never happen.
    Reloading applies the link. replaceState does not fire this event, so the saves this
    page makes every few seconds cannot trigger it. A fragment with no settings in it is
-   an anchor, not a link to a drawer, and reloading for one threw the drawer away. */
+   an anchor, not a link to a drawer, and reloading for one threw the drawer away. The
+   reload is that link, not this page reloaded (see forget in drawers.js). */
 addEventListener('hashchange', () => {
-  if (isLayoutHash((location.hash || '').replace(/^#/, ''))) location.reload();
+  if (!isLayoutHash((location.hash || '').replace(/^#/, ''))) return;
+  try { drawers.forget(); } catch (err) { /* the page never got as far as its drawers */ }
+  location.reload();
 });
 
 /* More slots beside the save, so a layout is set aside rather than lost.
@@ -2643,10 +2646,10 @@ let arrivedWith = '';    // the design string this page was opened with, if it s
     loadFromHash(src);
     if (!fromLink) $('restored').style.display = '';
     else if (canPutBack) {
-      /* Your own layout handed over from the other page is no link, and the same page
-         reloaded before it saved anything did not go back: what either sets aside is the
-         layout you had here before it arrived. */
-      showSetAside(back && !note.arrived
+      /* Your own layout handed over from the other page is no link, and a reload that
+         started as the page's last save landed did not go back: either way, what is set
+         aside is the layout you had here. */
+      showSetAside(back && !note.reloaded
         ? 'This page went back to an earlier layout of yours. The later one is set aside.'
         : back || handedOver ? 'The layout you had here is set aside.'
         : 'This link replaced the layout you had here.', true, false);
