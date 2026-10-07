@@ -370,7 +370,17 @@ console.log('\nmalformed hashes fall back instead of throwing');
    it, a height of 1e308 printed as "Infinity mm", a y of 0.5 threw in the map, and a
    wall height the edge menu does not offer turned into NaN on the next edit. Each case
    here is a link someone could paste; what comes back must be buildable, whole where
-   it counts something, and inside the range the page can show. */
+   it counts something, and inside the range the page can show.
+
+   And buildable in reasonable time, which is measured as the work the build does, this
+   process's CPU time, not as the clock. On a machine busy with other work the clock runs
+   on while the build waits its turn: the largest here, the 50 x 50 footprint, took 1.5 s
+   by the clock on an idle machine and 8.1 s at a load average of 25, failing an 8 s
+   budget with nothing wrong, while its CPU time stayed at 2.8 s at both. A build that
+   does more work than that takes more CPU time on any machine, busy or not, so 8 s of it
+   is still a slowdown found: a little under three times what the largest takes. */
+const cpuMs = () => { const u = process.cpuUsage(); return (u.user + u.system) / 1000; };
+const BUILD_BUDGET_MS = 8000;
 console.log('\nwhat a link asks for is held to what can be built');
 {
   const { LINK_MAX } = require('../src/bins/bin.js');
@@ -405,10 +415,11 @@ console.log('\nwhat a link asks for is held to what can be built');
       if (odd.length) why = 'out of range: ' + odd.join(', ');
       else if (!ok(b)) why = JSON.stringify(b).slice(0, 160);
       else {
-        const t = Date.now();
+        const t = cpuMs();
         const r = buildBin(G, Object.assign({}, b, { edges: b.edges }));
+        const took = cpuMs() - t;
         if (!r.polys.length) why = 'built an empty mesh';
-        else if (Date.now() - t > 8000) why = `took ${Date.now() - t} ms to build`;
+        else if (took > BUILD_BUDGET_MS) why = `took ${took.toFixed(0)} ms of CPU to build, over ${BUILD_BUDGET_MS}`;
       }
     } catch (e) { why = 'THREW: ' + e.message; }
     console.log(`  ${name.padEnd(42)}${why ? 'FAILED — ' + why : 'held'}`);
