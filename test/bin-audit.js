@@ -1702,7 +1702,7 @@ console.log('\nremovable dividers: every plate goes into its slot');
       for (const [u, v] of [[1, 1], [2, 1]])
         both(u, v, wall, most((u - 1) * 42 + 41.5 - 2 * wall, wall), most((v - 1) * 42 + 41.5 - 2 * wall, wall), divT, divClr);
   }
-  report('one way, no lip, scoop or shelf', rows, true);
+  report('no lip, scoop or shelf, one way and both', rows, true);
   /* Lip, scoop and shelf each on and off, with plates one way and both ways, as many as
      the fields allow and half that, at walls either side of the lip's base, where it stops
      overhanging. The bins with the most notches in the lip are checked whole as well,
