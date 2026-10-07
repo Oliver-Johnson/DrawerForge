@@ -128,6 +128,9 @@ console.log('\nnotes raised on the label shelf, under the bin above');
     ['0.5x1x3, half a cell wide', { u: 0.5, v: 1, hUnits: 3, label: 12, note: 'M2' }],
     ['3x2x4, holes in every foot', { u: 3, v: 2, hUnits: 4, label: 20, note: 'Fuses 5A, 10A',
                                      magnets: true, screws: true, holesEvery: true }],
+    // a block of holes across the floor in front of the shelf and under it, below both
+    ['2x1x4, over hex bit holes', { u: 2, v: 1, hUnits: 4, label: 12, note: 'Hex bits 1/4 inch',
+                                    insert: 4 }],
   ];
   for (const [name, cfg] of NOTES) {
     const c = Object.assign({ wall: BIN_DEFAULTS.wall, labelMode: 1 }, cfg);

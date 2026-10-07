@@ -240,6 +240,72 @@ test('a bin with holes is its own STL, and two depths are two files', async ({ p
   expect(dl.suggestedFilename()).toMatch(/^bin-1x1x3-aa-holes-depth(10|14\.5)-qty1\.stl$/);
 });
 
+/* Holes and a note raised on the shelf, on one bin. The holes keep in front of the shelf
+   and under it, so the shelf is lowered for the letters first and the block stops under
+   it; and the dividers holes leave off are not there for the letters to keep clear of, so
+   they have the whole shelf. The page says the same as the build: the note's hint, its
+   key and name, the link, the rows and the README, and Checks. */
+test('a bin with holes and a raised note: the letters have the whole shelf, and the page says both',
+  async ({ page }) => {
+    const noteLead = () => page.evaluate(() => {
+      const h = document.getElementById('noteHint'), b = h.querySelector(':scope>button.more');
+      return (b ? b.previousElementSibling.textContent : h.textContent).trim();
+    });
+    await H.dragCells(page, [0, 0], [1, 0]);               // a 2x1x3, selected
+    await H.setField(page, 'hUnits', 4);
+    await H.setField(page, 'divX', 2);
+    await page.fill('#note', 'Hex bits 1/4 inch');
+    await page.selectOption('#labelMode', '1');
+    await settle(page);
+    await expect(page.locator('#label')).toHaveValue('12');
+    // between two dividers it takes two lines
+    expect(await noteLead()).toBe('Prints 3.1 mm tall on two lines, between the dividers.');
+    expect(await page.evaluate(() => typeName(types()[0]))).toBe('bin-2x1x4-2x0div-note-hex-bits-1-4-inch-qty1');
+
+    await holesFor(page, 4);
+    expect(await noteLead(), 'the dividers are left off, so not between them').toBe('Prints 5.6 mm tall on one line.');
+    expect(await lead(page)).toBe('20 holes, 8.3 mm deep. Bits are 25 mm long, so this bin needs 5 units to keep them below the rim.');
+    const [key, name, holes, top, tail4] = await page.evaluate(() => {
+      const b = B()[0], H = b.hUnits * SPEC.unitH;
+      // the highest point well inside the lip's opening: the letters' tops
+      let z = -Infinity;
+      for (const p of geomFor(b).polys)
+        for (const v of p.verts) if (Math.abs(v[0]) < 35 && Math.abs(v[1]) < 15) z = Math.max(z, v[2]);
+      return [typeKey(b), typeName(types()[0]), geomFor(b).meta.holes, z - H, packBin(b).split('-').slice(21)];
+    });
+    expect(holes).toBe(20);
+    expect(top, 'the letters stop 0.4 mm under the rim').toBeCloseTo(-0.4, 6);
+    // both are parts of their own, so both are in the key: the note's lines, then the holes
+    const codes = [...'Hex bits 1/4 inch'].map((c) => c.codePointAt(0).toString(16).padStart(4, '0')).join('');
+    expect(key).toMatch(new RegExp(`-n${codes}\\.5\\.64\\d*-i4w6\\.65d8\\.333$`));
+    expect(name).toBe('bin-2x1x4-hex-bit-holes-note-hex-bits-1-4-inch-qty1');
+    // the note's 23rd field, then the holes' two
+    expect(tail4).toEqual(['0', '1', '4', '0']);
+    await expect(page.locator('#typeRows')).toContainText('20 holes for hex bits');
+    expect(await page.evaluate(() => layoutReadme()))
+      .toMatch(/^ +1 x {2}2x1x4 {2}\(.*\) {2}20 holes for hex bits {2}note raised on the shelf/m);
+    await expect(checks(page)).toContainText('has holes for hex bits, so its dividers are left off');
+    await expect(checks(page)).not.toContainText('note on two lines');
+    expect(await page.locator('#warnings .w.err').count()).toBe(0);
+
+    // the README of the bin on its own says both, and no compartments
+    await H.clickCell(page, 0, 0);
+    await page.locator('#focusBin').click();
+    await settle(page);
+    const readme = await page.evaluate(() => layoutReadme());
+    expect(readme).toContain('Holes: 20 for hex bits, 6.65 mm across the flats, 8.3 mm deep');
+    expect(readme).toContain('Raised note: “Hex bits 1/4 inch” on the label shelf, 5.6 mm letters on one line.');
+    expect(readme).not.toContain('Compartments');
+    await page.locator('#focusExit').click();
+    await settle(page);
+
+    // holes off again: the dividers are back, and the letters between them as before
+    await holesFor(page, 0);
+    expect(await noteLead()).toBe('Prints 3.1 mm tall on two lines, between the dividers.');
+    expect(await page.evaluate(() => [typeName(types()[0]), packBin(B()[0]).split('-').slice(21)]))
+      .toEqual(['bin-2x1x4-2x0div-note-hex-bits-1-4-inch-qty1', ['0', '1']]);
+  });
+
 test('a layout without holes writes the same link it always did', async ({ page }) => {
   await H.dragCells(page, [0, 0], [1, 0]);
   await H.setField(page, 'label', 12);

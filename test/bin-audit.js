@@ -318,6 +318,12 @@ const CASES = [
   { name: '2x1x4-hex-label', u: 2, v: 1, hUnits: 4, insert: 4, label: 12, holes: 20 },
   { name: '2x1x4-hex-note', u: 2, v: 1, hUnits: 4, insert: 4, label: 12, labelMode: 1, note: 'Hex bits',
     fit: { lines: 1, cut: false }, holes: 20 },
+  /* Asked for dividers and a scoop too, which holes leave off, so the letters have the
+     whole shelf: one line each, where between those dividers both would take two. */
+  { name: '2x1x4-hex-note-div', u: 2, v: 1, hUnits: 4, insert: 4, label: 12, labelMode: 1, divX: 2, divY: 1,
+    scoop: 8, note: 'Hex bits 1/4 inch', fit: { lines: 1, cut: false }, holes: 20 },
+  { name: '1x1x4-aa-note-div1', u: 1, v: 1, hUnits: 4, insert: 1, label: 12, labelMode: 1, divX: 1,
+    note: 'AA cells', fit: { lines: 1, cut: false }, holes: 2 },
   { name: '1x1x4-hex-wall0.4', u: 1, v: 1, hUnits: 4, insert: 4, wall: 0.4, holes: 16 },
   { name: '1x1x4-hex-wall3', u: 1, v: 1, hUnits: 4, insert: 4, wall: 3, holes: 12 },
   { name: '0.5x1x3-hex', u: 0.5, v: 1, hUnits: 3, insert: 4, holes: 8 },
@@ -1285,8 +1291,10 @@ console.log('\nnotes raised on the label shelf');
       /* ...and 0.4 clear of every divider: a fixed one a wall thick, a removable one 1.2
          mm of rail each side of a slot as wide as the plate and its clearance, which is
          where the plate goes down too. Measured from the bin's numbers, centre lines
-         evenly across the cavity, not from what built it. */
+         evenly across the cavity, not from what built it. A bin that has holes has no
+         dividers (the section on holes below), so it has none to keep clear of. */
       const wall = cs.wall !== undefined ? cs.wall : BIN_DEFAULTS.wall;
+      const divs = r.meta.holes ? { divX: 0, divY: 0 } : cs;
       const iw = (cs.u - 1) * SPEC.pitch / 2 + SPEC.half - wall;
       const half = cs.divRemovable ? BIN_DEFAULTS.divT / 2 + BIN_DEFAULTS.divClr + 1.2 : wall / 2;
       const offDiv = (n, inner, v) => {
@@ -1296,7 +1304,7 @@ console.log('\nnotes raised on the label shelf');
       };
       divClear = Infinity;
       for (const [cx, cy] of corners)
-        divClear = Math.min(divClear, offDiv(cs.divX || 0, iw, cx), offDiv(cs.divY || 0, id, cy));
+        divClear = Math.min(divClear, offDiv(divs.divX || 0, iw, cx), offDiv(divs.divY || 0, id, cy));
       if (divClear < 0.4 - 1e-6)
         faults.push(divClear < 0 ? `a letter ${(-divClear).toFixed(2)} mm into a divider's footprint`
           : `a letter only ${divClear.toFixed(2)} mm off a divider`);
@@ -1563,11 +1571,15 @@ console.log('\nholes across the floor');
     ['solid', Object.assign({}, one, { solid: true }), { insert: 4 }, 'solid'],
     ['a 1-unit bin, too short', Object.assign({}, one, { hUnits: 1 }), { insert: 4 }, 'short'],
     ['18650s in half a cell', { u: 0.5, v: 0.5, hUnits: 6 }, { insert: 3 }, 'none'],
+    // none fit, so the dividers are built after all and the note goes between them
+    ['18650s, a note between dividers', { u: 0.5, v: 1, hUnits: 3, label: 12, labelMode: 1, divY: 3, note: 'M2' },
+     { insert: 3 }, 'none'],
   ];
   const moved = SAME.map(([name, cfg, extra, why]) => {
     const withIt = Object.assign({}, cfg, extra), got = insertPlan(withIt).why;
     if (stl(cfg) !== stl(withIt)) return `${name}: BUILT DIFFERENTLY`;
     if (buildBin(G, withIt).meta.holes) return `${name}: counts holes`;
+    if (JSON.stringify(shelfNote(cfg)) !== JSON.stringify(shelfNote(withIt))) return `${name}: its note told differently`;
     return got === why ? '' : `${name}: insertPlan says ${got}, not ${why}`;
   }).filter(Boolean);
   console.log(`  ${'bins with no holes'.padEnd(20)} ` + (moved.length ? 'FAILED: ' + moved.join('; ')

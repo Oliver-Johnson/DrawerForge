@@ -239,11 +239,15 @@ console.log('\nholes across the floor');
     packBin(pb) === plain;
   console.log(`  holes for hex bits survive the trip       ${plainOk ? 'intact, 25 fields, the two before as 0' : 'LOST: ' + plain}`);
   if (!plainOk) bad++;
-  const all = packBin(bin({ hUnits: 6, label: 12, labelMode: 1, magnets: true, screws: true, insert: 1, insertDepth: 12.5 }));
+  /* ...and its first 23 fields are the ones the same bin without holes writes, the raised
+     note's 23rd among them, so the two only ever add on at the end */
+  const noted = { hUnits: 6, label: 12, labelMode: 1, magnets: true, screws: true };
+  const all = packBin(bin(Object.assign({ insert: 1, insertDepth: 12.5 }, noted)));
   const ab = unpackBin(all);
   const allOk = all.split('-').length === 25 && ab.insert === 1 && ab.insertDepth === 12.5 && ab.labelMode === 1 &&
-    ab.magnets && ab.screws && packBin(ab) === all;
-  console.log(`  beside a raised note and holes in the feet ${allOk ? 'intact, depth and all' : 'LOST: ' + all}`);
+    ab.magnets && ab.screws && packBin(ab) === all &&
+    all.split('-').slice(0, 23).join('-') === packBin(bin(noted));
+  console.log(`  beside a raised note and holes in the feet ${allOk ? 'intact, depth and all, after the note\'s 23' : 'LOST: ' + all}`);
   if (!allOk) bad++;
 
   /* the preset held to 0 to 4, and the depth to 0 to H: 21 mm on these 3-unit bins. No
