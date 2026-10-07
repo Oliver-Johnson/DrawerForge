@@ -8,7 +8,7 @@ const path = require('path');
 const G = require('../src/core.js');
 const { buildBin, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
-        unpackBin, binFeet, dividersBuilt } = require('../src/bins/bin.js');
+        unpackBin, binFeet, dividersBuilt, plateLayout } = require('../src/bins/bin.js');
 const { checkOrientation, orientationNote } = require('./orientation.js');
 
 // the browser hand-assembles its own G; make sure core still exports everything
@@ -1119,6 +1119,23 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
       `among them ${fails.slice(0, 4).join('; ')}` : `${rows.length} builds, all clean`));
   if (!exact || fails.length) bad++;
 }
+/* Edges used other than twice once every vertex within `step` of another is one with it,
+   as a slicer may weld them. */
+const weldBad = (polys, step) => {
+  const key = (v) => v.map((x) => Math.round(x / step)).join(',');
+  const edges = new Map();
+  for (const t of G.polysToTriangles(polys)) {
+    const ks = t.map(key);
+    if (ks[0] === ks[1] || ks[1] === ks[2] || ks[0] === ks[2]) continue;   // welded away
+    for (let i = 0; i < 3; i++) {
+      const a = ks[i], b = ks[(i + 1) % 3], k = a < b ? a + '|' + b : b + '|' + a;
+      edges.set(k, (edges.get(k) || 0) + 1);
+    }
+  }
+  let n = 0;
+  for (const c of edges.values()) if (c !== 2) n++;
+  return n;
+};
 /* Just off the shelf's front is as bad once a slicer welds what is close. A face 2 to 5
    µm from it was built as it was, clean at checkManifold's micron, but its corners and
    the shelf's became one at a weld of 5 or 10 µm and the edge was shared again. So the
@@ -1128,21 +1145,6 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
    failed, and 241 of all 2954. */
 {
   const most = (inside, wall) => Math.max(0, Math.floor(inside / Math.max(wall, 1.2)) - 1);
-  const weldBad = (polys, step) => {
-    const key = (v) => v.map((x) => Math.round(x / step)).join(',');
-    const edges = new Map();
-    for (const t of G.polysToTriangles(polys)) {
-      const ks = t.map(key);
-      if (ks[0] === ks[1] || ks[1] === ks[2] || ks[0] === ks[2]) continue;   // welded away
-      for (let i = 0; i < 3; i++) {
-        const a = ks[i], b = ks[(i + 1) % 3], k = a < b ? a + '|' + b : b + '|' + a;
-        edges.set(k, (edges.get(k) || 0) + 1);
-      }
-    }
-    let n = 0;
-    for (const c of edges.values()) if (c !== 2) n++;
-    return n;
-  };
   const rows = [];
   for (const v of [0.5, 1, 1.5, 2, 2.5])
     for (let w = 4; w <= 50; w++) {
@@ -1169,6 +1171,80 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
     : fails.length ? `FAILED ${fails.length} welded, among them ${fails.slice(0, 3).join('; ')}`
     : 'welded at 5 and 10 µm, all clean'));
   if (!some.length || fails.length) bad++;
+}
+
+console.log('\nremovable dividers both ways, at every count up to the most that fit');
+/* Removable both ways, the end rails of the two directions end beside each other, each a
+   rail's depth and the clearance out from its wall. Where the end spacing on both axes was
+   a rail and that reach, half a plate, twice the clearance and 2.4 mm, the tip of the end
+   divY rail came to the outer face of the end divX rail at that rail's own tip, and the
+   two shared a vertical edge, used four times: a 1x1 with a 0 or 0.4 mm wall at 10 each
+   way, a half-cell square with a 1 mm wall at 4, a 2x2 with a 2.9 mm wall at 20 and a 3x3
+   with a 1.7 mm wall at 32, all at the usual plate and clearance. The both-ways rows of
+   "as many dividers as the fields allow" build only the most the fields allow, which the
+   limit holds to 11 each way on a 1x1, and so never built them. So those bins are built
+   at every count up to the most that fit. Then, worked out here from what the bin is
+   meant to be rather than read from bin.js, every size from a half-cell square to a 3x3,
+   square or not, at every wall, plate and clearance the fields allow, takes the counts
+   that put the end spacing on both axes within a micron of that reach and a rail, or of
+   a rail's depth and a rail, where the tips stood when the rails reached only a rail's
+   depth. Those that are built as asked are kept, and one in three of them is built. The
+   count found is printed and must not be zero, or the sweep would pass while building
+   none of what it is for. Last, as for the label shelf above, the counts that put it
+   from a micron to 20 µm off, at the reach the rails have now, are welded at 5 and at
+   10 µm, one in 250 of them: with the tips run on only within WELD of a face, 7 of those
+   47 came apart so. */
+{
+  const rows = [];
+  for (const [s, walls] of [[0.5, [0.4, 1, 2]], [1, [0, 0.4, 1, 1.7]], [2, [1, 1.7, 2.9]], [3, [0.4, 1.7, 2.9]]])
+    for (const wall of walls) {
+      const cfg = { u: s, v: s, hUnits: 2, wall, divRemovable: true };
+      const top = dividersBuilt(Object.assign({ divX: 999, divY: 999 }, cfg));
+      for (let k = 1; k <= Math.max(top.divX, top.divY); k++)
+        rows.push([`${s}x${s} wall ${wall} x${k}`, Object.assign({ divX: k, divY: k }, cfg)]);
+    }
+  sweepReport('every count, the usual plate', rows);
+}
+{
+  const field = (cells, wall) => Math.max(0, Math.floor(((cells - 1) * 42 + 41.5 - 2 * wall) / Math.max(wall, 1.2)) - 1);
+  const sizes = [0.5, 1, 1.5, 2, 2.5, 3], rows = [], near = [];
+  let found = 0, close = 0;
+  for (const u of sizes) for (const v of sizes)
+    for (let w = 0; w <= 100; w++) {
+      const wall = w / 10, ix = (u - 1) * 21 + 20.75 - Math.max(0.4, wall), iy = (v - 1) * 21 + 20.75 - Math.max(0.4, wall);
+      for (let t = 8; t <= 50; t += 2)
+        for (let cl = 0; cl <= 100; cl += 5) {
+          const divT = t / 10, divClr = cl / 100;
+          for (const reach of new Set([1.2 + divClr, 1.2])) {
+            const K = divT / 2 + divClr + 1.2 + reach;
+            const nx = Math.round(2 * ix / K - 1), ny = Math.round(2 * iy / K - 1);
+            if (nx < 1 || ny < 1 || nx > field(u, wall) || ny > field(v, wall)) continue;
+            const off = Math.max(Math.abs(2 * ix / (nx + 1) - K), Math.abs(2 * iy / (ny + 1) - K));
+            const on = off <= 0.001, by = !on && off < 0.02 && reach > 1.2 + divClr - 1e-9;
+            if (!on && !by) continue;
+            const cfg = { u, v, hUnits: 3, wall, divX: nx, divY: ny, divRemovable: true, divT, divClr };
+            const built = dividersBuilt(cfg);
+            if (built.divX !== nx || built.divY !== ny) continue;
+            const name = `${u}x${v} wall ${wall}, ${divT} mm plate ${divClr} clear, ${nx}+${ny}`;
+            if (on && found++ % 3 === 0) rows.push([name, cfg]);
+            if (by && close++ % 250 === 0) near.push([name, cfg]);
+          }
+        }
+    }
+  const fails = rows.map(([name, cfg]) => { const f = cleanBuild(cfg); return f ? `${name}: ${f}` : ''; })
+    .filter(Boolean);
+  console.log(`  ${`${found} with both on a face`.padEnd(34)} ` + (!found
+    ? 'NONE FOUND to build' : fails.length ? `FAILED ${fails.length} of ${rows.length}, ` +
+      `among them ${fails.slice(0, 4).join('; ')}` : `${rows.length} builds, all clean`));
+  const welds = [];
+  for (const [name, cfg] of near) {
+    const polys = buildBin(G, cfg).polys, b5 = weldBad(polys, 0.005), b10 = weldBad(polys, 0.01);
+    if (b5 || b10) welds.push(`${name}: ${b5} edges at 5 µm, ${b10} at 10 µm`);
+  }
+  console.log(`  ${`${near.length} of ${close} just off one`.padEnd(34)} ` + (!near.length ? 'NONE FOUND to build'
+    : welds.length ? `FAILED ${welds.length} welded, among them ${welds.slice(0, 3).join('; ')}`
+    : 'welded at 5 and 10 µm, all clean'));
+  if (!found || fails.length || !near.length || welds.length) bad++;
 }
 
 console.log('\ndivider boxes cut to the cavity\'s rounded corner');
@@ -1270,7 +1346,9 @@ console.log('\nremovable dividers: every plate goes into its slot');
    plate across met the floor at the front, and the label shelf over its top at the back;
    and, with removable dividers both ways, the plates of the other direction.
 
-   So each plate a bin is built for is taken as dividerPart makes it, outline and all, and
+   So each plate a bin is built for must have some length: where the clearance at its
+   ends took the whole cavity, a 1x0.5 with a 9.5 mm wall and 1 mm clearance listed a
+   plate -0.5 mm long. Then it is taken as dividerPart makes it, outline and all, and
    moved straight down into its slot from above the top of the bin, lip included: the
    space it passes through on the way, everything above its bottom edge across its span
    and its thickness, must keep clear of every triangle of the bin, to a micron, and stay
@@ -1279,6 +1357,16 @@ console.log('\nremovable dividers: every plate goes into its slot');
    clear of the plates across as well, standing in their slots. Each distinct plate is
    watertight, wound outwards, and as big as its outline times its thickness, which is
    what ties the outline swept here to the plate that is printed.
+
+   The slot itself, the room the plate has to move by the clearance either way, must be
+   clear of the walls of the bin with no dividers, lip, scoop or shelf, and, moved down
+   the same way as its plate, of every triangle of the bin as built: its rails, and the
+   notches in the lip and the shelf, which are cut a little wider than the slot. Held
+   only to having the plate's corner inside the cavity, the end ones kept 0.0014 mm of
+   the 0.1 mm clearance asked at their corners on a 2x1 with a 1.2 mm wall, a 0.8 mm plate
+   and 35 across. Held only to room for its own rails, a lone divider had the rails the
+   other way 0.45 mm into each side of its 1 mm clearance on a half-cell bin with a 5 mm
+   wall and a 5 mm plate, which only a bin with dividers both ways shows.
 
    Then each face of its slot, at each end of the plate, must have a rail standing from
    the floor to the rim along a full rail's depth of that end: the rails reached only a
@@ -1289,16 +1377,21 @@ console.log('\nremovable dividers: every plate goes into its slot');
 
    Asked for as many as the fields allow, a bin with no lip, scoop or shelf is built with
    as many as fit, and one more would not. One more is set out the same way in the same
-   bin with no dividers, and fits if its plates and the rails that would hold them, a rail
-   thick across and a rail's depth along, are clear of the walls and the floor, and no two
-   stand closer than a slot and a rail. A lone divider has no neighbour, so what decides it
-   is room for its rails alone: the limit asked it for a neighbour's spacing, and built
-   none on a half-cell bin with a 3 mm wall at a 5 mm plate, where one fits. Some of the
-   rows below are just that. That is done at both ends of the plate and the clearance the
-   page takes, and at its three smoothnesses, which set the corners' chords. Then lip,
-   scoop and shelf each on and off, with dividers one way and both ways. There what the
-   lip, the shelf and the other direction leave room for decides the count as well, and
-   the Checks say which, so one more is not tried in them. */
+   bin with no dividers, and fits if its plates have length, its slots and the rails that
+   would hold them, a rail thick across and a rail's depth along, are clear of the walls
+   and the floor, no two stand closer than a slot and a rail, and no slot stands where the
+   rails the other way would: a rail's depth and the clearance from each end wall, and ten
+   times WELD (0.02 mm) more so that their tips are not flush with its face. The limit for
+   one way cannot know whether there will be any the other way, so it keeps clear of them
+   either way. That only ever decides a lone divider, which has no neighbour, so what
+   decides it is room for those rails: the limit once asked it for a neighbour's spacing,
+   and built none on a half-cell bin with a 3 mm wall at a 5 mm plate, where one fits.
+   Some of the rows below are just that. That is done at both ends of the plate and the
+   clearance the page takes, and at its three smoothnesses, which set the corners' chords,
+   and then with dividers both ways on half cells with thick walls and on whole cells
+   with thin ones. Then lip, scoop and shelf each on and off, with dividers one way and
+   both ways. There what the lip, the shelf and the other direction leave room for decides
+   the count as well, and the Checks say which, so one more is not tried in them. */
 {
   const sub = (p, q) => [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
   const cross = (p, q) => [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
@@ -1431,6 +1524,12 @@ console.log('\nremovable dividers: every plate goes into its slot');
   /* Where a plate's rails must stand to hold it, a micron inside: a rail thick out from
      each face of its slot, and a rail's depth back from each end of the plate, floor to
      rim. Or the plate's whole half, when that is shorter than a rail's depth. */
+  // the slot a plate stands in, from face to face, grown by `grow` across it
+  const slotOf = (pl, ax, grow) => {
+    const lo = pl.lo.slice(), hi = pl.hi.slice();
+    lo[ax] = pl.faces[0] - grow; hi[ax] = pl.faces[1] + grow;
+    return { lo, hi };
+  };
   const railsOf = (pl, ax, H) => {
     const out = [], along = Math.min(RAIL_D, pl.end);
     for (const [a, b] of [[pl.faces[0] - RAIL_T, pl.faces[0]], [pl.faces[1], pl.faces[1] + RAIL_T]])
@@ -1445,8 +1544,15 @@ console.log('\nremovable dividers: every plate goes into its slot');
   const faults = (cfg, oneMore) => {
     const c = Object.assign({}, BIN_DEFAULTS, cfg), H = c.hUnits * SPEC.unitH;
     const r = buildBin(G, cfg), tris = trisOf(r.polys), binAt = indexOf(tris), built = dividersBuilt(cfg), out = [];
-    const bareKey = JSON.stringify(Object.assign({}, cfg, { divX: 0, divY: 0, divRemovable: false }));
-    if (oneMore && !bare.has(bareKey)) bare.set(bareKey, trisOf(buildBin(G, JSON.parse(bareKey)).polys));
+    /* The bin with no dividers, and no lip, scoop or shelf either, which stand over a
+       slot only where it is notched or its plate cut: its walls and floor alone. The rows
+       that share one come together, so only the last few are kept: kept for every row,
+       they held gigabytes. */
+    const bareKey = JSON.stringify(Object.assign({}, cfg, { divX: 0, divY: 0, divRemovable: false, lip: false, scoop: 0, label: 0 }));
+    if (!bare.has(bareKey)) {
+      if (bare.size >= 8) bare.delete(bare.keys().next().value);
+      bare.set(bareKey, trisOf(buildBin(G, JSON.parse(bareKey)).polys));
+    }
     /* Clear of every triangle, and inside the cavity's rectangle: a box wholly inside a
        wall meets no triangle either. */
     const room = [innerOf(c, 0), innerOf(c, 1)];
@@ -1455,7 +1561,7 @@ console.log('\nremovable dividers: every plate goes into its slot');
     let Z = -Infinity;
     for (const p of r.polys) for (const v of p.verts) Z = Math.max(Z, v[2]);
     Z += 1;
-    const zf = r.meta.floorZ + 0.05;
+    const zf = r.meta.floorZ + 0.05, lay = plateLayout(cfg, built);
     const seated = [];            // the plates across, standing in their slots
     let seatedAt = null, plates = 0;
     for (const [key, ax] of [['divX', 0], ['divY', 1]]) {
@@ -1477,18 +1583,29 @@ console.log('\nremovable dividers: every plate goes into its slot');
         if (m.tall < 1) continue;            // the page lists no plate this short
         plates++;
         if (pl.end < RAIL_D) short++;
+        if (!(pl.end > 0)) { out.push(`${what} has no length`); continue; }
         if (m.at !== undefined && Math.abs(m.at - pl.p) > 1e-9) { out.push(`${what} made for ${m.at.toFixed(3)}, stands at ${pl.p.toFixed(3)}`); continue; }
         const mf = meshFault(d);
         if (mf) { out.push(`${what}: ${mf}`); continue; }
         if (!inside(pl)) { out.push(`${what} blocked, into a wall`); continue; }
-        const P = swept(bottomOf(outlineOf(m, zf)), pl.p - m.t / 2, pl.p + m.t / 2, Z, frame);
+        // its room to move by the clearance either way: clear of the walls, then of every rail
+        if (!clear(slotOf(pl, ax, -E))) { out.push(`${what} has its slot in a corner`); continue; }
+        /* The plate, and its slot face to face, each moved down from above the bin to the
+           seat. A plate along over the scoop stands on it at its front face, and moved
+           forward by its clearance would stand that much higher up the scoop's slope: its
+           slot comes down to the scoop at the slot's front face, which is not in its way. */
+        const bottom = bottomOf(outlineOf(m, zf));
+        const P = swept(bottom, pl.p - m.t / 2, pl.p + m.t / 2, Z, frame);
+        const rise = ax && lay.r ? lay.S(pl.faces[0]) : -Infinity;
+        const S = swept(bottom.map(([u, z]) => [u, Math.max(z, rise)]), pl.faces[0], pl.faces[1], Z, frame);
         if (ax && !seatedAt) seatedAt = indexOf(seated);
-        const bin = P.find((pc) => hits(binAt, pc)), plate = ax && !bin && P.find((pc) => hits(seatedAt, pc));
-        if (bin || plate) {
-          const at = (bin || plate).lo.map((x, a) => ((x + (bin || plate).hi[a]) / 2).toFixed(1)).join(', ');
-          out.push(`${what} ${bin ? 'blocked' : 'meets a plate across'} going in, near ${at}`);
-          continue;
-        }
+        const where = (pc) => pc.lo.map((x, a) => ((x + pc.hi[a]) / 2).toFixed(1)).join(', ');
+        const bin = P.find((pc) => hits(binAt, pc));
+        if (bin) { out.push(`${what} blocked going in, near ${where(bin)}`); continue; }
+        const room = S.find((pc) => hits(binAt, pc));
+        if (room) { out.push(`${what} has the bin in its clearance going in, near ${where(room)}`); continue; }
+        const plate = ax && P.find((pc) => hits(seatedAt, pc));
+        if (plate) { out.push(`${what} meets a plate across going in, near ${where(plate)}`); continue; }
         // each face of the slot, at each end on its own: from the middle to that end
         const need = Math.min(RAIL_D, pl.end) - 1e-6;
         for (const x of pl.faces) for (const s of [-1, 1]) {
@@ -1502,17 +1619,20 @@ console.log('\nremovable dividers: every plate goes into its slot');
           seated.push(...trisOf(d.polys.map((q) => ({ verts: q.verts.map(([x, y, z]) => frame(x, y + zc, pl.p - m.t / 2 + z)) }))));
         }
       }
-      // one more: crowded by a neighbour, or its plates or their rails into a wall of the bare bin
+      /* one more: crowded by a neighbour, its slots or their rails into a wall of the bare
+         bin, a slot where the rails the other way would stand, or a plate with no length */
       if (oneMore && n < (c[key] || 0)) {
         const k = n + 1, crowded = k > 1 && 2 * inner / (k + 1) < pitch - 1e-9;
-        if (!crowded && platesOf(c, r, k, ax, E).every((pl) => clear(pl) && railsOf(pl, ax, H).every(clear)))
+        const reach = RAIL_D + c.divClr + 0.02;
+        if (!crowded && platesOf(c, r, k, ax, E).every((pl) => pl.end > 0 && clear(slotOf(pl, ax, E)) &&
+            railsOf(pl, ax, H).every(clear) && pl.faces[0] >= -inner + reach - 1e-9 && pl.faces[1] <= inner - reach + 1e-9))
           out.push(`${key}: ${k} would have fit, ${n} built`);
       }
     }
     return { out, plates, r };
   };
   const kindOf = (t) => (/^the bin:/.test(t) ? 'the bin'
-    : (t.match(/\b(blocked|meets a plate across|held|would have fit|asked|made for)\b/) || ['', 'the plate'])[1]);
+    : (t.match(/\b(length|blocked|corner|clearance|meets a plate across|held|would have fit|asked|made for)\b/) || ['', 'the plate'])[1]);
   /* A row may ask for the whole bin to be checked too, watertight and wound: see
      cleanBuild. A lone divider is only looked for where one more is tried. */
   const report = (label, rows, oneMore) => {
@@ -1556,7 +1676,7 @@ console.log('\nremovable dividers: every plate goes into its slot');
      and the plates spanning that half cell, as short as the rails are deep or shorter,
      where the rails from its two walls meet and are one rib across. */
   for (const [divT, divClr] of pairs)
-    for (const wall of [2.5, 3, 4, 5, 6, 7, 8, 9])
+    for (const wall of [2.5, 3, 4, 5, 6, 7, 8, 9, 9.5, 10])
       for (const key of ['divX', 'divY'])
         for (const [a, b] of [[0.5, 1], [2, 0.5]]) {
           const top = most((a - 1) * 42 + 41.5 - 2 * wall, wall), [u, v] = key === 'divX' ? [a, b] : [b, a];
@@ -1564,6 +1684,24 @@ console.log('\nremovable dividers: every plate goes into its slot');
             rows.push([label(u, v, wall, n, key, divT, divClr, 12),
                        { u, v, hUnits: 3, wall, divRemovable: true, lip: false, divT, divClr, arcSegs: 12, [key]: n }]);
         }
+  /* Both ways at once: the rails the other way stand along each end wall, a rail's depth
+     and the clearance out from it, and must keep out of every slot. On a half cell with a
+     thick wall the one divider there is room for stands near them; on whole cells with
+     thin walls the end ones of both ways crowd the same corners. */
+  const both = (u, v, wall, nx, ny, divT, divClr) => rows.push([`${u}x${v} wall ${wall}, ${nx} across and ${ny} along` +
+    `${divT === 1.6 && divClr === 0.25 ? '' : `, ${divT} mm plate ${divClr} clear`}`,
+    { u, v, hUnits: 3, wall, divRemovable: true, lip: false, divT, divClr, arcSegs: 12, divX: nx, divY: ny }]);
+  for (const [divT, divClr] of pairs) {
+    for (const wall of [2.5, 3, 4, 5, 5.5, 6, 7, 7.5, 8, 8.5, 9])
+      for (const [u, v] of [[0.5, 1], [1, 0.5], [0.5, 0.5]]) {
+        const tx = most((u - 1) * 42 + 41.5 - 2 * wall, wall), ty = most((v - 1) * 42 + 41.5 - 2 * wall, wall);
+        for (const nn of new Set([[1, ty], [tx, 1], [tx, ty]].filter(([x, y]) => x && y).map(String)))
+          both(u, v, wall, ...nn.split(',').map(Number), divT, divClr);
+      }
+    for (const wall of [0.4, 1.2, 2])
+      for (const [u, v] of [[1, 1], [2, 1]])
+        both(u, v, wall, most((u - 1) * 42 + 41.5 - 2 * wall, wall), most((v - 1) * 42 + 41.5 - 2 * wall, wall), divT, divClr);
+  }
   report('one way, no lip, scoop or shelf', rows, true);
   /* Lip, scoop and shelf each on and off, with plates one way and both ways, as many as
      the fields allow and half that, at walls either side of the lip's base, where it stops

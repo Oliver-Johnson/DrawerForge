@@ -1594,23 +1594,35 @@ function shelfDepth(c, id, H) {
  * their slots, and both plates go in.
  *
  * Even spacing stands the end ones as far from the end walls as from each other, which
- * one alone does not need: with no neighbour, it needs only its slot and a rail either
- * side inside the cavity. Asked for a neighbour's spacing as well, a half-cell bin with a
- * 3 mm wall built none at a 5 mm plate and 1 mm clearance, where one fits with room over.
+ * one alone does not need: with no neighbour, it needs only its slot and, from there to
+ * each end wall, room for the rails the other way, should there be any, which reach a
+ * rail's depth and the clearance out from the wall (see reach in buildBin), more than
+ * its own rail takes. Held only to its slot and a rail either side, the other way's
+ * rails stood in its clearance, 0.45 mm into each side of the 1 mm asked on a half-cell
+ * bin with a 5 mm wall and a 5 mm plate. With ten times WELD over, their tips stop short
+ * of the slot's face rather than flush with it, where in a square bin a rail each way
+ * had a corner on one edge, used four times. Asked for a neighbour's spacing as well, a
+ * half-cell bin with a 3 mm wall built none at a 5 mm plate and 1 mm clearance, where
+ * one fits with room over.
  *
  * The end ones must clear the cavity's rounded corners as well. Spaced so, the plate
  * nearest an end wall stands a slot and a rail from it less half a plate, which with a
  * thin plate and little clearance is inside the corner's radius: 1.8 mm out at 0.8 mm
  * and 0.1, where the corner's radius is up to 3.35. Its plate spans to the clearance
  * from the side walls, so its corner stood up to 0.26 mm into the wall at smoothness 8,
- * and the plate could not go in. The rails reach a rail's depth along that plate's end
- * (see reach in buildBin), and the face of the slot on the end wall's side is a
- * clearance nearer the corner than the plate is: where the corner cuts that face short
- * of the plate's end, the end sits less than a rail's depth in its rail. So the count
- * comes down until that face, at the end of the plate's span, is inside the cavity's
- * outline as built, chords and all, or on it. The plate's own corner, between that face
- * and the middle, is then inside too. Fewer dividers rather than end plates cut to the
- * corner, because every plate is then the same part, and goes in any slot.
+ * and the plate could not go in. Held only to having the plate's corner inside the
+ * outline, it went in with next to no clearance at its corner: 0.0014 mm of the 0.1
+ * asked, across the plate, on a 2x1 with a 1.2 mm wall and 35 across. So the count
+ * comes down until the slot's face on the end wall's side, at the end of the plate's
+ * span, is inside the cavity's outline as built, chords and all, or on it: the whole
+ * slot is then clear of the corner, and the plate keeps the clearance asked for across
+ * it at its corner, as along the rest of the slot (0.134 mm at the 33 that bin is built
+ * with). Fewer dividers rather than end plates cut to the corner, because every plate
+ * is then the same part, and goes in any slot.
+ *
+ * And none at all where the clearance at the plate's two ends takes the whole cavity:
+ * a 1x0.5 with a 9.5 mm wall and 1 mm clearance listed a plate -0.5 mm long, and at a
+ * 10 mm wall and the usual clearance one with no volume.
  *
  * Two more things can stand over a slot, and each brings the count down again where it
  * would. With a stacking lip, each slot is a notch through the lip (notchedLip), cut
@@ -1630,7 +1642,9 @@ function railedLimit(cfg, axis) {
   const inner = axis === 'x' ? hw : hd;
   const slot = c.divT / 2 + c.divClr, pitch = 2 * slot + RAIL_T;
   let most = Math.max(0, Math.floor(2 * inner / pitch + 1e-9) - 1) || 0;
-  if (!most && inner >= slot + RAIL_T - 1e-9) most = 1;
+  if (!most && inner >= slot + RAIL_D + c.divClr + 10 * WELD - 1e-9) most = 1;
+  // none where the clearance at the plate's ends leaves it no length (see dividerPart)
+  if ((axis === 'x' ? hd : hw) - c.divClr < WELD) most = 0;
   const slots = most;
   // the cavity's corner as roundRect builds it, and whether a point stands out through it
   const r = Math.max(0.2, Math.min(Math.max(0.4, SPEC.r - c.wall), Math.min(hw, hd) - 0.01));
@@ -2396,12 +2410,36 @@ function buildBin(G, cfg) {
        shelf above was built to. Nothing, when there is no shelf. */
     const shelf = !c.divRemovable && d ? id - d : NaN;
     // removable ones no more than fit, however many are asked for: built, at the top
-    for (const [a, b] of spans(built.divX, iw))
-      for (const [lo, hi] of reach(id))
+    const xs = spans(built.divX, iw), ys = spans(built.divY, id, shelf);
+    /* Removable both ways, the rails of one direction end in the cavity beside those of
+       the other. Where the end spacing on both axes is a rail and its reach (half a
+       plate, twice the clearance and 2.4 mm), the tip of the end divY rail came to the
+       outer face of the end divX rail, at that rail's own tip: two boxes corner to corner
+       on one vertical edge, used four times (a 1x1 with a 0.4 mm wall, 10 each way, at
+       the usual plate and clearance). Spaced so on one axis, the tip came to the other
+       rail's face, and the two touched face to face. So a rail whose tip comes within
+       ten times WELD of the face of a rail the other way, where the two meet, runs a
+       BLOAT on into that rail, as a divider does into the label shelf. That is the face
+       towards the wall the tip comes from, and the rail is a rail thick, so the tip stays
+       in it, stands in no slot, and holds its plate no less. */
+    const runOn = ([a, b], [lo, hi], others, otherReach) => {
+      if (c.divRemovable && otherReach.some(([p, q]) => a < q + 10 * WELD && b > p - 10 * WELD))
+        for (const [oa, ob] of others) {
+          if (Math.abs(hi - oa) < 10 * WELD) hi = oa + BLOAT;
+          if (Math.abs(lo - ob) < 10 * WELD) lo = ob - BLOAT;
+        }
+      return [lo, hi];
+    };
+    for (const [a, b] of xs)
+      for (const r of reach(id)) {
+        const [lo, hi] = runOn([a, b], r, ys, reach(iw));
         polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
-    for (const [a, b] of spans(built.divY, id, shelf))
-      for (const [lo, hi] of reach(iw))
+      }
+    for (const [a, b] of ys)
+      for (const r of reach(iw)) {
+        const [lo, hi] = runOn([a, b], r, xs, reach(id));
         polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT, Math.abs(a - shelf) < 10 * WELD));
+      }
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */

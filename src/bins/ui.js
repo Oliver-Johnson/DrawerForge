@@ -476,8 +476,8 @@ function footProfileHalf(z) {
    counted in full all the same, as if those were not there, so such a bin comes out a
    little heavy: about 0.2 g on a 1x1x3 or a 2x1x6 with two or three dividers each way, an
    8 mm scoop and a 10 mm shelf, of which the chamfer is 0.03 g. It grows with the count
-   and with the scoop and the shelf, to about 3.5 g on a 2x1x6 with 23 across and 10
-   along under a 20 mm scoop and a 20 mm shelf.
+   and with the scoop and the shelf, to 1.9 g on a 2x1x6 with 23 across and 10 along
+   under a 20 mm scoop and a 20 mm shelf, measured off the bin as built.
    Placed, sorted and merged where two meet exactly as spans() does it, so dividers packed
    close enough for one's rail to run into the next count the plastic they share once.
    A rail beside an end wall can stand in the cavity's rounded corner, where buildBin
@@ -2685,10 +2685,10 @@ function binIssues(b, k, claims) {
     out.push({ note: true, t: `has ${b.wall} mm walls, thicker than the ${lipBase} mm the stacking lip stands on — ` +
       `each side takes ${(b.wall - BIN_DEFAULTS.wall).toFixed(1)} mm more of the inside than the usual ${BIN_DEFAULTS.wall} mm` });
   /* A note, because the bin prints, with fewer removable dividers than it asks for: as
-     many as leave every slot room for its plate and keep the end ones out of the rounded
-     corners (railedLimit), and the note says which of the two stopped it; or as many as
-     go in past the lip and the shelf and keep their plate where they cross, which notes
-     of their own say (dividersWhy). A design from
+     many as leave every slot room for its plate, and the end ones the clearance at the
+     plate's corner in the bin's rounded corners (railedLimit), and the note says which of
+     the two stopped it; or as many as go in past the lip and the shelf and keep their
+     plate where they cross, which notes of their own say (dividersWhy). A design from
      before the fields held them there can ask for 31 on a 1x1, where 10 fit at the usual
      plate and clearance. Its link keeps asking, so a thinner plate or a tighter clearance
      builds more without it being edited. A whole drawer of such bins says it once
@@ -2708,15 +2708,15 @@ function binIssues(b, k, claims) {
       const by = rules.size > 1 ? 'both' : [...rules][0], more = railShort.some(([k]) => d[k]);
       const at = `a ${state.divT} mm plate at ${state.divClr} mm clearance`;
       const because = (them) => (by === 'slots' ? `${more ? 'no more' : 'none'} leave every slot room for ${at}`
-        : by === 'corners' ? (more ? `more would stand the end ones in ${them} rounded corners, where the rails cannot hold them, with ${at}`
-          : `even one would stand in ${them} rounded corners, where its rails cannot hold it, with ${at}`)
+        : by === 'corners' ? (more ? `more would stand the end ones so far into ${them} rounded corners that a plate would lose the clearance at its corner, with ${at}`
+          : `even one would stand so far into ${them} rounded corners that its plate would lose the clearance at its corner, with ${at}`)
         : `${more ? 'no more' : 'none'} leave every slot room and keep the end ones out of ${them} rounded corners with ${at}`);
       out.push({ note: true, group: `rails-${by}`,
         t: `is built with ${railShort.map(([k, w], i) => `${d[k] || 'no'}${i ? '' : ` removable divider${d[k] === 1 ? '' : 's'}`} ${w}`).join(' and ')}, ` +
            `not the ${railShort.map(([k]) => b[k]).join(' and ')} it asks for, as ${because("the bin's")}`,
         many: (n, names) => `${n} bins are built with fewer removable dividers than they ask for, as ` +
           `${by === 'slots' ? `no more leave every slot room for ${at}` : by === 'corners'
-            ? `more would stand the end ones in their rounded corners, where the rails cannot hold them, with ${at}`
+            ? `more would stand the end ones so far into their rounded corners that a plate would lose the clearance at its corner, with ${at}`
             : `no more leave every slot room and keep the end ones out of their rounded corners with ${at}`}: ${names}` });
     }
     const stand = d.divX ? `cross the ones across${b.scoop ? ', or stand on the scoop' : ''}` : 'stand on the scoop';
@@ -4215,9 +4215,14 @@ const heightSrc = () => scratch || (selected >= 0 && B()[selected] ? B()[selecte
    with, which stand to the full height whatever the walls do, and the cells, because a
    carved bin's walls are full height too. The new-bin settings have no cells of their
    own, and are a whole rectangle; nor is a half-size bin carved (buildBin drops its
-   mask), so it is asked without one, or it would be quoted walled full height. */
+   mask), so it is asked without one, or it would be quoted walled full height. They are
+   drawn with fixed dividers whatever Removable says (readControls), so they are asked
+   with fixed ones: held to the removable limit, a half-cell bin with its walls halved
+   and one divider was quoted at the walls' height, where the bin drawn stands full
+   height on its divider. */
 const heightCfg = (b) => ({ floorT: b.floorT, screws: b.screws, solid: b.solid, edges: b.edges,
-                            ...builtDivs(b), u: b.u || 1, v: b.v || 1,
+                            ...builtDivs(b === state ? Object.assign({}, b, { divRemovable: false }) : b),
+                            u: b.u || 1, v: b.v || 1,
                             cells: isHalfSize(b) ? null : b.cells || null });
 const heightsOf = (b) => binHeights(Object.assign(heightCfg(b), { hUnits: b.hUnits }));
 /* Which length the field takes for this bin. Inside depth when that is the menu's choice
