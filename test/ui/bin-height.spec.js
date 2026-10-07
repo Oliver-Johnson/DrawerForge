@@ -626,3 +626,25 @@ test('an inside depth shown, typed back, gives the same units', async ({ page })
   await typeHeight(page, 14.96);
   expect(await units(page)).toBe(3);
 });
+
+/* With nothing selected the fields are the next bin drawn, which is drawn with fixed
+   dividers whatever Removable says. Quoted with the removable limit, a half-cell bin with
+   5 mm walls, halved all round, asking for one divider at a 5 mm plate and 1 mm
+   clearance, where no removable one fits, read as standing at its walls' height, where
+   the bin drawn stands full height on its divider. */
+test('the next bin is quoted with the dividers it is drawn with, whatever Removable says', async ({ page }) => {
+  page.__errors = await H.openBins(page);
+  await H.setField(page, 'u', 0.5);
+  await H.setField(page, 'wall', 5);
+  await H.setField(page, 'hUnits', 6);
+  // the bin settings are closed at first, so these are set as setField sets a field
+  for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) await H.setField(page, id, '0.5');
+  await H.setField(page, 'divX', 1);
+  await page.evaluate(() => document.getElementById('divRemovable').click());
+  await H.setField(page, 'divT', 5);
+  await H.setField(page, 'divClr', 1);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => [selected, state.u, state.divX, state.divRemovable,
+    railedMost(binCfg(state), 'x')])).toEqual([-1, 0.5, 1, true, 0]);
+  expect(await result(page)).toBe('6 units · 42 mm overall · 18 mm inside');
+});
