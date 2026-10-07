@@ -8238,6 +8238,52 @@ function footProfileHalf(z) {
   return h;
 }
 
+/* The plan area of the rails `n` removable dividers stand in along one direction: each a
+   slot between two ribs RAIL_T thick, standing RAIL_D out from each of the two facing
+   walls its plate slides between, from the floor to the rim. `along` is half the length
+   of those walls inside the cavity, hwI for the dividers that stand at a fixed x (divX),
+   hdI for the others, as buildBin's spans() and reach() take them.
+   Placed, sorted and merged where two meet exactly as spans() does it, so dividers packed
+   close enough for one's rail to run into the next count the plastic they share once.
+   A rail beside an end wall can stand in the cavity's rounded corner, where buildBin
+   either leaves it buried in the wall or, if it would stand out through the bin, cuts it
+   to the cavity's outline. Either way the part behind the arc is wall, already counted,
+   so only the part in front of it is counted here: the rail's depth left in front of
+   the arc, summed along it, against a true arc of the cavity's radius rather than the
+   chords it is built from (under a rail 1.2 mm wide the two differ by a few hundredths
+   of a square millimetre at the coarsest smoothness). A rail on a straight run is
+   counted whole, so at any count that keeps the rails out of the corners the sum is
+   exactly the rails' own area. */
+function railArea(n, along, wall) {
+  if (!(n > 0) || !(along > 0)) return 0;
+  const slot = state.divT / 2 + state.divClr, rail = slot + RAIL_T;
+  const spans = [];
+  for (let k = 1; k <= n; k++) {
+    const p = -along + (2 * along) * k / (n + 1);
+    spans.push([p - rail, p - slot], [p + slot, p + rail]);
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const [lo, hi] of spans) {
+    const last = merged[merged.length - 1];
+    if (last && lo <= last[1] + BLOAT) last[1] = Math.max(last[1], hi);
+    else merged.push([lo, hi]);
+  }
+  /* t into a corner, the arc stands rI - sqrt(rI² - t²) in front of the wall's straight
+     line, and takes the whole of a rail's depth at tEnd (or never quite, where the
+     radius is no deeper than the rail). `under` is the depth left in front of it, summed
+     from the corner's start to t; `upTo` the same from the middle of the wall to x, both
+     ways, so a span's area is upTo(hi) - upTo(lo). Past the end wall it adds nothing. */
+  const rI = Math.max(0.4, SPEC.r - wall), straight = Math.max(0, along - rI);
+  const tEnd = RAIL_D >= rI ? rI : Math.sqrt(rI * rI - (rI - RAIL_D) * (rI - RAIL_D));
+  const under = (t) => {
+    t = Math.min(Math.max(t, 0), tEnd);
+    return (RAIL_D - rI) * t + (t * Math.sqrt(rI * rI - t * t) + rI * rI * Math.asin(t / rI)) / 2;
+  };
+  const upTo = (x) => Math.sign(x) * (RAIL_D * Math.min(Math.abs(x), straight) + under(Math.abs(x) - straight));
+  return 2 * merged.reduce((a, [lo, hi]) => a + upTo(hi) - upTo(lo), 0);  // both walls
+}
+
 // { raw, filament } in mm3
 function volumeMm3(c) {
   const C = SPEC.centre;
@@ -8284,7 +8330,19 @@ function volumeMm3(c) {
                     * (H - floorZ);
   const perim = 4 * hwO + 4 * hdO;
   const wallFrac = (e('f') * 2 * hwO + e('b') * 2 * hwO + e('l') * 2 * hdO + e('r') * 2 * hdO) / perim;
-  const divs = (c.divX * wall * 2 * hdI + c.divY * wall * 2 * hwI) * (H - floorZ);
+  /* Dividers. A fixed one is a wall across the cavity, a wall thick, and is counted as
+     one. A removable one is not built into the bin at all: the bin gets the rails its
+     plate slides down (railArea), and the plate is a part of its own, which the plan
+     weighs beside the bin (computePlan). Counted as a wall each, the rails went uncounted
+     and each plate was weighed twice, once here and once as itself: a 2x1x6 with three
+     removable dividers across and two along was 41 g of bin where it is 27 g, and with
+     its 20 g of plates the job was 60 g where it is 47 g. A carved bin gets no rails
+     (buildBin leaves dividers off a carved shape, as dividerParts does its plates), so a
+     removable one counts none. */
+  const built = { divX: c.divX || 0, divY: c.divY || 0 };   // the dividers it is built with
+  const divs = !c.divRemovable
+    ? (built.divX * wall * 2 * hdI + built.divY * wall * 2 * hwI) * (H - floorZ)
+    : isCarved(c) ? 0 : (railArea(built.divX, hwI, wall) + railArea(built.divY, hdI, wall)) * (H - floorZ);
   const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
   const thin = wallsFull * wallFrac + divs + lipV;
   return { raw: baseRaw + thin, filament: baseFil + thin };
