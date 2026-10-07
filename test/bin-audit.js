@@ -275,6 +275,30 @@ const CASES = [
     fit: { lines: 1, cut: false } },
   { name: '0.5x1x3-note', u: 0.5, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'M2',
     fit: { lines: 1, cut: false } },
+  /* Dividers stand from the floor to H, through the shelf and anything on it, so the
+     letters go in the widest space between them and keep 0.4 mm off each: a fixed one is
+     a wall thick, a removable one the rails either side of the slot its plate slides
+     down. Ones across the other way that cross the shelf split it front from back, and
+     the letters take the deeper part. The section on raised notes holds every corner of
+     every letter 0.4 clear of each divider's footprint, worked out from the bin's own
+     numbers; a bin whose dividers leave no room for any of it is with the bins that
+     print nothing. */
+  { name: '1x1x3-note-div1', u: 1, v: 1, hUnits: 3, label: 12, divX: 1, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 2, cut: false } },
+  { name: '3x1x3-note-div2', u: 3, v: 1, hUnits: 3, label: 12, divX: 2, labelMode: 1,
+    note: 'Assorted M3 M4 nuts', fit: { lines: 2, cut: false } },
+  { name: '1x1x3-note-wall0.4-div1', u: 1, v: 1, hUnits: 3, wall: 0.4, label: 12, divX: 1, labelMode: 1,
+    note: 'M3 screws', fit: { lines: 2, cut: false } },
+  { name: '2x1x3-note-rails1', u: 2, v: 1, hUnits: 3, label: 12, divX: 1, divRemovable: true,
+    labelMode: 1, note: 'M3 screws', fit: { lines: 1, cut: false } },
+  { name: '1x1x3-note-rails2', u: 1, v: 1, hUnits: 3, label: 12, divX: 2, divRemovable: true,
+    labelMode: 1, note: 'M2 nuts', fit: { lines: 2, cut: true } },
+  { name: '1x1x3-note-divY3', u: 1, v: 1, hUnits: 3, label: 12, divY: 3, labelMode: 1, note: 'M3 screws',
+    fit: { lines: 1, cut: false } },
+  { name: '2x2x4-note-div-both', u: 2, v: 2, hUnits: 4, label: 16, divX: 1, divY: 5, labelMode: 1,
+    note: 'Fuses 5A, 10A', fit: { lines: 1, cut: false } },
+  { name: '2x2x4-note-rails-both', u: 2, v: 2, hUnits: 4, label: 16, divX: 1, divY: 5, divRemovable: true,
+    labelMode: 1, note: 'Fuses 5A, 10A', fit: { lines: 1, cut: false } },
   { name: '2x1x3-note-mag-scr', u: 2, v: 1, hUnits: 3, label: 12, labelMode: 1, note: 'Fuses 5A, 10A',
     magnets: true, screws: true, fit: { lines: 1, cut: false } },
   ...NOTE_GLYPHS.map((note, i) => ({ name: `4x1x3-glyphs-${i + 1}`, u: 4, v: 1, hUnits: 3, label: 12,
@@ -1210,12 +1234,14 @@ console.log('\nnotes raised on the label shelf');
 {
   for (const cs of CASES.filter((c) => c.labelMode === 1)) {
     const r = buildBin(G, cs), at = prober(r.polys), s = shelfNote(cs), faults = [];
+    let divClear = Infinity;
     const H = cs.hUnits * SPEC.unitH;
     const id = (cs.v - 1) * SPEC.pitch / 2 + SPEC.half - (cs.wall || BIN_DEFAULTS.wall);
     if (!s.fit) faults.push(`NO LETTERS (${s.why})`);
     else {
+      // the shelf through the strip in front of the letters, beside one: clear of dividers
       const [x, y] = s.fit.segs[0][0];
-      const top = at(x, y).pop(), shelf = at(0, id - s.depth + 0.3).pop();
+      const top = at(x, y).pop(), shelf = at(x, id - s.depth + 0.3).pop();
       if (Math.abs(top - (H - NOTE_CLEAR)) > 1e-6)
         faults.push(`a letter's top at ${top.toFixed(3)}, not H - 0.4 = ${(H - 0.4).toFixed(2)}`);
       if (Math.abs(shelf - (H - 1.0)) > 1e-6)
@@ -1227,6 +1253,24 @@ console.log('\nnotes raised on the label shelf');
       if (off.length)
         faults.push(`${off.length} of ${corners.length} letter corners not over the shelf, ` +
                     `as at ${off[0][0].toFixed(2)}, ${off[0][1].toFixed(2)}`);
+      /* ...and 0.4 clear of every divider: a fixed one a wall thick, a removable one 1.2
+         mm of rail each side of a slot as wide as the plate and its clearance, which is
+         where the plate goes down too. Measured from the bin's numbers, centre lines
+         evenly across the cavity, not from what built it. */
+      const wall = cs.wall !== undefined ? cs.wall : BIN_DEFAULTS.wall;
+      const iw = (cs.u - 1) * SPEC.pitch / 2 + SPEC.half - wall;
+      const half = cs.divRemovable ? BIN_DEFAULTS.divT / 2 + BIN_DEFAULTS.divClr + 1.2 : wall / 2;
+      const offDiv = (n, inner, v) => {
+        let d = Infinity;
+        for (let k = 1; k <= n; k++) d = Math.min(d, Math.abs(v - (-inner + 2 * inner * k / (n + 1))) - half);
+        return d;
+      };
+      divClear = Infinity;
+      for (const [cx, cy] of corners)
+        divClear = Math.min(divClear, offDiv(cs.divX || 0, iw, cx), offDiv(cs.divY || 0, id, cy));
+      if (divClear < 0.4 - 1e-6)
+        faults.push(divClear < 0 ? `a letter ${(-divClear).toFixed(2)} mm into a divider's footprint`
+          : `a letter only ${divClear.toFixed(2)} mm off a divider`);
       if (cs.fit.lines && s.fit.lines.length !== cs.fit.lines)
         faults.push(`${s.fit.lines.length} lines, not ${cs.fit.lines}`);
       if (s.fit.cut !== cs.fit.cut) faults.push(cs.fit.cut ? 'NOT CUT short' : 'CUT short');
@@ -1236,7 +1280,8 @@ console.log('\nnotes raised on the label shelf');
     }
     console.log(`  ${cs.name.padEnd(22)} ${s.fit ? (s.fit.cap.toFixed(2) + ' mm, ' + s.fit.lines.length +
       (s.fit.lines.length > 1 ? ' lines' : ' line') + (s.fit.cut ? ', cut' : '')).padEnd(20) : ''.padEnd(20)} ` +
-      (faults.length ? faults.join('; ') : 'letters at H - 0.4 on a shelf at H - 1.0'));
+      (faults.length ? faults.join('; ') : 'letters at H - 0.4 on a shelf at H - 1.0' +
+        (isFinite(divClear) ? `, ${divClear.toFixed(2)} off the nearest divider` : '')));
     if (faults.length) bad++;
   }
 
@@ -1305,6 +1350,14 @@ console.log('\nnotes raised on the label shelf');
     ['solid', Object.assign({}, one, { solid: true }), { labelMode: 1, note: 'M3' }, 'solid'],
     ['carved', { u: 3, v: 3, hUnits: 3, label: 12, cells: cellsExcept(3, 3, [[2, 2]]) },
      { labelMode: 1, note: 'M3' }, 'carved'],
+    // 4.9 mm between centre lines: no space between them takes even "..." at 3 mm
+    ['dividers too close for any of it', Object.assign({}, one, { divX: 7 }),
+     { labelMode: 1, note: 'M3 screws' }, 'dividers'],
+    ['removable ones too close', Object.assign({}, one, { divX: 4, divRemovable: true }),
+     { labelMode: 1, note: 'M3 screws' }, 'dividers'],
+    // a half cell with 8 mm walls is 4 mm across inside: its letters were 0.5 mm tall
+    ['walls too thick for any of it', Object.assign({}, one, { u: 0.5, wall: 8 }),
+     { labelMode: 1, note: 'M3 screws' }, 'narrow'],
   ];
   const moved = SAME.map(([name, cfg, extra, why]) => {
     const withIt = Object.assign({}, cfg, extra), got = shelfNote(withIt).why;

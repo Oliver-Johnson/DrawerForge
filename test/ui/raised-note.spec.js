@@ -32,6 +32,9 @@ const checks = (page) => page.locator('#warnings');
 test.beforeEach(async ({ page }) => {
   await H.forgetSaved(page);
   page.__errors = await H.openBins(page);
+  /* A page without the menu fails here, at once, rather than every case waiting out the
+     whole timeout on a select it cannot find. */
+  await expect(page.locator('#labelMode'), 'the page has the "On the shelf" menu').toHaveCount(1, { timeout: 2000 });
 });
 test.afterEach(async ({ page }) => {
   expect(page.__errors, 'the page threw while being driven').toEqual([]);
@@ -170,4 +173,39 @@ test('Checks says when the note is wrapped, cut short, left off or has no shelf'
   await H.setField(page, 'label', 12);
   expect(await lead(page)).toBe('With the back wall lowered there is no label shelf, so the note does not print.');
   await expect(checks(page)).toContainText('but its back wall is lowered, so it has none');
+});
+
+/* Fixed dividers stand through the shelf, rails and plates too, so the letters go in the
+   widest space between them, keeping 0.4 mm off each. The audit holds the geometry
+   (bin-audit's divider cases); this is that the page says so, and says when there is no
+   space wide enough. */
+test('dividers: the note goes between them, or the hint and Checks say there is no room', async ({ page }) => {
+  await H.dragCells(page, [0, 0], [0, 0]);
+  await raise(page);
+  await note(page, 'M3 screws');
+  expect(await lead(page)).toBe('Prints 4.5 mm tall on one line.');
+
+  await H.setField(page, 'divX', 1);
+  // half the shelf each side of the divider: two lines, smaller
+  expect(await lead(page)).toBe('Prints 3.2 mm tall on two lines, between the dividers.');
+  await expect(hint(page).locator('.moretext')).toHaveText(
+    'The dividers stand through the shelf, so the letters go in the widest space between them.');
+  await expect(checks(page)).toContainText('has its note on two lines, 3.2 mm tall');
+
+  // seven leave no space a letter fits in
+  await H.setField(page, 'divX', 7);
+  expect(await lead(page)).toBe('The dividers leave no space on the label shelf wide enough for the note, so nothing prints.');
+  await expect(checks(page)).toContainText(
+    'has dividers across its label shelf too close together for its note to fit between them, so its note is not printed');
+  // the bin is the plain part again, since nothing prints on it
+  expect(await page.evaluate(() => typeKey(B()[0]).includes('-n'))).toBe(false);
+  // removable ones too: the plates' slots and the rails beside them
+  await page.check('#divRemovable');
+  await H.setField(page, 'divX', 4);
+  await settle(page);
+  expect(await lead(page)).toBe('The dividers leave no space on the label shelf wide enough for the note, so nothing prints.');
+  await H.setField(page, 'divX', 1);
+  // a plate's slot and two rails take more of the shelf than a fixed divider does
+  expect(await lead(page)).toBe('Prints 3 mm tall on two lines, between the dividers, cut short to fit.');
+  expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
 });

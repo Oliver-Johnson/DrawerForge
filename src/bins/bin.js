@@ -270,32 +270,71 @@ function labelRounded(G, hwI, hdI, wall, H, depth, t, n) {
 
 /* The note raised on the label shelf (labelMode 1).
  *
- * The shelf is what a bin stacked on this one rests on: its feet come down at H, which
- * is where the shelf's top is. Letters standing on it there would hold that bin up and
- * be crushed by it. So with letters on it the shelf drops to H - 1.0, and they stand
- * 0.6 on it and top out at H - 0.4, under anything that comes down at H. Without letters
- * nothing moves: every other bin is built exactly as it was.
+ * A bin stacked on this one comes down into its lip until the chamfers of its feet meet
+ * the lip's, 0.25 mm below H (the spec's clearance, on 45 degree faces: stack-check.js),
+ * unless something stops it first, and a shelf with its top at H does. Letters standing
+ * on a shelf there would hold that bin up and be crushed by it. So with letters on it
+ * the shelf drops to H - 1.0, and they stand 0.6 on it and top out at H - 0.4: 0.15 mm
+ * under the feet of a bin seated above. Without letters nothing moves: every other bin
+ * is built exactly as it was.
  *
  * The letters go where they can be read from above. At the back and the sides that is
  * clear of the stacking lip, whose chamfer leans in over the shelf to 2.70 from the
  * outside at H: the band stops there, which at the letters' top, 0.4 lower, is 0.4 clear
  * of the chamfer too. At the front they keep 0.6 off the shelf's edge.
  *
+ * Dividers stand from the floor to H, through the shelf and anything on it (buildBin), so
+ * the letters keep 0.4 off each one that crosses the band: a fixed divider is a wall
+ * thick, and a removable one has a rail each side of the slot its plate slides down,
+ * which is where the plate goes too. They go in the widest space left across the shelf
+ * and, where dividers the other way cross it, the deepest from front to back. A space
+ * that will not take the note at the usual sizes (noteFit's readable) takes nothing. The
+ * walls alone leave one that narrow only on a half-size bin with walls past about 6.5 mm,
+ * where letters came out half a millimetre tall.
+ *
  * `footAt` is how low the shelf's slope may reach, which buildBin works out. Returns what
  * goes on the shelf: { why } with why 'off' when no note was asked for, 'empty' when
- * nothing in it prints and 'shallow' when the lowered shelf is under 6 mm deep (with its
- * depth); otherwise { why: '', top, depth, text, fit }, `fit` being noteFit's answer. */
+ * nothing in it prints, 'shallow' when the lowered shelf is under 6 mm deep (with its
+ * depth, and `by`: 'asked' for a shelf asked for that shallow, 'inside' for one held to
+ * 0.8 of the inside's depth, 'height' for one held to the room above the floor),
+ * 'dividers' when the dividers leave no space the note fits and 'narrow' when the walls
+ * do (both with its depth); otherwise { why: '', top, depth, text, fit, divided }, `fit`
+ * being noteFit's answer and `divided` whether dividers narrowed the space it was fitted
+ * to. */
 const NOTE_CLEAR = 0.4;      // letters stop this far under H
+const NOTE_DIV_CLEAR = 0.4;  // ...and this far off a divider, its rails or its plate's slot
 function noteOnShelf(c, iw, id, H, footAt) {
   if (+c.labelMode !== 1) return { why: 'off' };
   const text = NOTE_TEXT.notePrintable(c.note).text;
   if (!text) return { why: 'empty' };
   const S = NOTE_TEXT.NOTE_SPEC, top = H - NOTE_CLEAR - S.relief;
-  const depth = Math.min(c.label, id * 0.8, top - c.labelT - footAt);
-  if (!(depth >= S.shelfMin)) return { why: 'shallow', depth: Math.max(0, depth) };
+  const inside = id * 0.8, room = top - c.labelT - footAt;
+  const depth = Math.min(c.label, inside, room);
+  if (!(depth >= S.shelfMin))
+    return { why: 'shallow', depth: Math.max(0, depth),
+             by: depth === c.label ? 'asked' : depth === inside ? 'inside' : 'height' };
   const m = Math.max(0.5, LIP[0][1] - c.wall);
-  const band = { x0: -iw + m, x1: iw - m, y0: id - depth + S.front, y1: id - m };
-  return { why: '', top, depth, text, fit: NOTE_TEXT.noteFit(text, band) };
+  /* The widest stretch of lo..hi clear of n dividers spread across -inner..inner as
+     buildBin spreads them, `half` either side of each centre line, the first of equals;
+     null when nothing is left. `divided` says whether any of them crossed it. */
+  const half = (c.divRemovable ? c.divT / 2 + c.divClr + RAIL_T : c.wall / 2) + NOTE_DIV_CLEAR;
+  let divided = false;
+  const widest = (lo, hi, n, inner) => {
+    let gaps = [[lo, hi]];
+    for (let k = 1; k <= n; k++) {
+      const p = -inner + (2 * inner) * k / (n + 1), a = p - half, b = p + half;
+      if (b <= lo || a >= hi) continue;
+      divided = true;
+      gaps = gaps.flatMap(([u, v]) => [[u, Math.min(v, a)], [Math.max(u, b), v]])
+        .filter(([u, v]) => v - u > 1e-9);
+    }
+    return gaps.reduce((w, g) => (!w || g[1] - g[0] > w[1] - w[0] + 1e-9 ? g : w), null);
+  };
+  const xs = widest(-iw + m, iw - m, c.divX, iw), ys = widest(id - depth + S.front, id - m, c.divY, id);
+  if (!xs || !ys) return { why: 'dividers', depth };
+  const fit = NOTE_TEXT.noteFit(text, { x0: xs[0], x1: xs[1], y0: ys[0], y1: ys[1] });
+  if (!fit.readable) return { why: divided ? 'dividers' : 'narrow', depth };
+  return { why: '', top, depth, text, fit, divided };
 }
 
 /* Stacking lip.

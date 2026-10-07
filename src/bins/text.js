@@ -190,9 +190,15 @@ function noteCut(text, W, Hh) {
    The band is where plastic may go, so the strokes' centre lines are fitted NOTE_INK
    inside it: fitted to the band itself, a letter at its edge reached half a stroke past
    it, under the lip at the back and to a tenth of a millimetre from the shelf's front.
-   Returns { lines, cap, cut, segs }: the lines as printed, the cap height in mm, whether
-   anything was cut, and every stroke as a list of [x, y] points in mm. A cut note on a
-   shelf too shallow even for one line 3 mm tall is smaller than 3 mm, and `cap` says so. */
+   Returns { lines, cap, cut, segs, readable }: the lines as printed, the cap height in
+   mm, whether anything was cut, every stroke as a list of [x, y] points in mm, and
+   whether the band has room for the note at these rules. A cut note on a shelf too
+   shallow even for one line 3 mm tall is smaller than 3 mm, and `cap` says so; that is
+   the shelf's depth, and still readable. A band too NARROW is not: when not even the
+   ellipsis goes in at the size the depth allows, nothing could be cut to fit, and the
+   letters come out as small as the width makes them; and when all that goes in is the
+   ellipsis, none of the note is there. A shelf the width of a bin is never that narrow;
+   the spaces between dividers can be (noteOnShelf). */
 const noteFits = new Map();
 function noteFit(text, outer) {
   const k = [text, outer.x0, outer.x1, outer.y0, outer.y1].join('|');
@@ -231,7 +237,10 @@ function noteFit(text, outer) {
     for (const st of lay.strokes) segs.push(st.map(([x, y]) => [x0 + x * s, yTop - (y - lay.top) * s]));
     yTop -= (lay.span + gap) * s;
   }
-  const out = { lines: best.lays.map((l) => l.text), cap: s * NOTE_CAP_U, cut: best.cut, segs };
+  const sDepth = Math.min(sMin, Hh / noteLine(text).span);
+  const none = best.cut && best.lays.every((l) => l.text === '' || l.text === NOTE_ELLIPSIS);
+  const out = { lines: best.lays.map((l) => l.text), cap: s * NOTE_CAP_U, cut: best.cut, segs,
+                readable: !none && s >= sDepth - 1e-9 };
   if (noteFits.size > 500) noteFits.clear();
   noteFits.set(k, out);
   return out;
