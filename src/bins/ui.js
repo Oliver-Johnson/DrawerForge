@@ -1292,7 +1292,11 @@ function readControls() {
   holdNotes();
   const raise = t.labelMode === 1 && !t.solid;
   $('noteHint').style.display = raise ? '' : 'none';
-  if (raise) {
+  /* Emptied, not only hidden, once nothing is raised: the note's field is described by
+     it, and a hidden description is still read out, so the field went on saying
+     "Prints 4.5 mm tall on one line." after the note was set back to Nothing. */
+  if (!raise) $('noteHint').textContent = '';
+  else {
     const [lead, rest] = noteHintSay(target);
     if (rest) DF.hint($('noteHint'), lead, rest);
     else $('noteHint').textContent = lead;

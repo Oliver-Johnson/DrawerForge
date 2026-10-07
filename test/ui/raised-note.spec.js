@@ -81,6 +81,8 @@ test('the note raised: the menu gives the bin a shelf, and the bin becomes its o
   expect(await page.evaluate(() => [B()[0].labelMode || 0, B()[0].label])).toEqual([0, 0]);
   await expect(page.locator('#labelMode')).toHaveValue('0');
   await expect(hint(page)).toBeHidden();
+  // and the note's field no longer describes itself by a hint that is not there
+  await expect(page.locator('#note')).toHaveAccessibleDescription('');
   expect(await page.evaluate(() => packBin(B()[0]).split('-').length)).toBe(21);
 });
 
