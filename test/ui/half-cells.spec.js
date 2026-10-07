@@ -945,16 +945,21 @@ test('the map card\'s title is whole beside the Steps switch, whatever the drawe
     s.remove();
     return w;
   }, font);
-  await page.setViewportSize({ width: 1366, height: 768 });
-  await openAt(page, '');
-  const own = await titleIn(null), fonts = [null];
-  for (const f of ['DejaVu Sans', 'Liberation Sans']) if (Math.abs(await titleIn(f) - own) > 0.01) fonts.push(f);
-  expect(fonts.length, 'a font this machine does not draw the page in').toBeGreaterThan(1);
+  /* The fonts are found on the first visit's own page, not on a page opened for them
+     first: a second visit picks up the layout the first left and says so above the map,
+     which is 42 px the first visit does not have, and took the coverage bar out of view. */
+  let fonts = null;
   for (const [drawer, hash, barInView] of [['the first visit\'s drawer', '', true],
                                           ['a deep 7-column drawer', 'w=306&d=600', false],
                                           ['a 150 mm drawer', 'w=150&d=380', true]]) {
     await page.setViewportSize({ width: 1366, height: 768 });
     await openAt(page, hash);
+    if (!fonts) {
+      const own = await titleIn(null);
+      fonts = [null];
+      for (const f of ['DejaVu Sans', 'Liberation Sans']) if (Math.abs(await titleIn(f) - own) > 0.01) fonts.push(f);
+      expect(fonts.length, 'a font this machine does not draw the page in').toBeGreaterThan(1);
+    }
     for (const font of fonts) {
       if (font) await page.evaluate((f) => { document.documentElement.style.setProperty('--sans', `'${f}'`); }, font);
       for (const [w, h] of sizes) {
