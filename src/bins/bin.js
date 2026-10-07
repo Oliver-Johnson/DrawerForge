@@ -126,6 +126,148 @@ function labelPrism(G, hwI, hdI, top, depth, t) {
   return G.profilePrism(prof, -hwI - BLOAT, hwI + BLOAT, (u, v) => [v, u]);
 }
 
+/* ...which suits a wall of the usual thickness and nothing much thinner. The prisms end
+   square, a BLOAT into the side walls, and the bin's outer corner is an arc of SPEC.r:
+   a wall under about 1.15 mm leaves those square ends standing out through the rounded
+   corners, 1.06 mm at the 0.4 minimum and 0.21 at 1.0. Such a bin builds the scoop and
+   the shelf over the cavity's own rounded outline instead, grown a BLOAT into the wall
+   all round, so their ends follow the corners. The usual wall keeps the prisms, and with
+   them the same bytes. Dividers and their rails are boxes with the same trouble, and
+   are built the same way when they have it (see the dividers in buildBin). */
+function cornersPoke(hw, hd, hwI, hdI, n) {
+  return outsideArc(hw, hd, hwI + BLOAT, hdI + BLOAT, n);
+}
+
+/* Whether a point stands out through the outline's rounded corner, or on it. Measured
+   against the outline as built, chords and all: in the direction of the point, the chord
+   it faces comes in to SPEC.r * cos(half a segment) at its middle and out to SPEC.r at
+   its ends. Held to the chord's middle everywhere, a scoop's corner, which lies exactly
+   on a vertex at 45 degrees, counted as out at walls 1.148 to 1.154 that never were. */
+function outsideArc(hw, hd, x, y, n) {
+  const dx = Math.abs(x) - (hw - SPEC.r), dy = Math.abs(y) - (hd - SPEC.r);
+  if (dx <= 0 || dy <= 0) return Math.max(dx, dy) > SPEC.r - 1e-6;
+  const seg = Math.PI / (2 * n), a = Math.atan2(dy, dx);
+  const mid = (Math.min(n - 1, Math.floor(a / seg)) + 0.5) * seg;
+  return Math.hypot(dx, dy) > SPEC.r * Math.cos(seg / 2) / Math.cos(a - mid) - 1e-6;
+}
+
+// the part of a convex outline with keep * (p[axis] - v) >= 0, the cut along it set to v
+function clipSide(pts, axis, v, keep) {
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const da = keep * (a[axis] - v), db = keep * (b[axis] - v);
+    if (da >= 0) out.push(a);
+    if (da * db < 0) {
+      const o = 1 - axis;
+      const p = [];
+      p[o] = a[o] + (b[o] - a[o]) * da / (da - db);
+      p[axis] = v;
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/* A solid standing over a convex outline in plan, between a bottom and a top that
+   depend on y alone and run straight between consecutive `stations`. Cut at the
+   stations, every band of it has a flat top and a flat bottom, so it is built as flat
+   faces: the outline's sides, and each band's top and bottom fanned from its middle.
+
+   Nothing in it is closer than WELD to anything else. checkManifold, and a slicer, weld
+   vertices a micron or so apart, and a scoop's arc runs into the floor at a tangent: a
+   0.09 mm scoop on a lowered front had stations 0.0004 mm apart and a top that never
+   rose a thousandth above its bottom, and welded, its faces folded onto each other. So
+   stations closer than ten times WELD are thinned out, a vertex that close to a station
+   is moved onto it, and the bottom stays a little way under the top's lowest point. */
+const WELD = 0.002;
+function bandSolid(G, ring, ylo, yhi, stations, zTop, zBot) {
+  const pts = clipSide(clipSide(ring, 1, ylo, 1), 1, yhi, -1);
+  let lo = Infinity, hi = -Infinity;
+  for (const p of pts) { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }
+  const cuts = [];
+  for (const s of stations.slice().sort((a, b) => a - b))
+    if (s > lo + 10 * WELD && s < hi - 10 * WELD && !(s - cuts[cuts.length - 1] < 10 * WELD)) cuts.push(s);
+  // a vertex wherever a station crosses the outline, and any vertex near one moved onto it
+  const rim = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const near = cuts.find((s) => Math.abs(a[1] - s) < WELD);
+    rim.push(near === undefined ? a : [a[0], near]);
+    const on = cuts.filter((s) => (s - a[1]) * (s - b[1]) < 0);
+    if (b[1] < a[1]) on.reverse();
+    for (const s of on) rim.push([a[0] + (b[0] - a[0]) * (s - a[1]) / (b[1] - a[1]), s]);
+  }
+  const vs = [];
+  for (const p of rim) {
+    const q = vs[vs.length - 1];
+    if (!q || Math.hypot(p[0] - q.x, p[1] - q.y) >= WELD)
+      vs.push({ x: p[0], y: p[1], t: zTop(p[1]), b: zBot(p[1]) });
+  }
+  while (vs.length > 1 && Math.hypot(vs[0].x - vs[vs.length - 1].x, vs[0].y - vs[vs.length - 1].y) < WELD)
+    vs.pop();
+  const polys = [];
+  const add = (verts) => { const p = G.makePoly(verts); if (p) polys.push(p); };
+  for (let i = 0; i < vs.length; i++) {             // sides, outwards: the outline is CCW
+    const a = vs[i], b = vs[(i + 1) % vs.length];
+    add([[a.x, a.y, a.b], [b.x, b.y, b.b], [b.x, b.y, b.t], [a.x, a.y, a.t]]);
+  }
+  /* Each band takes the outline's edges that lie in it. An edge along a station belongs
+     to the band the outline's inside is on: above it when the edge runs +x, as it does
+     anticlockwise along the bottom. */
+  const edges = [lo].concat(cuts, [hi]);
+  for (let k = 0; k + 1 < edges.length; k++) {
+    const y0 = edges[k], y1 = edges[k + 1];
+    const mine = vs.map((a, i) => {
+      const b = vs[(i + 1) % vs.length], m = (a.y + b.y) / 2;
+      if (a.y === b.y && (a.y === y0 || a.y === y1)) return a.y === (b.x > a.x ? y0 : y1);
+      return m > y0 && m < y1;
+    });
+    const band = vs.filter((v, i) => mine[i] || mine[(i - 1 + vs.length) % vs.length]);
+    const cx = band.reduce((s, v) => s + v.x, 0) / band.length;
+    const cy = band.reduce((s, v) => s + v.y, 0) / band.length;
+    for (let i = 0; i < band.length; i++) {
+      const a = band[i], b = band[(i + 1) % band.length];
+      add([[cx, cy, zTop(cy)], [a.x, a.y, a.t], [b.x, b.y, b.t]]);
+      add([[cx, cy, zBot(cy)], [b.x, b.y, b.b], [a.x, a.y, a.b]]);
+    }
+  }
+  return polys;
+}
+
+// straight between the points of a profile [[y, z], ...] sorted by y, flat beyond it
+function piecewise(prof) {
+  return (y) => {
+    if (y <= prof[0][0]) return prof[0][1];
+    for (let k = 1; k < prof.length; k++)
+      if (y <= prof[k][0]) {
+        const [y0, z0] = prof[k - 1], [y1, z1] = prof[k];
+        return y === y1 ? z1 : z0 + (z1 - z0) * (y - y0) / (y1 - y0);
+      }
+    return prof[prof.length - 1][1];
+  };
+}
+
+// the cavity's outline grown a BLOAT into the wall, without the straights' split points
+function cavityRing(hwI, hdI, wall, n, grow = BLOAT) {
+  return roundRect(hwI + grow, hdI + grow, Math.max(0.4, SPEC.r - wall) + grow, n,
+                   [[], [], [], []]);
+}
+function scoopRounded(G, hwI, hdI, wall, floorZ, r, segs, n) {
+  const y0 = -hdI, prof = [];
+  for (let k = segs; k >= 0; k--) {                 // the same arc, from the wall down
+    const a = (k / segs) * Math.PI / 2;
+    prof.push([y0 + r - r * Math.sin(a), floorZ + r - r * Math.cos(a)]);
+  }
+  return bandSolid(G, cavityRing(hwI, hdI, wall, n), -Infinity, y0 + r,
+                   prof.map(([y]) => y), piecewise(prof), () => floorZ - BLOAT / 2);
+}
+function labelRounded(G, hwI, hdI, wall, H, depth, t, n) {
+  const yb = hdI;
+  return bandSolid(G, cavityRing(hwI, hdI, wall, n), yb - depth, Infinity, [],
+                   () => H, piecewise([[yb - depth, H - t], [yb + BLOAT, H - t - depth]]));
+}
+
 /* The note raised on the label shelf (labelMode 1).
  *
  * The shelf is what a bin stacked on this one rests on: its feet come down at H, which
@@ -1492,10 +1634,15 @@ function buildBin(G, cfg) {
        attach them to (an open front has no corner to fill). */
     const eF = c.edges && c.edges.f !== undefined ? c.edges.f : 1;
     const eB = c.edges && c.edges.b !== undefined ? c.edges.b : 1;
-    const iw = hw - c.wall, id = hd - c.wall;
+    const iw = hw - c.wall, id = hd - c.wall, poke = cornersPoke(hw, hd, iw, id, n);
     if (c.scoop > 0.05 && eF > 0) {
-      const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9);
-      if (r > 0.05) polys.push(...scoopPrism(G, iw, id, floorZ, r, Math.max(4, n)));
+      /* No taller than the front wall it fills the corner of. With the front lowered,
+         a scoop held only to the full height stood above the wall, and above the
+         height binTop quotes: a 2x1x4 with every wall at a quarter and an 8.5 mm scoop
+         was 14.45 mm built and 11.5 quoted, to its README and the bed check. */
+      const r = Math.min(c.scoop, id * 0.9, (H - floorZ) * 0.9 * Math.min(1, eF));
+      if (r > 0.05) polys.push(...(poke ? scoopRounded(G, iw, id, c.wall, floorZ, r, Math.max(4, n), n)
+                                        : scoopPrism(G, iw, id, floorZ, r, Math.max(4, n))));
     }
     if (c.label > 0.05 && eB > 0.99) {
       /* Limited by height as well as depth. The shelf's underside runs down at 45
@@ -1510,14 +1657,16 @@ function buildBin(G, cfg) {
          With screws the foot stops above the screws' ends instead, for the reason the
          wall ring does: behind a wall over 5 mm thick it reaches in over a hole. */
       const footAt = plan && plan.screws ? FOOT_HOLES.screwTop + BLOAT : bodyBase + BLOAT;
+      /* The shelf's top is H, or lower with a note raised on it (noteOnShelf), and on a
+         thin wall it is built over the cavity's rounded outline (cornersPoke) whichever
+         height it is at. */
       const raised = noteOnShelf(c, iw, id, H, footAt);
-      if (raised.fit) {
-        polys.push(...labelPrism(G, iw, id, raised.top, raised.depth, c.labelT));
+      const shelfTop = raised.fit ? raised.top : H;
+      const d = raised.fit ? raised.depth : Math.min(c.label, id * 0.8, H - c.labelT - footAt);
+      if (d > 0.05) polys.push(...(poke ? labelRounded(G, iw, id, c.wall, shelfTop, d, c.labelT, n)
+                                        : labelPrism(G, iw, id, shelfTop, d, c.labelT)));
+      if (raised.fit)
         polys.push(...NOTE_TEXT.noteShells(G, raised.fit.segs, raised.top - BLOAT, H - NOTE_CLEAR));
-      } else {
-        const d = Math.min(c.label, id * 0.8, H - c.labelT - footAt);
-        if (d > 0.05) polys.push(...labelPrism(G, iw, id, H, d, c.labelT));
-      }
     }
 
     /* Dividers — separate overlapping shells, never unioned.
@@ -1567,12 +1716,33 @@ function buildBin(G, cfg) {
     const reach = (inner) => (c.divRemovable
       ? [[-inner - BLOAT, -inner + RAIL_D], [inner - RAIL_D, inner + BLOAT]]
       : [[-inner - BLOAT, inner + BLOAT]]);
+    /* A box that would stand out through a rounded corner, as one packed up to a corner
+       does (16 pairs of rails across a 1x1 with a 0.4 mm wall: 0.92 mm out; the most
+       rails both ways the fields allow, at the usual 1.2: 0.67), is
+       the cavity's outline grown a BLOAT into the wall, cut to the box instead: the same
+       outline the scoop and shelf follow there, so it meets the wall the same way. A box
+       left with almost nothing inside the outline is all wall, and is not built.
+       Each direction's boxes take the outline grown a little less than a BLOAT, and by a
+       different amount, so that two cut at one corner, or one and the shelf, never share
+       a vertical edge at the same outline vertex: 8 edges used four times when they did. */
+    const box = (pts, grow) => {
+      if (!pts.some(([x, y]) => outsideArc(hw, hd, x, y, n)))
+        return G.extrudePoly(pts, floorZ - BLOAT, H);
+      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      let cut = cavityRing(iw, id, c.wall, n, grow);
+      cut = clipSide(clipSide(cut, 0, Math.min(...xs), 1), 0, Math.max(...xs), -1);
+      cut = clipSide(clipSide(cut, 1, Math.min(...ys), 1), 1, Math.max(...ys), -1);
+      cut = cut.filter((p, i) => Math.hypot(p[0] - cut[(i + 1) % cut.length][0],
+                                            p[1] - cut[(i + 1) % cut.length][1]) >= WELD);
+      return cut.length >= 3 && Math.abs(G.polyArea2D(cut)) > 0.01
+        ? G.extrudePoly(cut, floorZ - BLOAT, H) : [];
+    };
     for (const [a, b] of spans(c.divX, iw))
       for (const [lo, hi] of reach(id))
-        polys.push(...G.extrudePoly([[a, lo], [b, lo], [b, hi], [a, hi]], floorZ - BLOAT, H));
+        polys.push(...box([[a, lo], [b, lo], [b, hi], [a, hi]], 0.8 * BLOAT));
     for (const [a, b] of spans(c.divY, id))
       for (const [lo, hi] of reach(iw))
-        polys.push(...G.extrudePoly([[lo, a], [hi, a], [hi, b], [lo, b]], floorZ - BLOAT, H));
+        polys.push(...box([[lo, a], [hi, a], [hi, b], [lo, b]], 0.6 * BLOAT));
   }
 
   /* A rectangle's lip is still its own swept ring around the rounded outline. */

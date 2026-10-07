@@ -433,3 +433,118 @@ test('the filament estimate follows the infill, and says when it cannot', async 
   expect(grams(high), `${grams(high)} g at 60% must exceed ${grams(low)} g at 5%`)
     .toBeGreaterThan(grams(low) * 1.1);
 });
+
+/* Half cells in the leftover (#16): the fourth Leftover space option.
+ *
+ * 400 × 330 is nine cells across with 22 mm over and seven deep with 36 mm over, so it
+ * takes a half column and a half row, with 1 mm and 15 mm of margin past them for the
+ * alignment to place. The 36 is past the leftover warning's three quarters of a cell, so
+ * the same drawer with a solid margin says "Leftover space is large"; once the half row
+ * has used it, nothing should. Everything a reader is told about the strips is read here:
+ * the summary, the map, the piece table, Checks, the dialog and the README, because each
+ * of them quoted the layout's own margins, and those count a strip as margin. */
+test('half cells: the strips are laid, drawn and described, and the margins are what is left',
+  async ({ page }) => {
+    const errors = await H.openPlates(page);
+    const ready = () => page.waitForFunction(
+      () => /ready/.test(document.getElementById('pieceTail').textContent),
+      null, { timeout: 30000 });
+    await H.setField(page, 'drawerW', 400);
+    await H.setField(page, 'drawerD', 330);
+    await ready();
+    await expect(page.locator('#warnings .w').filter({ hasText: 'Leftover space is large' }),
+      'fixture: as solid margin, the depth is a large leftover').toHaveCount(1);
+
+    await page.selectOption('#marginMode', 'half');
+    await settle(page);
+    await ready();
+
+    const s = await page.evaluate(() => ({
+      mode: state.marginMode, strips: [layout.hX, layout.hY],
+      summary: document.getElementById('gridSummary').textContent,
+      align: getComputedStyle(document.getElementById('alignRow')).display,
+      hint: getComputedStyle(document.getElementById('halfHint')).display,
+      custom: getComputedStyle(document.getElementById('customMargins')).display,
+      // each half cell's box on the map, in map units, against a whole cell's width
+      boxes: [...document.querySelectorAll('#cutmap rect.halfcell')].map((r) =>
+        [+r.getAttribute('width'), +r.getAttribute('height')]),
+      cell: (() => {
+        const xs = [...document.querySelectorAll('#cutmap line.gridline')]
+          .filter((l) => l.getAttribute('x1') === l.getAttribute('x2'))
+          .map((l) => +l.getAttribute('x1')).sort((a, b) => a - b);
+        return xs[1] - xs[0];
+      })(),
+      cells: [...document.querySelectorAll('#pieceRows tr')].map((r) => r.cells[1].textContent),
+      label: document.getElementById('three').getAttribute('aria-label') + ' | ' +
+        document.getElementById('cutmap').getAttribute('aria-label'),
+      tail: document.getElementById('mapTail').textContent,
+    }));
+    expect(s.mode, 'readControls folded half into auto').toBe('half');
+    expect(s.strips).toEqual([1, 1]);
+    expect(s.align, 'the alignment places what is left, so it stays').not.toBe('none');
+    expect(s.hint).not.toBe('none');
+    expect(s.custom).toBe('none');
+    expect(s.summary)
+      .toContain('cells (378 × 294 mm), plus a half column on the right and a half row at the back');
+    /* The solid margins: 1 mm across and 15 deep, centred. The layout's own mR and mB are
+       21.5 and 28.5, which would have said the strips were margin. */
+    expect(s.summary).toContain('margins L 0.5 / R 0.5 / F 7.5 / B 7.5 mm');
+    // 7 down the column, 9 along the row and the quarter in the corner, each half a cell
+    expect(s.boxes).toHaveLength(17);
+    const near = (a, b) => Math.abs(a - b) < 0.01;
+    expect(s.boxes.filter(([w, h]) => near(w, s.cell / 2) && near(h, s.cell))).toHaveLength(7);
+    expect(s.boxes.filter(([w, h]) => near(w, s.cell) && near(h, s.cell / 2))).toHaveLength(9);
+    expect(s.boxes.filter(([w, h]) => near(w, s.cell / 2) && near(h, s.cell / 2))).toHaveLength(1);
+    expect(s.cells.some((c) => c.includes('½')), 'no piece says it carries half cells').toBe(true);
+    expect(s.label).toContain('plus a half column on the right and a half row at the back');
+    // the size is the whole cells', so it comes before the strips rather than after them
+    expect(s.label).toContain('378 by 294 millimetres, plus a half column on the right');
+    expect(s.tail).toBe('9½ × 7½ cells · 4 pieces');
+
+    const w = page.locator('#warnings .w');
+    await expect(w.filter({ hasText: 'Leftover space is large' }),
+      'the half row used the leftover the warning was about').toHaveCount(0);
+    await expect(w.filter({
+      hasText: 'Half cells take half-size bins only, and have no magnet or screw holes.' }))
+      .toHaveCount(1);
+    await expect(w.filter({ hasText: 'No room for half cells' })).toHaveCount(0);
+
+    await page.locator('#openExport').click();
+    await page.waitForTimeout(300);
+    const dlg = await page.locator('#exDesign').textContent();
+    /* The download rows name a piece's cells as the piece table and the cut map do. They
+       said "B1 4 × 4" for a piece of 4½ × 4. */
+    const rows = await page.evaluate(() => [...document.querySelectorAll('#exFiles .exrow')]
+      .filter((r) => r.querySelector('[data-ex="piece"]'))
+      .map((r) => `${r.querySelector('.nm').textContent} ${r.querySelector('.meta').textContent}`
+        .replace(/ · [^·]* · STL$| · not built yet$/, '')));
+    const table = await page.evaluate(() => [...document.querySelectorAll('#pieceRows tr')]
+      .map((r) => `Piece ${r.cells[0].textContent.trim()} ${r.cells[1].textContent} cells`));
+    await page.locator('#exportClose').click();
+    expect(rows).toEqual(table);
+    expect(rows.filter((r) => r.includes('½'))).toHaveLength(3);
+    expect(dlg).toContain(
+      'plus a half column on the right and a half row at the back, in a 400 × 330 mm drawer');
+    expect(dlg).toContain('margins L 0.5 / R 0.5 / F 7.5 / B 7.5 mm');
+    const readme = await page.evaluate(() => readmeText());
+    expect(readme).toContain('Margins: L 0.5 R 0.5 F 7.5 B 7.5 mm\n' +
+      'Half cells: a half column on the right and a half row at the back (21 mm), for ' +
+      'half-size bins only; no magnet or screw holes in them');
+    // the link carries the mode, so it reaches the Bins page and a saved drawer
+    expect(await page.evaluate(() => shareLink())).toMatch(/[#&]mm=half(&|$)/);
+    expect(errors).toEqual([]);
+  });
+
+/* A solid-margin drawer reads exactly as it did: no strip in the summary, the margins
+   the layout gives, and no half-cell box on the map. */
+test('without half cells the summary and the map are as they were', async ({ page }) => {
+  await H.openPlates(page);
+  const s = await page.evaluate(() => ({
+    summary: document.getElementById('gridSummary').textContent,
+    boxes: document.querySelectorAll('#cutmap rect.halfcell').length,
+    hint: getComputedStyle(document.getElementById('halfHint')).display,
+  }));
+  expect(s.summary).toBe('Grid: 7 × 9 cells (294 × 378 mm) · margins L 6.0 / R 6.0 / F 1.0 / B 1.0 mm');
+  expect(s.boxes).toBe(0);
+  expect(s.hint).toBe('none');
+});

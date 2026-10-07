@@ -174,7 +174,33 @@ const CASES = [
   { name: '3x2x5-railed', u: 3, v: 2, hUnits: 5, divX: 2, divY: 1, divRemovable: true },
   { name: '1x1x1', u: 1, v: 1, hUnits: 1 },
   { name: '2x1x3-scoop', u: 2, v: 1, hUnits: 3, scoop: 8 },
+  /* A scoop deeper than a lowered front wall is tall stood above it, past the height
+     the bin quotes, its README and the bed check use: 14.45 mm built against 11.5 quoted
+     here, and 17.95 against 15 below. It stops at the front wall's height now. Walls
+     of part height stand up to a BLOAT under the quote (see binTop), so these may be
+     that much under it, never over. */
+  { name: '2x1x4-low-scoop', u: 2, v: 1, hUnits: 4, scoop: 8.5, under: 0.05,
+    edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 } },
+  { name: '2x1x6-low-scoop', u: 2, v: 1, hUnits: 6, scoop: 12, under: 0.05,
+    edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 } },
   { name: '2x1x3-label', u: 2, v: 1, hUnits: 3, label: 12 },
+  /* A thin wall under a scoop and a shelf. Both ran square into the side walls, and a
+     wall under about 1.15 mm left their ends standing out through the rounded outer
+     corners: 1.06 mm at 0.4, which the outline check below now catches. The lowered one
+     is a 0.09 mm scoop, whose arc never rose a thousandth above the floor before it was
+     welded flat. */
+  { name: '1x1x3-wall0.4-scoop-label', u: 1, v: 1, hUnits: 3, wall: 0.4, scoop: 8, label: 12 },
+  { name: '2x1x4-wall1-scoop-label', u: 2, v: 1, hUnits: 4, wall: 1, scoop: 8, label: 10 },
+  { name: '0.5x1x3-wall0.4-scoop-label', u: 0.5, v: 1, hUnits: 3, wall: 0.4, scoop: 8, label: 10 },
+  /* Dividers and rails packed up to a thin wall's corner stood out through it the same
+     way: 0.36 mm for 32 dividers across a 1x1, 0.92 for 16 pairs of rails. Both ways at
+     once, with a scoop and a shelf, is the four shells that meet at one corner. */
+  { name: '1x1x3-wall0.4-div32', u: 1, v: 1, hUnits: 3, wall: 0.4, divX: 32 },
+  { name: '1x1x3-wall0.4-rails16', u: 1, v: 1, hUnits: 3, wall: 0.4, divX: 16, divRemovable: true },
+  { name: '1x1x3-wall0.4-rails-both', u: 1, v: 1, hUnits: 3, wall: 0.4, divX: 16, divY: 16,
+    divRemovable: true, scoop: 8, label: 12 },
+  { name: '1x1x1-wall0.4-low-scoop', u: 1, v: 1, hUnits: 1, wall: 0.4, scoop: 8, under: 0.05,
+    edges: { f: 0.25, b: 0.25, l: 0.25, r: 0.25 }, magnets: true, screws: true, holesEvery: true },
   /* A shelf deeper than the cavity is tall: its 45 degree underside used to run down
      through the floor and out among the feet, 4 open edges from 8 mm on a 1-unit bin. */
   { name: '1x1x1-label12', u: 1, v: 1, hUnits: 1, label: 12 },
@@ -255,6 +281,23 @@ const orientQuarantine = (cs, r) => cs.orientQuarantine
   ? (r.ok ? '  ORIENTATION NOW CLEAN — take it out of quarantine' : `  known: ${cs.orientQuarantine}`)
   : '';
 
+/* How far a bin stands out through the spec's outline, rounded corners and all, above
+   the feet. The bounding box cannot see a corner: the scoop's square ends stood 1.06 mm
+   out through a 0.4 mm wall's corners with the box exactly right, and so did dividers
+   and rails packed up to one. Carved shapes have outlines of their own and are left to
+   the box. */
+function outsideBy(r, cfg) {
+  if (cfg.cells) return 0;
+  const ox = ((cfg.u - 1) * 42 + 41.5) / 2 - 3.75, oy = ((cfg.v - 1) * 42 + 41.5) / 2 - 3.75;
+  let out = 0;
+  for (const p of r.polys) for (const v of p.verts) {
+    if (v[2] <= 4.75 + 1e-6) continue;
+    const dx = Math.max(0, Math.abs(v[0]) - ox), dy = Math.max(0, Math.abs(v[1]) - oy);
+    out = Math.max(out, Math.hypot(dx, dy) - 3.75);
+  }
+  return out;
+}
+
 let bad = 0;
 console.log('case            tris   W x D x H (mm)        zmin   zmax   mesh');
 for (const cs of CASES) {
@@ -294,10 +337,13 @@ for (const cs of CASES) {
      and 0.1 mm over on the flats. */
   const tol = 0.02;
   const wOk = Math.abs((xmax - xmin) - expW) < tol && Math.abs((ymax - ymin) - expD) < tol;
+  // ...and inside the spec's outline, rounded corners and all: see outsideBy
+  const out = outsideBy(r, cs);
+  const oOk = out < 0.001;
   /* The stacking PITCH is always hUnits*7 — that is what a bin occupies in a stack.
      The real height can be less: a tray with every wall open is just its floor, so
      compare zmax against meta.totalH and check the pitch separately. */
-  const hOk = Math.abs(zmax - r.meta.totalH) < 0.02 &&
+  const hOk = zmax - r.meta.totalH < 0.02 && r.meta.totalH - zmax < (cs.under || 0.02) &&
               Math.abs(r.meta.H - cs.hUnits * 7) < 0.001 &&
               zmin > -0.001;
 
@@ -305,6 +351,7 @@ for (const cs of CASES) {
               `${zmin.toFixed(3).padStart(6)} ${zmax.toFixed(3).padStart(6)}  ` +
               `${ok ? 'watertight' : man.bad + ' BAD EDGES'}`.padStart(12) +
               `${wOk ? '' : '  FOOTPRINT MISMATCH exp ' + expW + 'x' + expD}` +
+              `${oOk ? '' : '  OUTSIDE THE OUTLINE by ' + out.toFixed(3) + ' mm'}` +
               `${hOk ? '' : '  HEIGHT MISMATCH: zmax ' + zmax.toFixed(2) + ' vs totalH ' + r.meta.totalH.toFixed(2) + ', pitch ' + r.meta.H}`);
   /* A carved shape is still a bin: it takes a stacking lip like any other, so it
      must report one and stand the same height as the rectangle of the same units.
@@ -320,7 +367,7 @@ for (const cs of CASES) {
   if (!ori.ok || cs.orientQuarantine)
     console.log(`${''.padEnd(14)}  ${ori.shells} shells, ${ori.volume.toFixed(1)} mm3   ` +
                 `${orientationNote(ori)}${orientQuarantine(cs, ori)}`);
-  if (!ok || !wOk || !hOk || !lipOk) bad++;
+  if (!ok || !wOk || !oOk || !hOk || !lipOk) bad++;
   if (cs.orientQuarantine ? ori.ok : !ori.ok) bad++;
   if (cs.magnets || cs.screws) {
     const f = holeFaults(r, cs);
@@ -982,8 +1029,10 @@ const cleanBuild = (cfg) => {
   const H = cfg.hUnits * SPEC.unitH;
   // nothing but the stacking lip may stand above the bin's own height
   const lipTop = H + (r.meta.hasLip ? r.meta.lipH : 0) + 0.001;
+  const out = outsideBy(r, cfg);
   return [m.bad ? `${m.bad} bad edges` : '', ori.ok ? '' : orientationNote(ori),
           zmax > lipTop ? `${(zmax - lipTop).toFixed(2)} mm above the top` : '',
+          out >= 0.001 ? `${out.toFixed(3)} mm outside the outline` : '',
           cfg.magnets || cfg.screws ? holeFaults(r, cfg) : '']
     .filter(Boolean).join(', ');
 };
