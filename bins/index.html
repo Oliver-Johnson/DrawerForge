@@ -7751,10 +7751,20 @@ const railedMost = (cfg, axis) => railedLimit(cfg, axis).most;
 /* The dividers a bin is built with: as many as it asks for, bar removable ones past the
    most that fit. What a bin asks for is left as it is, in the link and everywhere it is
    kept, so a design from before this held them there opens unchanged; the page says in
-   Checks that it is built with fewer, and the plates it lists are the ones built. */
+   Checks that it is built with fewer, and the plates it lists are the ones built.
+   And none at all on a carved shape or a solid block, whatever it asks for: buildBin
+   builds both without dividers, as it does a bin whose floor fills it (builtSolid). A
+   half-size bin is never carved, so its mask is dropped first, as buildBin drops it.
+   Counted as asked, a carved L of three cells asking for two across and one along was
+   listed with 6 compartments, named bin-2x2x3-2x1div and weighed with three walls across
+   it that it does not have, and a solid block asking the same was listed and named the
+   same way. */
 function dividersBuilt(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg);
-  const n = (key, axis) => Math.min(c[key] || 0, c.divRemovable ? railedMost(c, axis) : Infinity);
+  const shape = halfSized(Object.assign({}, c));
+  if (isHalfSize(shape)) shape.cells = null;
+  if (!isFullRect(shape) || builtSolid(shape)) return { divX: 0, divY: 0 };
+  const n =(key, axis) => Math.min(c[key] || 0, c.divRemovable ? railedMost(c, axis) : Infinity);
   return { divX: n('divX', 'x'), divY: n('divY', 'y') };
 }
 
