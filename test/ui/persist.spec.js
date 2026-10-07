@@ -323,7 +323,9 @@ test('a layout with half-size bins comes back after a reload', async ({ page }) 
    without its note, and one raised on its shelf came back a plain bin under another
    name, with no letters. A loose bin with no note has the link it always had. */
 test('a loose bin keeps its raised note through a reload, a restore and its README link', async ({ page }) => {
-  const errors = await H.openBins(page);
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await openBins(page);
   await expect(page.locator('#labelMode'), 'the page has the "On the shelf" menu').toHaveCount(1, { timeout: 2000 });
   const ready = async () => {
     await page.waitForFunction(() => typeof THREE !== 'undefined');
@@ -350,7 +352,7 @@ test('a loose bin keeps its raised note through a reload, a restore and its READ
   expect(await now(), 'after a reload').toEqual(want);
 
   await page.goto('about:blank');
-  await page.goto(H.BINS_URL);
+  await page.goto(binsUrl());
   await ready();
   expect(await now(), 'restored, on the bare page').toEqual(want);
 
