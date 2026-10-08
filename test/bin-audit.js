@@ -2164,6 +2164,19 @@ console.log('\nremovable dividers: the plates a bin lists, and why it has fewer'
     : `${NONE.length} bins (${NONE.map(([name]) => name).join(', ')}) list none; with rails, ${kept.join(' and ')}`));
   if (listed.length || kept.some((n) => !n)) bad++;
 
+  /* Nor a reason it has fewer than it asks for (dividersWhy): a bin with no rails at all
+     has none whatever it asks for, not too few. The carved, solid and filled ones were
+     each given 'lipCorners', and one with holes across its floor 'slots' both ways, which
+     only the page's own check kept out of Checks. A half-size bin rails, and says why. */
+  const RAILLESS = NONE.slice(0, 3).concat([['holes across the floor', { u: 1, v: 1, hUnits: 3, divX: 31, divY: 31, divRemovable: true, insert: 1 }]]);
+  const given = RAILLESS.map(([name, c]) => [name, dividersWhy(c)]).filter(([, w]) => w.divX !== null || w.divY !== null);
+  const half = dividersWhy({ u: 0.5, v: 1, hUnits: 3, divY: 12, divRemovable: true, cells: [[0, 0]] }).divY;
+  console.log(`  ${'no rails, no reason'.padEnd(22)} ` + (given.length || half !== 'slots'
+    ? 'FAILED: ' + given.map(([name, w]) => `${name} says ${[w.divX, w.divY].filter((r) => r !== null).join(' and ')}`)
+      .concat(half !== 'slots' ? [`a half-size bin asking for 12 along says ${half}`] : []).join('; ')
+    : `${RAILLESS.length} bins (${RAILLESS.map(([name]) => name).join(', ')}) give none; a half-size one, 'slots'`));
+  if (given.length || half !== 'slots') bad++;
+
   /* Below what the rails allow, a bin is built with fewer along where one more would keep
      too little plate where they cross or stand on the scoop, or notch the lip too close to
      its corners (dividersBuilt), and Checks names what stops one more (dividersWhy): both,

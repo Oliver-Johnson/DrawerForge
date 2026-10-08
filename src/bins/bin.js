@@ -2150,10 +2150,14 @@ function binDividers(cfg) {
    or cross, 'lipCorners' when the notches would leave the lip too little of its corners,
    and 'crossCorners' when both would. It was asked of as many as the rails allow, and
    named the plates' keep wherever both went wrong there, whichever stopped one more.
-   Null where it is built with all it asks for. */
+   Null where it is built with all it asks for, and where it has no rails at all: a
+   carved shape, a solid block or a floor that fills the bin (plateLayout's railed), or
+   holes across its floor (binDividers). Those are built with none whatever they ask for,
+   not for want of room, and were given 'lipCorners' or railedLimit's rule all the same,
+   which only the page's own check kept out of Checks. */
 function dividersWhy(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg), built = dividersBuilt(c), out = { divX: null, divY: null };
-  if (!c.divRemovable) return out;
+  if (!c.divRemovable || !plateLayout(c, built).railed || (insertOf(c) && insertPlan(c).n)) return out;
   for (const [key, axis] of [['divX', 'x'], ['divY', 'y']]) {
     const asked = c[key] || 0;
     if (built[key] >= asked) continue;
