@@ -30,7 +30,7 @@ const binsReady = async (page) => {
 function watch(page) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !H.blankFavicon(m)) errors.push(m.text()); });
   return errors;
 }
 async function toBins(page) {
