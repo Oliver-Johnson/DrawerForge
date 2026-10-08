@@ -178,6 +178,44 @@ test('a half-size bin gets slots where they fit, and a carved one none', async (
     .toEqual(['bin-0.5x1x3-slot-l-qty1', 'bin-2x2x3-qty1']);
 });
 
+/* With removable plates the lip has a notch at each plate, and the plates across are cut
+   to the scoop, which they hold under a cap of their own. A slotted bin has no lip, so
+   nothing to notch, and its weight leaves the lip out once, notches and all. A front slot
+   holds the scoop lower than the plates need it held, and the plates across are cut to
+   that, so Checks names the slot for it and not the plates. */
+test('with removable plates: no lip to notch, weighed once, and plates cut to the held scoop', async ({ page }) => {
+  await H.dragCells(page, [0, 0], [1, 0]);               // a 2x1x3, selected
+  await H.setField(page, 'hUnits', 2);
+  await H.setField(page, 'divX', 2);
+  await page.check('#divRemovable');
+  await H.setField(page, 'scoop', 10);
+  await settle(page);
+  await expect(checks(page)).toContainText('is built with a 6.6 mm scoop rather than 7.2 mm, so the plates across keep 1 mm of their front ends in their rails');
+  const weigh = () => page.evaluate(() => {
+    const b = B()[0], m = geomFor(b).meta, p = fingerPlan(b);
+    const across = dividerPlates(G, binCfg(b)).find((q) => q.axis === 'y');
+    return { notch: lipNotchVolume(b), raw: volumeMm3(b).raw, lip: m.hasLip, area: p ? p.area : 0, wall: b.wall,
+             full: areaRR((b.u - 1) * SPEC.pitch / 2 + SPEC.half, (b.v - 1) * SPEC.pitch / 2 + SPEC.half, SPEC.r) * 0.35 * LIP_H / 1.9,
+             cut: across.meta.outline[0][1] - m.floorZ - state.divClr, scoop: p ? p.scoopNow : null };
+  });
+  const plain = await weigh();
+  expect(plain.lip).toBe(true);
+  expect(plain.notch, 'fixture: the lip is notched').toBeGreaterThan(0);
+  expect(plain.cut, 'fixture: the plates across cut to the plates\' own cap').toBeCloseTo(6.6, 6);
+
+  await slot(page, 'F');
+  const slotted = await weigh();
+  expect(slotted.lip).toBe(false);
+  expect(slotted.notch, 'no lip, so no notches in it').toBe(0);
+  // what the slot takes off: the lip as it was, notches and all, once, and the wall the dips take
+  expect(plain.raw - slotted.raw).toBeCloseTo(plain.full - plain.notch + slotted.area * slotted.wall, 6);
+  expect(slotted.scoop).toBeCloseTo(3.6225, 4);
+  expect(slotted.cut, 'the plates across cut to the scoop the slot holds it to').toBeCloseTo(slotted.scoop, 6);
+  await expect(checks(page)).toContainText('has a finger slot in its front wall, so its scoop is held to 3.6 mm, under the slot');
+  await expect(checks(page)).not.toContainText('rather than');
+  expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
+});
+
 test('a drawer of slotted bins hears each note once, and a bin cannot stand on one', async ({ page }) => {
   if (await page.locator('#s-bin.closed').count()) await page.locator('#s-bin > h2 > button').click();
   await H.setField(page, 'scoop', 12);                    // the new bins' settings

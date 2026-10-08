@@ -183,13 +183,14 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
    for its plate at the page's plate and clearance and keep the end ones out of the rounded
    corners (railedMost), however many it asks for.
    The plates, the names and Checks all go by these, so they say what is built. None on a
-   bin with holes across its floor, which the holes divide, as buildBin builds it: asked
-   here and not in dividersBuilt, which noteOnShelf asks, which the holes ask in turn.
-   Worked out as holesIn does it, with the new-bin settings at a 1x1 as these are. */
+   bin with holes across its floor, which the holes divide, as buildBin builds it
+   (binDividers, which asks the holes as holesIn does), with the new-bin settings at a
+   1x1 as these are. A bin with finger slots ticked asks the holes of its kept plan
+   (insertPlanOf), as binDividers would ask them of the slots all over again. */
 const builtDivs = (b) => {
   const c = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
-  return +c.insert > 0 && !c.solid && (b.u && b.v ? insertPlanOf(b) : insertPlan(c)).n
-    ? { divX: 0, divY: 0 } : dividersBuilt(c);
+  if (!(b.u && b.v && fingerPlan(b))) return binDividers(c);
+  return +c.insert > 0 && insertPlanOf(b).n ? { divX: 0, divY: 0 } : dividersBuilt(c);
 };
 // and how many compartments they make, or 0 for a bin with none
 const compartments = (b) => {
@@ -884,6 +885,26 @@ function railArea(n, along, across, wall, divT, divClr) {
   return 2 * merged.reduce((a, [lo, hi]) => a + upTo(hi) - upTo(lo), 0);  // both walls
 }
 
+/* What the notches take out of a removable bin's lip: one through it at each end of each
+   plate (notchedLip), the lip's own profile across, as lipLevels gives it, and as wide
+   as the slot and a BLOAT either side along it. Exactly what they take where they stand
+   on the lip's straight runs, which is all of them but the end ones of a bin packed into
+   its corners, and there within a fraction of a percent. None without a notched lip, nor
+   on a bin with no lip at all: one with finger slots has none to notch (hasLip). */
+function lipNotchVolume(b) {
+  if (!b.divRemovable || isCarved(b) || !hasLip(b)) return 0;
+  const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
+  const L = plateLayout(cfg, binDividers(cfg));
+  if (!L.lip) return 0;
+  const { ts, zs, lipH } = lipLevels(L.c, L.H);
+  const prof = [[0, zs[0]]].concat(ts.map((t, i) => [t, zs[i]]), [[0, L.H + lipH]]);
+  const area = Math.abs(prof.reduce((a, p, i) => {
+    const q = prof[(i + 1) % prof.length];
+    return a + p[0] * q[1] - q[0] * p[1];
+  }, 0)) / 2;
+  return area * 2 * (L.slot + BLOAT) * 2 * (L.pX.length + L.pY.length);
+}
+
 // { raw, filament } in mm3
 function volumeMm3(c) {
   const C = SPEC.centre;
@@ -949,8 +970,10 @@ function volumeMm3(c) {
     ? (built.divX * wall * 2 * hdI + built.divY * wall * 2 * hwI) * (H - floorZ)
     : isCarved(c) ? 0 : (railArea(built.divX, hwI, hdI, wall, bc.divT, bc.divClr) +
                          railArea(built.divY, hdI, hwI, wall, bc.divT, bc.divClr)) * (H - floorZ);
-  const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 : 0;
-  // less what finger slots take, the lip with them (fingerSlotVolume)
+  /* less what a removable bin's notches take out of it, and what finger slots take, the
+     lip with them (fingerSlotVolume): a slotted bin has neither lip nor notches, and its
+     lip is taken off once, whole */
+  const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 - lipNotchVolume(c) : 0;
   const thin = wallsFull * wallFrac + divs + lipV - fingerSlotVolume(c, wall, lipV);
   /* The block the holes are in fills the cavity to their depth, less the holes: a thick
      part like the base, so a shell round its outside and every hole, a top skin, and the
@@ -1428,18 +1451,28 @@ function magnetDefault() {
 const mostDividers = (cells, wall) => Math.max(0,
   Math.floor(((cells - 1) * SPEC.pitch + 2 * SPEC.half - 2 * wall) / Math.max(wall, RAIL_T)) - 1);
 /* The limits that depend on the bin itself, written onto the fields: the floor and the
-   scoop up to the bin's height, the label shelf up to its depth, the dividers up to
-   what fits across, and removable ones up to as many as leave every slot room for its
-   plate, which moves with the plate and the clearance. A hole is never deeper than the
-   bin is tall either, which is the limit the link holds it to; the engine stops it under
-   the rim besides. */
-function setBinLimits(u, v, hUnits, wall, removable) {
+   scoop up to the bin's height, the label shelf up to its depth. A hole is never deeper
+   than the bin is tall either, which is the limit the link holds it to; the engine stops
+   it under the rim besides. The dividers come after (setDividerLimit). */
+function setBinLimits(u, v, hUnits) {
   const H = hUnits * SPEC.unitH;
   $('floorT').max = H; $('scoop').max = H; $('insertDepth').max = H;
   $('label').max = v * SPEC.pitch;
-  const rails = { u, v, wall, divT: state.divT, divClr: state.divClr, arcSegs: state.arcSegs };
-  $('divX').max = Math.min(mostDividers(u, wall), removable ? railedMost(rails, 'x') : Infinity);
-  $('divY').max = Math.min(mostDividers(v, wall), removable ? railedMost(rails, 'y') : Infinity);
+}
+/* And the dividers, once the floor, scoop and shelf are read: up to what fits across, and
+   removable ones up to as many as leave every slot room for its plate, which moves with
+   the plate and the clearance, and as go in past the lip and the shelf (railedMost). The
+   ones along also as many as keep enough plate where they cross the ones across, or stand
+   on the scoop, and leave the lip its corners (dividersBuilt), so `cfg` carries the count
+   across when this is asked for the count along. */
+function setDividerLimit(id, cfg) {
+  const axis = id === 'divX' ? 'x' : 'y';
+  let most = mostDividers(axis === 'x' ? cfg.u : cfg.v, cfg.wall);
+  if (cfg.divRemovable) {
+    most = Math.min(most, railedMost(cfg, axis));
+    if (axis === 'y') most = dividersBuilt(Object.assign({}, cfg, { divY: most })).divY;
+  }
+  $(id).max = most;
 }
 
 function readControls() {
@@ -1577,7 +1610,8 @@ function readControls() {
      limit behind: after a 1x2 with removable dividers, the next bin drawn got 23 where 30
      were asked for. */
   const own = scratch || b;
-  setBinLimits(minU, minV, t.hUnits, t.wall, t.divRemovable && !!own);
+  setBinLimits(minU, minV, t.hUnits);
+  Object.assign(t, { floorT: mm('floorT', 1.2), scoop: mm('scoop', 0), label: mm('label', 0) });
   /* A bin asking for more removable dividers than fit keeps asking for them: a link or a
      saved drawer from before the limit followed the rails can ask for 31 on a 1x1, where
      10 fit, and is built with 10 (Checks says so). Selecting it, or changing anything
@@ -1591,9 +1625,13 @@ function readControls() {
     const x = count(id, 0), asked = Math.round(num(id, 0));
     return own && asked > x && asked === own[id] ? Math.min(asked, most) : x;
   };
-  Object.assign(t, { floorT: mm('floorT', 1.2), scoop: mm('scoop', 0), label: mm('label', 0),
-                     divX: divCount('divX', mostDividers(minU, t.wall)),
-                     divY: divCount('divY', mostDividers(minV, t.wall)) });
+  // the smallest bin's footprint, with what this pass gives every bin it applies to
+  const lim = binCfg(Object.assign({}, t, { u: minU, v: minV, cells: null, divX: 0, divY: 0,
+                                            divRemovable: t.divRemovable && !!own }));
+  setDividerLimit('divX', lim);
+  t.divX = divCount('divX', mostDividers(minU, t.wall));
+  setDividerLimit('divY', Object.assign(lim, { divX: t.divX }));
+  t.divY = divCount('divY', mostDividers(minV, t.wall));
   /* Show the value actually used once you have left the field: typed past a limit, the
      box would otherwise go on saying 100 while the bin is built at 10. Never under the
      caret, where emptying the box to type a new number would have it filled back in
@@ -3137,44 +3175,103 @@ function binIssues(b, k, claims) {
       `each side takes ${(b.wall - BIN_DEFAULTS.wall).toFixed(1)} mm more of the inside than the usual ${BIN_DEFAULTS.wall} mm` });
   /* A note, because the bin prints, with fewer removable dividers than it asks for: as
      many as leave every slot room for its plate, and the end ones the clearance at the
-     plate's corner in the bin's rounded corners (railedLimit), and the note says which of
-     the two stopped it. A design from before the fields held them there can ask for 31
-     on a 1x1, where 10 fit at the usual plate and clearance. Its link keeps asking, so a
-     thinner plate or a tighter clearance builds more without it being edited. A whole
-     drawer of such bins says it once (warnings), once for each reason. Not of a bin with
-     holes across its floor: it is built with no dividers at all, not as many as fit, and
-     insertIssues says that its dividers are left off. */
+     plate's corner in the bin's rounded corners, and the plate some length, with room for
+     the rails the other way beside a lone one (railedLimit), and the note says which
+     stopped it; or as many as go in past the lip and the shelf and keep their
+     plate where they cross, which notes of their own say (dividersWhy). A design from
+     before the fields held them there can ask for 31 on a 1x1, where 10 fit at the usual
+     plate and clearance. Its link keeps asking, so a thinner plate or a tighter clearance
+     builds more without it being edited. A whole drawer of such bins says it once
+     (warnings), once for each reason. Not of a bin with holes across its floor: it is
+     built with no dividers at all, not as many as fit, and insertIssues says that its
+     dividers are left off; nor are its plates' notes below, as it has none (builtDivs). */
   const d = builtDivs(b);
   const short = [['divX', 'across', 'x'], ['divY', 'along', 'y']].filter(([k]) => d[k] < (b[k] || 0));
   if (b.divRemovable && !b.solid && !isCarved(b) && !holesIn(b) && short.length) {
+    /* What brought each direction's count down (dividersWhy). The rails' own rules are
+       said together as one note; what stands over a slot, the lip and the shelf, and what
+       the plates keep where they cross or stand on the scoop, each in a note of its own. */
     const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
-    const rules = new Set(short.map(([, , ax]) => railedLimit(cfg, ax).by));
-    /* 'lone': room for one divider's slot and a rail either side, but not for the rails
-       the other way beside it, which are kept room for whether or not it has any, so
-       that dividers the other way never take it away. 'length': the clearance at a
-       plate's two ends takes the whole cavity. Either would read wrongly as "none leave
-       every slot room", as the slot itself has room. 'fit': two of those, or one of them
-       with the slots or corners, said once for both directions, either of which may have
-       none. */
-    const by = rules.size < 2 ? [...rules][0]
-      : [...rules].every((r) => r === 'slots' || r === 'corners') ? 'both' : 'fit';
-    const more = short.some(([k]) => d[k]);
-    const at = `a ${state.divT} mm plate at ${state.divClr} mm clearance`;
-    const why = (them) => (by === 'slots' ? `${more ? 'no more' : 'none'} leave every slot room for ${at}`
-      : by === 'corners' ? (more ? `more would stand the end ones so far into ${them} rounded corners that a plate would lose the clearance at its corner, with ${at}`
-        : `even one would stand so far into ${them} rounded corners that its plate would lose the clearance at its corner, with ${at}`)
-      : by === 'lone' ? `even one would leave too little room beside its slot for the rails of dividers the other way, with ${at}`
-      : by === 'length' ? `the clearance at a plate's ends would leave it no length, with ${at}`
-      : by === 'fit' ? (them === 'their' ? `only those fit with ${at}` : `that is as many as fit with ${at}`)
-      : `${more ? 'no more' : 'none'} leave every slot room and keep the end ones out of ${them} rounded corners with ${at}`);
-    out.push({ note: true, group: `rails-${by}`,
-      t: `is built with ${short.map(([k, w], i) => `${d[k] || 'no'}${i ? '' : ` removable divider${d[k] === 1 ? '' : 's'}`} ${w}`).join(' and ')}, ` +
-         `not the ${short.map(([k]) => b[k]).join(' and ')} it asks for, as ${why("the bin's")}`,
-      many: (n, names) => `${n} bins are built with fewer removable dividers than they ask for, as ` +
-        `${by === 'slots' ? `no more leave every slot room for ${at}` : by === 'corners'
-          ? `more would stand the end ones so far into their rounded corners that a plate would lose the clearance at its corner, with ${at}`
-          : by === 'lone' || by === 'length' || by === 'fit' ? why('their')
-          : `no more leave every slot room and keep the end ones out of their rounded corners with ${at}`}: ${names}` });
+    const why = dividersWhy(cfg);
+    /* The rails' own rules, said together as one note (railedLimit): the slots, the
+       corners, and two more. 'lone': room for one divider's slot and a rail either side,
+       but not for the rails the other way beside it, which are kept room for whether or
+       not it has any, so that dividers the other way never take it away. 'length': the
+       clearance at a plate's two ends leaves it under PLATE_MIN long, as a plate under
+       PLATE_MIN tall is not listed either. Either would read wrongly
+       as "none leave every slot room", as the slot itself has room. 'fit': two of those,
+       or one of them with the slots or corners, said once for both directions, either of
+       which may have none. */
+    const railShort = short.filter(([k]) => ['slots', 'corners', 'lone', 'length'].includes(why[k]));
+    if (railShort.length) {
+      const rules = new Set(railShort.map(([k]) => why[k]));
+      const by = rules.size < 2 ? [...rules][0]
+        : [...rules].every((r) => r === 'slots' || r === 'corners') ? 'both' : 'fit';
+      const more = railShort.some(([k]) => d[k]);
+      const at = `a ${state.divT} mm plate at ${state.divClr} mm clearance`;
+      const because = (them) => (by === 'slots' ? `${more ? 'no more' : 'none'} leave every slot room for ${at}`
+        : by === 'corners' ? (more ? `more would stand the end ones so far into ${them} rounded corners that a plate would lose the clearance at its corner, with ${at}`
+          : `even one would stand so far into ${them} rounded corners that its plate would lose the clearance at its corner, with ${at}`)
+        : by === 'lone' ? `even one would leave too little room beside its slot for the rails of dividers the other way, with ${at}`
+        : by === 'length' ? `the clearance at a plate's ends would leave it under ${PLATE_MIN} mm long, with ${at}`
+        : by === 'fit' ? (them === 'their' ? `only those fit with ${at}` : `that is as many as fit with ${at}`)
+        : `${more ? 'no more' : 'none'} leave every slot room and keep the end ones out of ${them} rounded corners with ${at}`);
+      out.push({ note: true, group: `rails-${by}`,
+        t: `is built with ${railShort.map(([k, w], i) => `${d[k] || 'no'}${i ? '' : ` removable divider${d[k] === 1 ? '' : 's'}`} ${w}`).join(' and ')}, ` +
+           `not the ${railShort.map(([k]) => b[k]).join(' and ')} it asks for, as ${because("the bin's")}`,
+        many: (n, names) => `${n} bins are built with fewer removable dividers than they ask for, as ` +
+          `${by === 'slots' ? `no more leave every slot room for ${at}` : by === 'corners'
+            ? `more would stand the end ones so far into their rounded corners that a plate would lose the clearance at its corner, with ${at}`
+            : by === 'lone' || by === 'length' || by === 'fit' ? because('their')
+            : `no more leave every slot room and keep the end ones out of their rounded corners with ${at}`}: ${names}` });
+    }
+    const stand = d.divX ? `cross the ones across${b.scoop ? ', or stand on the scoop' : ''}` : 'stand on the scoop';
+    const REASON = {
+      lip: (any) => `${any ? 'no more' : 'none'} can have a notch through the stacking lip clear of its corners`,
+      shelf: (any) => `${any ? 'no more' : 'none'} fit in front of the label shelf, which a plate along cannot drop in under`,
+      cross: (any) => `${any ? 'no more' : 'none'} keep ${PLATE_END} mm of plate where they ${stand}`,
+      lipCorners: (any) => `${any ? 'more' : 'any'} would notch the stacking lip too close to its corners`,
+      // both, where one more would go wrong both ways (dividersWhy)
+      crossCorners: (any) => `${any ? 'no more' : 'none'} keep ${PLATE_END} mm of plate where they ${stand}, ` +
+        `and ${any ? 'more' : 'any'} would notch the stacking lip too close to its corners`,
+    };
+    const MANY = {
+      lip: 'no more can have a notch through the stacking lip clear of its corners',
+      shelf: 'no more along fit in front of the label shelf, which a plate along cannot drop in under',
+      cross: `no more along keep ${PLATE_END} mm of plate where they cross the ones across, or stand on the scoop`,
+      lipCorners: 'more along would notch the stacking lip too close to its corners',
+      crossCorners: `no more along keep ${PLATE_END} mm of plate where they cross the ones across, or stand on the ` +
+        'scoop, and more would notch the stacking lip too close to its corners',
+    };
+    for (const r of Object.keys(REASON)) {
+      const these = short.filter(([k]) => why[k] === r);
+      if (!these.length) continue;
+      out.push({ note: true, group: 'rails-' + r,
+        t: `is built with ${these.map(([k, w], i) => `${d[k] || 'no'}${i ? '' : ` removable divider${d[k] === 1 ? '' : 's'}`} ${w}`).join(' and ')}, ` +
+           `not the ${these.map(([k]) => b[k]).join(' and ')} it asks for, as ${REASON[r](these.some(([k]) => d[k]))}`,
+        many: (n, names) => `${n} bins are built with fewer removable dividers than they ask for, as ${MANY[r]}: ${names}` });
+    }
+  }
+  /* How its plates go in, where that is not simply any plate in any slot: notes, because
+     the bin prints, and what the plates' rows and their files' names say as well. */
+  if (b.divRemovable && !b.solid && !isCarved(b) && (d.divX || d.divY)) {
+    const L = plateLayout(Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 }), d);
+    if (L.printed && L.pX.length && L.pY.length)
+      out.push({ note: true, group: 'plates-cross',
+        t: 'has removable dividers both ways, which halve together where they cross: put the plates across in first, slots up, then drop the plates along over them, slots down',
+        many: (n, names) => `${n} bins have removable dividers both ways, which halve together where they cross: put the plates across in first, slots up, then drop the plates along over them, slots down: ${names}` });
+    if (L.printed && L.pX.length && L.r)
+      out.push({ note: true, group: 'plates-scoop',
+        t: 'has its plates across cut at the bottom front corner to follow the scoop: that corner goes to the front',
+        many: (n, names) => `${n} bins have their plates across cut at the bottom front corner to follow the scoop: that corner goes to the front: ${names}` });
+    if (L.printed && L.along.some((a) => a.zb > L.zf))
+      out.push({ note: true, group: 'plates-stand',
+        t: 'has plates along that stand on the scoop, each made for its own slot: its row in the downloads says which',
+        many: (n, names) => `${n} bins have plates along that stand on the scoop, each made for its own slot: their rows in the downloads say which: ${names}` });
+    const free = L.scoopFree;
+    if (L.printed && free && L.r < free - 1e-9)
+      out.push({ note: true,
+        t: `is built with ${L.r ? `a ${+L.r.toFixed(1)} mm scoop rather than ${+free.toFixed(1)} mm` : 'no scoop'}, so the plates across keep ${PLATE_END} mm of their front ends in their rails` });
   }
   /* The note raised on the label shelf. Notes, not faults: the bin prints either way,
      and these say how much of the note it prints. They name what was typed, which is
@@ -3583,7 +3680,6 @@ function drawWarnings() {
 /* How a type reads in a list: its shape, and what you said goes in it. Distinct from
    typeName further down, which builds the STL FILENAME and must stay stable and
    filesystem-safe — a note with a slash in it has no business in a filename. */
-const B_DIV = (b, axis) => dividerPart(G, binCfg(b), axis);
 const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
   (t.b.solid ? ' solid' : '') + (insertText(t.b) ? `, ${insertText(t.b)}` : '') +
   (fingerText(t.b) ? `, ${fingerText(t.b)}` : '') +
@@ -3632,30 +3728,140 @@ function lidParts() {
 }
 const lidName = (d) => `lid-${d.b.u}x${d.b.v}-${d.meta.sides.join('') || 'flat'}`;
 
+/* A bin's distinct plates, each with its mesh and how many the bin takes (dividerPlates),
+   kept while the bin's settings are the same: the table, the plan, the preview and the
+   ZIP all ask for them, and a plate with halving slots is a mesh of its own to build. */
+const platesSeen = new Map();
+function platesOf(b) {
+  const cfg = binCfg(b), key = JSON.stringify(cfg);
+  if (!platesSeen.has(key)) {
+    if (platesSeen.size > 200) platesSeen.clear();
+    platesSeen.set(key, dividerPlates(G, cfg));
+  }
+  return platesSeen.get(key);
+}
+// a plate's outline in its own plane, for what it weighs: a plain one is its rectangle
+const plateArea = (meta) => !meta.outline ? meta.span * meta.tall
+  : Math.abs(meta.outline.reduce((a, p, i, o) => { const q = o[(i + 1) % o.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
 function dividerParts() {
   const m = new Map();
   for (const t of types()) {
-    /* Plates only for a bin that has rails to hold them. buildBin leaves the rails off a
-       solid or carved bin, and off one whose floor fills it — and a floor as thick as
-       the bin is tall, which the floor field allows, made a plate of negative height:
-       an STL turned inside out. */
-    if (!t.b.divRemovable || t.b.solid || isCarved(t.b)) continue;
-    /* as many plates as the bin has slots for, which is not always as many as it asks for,
-       and none for one with holes across its floor, which has no dividers (builtDivs) */
-    const built = builtDivs(t.b);
-    for (const [axis, n] of [['y', built.divX], ['x', built.divY]]) {
-      if (!n) continue;
-      const d = B_DIV(t.b, axis);
-      if (d.meta.tall < 1) continue;
-      const key = `${d.meta.span.toFixed(1)}x${d.meta.tall.toFixed(1)}x${d.meta.t}`;
-      if (!m.has(key)) m.set(key, { key, axis, b: t.b, meta: d.meta, qty: 0 });
-      m.get(key).qty += n * t.qty;
+    /* Plates only for a bin that has rails to hold them, which dividerPlates says as
+       buildBin builds them: none for fixed dividers, a solid or carved bin, or one whose
+       floor fills it (a floor as thick as the bin is tall, which the floor field allows,
+       made a plate of negative height: an STL turned inside out). As many as the bin
+       has slots for, which is not always as many as it asks for, and none for one with
+       holes across its floor, which has no dividers (dividerPlates goes by binDividers,
+       as builtDivs does). A plain plate is the rectangle it always was, grouped to the
+       0.1 mm its name gives; one shaped to pass the scoop or to halve with the plates
+       the other way is grouped by its exact outline, so two that differ go in as two
+       parts, and two bins that take the same one share its file. */
+    for (const p of platesOf(t.b)) {
+      const key = p.meta.outline ? p.key : `${p.meta.span.toFixed(1)}x${p.meta.tall.toFixed(1)}x${p.meta.t}`;
+      if (!m.has(key)) m.set(key, { key, axis: p.axis, b: t.b, meta: p.meta, polys: p.polys, uses: [],
+                                    vol: plateArea(p.meta) * p.meta.t, qty: 0 });
+      const d = m.get(key);
+      d.qty += p.qty * t.qty;
+      /* What is the bin's and not the plate's goes with each bin type that takes it:
+         which of its slots it is for. Kept from the first type alone, a plate standing on
+         the scoop in the 1st slot of one 2x2x6 and the 2nd of another was listed for the
+         1st of both, where it stands about 1.9 mm over the lip. The rest of its meta is the
+         plate's: its outline is its key, and its slot's width the page's plate and
+         clearance, the same for every bin. */
+      d.uses.push({ t, ks: p.ks });
     }
   }
-  return [...m.values()].sort((a, b) => b.qty - a.qty);
+  const out = [...m.values()].sort((a, b) => b.qty - a.qty);
+  /* Where plates go in more than one bin type, which bins a shaped plate is for, by their
+     files in the download (plateHow). The names are worked out once here: typeNames
+     builds every type's dividers, and asked for each plate's words it made the export
+     rows of 56 bins of 20 types take 195 ms rather than 16. */
+  const withPlates = new Set(out.flatMap((d) => d.uses.map((u) => u.t.key)));
+  const binned = withPlates.size > 1, names = binned && out.some((d) => d.meta.outline) ? typeNames() : null;
+  for (const d of out) {
+    d.binned = binned;
+    if (names) for (const u of d.uses) u.file = (names.get(u.t.key) || typeName(u.t)) + '.stl';
+  }
+  /* Named by size, and a shaped one by which way it stands and what it is shaped for, so
+     the file says how it goes in: "across-slots-up", "along-slots-down", "-scoop" for the
+     corner cut to the scoop, "-on-scoop" for one that stands on it. Two of a name that
+     still differ, made for different slots, are told apart by a number. */
+  const seen = new Map();
+  for (const d of out) {
+    const m2 = d.meta, size = `divider-${m2.span.toFixed(1)}x${m2.tall.toFixed(1)}x${m2.t}mm`;
+    const base = !m2.outline ? size : size + (d.axis === 'y'
+      ? '-across' + (m2.slots ? '-slots-up' : '') + (m2.cut ? '-scoop' : '')
+      : '-along' + (m2.slots ? '-slots-down' : '') + (m2.stands ? '-on-scoop' : ''));
+    const n = (seen.get(base) || 0) + 1;
+    seen.set(base, n);
+    d.name = n > 1 ? `${base}-${n}` : base;
+    d.base = base;
+  }
+  /* And its words, once, for its row and the README. Two plates along of one name can
+     still read alike, made for different slots of one bin: on a 1x1.5x4 with a 40 mm
+     scoop, one across and two along, the plate across meets the scoop beside the front
+     crossing, so the front plate along has its slot from the bottom 0.14 mm taller than
+     the back one's. Those say their slots as well, as one on the scoop does. They are
+     found by name and bin type, not by their words: where plates go in more than one
+     type of bin the words end in each plate's bins, and the same 1x1.5x4 beside one with
+     no scoop has its back plate along shared with that bin and its front one not, so the
+     two read differently and still neither said which slot it was for. */
+  for (const d of out) d.how = plateHow(d);
+  const alike = new Map();
+  for (const d of out) {
+    if (!d.meta.outline || d.axis !== 'x' || d.meta.stands) continue;
+    for (const u of d.uses) {
+      const k = `${d.base} ${u.t.key}`;
+      if (!alike.has(k)) alike.set(k, new Set());
+      alike.get(k).add(d);
+    }
+  }
+  for (const g of alike.values()) if (g.size > 1) for (const d of g) { d.bySlot = true; d.how = undefined; d.how = plateHow(d); }
+  return out;
 }
-const dividerName = (d) =>
-  `divider-${d.meta.span.toFixed(1)}x${d.meta.tall.toFixed(1)}x${d.meta.t}mm`;
+const dividerName = (d) => d.name;
+const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+const andList = (n) => (n.length < 2 ? n.join('') : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`);
+const slotsFromFront = (ks) => `the ${andList(ks.map(ordinal))} slot${ks.length > 1 ? 's' : ''} from the front`;
+/* Which slots a plate along is for, where it stands on the scoop or would read as another
+   of its size does (bySlot, dividerParts). It is made for its own slot, and two
+   bin types that take the same plate need not take it in the same one: a 2x2x6 with a
+   40 mm scoop takes it in its 1st slot with 2 along and its 2nd with 5. So where plates
+   go in more than one bin type, the slots are said bin by bin, naming each bin by its
+   file in the download (dividerParts), and the bins that take it in the same slots
+   together; with plates for one bin type, as a layout of one bin always has, they are
+   said as before. */
+function slotsFor(d) {
+  if (!d.binned) return slotsFromFront(d.uses[0].ks);
+  const by = new Map();
+  for (const u of d.uses) {
+    const k = u.ks.join(',');
+    if (!by.has(k)) by.set(k, { ks: u.ks, bins: [] });
+    const g = by.get(k);
+    if (!g.bins.includes(u.file)) g.bins.push(u.file);
+  }
+  return [...by.values()].map((x, i) => `${i ? `the ${andList(x.ks.map(ordinal))}` : slotsFromFront(x.ks)} of ` +
+    andList(x.bins)).join('; ');
+}
+/* How a shaped plate goes in, for its row and the README; '' for a plain one, which goes
+   in any slot either way round. Where plates go in more than one bin type, a shaped one
+   names the bins it is for as well, as one on the scoop names its slots in them: two
+   plates across of one size, cut to scoops of 8 and 10 mm, were two rows word for word
+   alike, and the one for the 8 mm scoop goes into the other bin 0.79 mm high, over the
+   rim. A plain plate goes in any bin of its size, and says nothing. Worked out once for
+   each plate in dividerParts, which keeps it as d.how. */
+function plateHow(d) {
+  if (d.how !== undefined) return d.how;
+  const m = d.meta;
+  if (!m.outline) return '';
+  const where = m.stands || d.bySlot ? `for ${slotsFor(d)}`
+    : d.binned ? `for ${andList([...new Set(d.uses.map((u) => u.file))])}` : '';
+  if (d.axis === 'y')
+    return [m.slots ? 'across, slots up: these go in first' : 'across',
+            m.cut ? 'cut corner to the front, over the scoop' : '', where].filter(Boolean).join(', ');
+  return [m.slots ? 'along, slots down: these go in over the plates across' : 'along',
+          m.stands ? 'stands on the scoop' : '', where].filter(Boolean).join(', ');
+}
 
 function types() {
   const m = new Map();
@@ -3803,8 +4009,7 @@ function computePlan() {
     meta: geomFor(t.b).meta, polys: () => geomFor(t.b).polys, vol: geomFor(t.b).vol,
   })).concat(dividerParts().map((d) => ({
     key: 'div:' + d.key, b: null, qty: d.qty, divider: d,
-    meta: d.meta, polys: () => B_DIV(d.b, d.axis).polys,
-    vol: d.meta.span * d.meta.tall * d.meta.t,
+    meta: d.meta, polys: () => d.polys, vol: d.vol,
   }))).concat(lidParts().map((d) => ({
     key: 'lid:' + d.key, b: null, qty: d.qty,
     meta: d.meta, polys: () => L_LID(d.b).polys, vol: d.vol,
@@ -4113,9 +4318,9 @@ function addLooseParts(b) {
      camera at the angle the preview opens on. */
   let z = binD / 2 + PART_GAP;
   for (const d of dividerParts()) {
-    // d.key rounds to 0.1 mm for grouping; the buffer wants the exact plate
-    const exact = [d.meta.span, d.meta.tall, d.meta.t].map((n) => n.toFixed(3)).join('x');
-    const geo = partGeoOf('div:' + exact, () => B_DIV(d.b, d.axis).polys);
+    // a plain plate's key rounds to 0.1 mm for grouping; the buffer wants the exact plate
+    const exact = d.meta.outline ? d.key : [d.meta.span, d.meta.tall, d.meta.t].map((n) => n.toFixed(3)).join('x');
+    const geo = partGeoOf('div:' + exact, () => d.polys);
     for (let i = 0; i < d.qty; i++) {
       const m = new THREE.Mesh(geo, partMat);
       m.position.set(0, 0, z + d.meta.tall / 2);
@@ -4564,6 +4769,20 @@ function holesReadme(ts) {
   if (screws) out.push(`Screws: ${screws} M3, driven up through the baseplate. Each hole in a bin is 6 mm deep.`);
   return out;
 }
+/* How the shaped divider plates go in, for the README, which is read at the printer with
+   them in hand: each file, how many, and which way it goes. Nothing when every plate is
+   plain and goes in any slot either way round, so such a README is as it always was. */
+function platesReadme(parts) {
+  const shaped = parts.filter((d) => d.meta.outline);
+  if (!shaped.length) return [];
+  const L = ['DIVIDER PLATES:'];
+  for (const d of shaped) L.push(`  ${String(d.qty).padStart(3)} x  ${dividerName(d)}.stl  (${plateHow(d)})`);
+  if (shaped.some((d) => d.meta.slots))
+    L.push('  Where plates cross they halve together: put the plates across in first, slots up,',
+           '  then drop the plates along over them, slots down. Lift them out the other way round.');
+  L.push('');
+  return L;
+}
 function layoutReadme() {
   const g = grid(), ts = types();
   const L = [];
@@ -4603,6 +4822,7 @@ function layoutReadme() {
       : `It belongs at column ${b.x + 1}, row ${b.y + 1} of a ${g.nx} x ${g.ny} grid` +
         (layers.length > 1 ? `, on layer ${cur + 1}.` : '.'));
     L.push('');
+    L.push(...platesReadme(dividerParts()));
     L.push('PRINTING: flat as oriented, no supports. Check it seats in your baseplate');
     L.push('before printing the rest of the drawer.');
     L.push('');
@@ -4669,6 +4889,7 @@ function layoutReadme() {
     L.push(...readmeTime(job));
     L.push('');
   }
+  L.push(...platesReadme(dividerParts()));
   L.push('ASSEMBLY: lay layer 1 into the baseplate, then drop each higher layer into');
   L.push('the stacking lips of the bins below it.');
   L.push('');
@@ -4736,7 +4957,7 @@ async function downloadBinZip() {
   /* The dividers go in the same ZIP. A bin with rails and no plate is not a divided
      bin, and the ZIP is what someone downloads when they want the whole job. */
   for (const d of dividerParts())
-    zip.file(dividerName(d) + '.stl', G.stlBinary(B_DIV(d.b, d.axis).polys, 'divider'));
+    zip.file(dividerName(d) + '.stl', G.stlBinary(d.polys, 'divider'));
   for (const d of lidParts())
     zip.file(lidName(d) + '.stl', G.stlBinary(L_LID(d.b).polys, 'lid'));
   zip.file('README.txt', layoutReadme());
@@ -5052,11 +5273,12 @@ function renderExport() {
               (d.meta.sides.length ? 'tall, prints upside down' : 'thick') + ' · STL', 'STL',
             () => saveBlob(G.stlBinary(L_LID(d.b).polys, 'lid'), lidName(d) + '.stl'),
             { 'data-ex': 'lid' });
+    /* A plate shaped to its slot says which way it goes in, and which go in first: the
+       same words its file's name and the README give. */
     for (const d of dividerParts())
       exRow(`Divider ${d.meta.span.toFixed(1)} × ${d.meta.tall.toFixed(1)} × ${d.meta.t} mm × ${d.qty}`,
-            `slides into a ${d.meta.slot.toFixed(2)} mm slot · STL`, 'STL',
-            () => saveBlob(G.stlBinary(B_DIV(d.b, d.axis).polys, 'divider'),
-                           dividerName(d) + '.stl'), { 'data-ex': 'divider' });
+            (plateHow(d) ? plateHow(d) + ' · ' : '') + `slides into a ${d.meta.slot.toFixed(2)} mm slot · STL`, 'STL',
+            () => saveBlob(G.stlBinary(d.polys, 'divider'), dividerName(d) + '.stl'), { 'data-ex': 'divider' });
     for (const t of ts)
       exRow(typeLabel(t),
             `${DF.bytes(DF.stlBytes(geomFor(t.b).polys))} · STL`, 'STL',

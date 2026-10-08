@@ -132,7 +132,7 @@ test('the exploded offsets do not reach the print plan', async ({ page }) => {
       return { lo, hi };
     };
     return {
-      div: dividerParts().map((d) => bb(B_DIV(d.b, d.axis).polys)),
+      div: dividerParts().map((d) => bb(d.polys)),
       lid: lidParts().map((d) => Object.assign(bb(L_LID(d.b).polys), { h: d.meta.totalH })),
     };
   });

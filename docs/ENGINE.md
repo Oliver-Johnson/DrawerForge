@@ -293,6 +293,14 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   they keep where they are with the shelf (`holesGaveWay`, which says why), and the slots
   are whatever builds over them, as before: if the block is too high for the back one
   even then, the shelf stays. Either way it is one more `floorPlan`, not a loop.
+  With removable plates the front and back walls are settled first, on their own
+  (`fingerWall`): only the dividers across meet them, and those are counted without the
+  ones along. So `plateLayout` cuts the plates across to the scoop a front slot holds, the
+  smaller of that and the plates' own cap, stands the plates along on it and counts them
+  on it, and `railedLimit` keeps no plates along in front of a shelf a back slot takes
+  away, notches and all. The lip still limits the count, as whether a bin has any slot
+  at all is settled between the dividers it counts; a slotted bin builds no lip, so no
+  notches.
   `fingerSlots` hands its answer to `buildBin` and `insertPlan` (`floor`), so the page
   counts the holes that are built. A bin with no slots built gets the same split lists
   and holes it always had, so it is byte for byte what it was. The audit reads every
