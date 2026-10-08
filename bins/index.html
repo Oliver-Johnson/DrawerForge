@@ -10845,15 +10845,19 @@ const fingerText = (b) => {
    scoop under it, so 15 and 25 mm asked for are both built at what it is held to; a back
    slot leaves the shelf off, so a shelf asked for is no shelf, unless the holes across
    the floor kept clear of it all the same (holesGaveWay): then how deep it would have
-   been is where they are. A bin with no slots is keyed and named by what it asks for, as
-   it always was. */
+   been is where they are, and the bin is keyed by that, the depth it is laid out to. The
+   depth asked for is not it: on a bin too short for a 20 mm shelf it is laid out 15 deep,
+   and 14 with a note raised on it, which the slot keeps from printing, so two bins asking
+   for 20 kept their holes a millimetre apart under one key. A bin with no slots is keyed
+   and named by what it asks for, as it always was. */
 const scoopAsBuilt = (b) => {
   const p = fingerPlan(b);
   return p && p.scoop !== null ? +p.scoopNow.toFixed(3) : b.scoop;
 };
 const labelAsBuilt = (b) => {
   const p = fingerPlan(b);
-  return p && p.shelfOff && !(p.holesGaveWay && holesIn(b)) ? 0 : b.label;
+  if (!(p && p.shelfOff)) return b.label;
+  return p.holesGaveWay && holesIn(b) ? +p.floor.shelf.depth.toFixed(3) : 0;
 };
 /* What finger slots take off a bin's volume, for the filament estimate (volumeMm3): the
    dips' area in the plane of the wall times the `wall` they are cut from, and the
