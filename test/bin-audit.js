@@ -1303,9 +1303,9 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
   if (!exact || fails.length) bad++;
 }
 /* Edges used other than twice once every vertex within `step` of another is one with it,
-   as a slicer may weld them. */
-const weldBad = (polys, step) => {
-  const key = (v) => v.map((x) => Math.round(x / step)).join(',');
+   as a slicer may weld them: on a grid `step` across, moved `off` along each axis. */
+const weldBad = (polys, step, off = 0) => {
+  const key = (v) => v.map((x) => Math.round((x - off) / step)).join(',');
   const edges = new Map();
   for (const t of G.polysToTriangles(polys)) {
     const ks = t.map(key);
@@ -2476,6 +2476,71 @@ console.log('\nnotes raised on the label shelf');
     : `${ALL_GLYPHS.length} glyphs, ${shells} shells, each watertight, oriented, every cap n - 2 triangles`));
   if (fails.length) bad++;
 
+  /* ...and still so once a slicer or a repair tool has welded them: every vertex put on a
+     grid, and the ones in one cell of it made one. Each shell is closed on its own, so an
+     edge used other than twice after that is two shells with corners in one cell. On a
+     grid 10 µm across, moved 5 µm, "Fuses 5A, 10A" on a 2x1x2 with a 10 mm shelf did it
+     with two discs whose corners were 8 µm apart, and the 0.004 mm a stroke's end moved
+     a lane and the 0.003 mm a shell's bottom did were no defence. In the sweep below 321
+     of the 720 notes did it at one of the four offsets or another, and all 720 had two
+     shells with corners under 20 µm apart. So each note of a sweep over notes, shelves,
+     walls and widths is welded on a 10 µm grid at four offsets, and every edge has to be
+     used twice; and, which is what makes that hold at any offset and not only these four,
+     no two shells may have corners closer than 20 µm in x and in y both. Every shell's
+     top is at one height, so x and y are all that keep two apart. The bin it was found
+     on is welded whole as well. */
+  {
+    const APART = 0.02, offs = [0, 0.0025, 0.005, 0.0075];
+    const notes = ['M3 screws', 'Fuses 5A, 10A', 'Drill bits 1-6 mm', 'Assorted M3 M4 nuts, washers',
+                   'Resistors 10k to 100k', 'M2', 'Zip ties', 'Hex bits 1/4 inch', ...NOTE_GLYPHS];
+    const welded = [], near = [];
+    let tried = 0, printed = 0, nearest = Infinity;
+    for (const note of notes) for (const label of [7.5, 10, 12, 15]) for (const wall of [0.8, 1.2, 2])
+      for (const [u, v, hUnits] of [[1, 1, 3], [2, 1, 2], [3, 1, 3], [4, 1, 3], [1.5, 1, 4]]) {
+        const cfg = { u, v, hUnits, wall, label, labelMode: 1, note }, s = shelfNote(cfg);
+        tried++;
+        if (!s.fit) continue;
+        printed++;
+        const name = `${u}x${v}x${hUnits} wall ${wall}, ${label} mm shelf, "${note}"`;
+        const rings = [];
+        const rec = Object.assign({}, G, { extrudePoly: (pts, z0, z1) => {
+          rings.push(pts);
+          return G.extrudePoly(pts, z0, z1);
+        } });
+        const polys = NOTE_TEXT.noteShells(rec, s.fit.segs, s.top - 0.05, hUnits * SPEC.unitH - NOTE_CLEAR);
+        const counts = offs.map((o) => weldBad(polys, 0.01, o));
+        if (counts.some(Boolean)) welded.push(`${name}: ${counts.join('/')}`);
+        // the nearest two corners of different shells, x and y each, by squares APART across
+        const grid = new Map();
+        let close = Infinity;
+        rings.forEach((ring, i) => {
+          for (const [x, y] of ring) {
+            const cx = Math.floor(x / APART), cy = Math.floor(y / APART);
+            for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++)
+              for (const [j, qx, qy] of grid.get(`${cx + dx},${cy + dy}`) || [])
+                if (j !== i) close = Math.min(close, Math.max(Math.abs(x - qx), Math.abs(y - qy)));
+          }
+          for (const [x, y] of ring) {
+            const k = `${Math.floor(x / APART)},${Math.floor(y / APART)}`;
+            if (!grid.has(k)) grid.set(k, []);
+            grid.get(k).push([i, x, y]);
+          }
+        });
+        nearest = Math.min(nearest, close);
+        if (close < APART) near.push(`${name}: ${(close * 1000).toFixed(1)} µm`);
+      }
+    const found = { u: 2, v: 1, hUnits: 2, wall: 1.2, label: 10, labelMode: 1, note: 'Fuses 5A, 10A' };
+    const whole = offs.map((o) => weldBad(buildBin(G, found).polys, 0.01, o));
+    const fault = whole.some(Boolean) || welded.length || near.length;
+    console.log(`  welded at 10 µm        ` + (fault
+      ? `FAILED: the 2x1x2 it was found on ${whole.join('/')} edges used other than twice (offsets 0/2.5/5/7.5 µm); ` +
+        `${welded.length} of ${printed} notes weld one, among them ${welded.slice(0, 3).join('; ')}; ` +
+        `${near.length} have two shells' corners under 20 µm apart, among them ${near.slice(0, 3).join('; ')}`
+      : `${printed} of ${tried} notes print, each clean at 0, 2.5, 5 and 7.5 µm, and the 2x1x2 it was found on ` +
+        `whole; no two shells' corners nearer than ${(nearest * 1000).toFixed(1)} µm`));
+    if (fault || printed < tried / 2) bad++;
+  }
+
   /* The font's data goes into the page inside a script tag, where a less-than sign and a
      slash together could end the script. None of it may hold one, and the file may not
      either. And the four notes above have to be every glyph the font draws, or "every
@@ -2806,11 +2871,15 @@ function weldOpen(polys, tol) {
      so those are the rows. Notes ride in bnotes, so the two that print one are given it.
      The removable dividers' row is as the table of links from before the feet holes has
      it: 857e407d on main, 7b838b80 once its rails reached the clearance further (#50),
-     and 576daddc since its lip is notched where its plates go in. */
+     and 576daddc since its lip is notched where its plates go in. The 1x1x3's note was
+     e43cbc54 until its letters' shells were laid with no two corners closer than a
+     slicer's weld joins (noteShells), and d3caaa09 since: some of its strokes stop up to
+     a few hundredths of a millimetre elsewhere, and nothing else in it changed. The 2x1x2
+     over screws prints no note (its shelf is too shallow), so it is the same bytes. */
   const crypto = require('crypto');
   const BEFORE = [
     ['2x1x4, label shelf 12', '0-0-2-1-4-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15', {}, '314a909d03d54277'],
-    ['1x1x3, note raised', '0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-1', { note: 'M3 screws' }, 'e43cbc548a2737ae'],
+    ['1x1x3, note raised', '0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-1', { note: 'M3 screws' }, 'd3caaa093f004e13'],
     ['3x2x5, dividers, scoop, label, magnets', '0-0-3-2-5-1.2-1.2-2-1-0-1-1-1-1-8-12-0-0-0-0-15-1', {}, '378b909714f22d86'],
     ['2x2x3, removable dividers', '0-0-2-2-3-1.2-1.2-1-1-0-1-1-1-1-0-0-0-0-1-0-15', {}, '576daddcf6ccc8e5'],
     ['1.5x1x3, scoop and label', '0-0-1.5-1-3-1.2-1.2-0-0-0-1-1-1-1-8-10-0-0-0-0-15', {}, '4a2046d7ad5c3eae'],

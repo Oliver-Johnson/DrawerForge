@@ -46,6 +46,10 @@ const NOTE_CAP_U = 21, NOTE_TOP_U = -12, NOTE_BASE_U = 9;
 /* How far the plastic reaches past a stroke's centre line: to a corner of the disc at
    each point (noteShells), half the stroke and 0.05 over the inscribed radius. */
 const NOTE_INK = (NOTE_SPEC.stroke / 2 + 0.05) / Math.cos(Math.PI / NOTE_SPEC.sides);
+/* How far apart the corners of any two of a note's shells are kept, in x or in y: twice
+   a 0.01 mm grid such as a slicer welds a mesh on, so no grid that fine joins two
+   (noteShells). */
+const NOTE_APART = 0.02;
 
 /* ---------- characters ---------------------------------------------------- */
 
@@ -297,9 +301,32 @@ function noteFit(text, outer) {
  *     edge: each shell starts a different depth into the shelf, 0.003 mm apart, so their
  *     upright edges never match.
  *
+ * That keeps them apart to the last digit, and a slicer, or a tool that repairs a mesh,
+ * works to less: it welds every vertex within a few microns of another into one, by
+ * putting them on a grid, and two shells with a corner each in one cell of it share
+ * whatever edge leaves that cell. Laid out only as above, every note had two shells'
+ * corners closer than 0.02 mm, and welded on a grid of 0.01 mm, at one offset of it or
+ * another, nearly half the notes in the audit's sweep had an edge used four times. At a
+ * bend a little gentler than 28 degrees the outer corners of the two rectangles all but
+ * meet, and 0.004 and 0.003 mm are both less than a cell. "Fuses 5A, 10A" on a 2x1x2 did
+ * it with two discs 0.37 mm apart, corners 8 µm apart, on a grid moved 5 µm.
+ *
+ * So every shell is laid clear of the corners of every one before it, NOTE_APART in x or
+ * in y, which no grid of 0.01 mm can join at any offset, and one that would not be moves
+ * the least that clears it (stop, below). A rectangle's end moves 0.01 mm at a time, up
+ * to 0.08: at a disc into it or back towards its point, to 0.18 from the point at most,
+ * where its corners are 0.44 from it and still inside the disc's 0.45; at a mitred bend
+ * nearer the point or further past it, never so near that the outer edges no longer
+ * cross and never more than 0.18 past. A disc turns 2.5 degrees at a time, to any of the
+ * 18 ways an octagon can face. Turned, it could meet another flat to flat, but never
+ * with their corners together, which is what made the shared edge. Where the letters'
+ * outline moves at all, it is by under 0.04 mm: a disc's corners stand 0.037 out from
+ * its flats, and a mitre's outer tip stands out under 0.04.
+ *
  * One segment too short to leave any rectangle between its stops is covered by the
  * discs at its ends: each reaches 0.45 mm from its point, and the farthest corner of the
- * stroke from both is under 0.42 mm. */
+ * stroke from both is under 0.42 mm. Whether there is one is decided at the stops laid
+ * out above, before any is moved. */
 function noteShells(G, segs, z0, z1) {
   const h = NOTE_SPEC.stroke / 2, n = NOTE_SPEC.sides, R = NOTE_INK;
   const past = 0.1, stopA = 0.12, stopB = 0.1, turn = -1.2 * Math.PI / 180;
@@ -307,7 +334,34 @@ function noteShells(G, segs, z0, z1) {
   const key = (p) => p[0].toFixed(4) + ',' + p[1].toFixed(4);
   const polys = [], discs = new Map(), done = new Set();
   let shells = 0;
-  const shell = (ring) => polys.push(...G.extrudePoly(ring, z0 - 0.003 * (shells++ % 64), z1));
+  // every corner laid so far, by the square NOTE_APART across it is in
+  const laid = new Map(), cell = (v) => Math.floor(v / NOTE_APART);
+  const clear = (ring) => ring.every(([x, y]) => {
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++)
+      for (const [qx, qy] of laid.get((cell(x) + i) + ',' + (cell(y) + j)) || [])
+        if (Math.abs(x - qx) < NOTE_APART && Math.abs(y - qy) < NOTE_APART) return false;
+    return true;
+  });
+  const shell = (ring) => {
+    for (const p of ring) {
+      const k = cell(p[0]) + ',' + cell(p[1]);
+      if (!laid.has(k)) laid.set(k, []);
+      laid.get(k).push(p);
+    }
+    polys.push(...G.extrudePoly(ring, z0 - 0.003 * (shells++ % 64), z1));
+  };
+  /* Where a rectangle stops at one end: `s` as laid out below, or the least move from it
+     that leaves the end's two corners (`ends(t)` for a stop t) clear of every shell laid
+     so far, 0.01 mm at a time up to 0.08 either way. At a disc the stop stays within 0.18
+     of the point; at a mitre the end runs at least `need` past it and at most 0.18. `most`
+     keeps the rectangle 0.02 long. When nothing clears them, `s`. */
+  const stop = (s, round, need, most, ends) => {
+    for (let k = 0; k <= 8; k++) for (const t of k ? [s + k * 0.01, s - k * 0.01] : [s]) {
+      if (k && (t > most || t < -0.18 || (round ? t > 0.18 : t > -need))) continue;
+      if (clear(ends(t))) return t;
+    }
+    return s;
+  };
   /* Which lane a segment runs in: how many strokes its line is from the origin, odd or
      even, measured across it. Two parallel segments a stroke apart are in neighbouring
      lanes whichever way each was drawn. */
@@ -326,6 +380,12 @@ function noteShells(G, segs, z0, z1) {
     const round = line.map((p, i) => i === 0 || i === line.length - 1 ||
       dir[i - 1][0] * dir[i][0] + dir[i - 1][1] * dir[i][1] < mitre);
     line.forEach((p, i) => { if (round[i] && !discs.has(key(p))) discs.set(key(p), p); });
+    // how far past a mitred bend a rectangle has to run for the outer edges to cross, and a hundredth
+    const need = line.map((p, i) => {
+      if (round[i]) return 0;
+      const c = dir[i - 1][0] * dir[i][0] + dir[i - 1][1] * dir[i][1];
+      return h * Math.sqrt((1 - c) / (1 + c)) + 0.01;
+    });
     for (let i = 0; i + 1 < line.length; i++) {
       const a = line[i], b = line[i + 1], [ux, uy, L] = dir[i];
       // how far in from each end the rectangle starts; less than nothing runs past it
@@ -336,18 +396,26 @@ function noteShells(G, segs, z0, z1) {
       if (done.has(k)) continue;
       done.add(k);
       const nx = -uy * h, ny = ux * h;
-      const p0 = [a[0] + ux * sa, a[1] + uy * sa], p1 = [b[0] - ux * sb, b[1] - uy * sb];
+      // the two corners across the stroke at `d` along it from p
+      const ends = (p, d) => [[p[0] + ux * d - nx, p[1] + uy * d - ny], [p[0] + ux * d + nx, p[1] + uy * d + ny]];
+      const ta = stop(sa, round[i], need[i], L - sb - 0.02, (t) => ends(a, t));
+      const tb = stop(sb, round[i + 1], need[i + 1], L - ta - 0.02, (t) => ends(b, -t));
+      const p0 = [a[0] + ux * ta, a[1] + uy * ta], p1 = [b[0] - ux * tb, b[1] - uy * tb];
       shell([[p0[0] - nx, p0[1] - ny], [p1[0] - nx, p1[1] - ny],
              [p1[0] + nx, p1[1] + ny], [p0[0] + nx, p0[1] + ny]]);
     }
   }
   for (const p of discs.values()) {
-    const ring = [];
-    for (let j = 0; j < n; j++) {
-      const t = (j + 0.5) * 2 * Math.PI / n + turn;
-      ring.push([p[0] + R * Math.cos(t), p[1] + R * Math.sin(t)]);
-    }
-    shell(ring);
+    // turned as above, else the least further, 2.5 degrees at a time: the 18 ways it can face
+    const tries = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8, -8, 9].map((k) => {
+      const ring = [];
+      for (let j = 0; j < n; j++) {
+        const t = (j + 0.5) * 2 * Math.PI / n + turn + k * 2.5 * Math.PI / 180;
+        ring.push([p[0] + R * Math.cos(t), p[1] + R * Math.sin(t)]);
+      }
+      return ring;
+    });
+    shell(tries.find(clear) || tries[0]);
   }
   return polys;
 }
