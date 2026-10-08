@@ -204,6 +204,40 @@ test('a carved layout survives a round trip through the url', async ({ page }) =
   expect(await H.bins(page)).toEqual(before);
 });
 
+/* A carved shape and a solid block are built with no dividers, whatever the bin asks for
+   (buildBin), but the page listed them as asked: a carved L asking for two across and
+   one along was "2×2×3 · 6 comp" in the parts list and "6 compartments" in the README,
+   and its STL was named bin-2x2x3-2x1div, and a solid block the same. Rows, README and
+   names now go by the dividers built (dividersBuilt), so those say none, and a carved
+   or solid bin asking for dividers is the same part as one that does not. A plain bin
+   with dividers keeps its count and the name it had. */
+test('a carved or solid bin is listed and named without the dividers it is built without', async ({ page }) => {
+  const binAt = (x, y, more) => [x, y, 2, 2, 3, 1.2, 1.2, 2, 1, ...more].join('-');
+  await page.goto('about:blank');
+  await page.goto(H.BINS_URL + '#bl=' + [
+    binAt(0, 0, [0, 1, 1, 1, 1, 0, 0, '1110']),             // carved L, fixed dividers asked
+    binAt(3, 0, [0, 1, 1, 1, 1, 0, 0, '1110', 0, 1]),       // carved L, removable ones asked
+    binAt(0, 3, [1]),                                       // a solid block asking for them
+    binAt(3, 3, []),                                        // a plain bin with fixed ones
+  ].join('_'));
+  await page.waitForFunction(() => !!document.getElementById('fillmap'));
+  await page.waitForTimeout(400);
+  const got = await page.evaluate(() => ({
+    asked: layers[0].bins.map((b) => [b.divX, b.divY, (b.cells || []).length, !!b.solid]),
+    rows: [...document.querySelectorAll('#typeRows tr td:first-child')].map((e) => e.textContent),
+    names: types().map((t) => typeNames().get(t.key)).sort(),
+    readme: layoutReadme().split('\n').filter((l) => /^\s+\d+ x\s+2x2x3/.test(l)),
+    plates: dividerParts().length,
+  }));
+  expect(got.asked, 'fixture: every bin asks for two across and one along')
+    .toEqual([[2, 1, 3, false], [2, 1, 3, false], [2, 1, 0, true], [2, 1, 0, false]]);
+  expect(got.rows.filter((r) => /comp/.test(r))).toEqual(['2×2×3 · 6 comp']);
+  expect(got.rows).toEqual(expect.arrayContaining(['2×2×3', '2×2×3 solid']));
+  expect(got.readme.filter((l) => /compartments/.test(l))).toEqual([expect.stringMatching(/^\s+1 x\s+2x2x3 .*\)\s+6 compartments$/)]);
+  expect(got.names).toEqual(['bin-2x2x3-2x1div-qty1', 'bin-2x2x3-qty2', 'bin-2x2x3-solid-qty1']);
+  expect(got.plates, 'and no loose plates for the carved one').toBe(0);
+});
+
 /* The libraries are vendored, not fetched from a CDN. Two things must hold: they
    actually load from the relative path (a wrong path fails silently until you try to
    render), and nothing on the page reaches a third party — which is what lets the
