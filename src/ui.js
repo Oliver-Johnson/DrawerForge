@@ -2181,8 +2181,8 @@ const USED_KEY = 'drawerforge:used:v1';
    lost that layout for good. */
 let pristine = '', bootDesc = null;
 /* The boot meant to set this browser's save aside and could not: the storage was full.
-   Until the first change the page does not write over that save either, which was then
-   the one copy of it (see saveNow). */
+   Until the design changes at all the page does not write over that save either, which
+   was then the one copy of it (see saveNow). */
 let unkept = false;
 /* Someone's link this page holds, or ''. Each of its drawer, bed and infill values the
    page still uses is the link's, not yours, whatever else has been changed: so taking
@@ -2280,8 +2280,12 @@ function saveNow() {
       writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
+  /* Any change ends unkept, one that sameDesign does not count among them: kept on
+     until the first one it counts, a plate height or a view changed alone never reached
+     this browser's save. */
+  if (unkept && h !== bootDesc) unkept = false;
   // not a save another tab has moved on from, nor one the boot could not set aside (unkept)
-  if (!drawers.isBehind(h) && !(unkept && bootDesc !== null)) saveLocal(h);
+  if (!drawers.isBehind(h) && !unkept) saveLocal(h);
   try { drawers.wrote(h, linkKeys(h, heldLink)); }   // and into the saved drawer this is, if it is one
   finally {
     /* Marked as this tab's own, or as someone's link's while the page still holds it as
@@ -2731,7 +2735,10 @@ let arrivedWith = '';    // the design string this page was opened with, if it s
     writeKey(PREV_KEY, saved);
     keptAside = readKey(PREV_KEY) === saved;
     if (keptAside) writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
-    else unkept = true;
+    /* Not kept, it is not written over either (unkept), unless a hand-over brings on
+       anything the other page sets: then the save holds the drawer, bed or the other
+       page's settings from before, and a bare visit took those back to the other page. */
+    else unkept = !handOver || drawers.onlyMine(saved, src);
   }
   const canPutBack = (replaces && !kept && (keptAside || (savedLinked && !!readKey(PREV_KEY)))) ||
     (back && keptAside);

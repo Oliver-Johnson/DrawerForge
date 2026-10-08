@@ -315,8 +315,8 @@ function fullStorage() {
 for (const tool of ['bins', 'plates']) {
   const ready = tool === 'bins' ? binsReady : platesReady;
   // each change the same length or shorter, so this browser's own save of it still fits
-  const [field, key, before, refused, raced] = tool === 'bins' ? ['gap', 'bgap', '6', '4', '7']
-    : ['connector', 'cn', 'dovetail', 'puzzle', 'bowtie'];
+  const [field, key, before, refused, raced, next] = tool === 'bins' ? ['gap', 'bgap', '6', '4', '7', '5']
+    : ['connector', 'cn', 'dovetail', 'puzzle', 'bowtie', 'hclip'];
   test(`with storage full, a ${tool} page reloaded as a change's save lands sets nothing aside ` +
     'it cannot keep', async ({ page }) => {
     await page.addInitScript(fullStorage);
@@ -347,11 +347,72 @@ for (const tool of ['bins', 'plates']) {
     await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
     await settle(page);
     await expect(page.locator('#setAside'), 'nothing is said to be set aside').toBeHidden();
-    expect(await page.evaluate((k) => localStorage.getItem(k), `drawerforge:${tool}:v1`),
-      'the later change is still this browser\'s save').toContain(`${key}=${raced}`);
+    const local = () => page.evaluate((k) => localStorage.getItem(k), `drawerforge:${tool}:v1`);
+    expect(await local(), 'the later change is still this browser\'s save').toContain(`${key}=${raced}`);
+    /* Until the next change, which is saved there. On Bins first one the page does not
+       count as a change of the design, the plate height alone: held back until a change it
+       counted, that was never saved at all. */
+    if (tool === 'bins') {
+      const ph = (+await page.inputValue('#plateH') + 0.1).toFixed(2);
+      await H.setField(page, 'plateH', ph);
+      await expect.poll(local, { message: 'the plate height is saved', timeout: 20000 })
+        .toContain(`ph=${ph}`);
+      await H.setField(page, field, next);
+    } else await page.selectOption('#' + field, next);
+    await expect.poll(local, { message: 'and so is the next change', timeout: 20000 })
+      .toContain(`${key}=${next}`);
     expect(errors).toEqual([]);
   });
 }
+
+/* And a hand-over that brings anything changed on the other page is not held back. Bins
+   could not set its save aside after that race, and kept it; the drawer's size is then
+   changed on Baseplates and brought back. Kept again, this browser's save held the size
+   from before, and a visit to Bins with no link took that back to Baseplates. No saved
+   drawer, whose refused saves would take the size back on the way (catchUp). */
+test('with storage full, a size changed on the other page outlives the save Bins kept back',
+  async ({ page }) => {
+    await page.addInitScript(fullStorage);
+    const errors = await openPlates(page);
+    await toBins(page);
+    await H.setField(page, 'gap', '6');
+    await settle(page);
+    await page.evaluate(() => sessionStorage.setItem('full', '1'));
+    await H.setField(page, 'gap', '4');
+    await settle(page);
+    await Promise.all([page.waitForEvent('load'), page.evaluate(() => {
+      const e = document.getElementById('gap');
+      e.value = '7';
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+      e.dispatchEvent(new Event('change', { bubbles: true }));
+      landEdit();
+      const write = history.replaceState;
+      history.replaceState = () => {};     // the reload has the address already
+      try { saveNow(); } finally { history.replaceState = write; }
+      history.replaceState(null, '');      // and the address's mark went with the save's
+      location.reload();
+    })]);
+    await binsReady(page);
+    await settle(page);
+    const local = () => page.evaluate(() => localStorage.getItem('drawerforge:bins:v1'));
+    expect(await local(), 'the save kept back').toContain('bgap=7');
+
+    await toPlates(page);
+    const w = String(+await page.inputValue('#drawerW') + 10);   // the same length, so it fits
+    await H.setField(page, 'drawerW', w);
+    await settle(page);
+    await toBins(page);
+    expect(await page.inputValue('#drawerW')).toBe(w);
+    await expect.poll(local, { message: 'this browser\'s save has the size as changed', timeout: 20000 })
+      .toContain(`w=${w}`);
+    await page.goto('about:blank');
+    await page.goto(base + 'bins/');
+    await binsReady(page);
+    expect(await page.inputValue('#drawerW'), 'a visit to Bins with no link').toBe(w);
+    await toPlates(page);
+    expect(await page.inputValue('#drawerW'), 'and on to Baseplates').toBe(w);
+    expect(errors).toEqual([]);
+  });
 
 /* The same reload with no save landing. The page is your own drawer handed over, and the
    reload is that page again. Onto a layout another drawer holds, it used to say someone's
@@ -787,8 +848,8 @@ for (const tool of ['plates', 'bins']) {
     await expect(page.locator('#drawerName')).toHaveText('Kitchen');
     await expect(page.locator('#setAside')).toBeHidden();
     await H.setField(page, 'drawerD', '420');
-    await settle(page);
-    expect((await stored(page)).Kitchen, 'its edits reach the drawer').toMatchObject({ w: '650', d: '420' });
+    await expect.poll(() => stored(page).then((s) => s.Kitchen),
+      { message: 'its edits reach the drawer', timeout: 20000 }).toMatchObject({ w: '650', d: '420' });
     expect(await slots(page), 'nothing was set aside').toEqual(before);
     expect(errors).toEqual([]);
   });

@@ -892,6 +892,14 @@ const DRAWERS = (function () {
         const fp = fingerprint(h);
         return loadAll().drawers.some((d) => d.marks[o.tool] === fp);
       },
+      /* Whether `a` and `b` differ in this tool's own half alone (see restore): all that
+         the other page sets, the drawer, bed and printer, o.given and its own settings
+         carried along, the same in both. */
+      onlyMine(a, b) {
+        const rest = (s) => encodePairs((parsePairs(s) || []).filter(([k]) => !half(k))
+          .sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)));
+        return rest(a) === rest(b);
+      },
       /* Which drawer, if any, the design this page arrived with belongs to.
        *
        * The obvious answer — "whichever drawer was open last" — is wrong in the case that
