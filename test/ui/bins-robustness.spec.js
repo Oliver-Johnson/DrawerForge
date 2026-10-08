@@ -540,6 +540,25 @@ test('a bin kept from removable dividers both ways for different reasons says so
   expect(errors).toEqual([]);
 });
 
+/* A bin built as one block has no rails for want of a cavity, not of room for slots, and
+   Checks does not say otherwise. Once dividersBuilt counted none for such a bin, a 1x1x1
+   with a 3 mm floor, which fills it, asking for two removable dividers across was said to
+   be built with none "as none leave every slot room", and asking for 31 it was said, as
+   before, to be built with 10. A bin with a cavity asking for 31 is still told it gets 10. */
+test('a bin whose floor fills it is not said to be short of room for removable dividers', async ({ page }) => {
+  const binAt = (x, floorT, divX) => [x, 0, 1, 1, 1, 1.2, floorT, divX, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 15].join('-');
+  const errors = await openAt(page, 'bl=' + [binAt(0, 3, 2), binAt(2, 3, 31), binAt(4, 1.2, 31)].join('_'));
+  await settle(page, 600);
+  expect(await page.evaluate(() => B().map((b) => [b.hUnits, b.floorT, b.divX, b.divRemovable])),
+         'fixture: two 1x1x1 bins whose floor fills them and one that has a cavity')
+    .toEqual([[1, 3, 2, true], [1, 3, 31, true], [1, 1.2, 31, true]]);
+  expect((await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent)))
+    .filter((t) => t.includes('removable dividers'))).toEqual(['Layer 1, the 1×1 bin at column 5 row 1: is built with ' +
+    '10 removable dividers across, not the 31 it asks for, as no more leave every slot room for a 1.6 mm plate at ' +
+    '0.25 mm clearance.']);
+  expect(errors).toEqual([]);
+});
+
 /* Both ways, where the end spacing on both axes was a rail and its reach, the tip of the
    end rail one way met the end rail the other way corner to corner, on one edge used four
    times: a 1x1 with a 0.4 mm wall and 10 each way at the usual plate and clearance, which
