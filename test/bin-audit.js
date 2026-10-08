@@ -3465,8 +3465,9 @@ console.log('\nfinger slots');
   }
 
   /* Opt-in, and only where one can be built: every other bin is built to the byte as it
-     was, whatever its slot settings say. Each row is a bin that has to come out the same
-     as without them, and the reason fingerSlotPlan gives the page for building none. */
+     was, whatever its slot settings say, and its plates are counted as they were. Each row
+     is a bin that has to come out the same as without them, and the reason fingerSlotPlan
+     gives the page for building none. */
   const stl = (cfg) => Buffer.from(G.stlBinary(buildBin(G, cfg).polys, 'b')).toString('base64');
   const one = { u: 1, v: 1, hUnits: 3 }, front = { fingerSlots: { f: true } };
   const SAME = [
@@ -3480,17 +3481,26 @@ console.log('\nfinger slots');
     ['carved', { u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) }, front, 'carved'],
     ['solid', Object.assign({}, one, { solid: true }), front, 'solid'],
     ['AA cells in a 1x1x3', Object.assign({}, one, { insert: 1 }), front, 'holes'],
+    /* Holes that leave no room for a slot front or back: the plates along it asks for (and
+       is built without, as the holes divide it) are counted as without slots, in front of
+       its shelf and on its scoop. Counted as if the slots were built, they came to 10, not
+       3, and stood on a scoop held to 3.62 mm, not 7.25. */
+    ['AA cells, a shelf and plates along in a 1x1x2', { u: 1, v: 1, hUnits: 2, insert: 1, label: 12, scoop: 8, divY: 12,
+      divRemovable: true }, { fingerSlots: { f: true, b: true } }, 'holes'],
   ];
+  // and the plates counted, which the field for them is held to, though none are built
+  const counted = (cfg) => JSON.stringify([railedLimit(cfg, 'y'), dividersBuilt(cfg), plateLayout(cfg, dividersBuilt(cfg)).r]);
   const moved = SAME.map(([name, cfg, extra, why]) => {
     const withIt = Object.assign({}, cfg, extra), plan = fingerSlotPlan(withIt);
     if (stl(cfg) !== stl(withIt)) return `${name}: BUILT DIFFERENTLY`;
+    if (counted(cfg) !== counted(withIt)) return `${name}: counts its plates ${counted(withIt)}, not ${counted(cfg)}`;
     if (buildBin(G, withIt).meta.fingers || plan.n) return `${name}: counts slots`;
     const got = Object.values(plan.sides).map((s) => s.why);
     return why === null ? (got.length ? `${name}: says ${got}` : '')
       : got.length && got.every((g) => g === why) ? '' : `${name}: fingerSlotPlan says ${got}, not ${why}`;
   }).filter(Boolean);
   console.log(`  ${'bins with no slots'.padEnd(22)} ` + (moved.length ? 'FAILED: ' + moved.join('; ')
-    : `${SAME.length} kinds, each the same STL to the byte, and the page told why`));
+    : `${SAME.length} kinds, each the same STL to the byte and the same plates counted, and the page told why`));
   if (moved.length) bad++;
 }
 

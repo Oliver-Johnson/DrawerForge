@@ -394,13 +394,12 @@ function noteOnShelf(c, iw, id, H, footAt, built) {
    it out with the plates, `fit` where the caller has it already.
    Under a finger slot in the front wall, no taller than nine tenths of the way up to the
    slot's bottom (fingerSlots' scoop), so the scoop never shows in the slot: `fingers` is
-   the bin's slot plan where the caller has it, and otherwise the front wall's is settled
-   here (fingerWall). With removable plates plateLayout holds it so too, before its own
-   cap, and the smaller of the two holds: the slot's, on any bin a slot is built in. */
+   the bin's slot plan, which both callers have settled already. With removable plates
+   plateLayout holds it so too, before its own cap, and the smaller of the two holds: the
+   slot's, on any bin a slot is built in. */
 function scoopBuilt(c, id, H, floorZ, fit, fingers) {
   if (c.divRemovable) return (fit || plateLayout(c, dividersBuilt(c))).r;
-  const f = fingers || fingerWall(c, 'f');
-  return scoopRadius(f && f.scoop !== null ? Object.assign({}, c, { scoop: f.scoop }) : c, H, floorZ, id);
+  return scoopRadius(fingers.scoop !== null ? Object.assign({}, c, { scoop: fingers.scoop }) : c, H, floorZ, id);
 }
 
 /* Stacking lip.
@@ -1838,11 +1837,13 @@ const shelfFoot = (c) => {
    dividers, and if the holes come out built that is the bin. If they do not (too short,
    or none fit), the dividers are built after all and the shelf is worked out with them,
    as on any bin without holes, which is every bin not asked for them. Those are `divs`
-   where given, as noteOnShelf takes them (fingerSlots). */
+   where given, as noteOnShelf takes them (fingerSlots). Worked out without its dividers,
+   the bin is given none to fit the note between, which are the ones it would count, so
+   fingerWall can ask this without asking itself. */
 function floorPlan(c, iw, id, H, divs) {
   if (!insertOf(c)) return { shelf: shelfFor(c, iw, id, H, divs), holes: { why: 'off' } };
   const bare = c.divX || c.divY ? Object.assign({}, c, { divX: 0, divY: 0 }) : c;
-  const shelf = shelfFor(bare, iw, id, H), holes = holeLayout(c, iw, id, H, shelf);
+  const shelf = shelfFor(bare, iw, id, H, NO_DIVS), holes = holeLayout(c, iw, id, H, shelf);
   return holes.n ? { shelf, holes } : { shelf: bare === c ? shelf : shelfFor(c, iw, id, H, divs), holes };
 }
 /* Where the holes go in a bin settled as buildBin settles it, and how deep they are, or
@@ -2337,17 +2338,29 @@ function fingerSlotPlan(cfg, divs) {
    none there: settled from the dividers across alone, which are what meet those walls, so
    that the dividers along can be counted with them. A front slot holds the scoop the
    plates stand on (plateLayout), and a back one takes away the label shelf they would
-   keep in front of (railedLimit). Settled so, they are the slots buildBin builds there:
-   with holes across the floor it builds no dividers to count, and no scoop. `divX` is the
-   count of dividers across where the caller has it, plateLayout's plates across, which
-   with no lip to notch can be more than the lip allows (dividersBuilt). */
+   keep in front of (railedLimit). Settled so, they are the slots buildBin builds there.
+   `divX` is the count of dividers across where the caller has it, plateLayout's plates
+   across, which with no lip to notch can be more than the lip allows (dividersBuilt).
+   With holes across the floor the bin builds no dividers, so its slots are settled
+   without them, the whole plan at once, and the wall is the one built over the holes:
+   held lower, or none. Settled as if there were no holes, a slot the holes leave no room
+   for still took the shelf rule off the plates along, which the field for them is held
+   by, on bins built with no plates at all. */
 function fingerWall(cfg, k, divX) {
   if (!(cfg.fingerSlots && cfg.fingerSlots[k])) return null;
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
   c.floorT = builtFloorT(c);
   if (isHalfSize(c)) c.cells = null;
+  if (insertOf(c)) {
+    const p = fingerSlots(c, null, NO_DIVS);
+    if (p.floor && p.floor.holes.n) {
+      const s = p.sides[k], n = s ? s.slots.length : 0;
+      return Object.assign({}, p, { n, built: n ? k : '', sides: s ? { [k]: s } : {} });
+    }
+  }
   return fingerSlots(c, k, divX === undefined ? undefined : { divX, divY: 0 });
 }
+const NO_DIVS = { divX: 0, divY: 0 };
 
 /* ---------- the bin ------------------------------------------------------- */
 
@@ -2591,7 +2604,9 @@ function binDividers(cfg) {
    A bin with a finger slot built in it has no lip, and is said by the rules it is counted
    by without one (countedAs), never the lip's; 'slot' where it is built with the count
    its lip would allow all the same, because between more plates no slot would be built,
-   and it would have its lip. Null where it is built with all it asks for. */
+   and it would have its lip. That is a fallback no bin swept has reached: the lip's rule
+   binds only on plates packed too close for a slot between them, so more of them move no
+   slot (dividersBuilt). Null where it is built with all it asks for. */
 function dividersWhy(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg), built = dividersBuilt(c), out = { divX: null, divY: null };
   if (!c.divRemovable) return out;
