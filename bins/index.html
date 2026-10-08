@@ -9357,7 +9357,8 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
    Worked out as holesIn does it, with the new-bin settings at a 1x1 as these are. */
 const builtDivs = (b) => {
   const c = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
-  return +c.insert > 0 && !c.solid && insertPlan(c).n ? { divX: 0, divY: 0 } : dividersBuilt(c);
+  return +c.insert > 0 && !c.solid && (b.u && b.v ? insertPlanOf(b) : insertPlan(c)).n
+    ? { divX: 0, divY: 0 } : dividersBuilt(c);
 };
 // and how many compartments they make, or 0 for a bin with none
 const compartments = (b) => {
@@ -9450,11 +9451,19 @@ const holesText = (b) => {
    or none that fit. Worked out without building anything, so it is cheap to ask. */
 const holesIn = (b) => {
   if (!(+b.insert > 0) || b.solid) return null;
-  const h = insertPlan(binCfg(b));
+  const h = insertPlanOf(b);
   return h.n ? h : null;
 };
 // "16 holes for AA batteries", for the rows and the README, or ''
 const insertText = (b) => { const h = holesIn(b); return h ? `${plural(h.n, 'hole')} for ${h.p.items}` : ''; };
+/* insertPlan's answer for a bin, taken from its kept finger slot plan where it has one
+   (fingerPlan): with slots ticked insertPlan works them all out again to say where the
+   holes go, some 25 times a bin a refresh, and a refresh of 63 bins with a back slot over
+   AA cells took about 40 ms where it takes 10. */
+function insertPlanOf(b) {
+  const p = fingerPlan(b);
+  return p && p.floor ? p.floor.holes : insertPlan(binCfg(b));
+}
 /* Why the holes across a bin's floor keep clear of where its label shelf would be, when a
    finger slot in its back wall takes the shelf away (holesGaveWay in bin.js), or null when
    they do not: spread into the shelf's room they would come to more than one bin is built
@@ -9500,7 +9509,7 @@ function insertHintSay(b) {
         `builds, so this bin is built without its ${plural(n, 'hole')}.`,
     'Set some of the others to Nothing, or print some bins as a layout of their own.'];
   }
-  const h = insertPlan(binCfg(b));
+  const h = insertPlanOf(b);
   if (h.why === 'off' || h.why === 'solid') return ['', ''];
   const p = h.p;
   if (h.why === 'carved') return ['Holes need a rectangle, so a carved shape is built without them.', ''];
@@ -12379,7 +12388,7 @@ function binIssues(b, k, claims) {
  * that sentence for n bins. A solid block has no menu to have set. */
 function insertIssues(b, z) {
   if (!(+b.insert > 0) || b.solid) return [];
-  const h = insertPlan(binCfg(b)), out = [], mm = (x) => +x.toFixed(1);
+  const h = insertPlanOf(b), out = [], mm = (x) => +x.toFixed(1);
   if (h.why === 'off' || h.why === 'solid') return out;
   const p = h.p;
   if (h.why === 'carved') {
