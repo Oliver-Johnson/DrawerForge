@@ -42,6 +42,7 @@ async function arriveOverYours(page, at, yours, hash) {
   page.__errors = await (at === BINS_AT ? H.openBins : H.openPlates)(page, at());
   await yours();
   await page.waitForTimeout(600);                        // past the save's 400 ms
+  page.on('console', (m) => { if (hopFavicon(m)) page.__hop.push(m.text()); });
   await page.goto('about:blank');
   await page.goto(at() + '#' + hash);
   await page.waitForFunction(() => typeof THREE !== 'undefined');
@@ -49,8 +50,27 @@ async function arriveOverYours(page, at, yours, hash) {
   await expect(page.locator('#setAside')).toBeVisible();
   await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
 }
+/* The hop through about:blank now and then has the blank page ask for the favicon of the
+   page it replaced. Served over HTTP, from origin null, the browser refuses it and logs
+   two errors: the CORS refusal, from about:blank, and the failed load, from the favicon's
+   own address. Neither is the page's, so the errors each case checks leave those two
+   out, matched by where they came from as well as by what they say. */
+function hopFavicon(m) {
+  const from = (m.location() || {}).url || '';
+  return m.type() === 'error' &&
+    (from === 'about:blank' && /^Access to resource at '[^']*\/favicon\.svg' from origin 'null' has been blocked by CORS/.test(m.text()) ||
+     /\/favicon\.svg$/.test(from) && m.text() === 'Failed to load resource: net::ERR_FAILED');
+}
+test.beforeEach(({ page }) => { page.__hop = []; });
 test.afterEach(async ({ page }) => {
-  expect(page.__errors, 'the page threw while being driven').toEqual([]);
+  const hop = [...page.__hop];
+  const errors = page.__errors && page.__errors.filter((t) => {
+    const i = hop.indexOf(t);
+    if (i < 0) return true;
+    hop.splice(i, 1);
+    return false;
+  });
+  expect(errors, 'the page threw while being driven').toEqual([]);
 });
 
 /* What the page was like at each press from now, read in the page as it happens, so that
