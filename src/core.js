@@ -3025,15 +3025,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
         /* The mounting pockets' last few open edges, cut again. Where two of the
            cutters' side planes, extended across the cell by the BSP, cross a bottom-cap
            spoke or the pocket's ceiling a couple of thousandths from where something
-           else crosses it, the repair can lose the sliver between them: three or six
-           open edges by a pocket, on a few plates in a thousand (8 of 3,893 random
+           else crosses it, the repair can lose the sliver between them: a few open
+           edges by a pocket, on a few plates in a thousand (8 of 3,893 random
            mount designs before this, 30 on main), a lottery on the margins, the corner
            radius and the magnet size (fanCentre takes the commonest case, a spoke past
            a cutter's own corner, before it happens; none of the 3,893 is open now).
            healCsgSeams says when its result is still open, and then the same cut is
            taken again: the cutters in the other order, the cell's faces in the other
-           order, both, and last the cutters turned a 28th of a turn about their axes.
-           The first three are the same solids handed to the BSP in another order, which
+           order, and last the cutters turned a 28th of a turn about their axes.
+           The first two are the same solids handed to the BSP in another order, which
            builds other trees and so other splits; the last is the same pocket with the
            corners of its 14-sided bores where their flats were, the same circle inside
            each for the magnet or screw head to sit against. The first closed result is
@@ -3043,17 +3043,19 @@ function buildPiece(cfg, layout, piece, onStatus) {
            the first cut stands, open as it was rather than a failed build.
 
            Only a cell open by a sliver or a few is cut again, at most 24 edges: six at
-           each of its four pockets. Every retried cell on a page design was open by 3 or 6
-           (8 cells over 3,893 random mount designs, a second in 25 minutes of building).
-           Over 935 engine-only designs at small pitches with the sites moved in, no cell
-           open by more than 19 ever closed, and the 447 open by more than 24 ran half of
-           all the tries. Each try earns its place: the turned cutters close most, and the
-           faces and cutters both reversed closed three cells there that nothing else
-           did. */
+           each of its four pockets. Cells cut again have been open by anything from 1 to
+           24 edges, and cells open by 21 and by 24 have closed; none open by more than 24
+           has. Over 8,900 random mount designs (page designs at 34 to 50 mm, engine-only
+           ones at 20 to 34 mm with the sites moved in, and small ones), 357 cells were cut
+           again, open by 1 to 23, and 157 of them closed; none of the 10,730 cells open by
+           more than 24 closed on any try, and 32 of the 3,367 page designs with a solid
+           floor are left open, as they are on main. The turned cutters close most (140); they
+           are the only try that closed cells nothing else did (56). The cell's faces and
+           the cutters both reversed closed 101, but one of the first two had closed each
+           of those already, so that try is not taken. */
         if (next.open && next.open <= 24) {
           const tries = [() => csgSubtract(region, cut.slice().reverse()),
                          () => csgSubtract(region.slice().reverse(), cut),
-                         () => csgSubtract(region.slice().reverse(), cut.slice().reverse()),
                          () => csgSubtract(region, fasteners(turnedFastener()))];
           for (const t of tries) {
             let again;
