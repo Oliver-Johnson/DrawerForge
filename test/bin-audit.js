@@ -2739,6 +2739,7 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
   const L3 = [[0, 0], [1, 0], [0, 1]], U5 = [[0, 0], [1, 0], [2, 0], [0, 1], [2, 1]];
   const PLUS = [[1, 0], [0, 1], [1, 1], [2, 1], [1, 2]];
   const NOTE = { labelMode: 1, note: 'M3 screws' };
+  const SLOTS4 = { f: true, b: true, l: true, r: true };
   const CASES = [
     ['2x2x3, 8 mm scoop, 12 mm shelf', { u: 2, v: 2, hUnits: 3, scoop: 8, label: 12 }],
     ['3x2x6, scoop, shelf, fixed dividers', { u: 3, v: 2, hUnits: 6, scoop: 8, label: 12, divX: 2, divY: 1 }],
@@ -2798,15 +2799,75 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
        having no floor over its feet. */
     ['carved plus, 10 mm walls, 1 unit', { u: 3, v: 3, hUnits: 1, wall: 10, cells: PLUS }],
     ['carved plus, 10 mm, 1 unit, floor 0',{ u: 3, v: 3, hUnits: 1, wall: 10, floorT: 0, cells: PLUS }],
+    /* Finger slots (fingerSlots): no lip, and so no notches in one, the dips out of the
+       walls, a back slot's shelf left off with its notches and its raised note, and with
+       holes asked for those laid out for the shelf it takes away (the 1x1x4's spread into
+       its room, the 1x0.5x3's kept clear, which leaves room for none), a front one's scoop
+       held under it, on walls of 5, 6.5 and 10 mm, lowered walls, a half-size bin, and
+       removable plates (#57: the scoop under both caps, the slots off the rails). Weighed
+       as the bin without them, the trial merge of this with them came to 1.093 to 1.336. */
+    ['1x1x3, a front slot', { u: 1, v: 1, hUnits: 3, fingerSlots: { f: true } }],
+    ['1x1x3, front slot over an 8 mm scoop', { u: 1, v: 1, hUnits: 3, scoop: 8, fingerSlots: { f: true } }],
+    ['2x1x3, back slot, 12 mm shelf and note', { u: 2, v: 1, hUnits: 3, label: 12, ...NOTE, fingerSlots: { b: true } }],
+    ['1x1x4, back slot over AA holes, shelf', { u: 1, v: 1, hUnits: 4, insert: 1, label: 12, fingerSlots: { b: true } }],
+    ['1x0.5x3, back slot, AAA kept clear', { u: 1, v: 0.5, hUnits: 3, insert: 2, label: 8, fingerSlots: { b: true } }],
+    ['3x2x4, side slots, scoop and shelf', { u: 3, v: 2, hUnits: 4, scoop: 15, label: 12, fingerSlots: { l: true, r: true } }],
+    ['3x2x4, a slot in all four walls', { u: 3, v: 2, hUnits: 4, fingerSlots: SLOTS4 }],
+    ['2x1x6, 5 mm walls, front and back slots', { u: 2, v: 1, hUnits: 6, wall: 5, fingerSlots: { f: true, b: true } }],
+    ['2x2x6, 10 mm walls, all four slots', { u: 2, v: 2, hUnits: 6, wall: 10, fingerSlots: SLOTS4 }],
+    ['3x2x4, front at half, front and left', { u: 3, v: 2, hUnits: 4, scoop: 8, edges: { f: 0.5, b: 1, l: 1, r: 1 },
+                                               fingerSlots: { f: true, l: true } }],
+    ['2x2x6, walls at 0.66, all four, divided', { u: 2, v: 2, hUnits: 6, divX: 1, divY: 1,
+                                                 edges: { f: 0.66, b: 0.66, l: 0.66, r: 0.66 }, fingerSlots: SLOTS4 }],
+    ['2x1x6, 6.5 mm walls, back at half', { u: 2, v: 1, hUnits: 6, wall: 6.5, label: 12, edges: { f: 1, b: 0.5, l: 1, r: 1 },
+                                            fingerSlots: { f: true, b: true } }],
+    ['1.5x1x3, half size, front and back', { u: 1.5, v: 1, hUnits: 3, scoop: 8, label: 12, fingerSlots: { f: true, b: true } }],
+    ['2x1x2, 2 removable, front slot, scoop', { u: 2, v: 1, hUnits: 2, divX: 2, divRemovable: true, scoop: 10,
+                                                fingerSlots: { f: true } }],
+    ['3x2x4, 2 x 1 removable, slots f, l, r', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, divRemovable: true, scoop: 20,
+                                                fingerSlots: { f: true, l: true, r: true } }],
+    ['3x2x4, 2 x 6 removable, back slot, L12', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 6, divRemovable: true, scoop: 8,
+                                                 label: 12, fingerSlots: { b: true } }],
   ];
-  const off = [];
+  const off = [], meshes = new Map();
   for (const [name, cfg] of CASES) {
     const est = binVolume(cfg, 0.15).raw, mesh = enclosedVolume(buildBin(G, cfg).polys);
     const ratio = est / mesh, out = Math.abs(ratio - 1) > tolOf(cfg);
+    meshes.set(name, mesh);
     console.log(`  ${name.padEnd(40)} ${(est / 1000).toFixed(2).padStart(6)} of ${(mesh / 1000).toFixed(2).padStart(6)} cm³` +
                 `  ${ratio.toFixed(3)}${out ? '  OFF' : ''}`);
     if (out) off.push(name);
   }
+  /* And what the slots take off the weight is what they take off the plastic: each slotted
+     row against the same bin with none (its twin), the weight's drop within 1% of the
+     mesh's, or 5 mm³ (what enclosedVolume measures to here). The 2x1x3's twin has its note
+     raised, whose letters the weight leaves out (binVolume), 61 mm³ of them; the rest
+     agree to 15 mm³. And no row passes by being too coarse to tell: each would be OFF, by
+     its ratio or by its drop, with the slots' own term left out or taken twice, which is
+     the dips (fingerSlots' area times the wall) and the lip the twin has. Every row is
+     built with the slots it asks for. */
+  const slotOff = [], blind = [], unbuilt = [];
+  for (const [name, cfg] of CASES.filter(([, c]) => c.fingerSlots)) {
+    const p = fingerSlotPlan(cfg), twin = Object.assign({}, cfg, { fingerSlots: {} });
+    const asked = Object.keys(cfg.fingerSlots).filter((k) => cfg.fingerSlots[k]).sort().join('');
+    if (p.built.split('').sort().join('') !== asked) unbuilt.push(`${name} (${p.built || 'none'} of ${asked})`);
+    const est = binVolume(cfg, 0.15).raw, mesh = meshes.get(name);
+    const estT = binVolume(twin, 0.15), meshT = enclosedVolume(buildBin(G, twin).polys), dM = meshT - mesh;
+    const term = p.area * (cfg.wall || BIN_DEFAULTS.wall) + estT.parts.lip;
+    const holds = (e) => Math.abs(e / mesh - 1) <= TOL && Math.abs((estT.raw - e) - dM) <= Math.max(0.01 * Math.abs(dM), 5);
+    console.log(`  ${name.padEnd(40)} takes ${((estT.raw - est) / 1000).toFixed(3)} of ${(dM / 1000).toFixed(3)} cm³ off; ` +
+                `left out ${((est + term) / mesh).toFixed(3)}, twice ${((est - term) / mesh).toFixed(3)}` +
+                `${holds(est) ? '' : '  OFF'}${holds(est + term) || holds(est - term) ? '  BLIND' : ''}`);
+    if (!holds(est)) slotOff.push(name);
+    if (holds(est + term) || holds(est - term)) blind.push(name);
+  }
+  console.log(`  finger slots: ` + (slotOff.length || blind.length || unbuilt.length
+    ? [slotOff.length ? `OFF: ${slotOff.join('; ')}` : '', blind.length ? `BLIND to the term: ${blind.join('; ')}` : '',
+       unbuilt.length ? `NOT BUILT: ${unbuilt.join('; ')}` : ''].filter(Boolean).join('; ')
+    : 'each takes off what its mesh loses, and each would show the term left out or taken twice'));
+  if (slotOff.length) bad++;
+  if (blind.length) bad++;
+  if (unbuilt.length) bad++;
   /* And bins drawn at random, the same ones every run (a fixed seed): whole, half and
      carved, walls 0.4 to 10 mm, edges lowered and open, a scoop, a label shelf with and
      without its note raised, fixed and removable dividers at any plate and clearance,
