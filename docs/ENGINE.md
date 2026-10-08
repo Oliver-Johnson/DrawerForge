@@ -303,7 +303,10 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   at all is settled between the dividers it counts; a slotted bin builds no lip, so no
   notches.
   `fingerSlots` hands its answer to `buildBin` and `insertPlan` (`floor`), so the page
-  counts the holes that are built. A bin with no slots built gets the same split lists
+  counts the holes that are built, and to `binVolume`, which weighs the bin from it: no
+  lip, the dips (`area`, the mean of the wall's two faces, times the wall) off the walls,
+  the shelf left off with a back slot, and the holes where the plan has them. The scoop
+  both build and weigh is `scoopBuilt`'s, which holds it under a front slot. A bin with no slots built gets the same split lists
   and holes it always had, so it is byte for byte what it was. The audit reads every
   slot's bottom and sides off both faces of the mesh.
 - Every rounded square in a bin shares the corner-arc centre **17.00 mm**
@@ -650,7 +653,16 @@ currently installed):
   0.014 mm.
 - **Raw mesh volume is not filament.** The overlapping-shell construction double-counts,
   and slicers infill anything thick. Estimate analytically from parameters: thin features
-  at full density, thick blocks as shell + infill × core.
+  at full density, thick blocks as shell + infill × core. For a bin that is `binVolume`
+  in bins/bin.js, from the numbers `buildBin` builds from, held to within 1.5% of what
+  the mesh encloses (test/enclosed-volume.js), and a carved shape to within 0.3%, by
+  estimate.spec and by the bin audit: its own cases and 40 bins drawn at random from a
+  fixed seed, walls 0.4 to 10 mm. Over 3157 bins swept, whole, half and carved, walls to
+  10 mm, edges lowered and open, it came to 0.995 to 1.005 of it, and the carved ones
+  to 1.000. Over 1100 bins with finger slots, every combination of walls, lowered and
+  thick walls, scoops, shelves and notes, holes, removable plates and half sizes, it
+  came to 0.998 to 1.001, the lowest those whose shelf has a note raised on it, whose
+  letters it leaves out.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the

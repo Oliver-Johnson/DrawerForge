@@ -9,6 +9,11 @@
 'use strict';
 const { test, expect } = require('@playwright/test');
 const H = require('./helpers.js');
+// the engine itself, in Node, to measure what the page builds (estimate.spec does the same)
+const G = require('../../src/core.js');
+const { buildBin } = require('../../src/bins/bin.js');
+const { enclosedVolume } = require('../enclosed-volume.js');
+const meshOf = (cfg) => enclosedVolume(buildBin(G, cfg).polys);
 
 const settle = (page) => page.waitForTimeout(400);
 const slot = async (page, side, on = true) => {
@@ -61,19 +66,28 @@ test('four toggles under the wall menus, none on, with the hint under them', asy
 test('a front slot builds one, takes the lip, and makes the bin its own part', async ({ page }) => {
   await H.dragCells(page, [0, 0], [0, 0]);               // a 1x1x3, selected
   const plain = await page.evaluate(() => [typeKey(B()[0]), typeName(types()[0]), geomFor(B()[0]).vol,
-                                           packBin(B()[0])]);
+                                           packBin(B()[0]), volumeMm3(B()[0])]);
   await expect(page.locator('#hResult')).toContainText('+ 3.95 mm lip');
 
   await slot(page, 'F');
-  const [key, name, vol, meta, link] = await page.evaluate(() => {
+  const [key, name, vol, meta, link, weighed, dips, cfg] = await page.evaluate(() => {
     const b = B()[0], m = geomFor(b).meta;
-    return [typeKey(b), typeName(types()[0]), geomFor(b).vol, { n: m.fingers, walls: m.fingerWalls, lip: m.hasLip }, packBin(b)];
+    return [typeKey(b), typeName(types()[0]), geomFor(b).vol, { n: m.fingers, walls: m.fingerWalls, lip: m.hasLip }, packBin(b),
+            volumeMm3(b), fingerPlan(b).area * b.wall, binCfg(b)];
   });
   expect(meta).toEqual({ n: 1, walls: 'f', lip: false });
   expect(key, 'a bin with a slot is its own part').toBe(plain[0] + '-slot-f');
   expect(name).toBe('bin-1x1x3-slot-f-qty1');
   expect(plain[1]).toBe('bin-1x1x3-qty1');
   expect(vol, 'the filament estimate leaves out the wall the slot takes, and the lip').toBeLessThan(plain[2]);
+  /* By how much, from binVolume's own terms: the lip the plain bin has, 1229.8 mm³, and
+     the dip, 152.1 mm³ (fingerSlots' area, the wall's face it takes, times the wall). Both
+     are thin parts, laid down solid, so the filament drops by the same; and the mesh drops
+     by 1381.7 mm³ (enclosedVolume), where the weight drops by 1381.9. 9.95 g, 8.24 g. */
+  expect(weighed.parts.lip, 'no lip weighed').toBe(0);
+  expect(plain[4].raw - weighed.raw).toBeCloseTo(plain[4].parts.lip + dips, 6);
+  expect(plain[4].filament - weighed.filament).toBeCloseTo(plain[4].parts.lip + dips, 6);
+  expect(Math.abs(weighed.raw / meshOf(cfg) - 1), 'the plastic the slotted bin is built of').toBeLessThan(0.015);
   expect(link.split('-').slice(21), 'the slot rides in the feet field: 8 for the front').toEqual(['8']);
   await expect(page.locator('#hResult'), 'no lip quoted').not.toContainText('lip');
   await expect(page.locator('#typeRows')).toContainText('1 finger slot, front');
@@ -180,9 +194,10 @@ test('a half-size bin gets slots where they fit, and a carved one none', async (
 
 /* With removable plates the lip has a notch at each plate, and the plates across are cut
    to the scoop, which they hold under a cap of their own. A slotted bin has no lip, so
-   nothing to notch, and its weight leaves the lip out once, notches and all. A front slot
-   holds the scoop lower than the plates need it held, and the plates across are cut to
-   that, so Checks names the slot for it and not the plates. */
+   nothing to notch, and its weight leaves the lip out once, notches and all: weighed with
+   its notches still taken off a lip it does not have, its lip would come to less than
+   nothing. A front slot holds the scoop lower than the plates need it held, and the plates
+   across are cut to that, so Checks names the slot for it and not the plates. */
 test('with removable plates: no lip to notch, weighed once, and plates cut to the held scoop', async ({ page }) => {
   await H.dragCells(page, [0, 0], [1, 0]);               // a 2x1x3, selected
   await H.setField(page, 'hUnits', 2);
@@ -192,24 +207,33 @@ test('with removable plates: no lip to notch, weighed once, and plates cut to th
   await settle(page);
   await expect(checks(page)).toContainText('is built with a 6.6 mm scoop rather than 7.2 mm, so the plates across keep 1 mm of their front ends in their rails');
   const weigh = () => page.evaluate(() => {
-    const b = B()[0], m = geomFor(b).meta, p = fingerPlan(b);
-    const across = dividerPlates(G, binCfg(b)).find((q) => q.axis === 'y');
-    return { notch: lipNotchVolume(b), raw: volumeMm3(b).raw, lip: m.hasLip, area: p ? p.area : 0, wall: b.wall,
-             full: areaRR((b.u - 1) * SPEC.pitch / 2 + SPEC.half, (b.v - 1) * SPEC.pitch / 2 + SPEC.half, SPEC.r) * 0.35 * LIP_H / 1.9,
+    const b = B()[0], m = geomFor(b).meta, p = fingerPlan(b), v = volumeMm3(b), cfg = binCfg(b);
+    const across = dividerPlates(G, cfg).find((q) => q.axis === 'y'), L = plateLayout(cfg, builtDivs(b));
+    return { notched: m.hasLip && L.lip ? L.pX.length + L.pY.length : 0, raw: v.raw, parts: v.parts, lip: m.hasLip,
+             dips: p ? p.area * b.wall : 0, cfg,
              cut: across.meta.outline[0][1] - m.floorZ - state.divClr, scoop: p ? p.scoopNow : null };
   });
   const plain = await weigh();
   expect(plain.lip).toBe(true);
-  expect(plain.notch, 'fixture: the lip is notched').toBeGreaterThan(0);
+  expect(plain.notched, 'fixture: the lip is notched for its two plates').toBe(2);
   expect(plain.cut, 'fixture: the plates across cut to the plates\' own cap').toBeCloseTo(6.6, 6);
 
   await slot(page, 'F');
   const slotted = await weigh();
   expect(slotted.lip).toBe(false);
-  expect(slotted.notch, 'no lip, so no notches in it').toBe(0);
-  // what the slot takes off: the lip as it was, notches and all, once, and the wall the dips take
-  expect(plain.raw - slotted.raw).toBeCloseTo(plain.full - plain.notch + slotted.area * slotted.wall, 6);
+  expect(slotted.parts.lip, 'no lip weighed, and no notches taken off one').toBe(0);
+  expect(slotted.parts.walls, 'the walls less the dips').toBeCloseTo(plain.parts.walls - slotted.dips, 6);
+  /* What the slot takes off, measured: the lip as it was, notches and all (1834.3 mm³),
+     the dips (257.2), and the scoop held from 6.6 to 3.62 mm (501.5), less the rails' ends
+     the lip's chamfer no longer stands over (10.3), 2582.7 mm³ in all, where the mesh
+     loses 2579.4 (enclosedVolume, which measures to a few mm³ here). Both bins weigh
+     within 0.03% of their meshes. 15.89 g, 12.78 g. */
+  const [meshPlain, meshSlotted] = [meshOf(plain.cfg), meshOf(slotted.cfg)];
+  expect(Math.abs(plain.raw / meshPlain - 1), 'the plain bin, its lip notched').toBeLessThan(0.015);
+  expect(Math.abs(slotted.raw / meshSlotted - 1), 'the slotted bin').toBeLessThan(0.015);
+  expect(Math.abs((plain.raw - slotted.raw) / (meshPlain - meshSlotted) - 1), 'what the slot takes off').toBeLessThan(0.005);
   expect(slotted.scoop).toBeCloseTo(3.6225, 4);
+  expect(slotted.parts.scoop, 'the scoop weighed is the one the slot holds').toBeLessThan(plain.parts.scoop / 3);
   expect(slotted.cut, 'the plates across cut to the scoop the slot holds it to').toBeCloseTo(slotted.scoop, 6);
   await expect(checks(page)).toContainText('has a finger slot in its front wall, so its scoop is held to 3.6 mm, under the slot');
   await expect(checks(page)).not.toContainText('rather than');
@@ -379,16 +403,21 @@ test('past the most holes one bin is built with, they keep clear of the shelf’
     'more than the 2000 one bin is built with.');
 
   /* The block fills the wedge under where the shelf would be, as the bin has no shelf to
-     fill it: the slotted bin weighs what the bin without the slot does, less its slot and
-     lip, and that wedge more. */
+     fill it, and no lip whose chamfer it stands in: binVolume weighs it whole, the
+     cavity's rounded outline less the holes, from the slab's top (a BLOAT over the floor)
+     to the block's top, and no shelf. The bin without the slot has the same holes, and
+     weighs its block less the wedge its shelf fills, 1198.2 mm³ here: a triangle in
+     section, 1203.7 across the cavity's whole width, less where its rounded back corners
+     narrow it. Its block stands under the lip's chamfer, so nothing comes off it there. */
   expect(await page.evaluate(() => {
     const b = B()[0], a = Object.assign({}, b, { fingerSlots: { f: false, b: false, l: false, r: false } });
     const hwO = (b.u - 1) * SPEC.pitch / 2 + SPEC.half, hdO = (b.v - 1) * SPEC.pitch / 2 + SPEC.half;
-    const wall = Math.max(WALL_MIN, b.wall), lipV = areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9;
-    const h = holesIn(a), foot = h.shelf.top - BIN_DEFAULTS.labelT - h.shelf.depth, lo = Math.max(h.floor, foot);
-    const wedge = ((h.top - foot) ** 2 - (lo - foot) ** 2) / 2 * 2 * (hwO - wall);
-    return [+(volumeMm3(b).raw + fingerSlotVolume(b, wall, lipV) - volumeMm3(a).raw - wedge).toFixed(6), wedge > 1000];
-  })).toEqual([0, true]);
+    const wall = Math.max(WALL_MIN, b.wall), rI = Math.max(0.4, SPEC.r - wall), h = holesIn(b);
+    const whole = (areaRR(hwO - wall, hdO - wall, rI) - h.n * h.shape.area) * (h.top - (geomFor(b).meta.floorZ + BLOAT));
+    const [vb, va] = [volumeMm3(b).parts, volumeMm3(a).parts];
+    return [vb.shelf, vb.lip, +(vb.block - whole).toFixed(6), h.n === holesIn(a).n && h.top === holesIn(a).top,
+            +(whole - va.block).toFixed(1), va.shelf > 0];
+  })).toEqual([0, 0, 0, true, 1198.2, true]);
 
   /* Where the holes are goes by how deep the shelf would be, so the bin is keyed by it:
      at 10 mm they are 2 mm further forward, another part. */
