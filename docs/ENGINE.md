@@ -281,18 +281,20 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   profile is the slot on the wall's inner face, where a finger goes: sides at 70 degrees,
   under the 75 the audit holds every wall's top edge to. Both rings take the same
   fractions of their straights, and past a 3.35 mm wall the outer straight is the longer,
-  so on the outer face the slot is that much wider and less steep. A slot takes the lip
-  as a lowered wall does. There is one per compartment, between the dividers as built
-  (`dividersBuilt`, none on a bin with holes), clear of a removable one's rails and the
-  gap between them. A slot on the back takes the label shelf's place. A slot on the front
-  holds the scoop under its bottom. The slots stop over the block of holes across the
-  floor. With a back slot those holes are laid out as with no shelf (`floorPlan` asked
-  with no label), as long as the slot is still built over them; if it is not, they keep
-  where they are with the shelf (`holesGaveWay`), and the slot is built. Either way it is
-  one more `floorPlan`, not a loop. `fingerSlots` hands its answer to `buildBin` and
-  `insertPlan` (`floor`), so the page counts the holes that are built. A bin with no slots
-  built gets the same split lists and holes it always had, so it is byte for byte what it
-  was. The audit reads every slot's bottom and sides off both faces of the mesh.
+  so on the outer face the slot is that much wider and less steep; up to 3.35 mm the
+  rings share their corners' centres and the slot is worked out as it always was. A slot
+  takes the lip as a lowered wall does. There is one per compartment, between the
+  dividers as built (`dividersBuilt`, none on a bin with holes), clear of a removable
+  one's rails and the gap between them. A slot on the back takes the label shelf's place.
+  A slot on the front holds the scoop under its bottom. The slots stop over the block of
+  holes across the floor. With a back slot those holes are laid out as with no shelf
+  (`floorPlan` asked with no label), as long as the slot is still built over them; if it
+  is not, they keep where they are with the shelf (`holesGaveWay`), and the slot is
+  built. Either way it is one more `floorPlan`, not a loop. `fingerSlots` hands its
+  answer to `buildBin` and `insertPlan` (`floor`), so the page counts the holes that are
+  built. A bin with no slots built gets the same split lists and holes it always had, so
+  it is byte for byte what it was. The audit reads every slot's bottom and sides off
+  both faces of the mesh.
 - Every rounded square in a bin shares the corner-arc centre **17.00 mm**
   (`41.5/2 − 3.75`). That constant is what makes clearance uniform around the perimeter
   instead of binding at the corners. See [socket-clearance.md](socket-clearance.md) for

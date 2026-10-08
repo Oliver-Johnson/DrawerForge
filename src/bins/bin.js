@@ -1914,26 +1914,32 @@ function fingerSlots(c) {
          inner straight is the shorter, so on the outer face the slot is `out` (S / Si) times
          as wide, and its sides less steep. Settled on the outer face, as it first was, the
          inner one came out narrower than the least and steeper than the 75 degrees a
-         wall's top is held to: 12.2 mm at 77.5 on a 10 mm wall. */
-      const out = Si > 0 ? S / Si : 0;
+         wall's top is held to: 12.2 mm at 77.5 on a 10 mm wall. Up to 3.35 mm the rings
+         share their corners' centres (`same`), so the straights are one length and the two
+         faces one slot; there it is worked out as it always was, to the bit, where S / Si
+         put 2 of 251 such bins 1.4e-14 mm out. */
+      const same = Math.abs(rO - rI - c.wall) < 1e-9, out = Si > 0 ? S / Si : 0;
+      const L = same ? S : Si;                         // the straight the profile is laid along
       for (const [a0, b0] of room) {
-        const x0 = Math.max(a0, lo0, -Si, out ? lo / out : 0) + FINGER.keep;
-        const x1 = Math.min(b0, hi0, Si, out ? hi / out : 0) - FINGER.keep;
+        const a = Math.max(a0, lo0, -Si), b = Math.min(b0, hi0, Si);
+        const x0 = (same ? (Si > 0 ? Math.max(a * S / Si, lo) : 0) : Math.max(a, out ? lo / out : 0)) + FINGER.keep;
+        const x1 = (same ? (Si > 0 ? Math.min(b * S / Si, hi) : 0) : Math.min(b, out ? hi / out : 0)) - FINGER.keep;
         if (!(x1 - x0 >= FINGER.least - 1e-9)) { s.narrow++; continue; }
         /* In the middle of the compartment, or as near it as the corner, a ramp, the scoop
            or the shelf allow: the end compartments' middles are near the corners. */
         const half = Math.min(FINGER.top, x1 - x0) / 2;
-        const at = Math.min(x1 - half, Math.max(x0 + half, (a0 + b0) / 2));
+        const mid = same ? (Si > 0 ? (a0 + b0) / 2 * S / Si : 0) : (a0 + b0) / 2;
+        const at = Math.min(x1 - half, Math.max(x0 + half, mid));
         const inside = fingerProfile(at, half, T, Math.min(D, deepest(half)));
         // and on the outer face, the outline fingerDip lowers
-        const slot = { c: at * out, a: half * out, top: T, bottom: inside.bottom,
-                       prof: inside.prof.map(([x, z]) => [x * out, z]) };
+        const slot = same ? inside : { c: at * out, a: half * out, top: T, bottom: inside.bottom,
+                                       prof: inside.prof.map(([x, z]) => [x * out, z]) };
         s.slots.push(slot);
         for (let i = 1; i < inside.prof.length; i++) {
           const [xa, za] = inside.prof[i - 1], [xb, zb] = inside.prof[i];
-          plan.area += (1 + out) / 2 * (xb - xa) * ((T - za) + (T - zb)) / 2;
+          plan.area += (same ? 1 : (1 + out) / 2) * (xb - xa) * ((T - za) + (T - zb)) / 2;
         }
-        for (const [x] of inside.prof) plan.splits[straight].push(dir > 0 ? (x + Si) / (2 * Si) : (Si - x) / (2 * Si));
+        for (const [x] of inside.prof) plan.splits[straight].push(dir > 0 ? (x + L) / (2 * L) : (L - x) / (2 * L));
       }
       if (!s.slots.length) s.why = 'narrow';
     };
