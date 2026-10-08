@@ -562,6 +562,9 @@ test.describe('the weight', () => {
   });
 
   test('a bin with removable dividers weighs its rails, not a wall for each plate', async ({ page }) => {
+    const G = require('../../src/core.js');
+    const { buildBin } = require('../../src/bins/bin.js');
+    const { enclosedVolume } = require('../enclosed-volume.js');
     page.__errors = await H.openBins(page);
     const r = await page.evaluate((cases) => cases.map(([u, v, hUnits, divX, divY]) => {
       const bin = (more) => Object.assign({}, state, { x: 0, y: 0, u, v, hUnits, cells: null,
@@ -570,25 +573,20 @@ test.describe('the weight', () => {
       const built = (b) => buildBin(G, binCfg(b));
       const plates = [['y', divX], ['x', divY]]
         .reduce((a, [axis, n]) => a + n * meshVolume(dividerPart(G, binCfg(railed), axis).polys), 0);
-      const m = built(railed).meta, deep = m.H - m.floorZ;
       return { est: volumeMm3(railed).raw, estPlain: volumeMm3(plain).raw, plates,
                mesh: meshVolume(built(railed).polys), meshPlain: meshVolume(built(plain).polys),
-               /* The rails as the mesh has them reach a BLOAT into the wall and a BLOAT into
-                  the floor, which meshVolume, adding up shells that overlap, counts twice
-                  where the plastic is there once. They stand a rail's depth and the
-                  clearance out from the wall, so that the plate's end sits a whole rail's
-                  depth in them, and from the floor slab's top, which is a BLOAT over the
-                  floor, to the top of the bin: the weight counts each part once, as the
-                  plastic is (binVolume), where it used to count the rails from the floor
-                  itself, a BLOAT into the slab. */
-               trim: (RAIL_D + state.divClr) / (RAIL_D + state.divClr + BLOAT) * (deep - BLOAT) / (deep + BLOAT) };
+               cfg: binCfg(railed), cfgPlain: binCfg(plain) };
     }), RAILED);
     for (const [i, x] of r.entries()) {
       const what = `${RAILED[i]}`;
       // the bin and its plates, within a few percent of what their meshes enclose
       expect(Math.abs((x.est + x.plates) / (x.mesh + x.plates) - 1), what).toBeLessThan(0.06);
-      // and what the dividers add to the bin is the rails buildBin adds to it, exactly
-      expect((x.est - x.estPlain) / ((x.mesh - x.meshPlain) * x.trim), what).toBeCloseTo(1, 4);
+      /* and what the dividers add to the bin is the plastic the rails add to its mesh, each
+         overlap once (enclosedVolume): where they reach into the wall and the floor, and
+         where their ends stand in the lip's chamfer, which the weight counted in the lip
+         and in the rails both, 5% over on the 1x1x3 and 2% on the 2x1x6. */
+      const added = enclosedVolume(buildBin(G, x.cfg).polys) - enclosedVolume(buildBin(G, x.cfgPlain).polys);
+      expect(Math.abs((x.est - x.estPlain) / added - 1), what).toBeLessThan(0.001);
     }
   });
 
@@ -619,10 +617,12 @@ test.describe('the weight', () => {
     /* the railed 1x1x3 and 2x1x6 were 13 g and 41 g, as their fixed twins were. Those
        weigh the plastic their meshes enclose now, 15753 and 42059 mm³ by enclosedVolume,
        where they were weighed as 15799 and 42850 (the 2x1x6's dividers twice where they
-       cross, and its lip by its area), so the 2x1x6 is 40 g. */
+       cross, and its lip by its area), so the 2x1x6 is 40 g. And the dividers' ends where
+       they stand in the lip's chamfer are counted once, which they were not at 15765 and
+       42073. */
     expect(f.rows).toEqual(['10 g', '27 g', '13 g', '40 g']);
-    expect(f.fixed[0]).toBeCloseTo(15765.1637, 3);
-    expect(f.fixed[1]).toBeCloseTo(42073.0615, 3);
+    expect(f.fixed[0]).toBeCloseTo(15754.3637, 3);
+    expect(f.fixed[1]).toBeCloseTo(42059.5615, 3);
 
     // and every total says so: 114 g, where it was 133 before the plates were weighed once
     // and 116 before each bin was weighed as the plastic it is built of
