@@ -306,9 +306,10 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   counts the holes that are built, and to `binVolume`, which weighs the bin from it: no
   lip, the dips (`area`, the mean of the wall's two faces, times the wall) off the walls,
   the shelf left off with a back slot, and the holes where the plan has them. The scoop
-  both build and weigh is `scoopBuilt`'s, which holds it under a front slot. A bin with no slots built gets the same split lists
-  and holes it always had, so it is byte for byte what it was. The audit reads every
-  slot's bottom and sides off both faces of the mesh.
+  both build and weigh is `scoopBuilt`'s, which holds it under a front slot. A bin with
+  no slots built gets the same split lists and holes it always had, so it is byte for
+  byte what it was, and weighs what it did. The audit reads every slot's bottom and sides
+  off both faces of the mesh, and weighs slotted bins against what their meshes enclose.
 - Every rounded square in a bin shares the corner-arc centre **17.00 mm**
   (`41.5/2 − 3.75`). That constant is what makes clearance uniform around the perimeter
   instead of binding at the corners. See [socket-clearance.md](socket-clearance.md) for
