@@ -5048,6 +5048,10 @@ const USED_KEY = 'drawerforge:used:v1';
    defaults it stands in with put them over the layout it declined, and one more reload
    lost that layout for good. */
 let pristine = '', bootDesc = null;
+/* The boot meant to set this browser's save aside and could not: the storage was full.
+   Until the first change the page does not write over that save either, which was then
+   the one copy of it (see saveNow). */
+let unkept = false;
 /* Someone's link this page holds, or ''. Each of its drawer, bed and infill values the
    page still uses is the link's, not yours, whatever else has been changed: so taking
    the design to the other page does not replace yours there without setting it aside.
@@ -5124,7 +5128,8 @@ function saveNow() {
       writeKey(USED_KEY, '1');   // and this is someone using the tools (see USED_KEY)
     }
   }
-  if (!drawers.isBehind(h)) saveLocal(h);   // not a save another tab has moved on from
+  // not a save another tab has moved on from, nor one the boot could not set aside (unkept)
+  if (!drawers.isBehind(h) && !(unkept && bootDesc !== null)) saveLocal(h);
   try { drawers.wrote(h, linkKeys(h, heldLink)); }   // and into the saved drawer this is, if it is one
   finally {
     /* Marked as this tab's own, or as someone's link's while the page still holds it as
@@ -5525,12 +5530,17 @@ let arrivedWith = '';    // the design string this page was opened with
      you would want back. */
   const aside = saved.length > 2 && saved !== pristine && !savedLinked &&
     ((replaces && !kept) || back || !!stalled);
+  /* Set aside only if the browser kept it: with its storage full, the page said the
+     layout was set aside and offered a Put back that brought nothing back. */
+  let keptAside = false;
   if (aside) {
     writeKey(PREV_KEY, saved);
-    writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
+    keptAside = readKey(PREV_KEY) === saved;
+    if (keptAside) writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
+    else unkept = true;
   }
-  const canPutBack = (replaces && !kept && (aside || (savedLinked && !!readKey(PREV_KEY)))) ||
-    (back && aside);
+  const canPutBack = (replaces && !kept && (keptAside || (savedLinked && !!readKey(PREV_KEY)))) ||
+    (back && keptAside);
   if (stalled) {
     showSetAside('This layout did not finish loading last time, so the page has started ' +
       'from its defaults rather than try it again.', canPutBack, true);

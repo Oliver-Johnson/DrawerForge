@@ -961,8 +961,12 @@ const DRAWERS = (function () {
               : gone && gone.id === d.id ? { [o.tool]: gone.ours, [otherTool]: gone.theirs } : {};
             const str = (v) => (typeof v === 'string' ? v : undefined);
             theirs = str(came[otherTool]);
-            if (!noted && movedOn(d, arrivedWith, str(came[o.tool])) &&
-                reopen(d, gone && gone.id === d.id ? gone.link : null)) return;
+            /* A raced reload's link settings, those the drawer still has as the page had
+               them: one another tab has changed since is that tab's, not the link's. */
+            const stored = sharedOf(d.hash);
+            const held = gone && gone.id === d.id
+              ? strings(gone.link).filter((k) => stored.get(k) === base.get(k)) : null;
+            if (!noted && movedOn(d, arrivedWith, str(came[o.tool])) && reopen(d, held)) return;
             ours = d.marks[o.tool];
             /* A hand-over, onto a drawer this tool has saved into. One carrying a link's
                settings too: restore keeps the settings the other page sets, which are the

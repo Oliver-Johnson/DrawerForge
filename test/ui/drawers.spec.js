@@ -294,6 +294,65 @@ for (const tool of ['bins', 'plates']) {
   });
 }
 
+/* The browser's storage full, once the tab says so, in every page it loads: the drawer's
+   saves are refused, and so is any other write that would take more room. For
+   page.addInitScript. */
+function fullStorage() {
+  const write = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) {
+    if (this === window.localStorage && sessionStorage.getItem('full') === '1') {
+      const was = this.getItem(k);
+      if (k === 'drawerforge:drawers:v1' || was === null || String(v).length > was.length) {
+        throw new DOMException('full', 'QuotaExceededError');
+      }
+    }
+    return write.apply(this, arguments);
+  };
+}
+/* The same race with the storage full for everything, so the later change cannot be set
+   aside either. The page said it was, with a Put back that did nothing, and its first save
+   wrote over this browser's save, the one copy of that change left. */
+for (const tool of ['bins', 'plates']) {
+  const ready = tool === 'bins' ? binsReady : platesReady;
+  // each change the same length or shorter, so this browser's own save of it still fits
+  const [field, key, before, refused, raced] = tool === 'bins' ? ['gap', 'bgap', '6', '4', '7']
+    : ['connector', 'cn', 'dovetail', 'puzzle', 'bowtie'];
+  test(`with storage full, a ${tool} page reloaded as a change's save lands sets nothing aside ` +
+    'it cannot keep', async ({ page }) => {
+    await page.addInitScript(fullStorage);
+    const errors = await openPlates(page);
+    await H.setField(page, 'drawerW', '400');
+    await saveAs(page, 'Kitchen');
+    if (tool === 'bins') { await toBins(page); await H.setField(page, field, before); }
+    await settle(page);
+    await page.evaluate(() => sessionStorage.setItem('full', '1'));
+    if (tool === 'bins') await H.setField(page, field, refused);
+    else await page.selectOption('#' + field, refused);
+    await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+    await settle(page);
+    await Promise.all([page.waitForEvent('load'), page.evaluate(([field, v]) => {
+      const e = document.getElementById(field);
+      e.value = v;
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+      e.dispatchEvent(new Event('change', { bubbles: true }));
+      if (typeof landEdit === 'function') landEdit();
+      const write = history.replaceState;
+      history.replaceState = () => {};     // the reload has the address already
+      try { saveNow(); } finally { history.replaceState = write; }
+      history.replaceState(null, '');      // and the address's mark went with the save's
+      location.reload();
+    }, [field, raced])]);
+    await ready(page);
+    await expect(page.locator('#' + field)).toHaveValue(refused);
+    await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+    await settle(page);
+    await expect(page.locator('#setAside'), 'nothing is said to be set aside').toBeHidden();
+    expect(await page.evaluate((k) => localStorage.getItem(k), `drawerforge:${tool}:v1`),
+      'the later change is still this browser\'s save').toContain(`${key}=${raced}`);
+    expect(errors).toEqual([]);
+  });
+}
+
 /* The same reload with no save landing. The page is your own drawer handed over, and the
    reload is that page again. Onto a layout another drawer holds, it used to say someone's
    link had replaced your layout, set that aside, and count the drawer's settings as the
