@@ -23,23 +23,29 @@ const H = require('./helpers.js');
 // a 2 x 2 at [3, 3] and a 1 x 1 at [0, 6], as packBin writes them
 const BINS_LINK = 'bl=3-3-2-2-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15_0-6-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15';
 
-/* The page at a link, through about:blank, with a layout of yours saved before it, so
-   the link sets yours aside and says so above the map. The blank page now and then asks
-   for the favicon of the page it replaced, which it may not load from file://, and says
-   so in the console: that line is the hop's, not the page's, and is let go. */
-const BLANK_FAVICON = /^Not allowed to load local resource: file:\S*\/favicon\.svg$/;
-async function arriveOverYours(page, open, yours, url) {
-  // a case made again starts with nothing kept from the last try
-  await page.evaluate(() => { try { localStorage.clear(); } catch (err) { /* about:blank */ } });
-  page.__errors = await open(page);
+/* Over HTTP (H.serveRoot). From file:// a page's local save now and then went missing on
+   the next load, and the case then arrived over nothing of yours. The header links the
+   cases at the foot follow point at directories, which file:// does not resolve, and a
+   request the service worker answers never reaches page.route, so the worker is kept
+   out. */
+test.use({ serviceWorkers: 'block' });
+let site;
+test.beforeAll(async () => { site = await H.serveRoot(); });
+test.afterAll(() => site.close());
+const BINS_AT = () => site.base + 'bins/';
+const PLATES_AT = () => site.base;
+
+/* The page (`at`, one of the two above) at a link `hash`, through about:blank, with a
+   layout of yours saved before it, so the link sets yours aside and says so above the
+   map. */
+async function arriveOverYours(page, at, yours, hash) {
+  page.__errors = await (at === BINS_AT ? H.openBins : H.openPlates)(page, at());
   await yours();
   await page.waitForTimeout(600);                        // past the save's 400 ms
   await page.goto('about:blank');
-  await page.goto(url);
+  await page.goto(at() + '#' + hash);
   await page.waitForFunction(() => typeof THREE !== 'undefined');
   await page.waitForTimeout(600);                        // and past the boot's own, no change
-  const errors = page.__errors;
-  for (let i = errors.length - 1; i >= 0; i--) if (BLANK_FAVICON.test(errors[i])) errors.splice(i, 1);
   await expect(page.locator('#setAside')).toBeVisible();
   await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
 }
@@ -69,63 +75,65 @@ const watch = (page, map) => page.evaluate((map) => {
   });
   addEventListener('pointerup', () => { if (log.length) log[log.length - 1].upAt = performance.now(); }, true);
 }, map);
-/* Pressed at `from`, moved to `to` and held there past the save, then let go a pixel or
-   two away. Gives every press watch() saw, and where the map was at the end of the hold. */
-async function holdAndLet(page, map, from, to) {
+const binsNow = (page) => page.evaluate(() => B().map((b) => [b.x, b.y, b.u, b.v]));
+
+/* Pressed at `from` and moved to `to` with the page's save kept (keepSave, below), then
+   that save let come due while the press is still held, and the press let go a pixel or
+   two away. Gives every press watch() saw, where the map was once the save had come, and
+   whether there was a save waiting to come. The save comes when the test says rather than
+   400 ms on: timed, the drag had to change the design inside 400 ms of the press or the
+   click before it, and every step of getting there is a round trip to a browser that a
+   busy machine slows, so under load three goes in a row could all miss. */
+async function holdOverSave(page, from, to) {
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   await page.mouse.move(to.x, to.y, { steps: 6 });
-  await page.waitForTimeout(700);                        // held past the save's 400 ms
-  const held = await page.evaluate((map) => document.getElementById(map).getBoundingClientRect().top, map);
+  const due = await saveDue(page);
+  const held = await page.evaluate(() => document.getElementById('fillmap').getBoundingClientRect().top);
   await page.mouse.move(to.x + 2, to.y + 1);
   await page.mouse.up();
-  await page.waitForTimeout(150);
-  return { held, presses: await page.evaluate(() => window.__presses) };
+  return { due, held, presses: await page.evaluate(() => window.__presses) };
+}
+/* and the line goes once the bin is let go: the release sets the save going again, and
+   that one finds the layout changed */
+async function lineGoes(page) {
+  await page.waitForFunction(() => window.__save !== null);
+  await saveDue(page);
+  await expect(page.locator('#setAside')).toBeHidden();
 }
 
-const binsNow = (page) => page.evaluate(() => B().map((b) => [b.x, b.y, b.u, b.v]));
-
 /* The press grabs the bin, which sets the save going, and the drag has moved it before
-   the save comes, so the save finds the design changed. Made again should the drag have
-   been slow to move it, which is not the case this is about. */
+   the save comes, so the save finds the design changed. */
 test('a bin dragged and held on a link that set yours aside lands where it was let go', async ({ page }) => {
-  for (let tries = 1; ; tries++) {
-    await arriveOverYours(page, H.openBins, () => H.clickCell(page, 0, 0), H.BINS_URL + '#' + BINS_LINK);
-    const from = await H.cellPoint(page, 3, 3), to = await H.cellPoint(page, 4, 3);
-    await watch(page, 'fillmap');
-    const { held, presses: [p] } = await holdAndLet(page, 'fillmap', from, to);
-    if (p.lineUp && p.changedAt !== null && p.changedAt - p.at < 380) {
-      expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
-      expect(await binsNow(page), 'one cell right').toEqual([[4, 3, 2, 2], [0, 6, 1, 1]]);
-      // and the line goes once the bin is let go: the layout is a changed one now
-      await expect(page.locator('#setAside')).toBeHidden();
-      break;
-    }
-    expect(tries, 'the drag moved the bin while the press\'s save still waited').toBeLessThan(3);
-  }
+  await arriveOverYours(page, BINS_AT, () => H.clickCell(page, 0, 0), BINS_LINK);
+  const from = await H.cellPoint(page, 3, 3), to = await H.cellPoint(page, 4, 3);
+  await keepSave(page);
+  await watch(page, 'fillmap');
+  const { due, held, presses: [p] } = await holdOverSave(page, from, to);
+  expect(due, 'the press set a save going').toBe(true);
+  expect(p.lineUp && p.changedAt !== null, 'the drag changed the design with the line up').toBe(true);
+  expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
+  expect(await binsNow(page), 'one cell right').toEqual([[4, 3, 2, 2], [0, 6, 1, 1]]);
+  await lineGoes(page);
 });
 
 /* A grip is pressed a moment after the click that selected the bin, and has pulled the
-   bin out inside the 400 ms that click set the save going for, so the save finds it
-   resized. Made again should the save have come first all the same, which is the
-   ordinary order and not the one this is about. */
+   bin out before the save that click set going comes, so the save finds it resized. */
 test('a grip pulled and held a moment after selecting the bin makes the size it was let go at', async ({ page }) => {
-  for (let tries = 1; ; tries++) {
-    await arriveOverYours(page, H.openBins, () => H.clickCell(page, 0, 0), H.BINS_URL + '#' + BINS_LINK);
-    const to = await H.cellPoint(page, 5, 5), bin = await H.cellPoint(page, 3, 3);
-    await watch(page, 'fillmap');
-    await page.mouse.click(bin.x, bin.y);
-    const box = await page.locator('#fillmap .grip[data-handle="rb"]').boundingBox();
-    const grip = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-    const { held, presses: [click, p] } = await holdAndLet(page, 'fillmap', grip, to);
-    if (p.lineUp && p.changedAt !== null && p.changedAt - click.upAt < 380) {
-      expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
-      expect(await binsNow(page), 'one cell out each way').toEqual([[3, 3, 3, 3], [0, 6, 1, 1]]);
-      await expect(page.locator('#setAside')).toBeHidden();
-      break;
-    }
-    expect(tries, 'the grip resized the bin while the click\'s save still waited').toBeLessThan(3);
-  }
+  await arriveOverYours(page, BINS_AT, () => H.clickCell(page, 0, 0), BINS_LINK);
+  const to = await H.cellPoint(page, 5, 5), bin = await H.cellPoint(page, 3, 3);
+  await keepSave(page);
+  await watch(page, 'fillmap');
+  await page.mouse.click(bin.x, bin.y);
+  await page.waitForFunction(() => window.__save !== null);
+  const box = await page.locator('#fillmap .grip[data-handle="rb"]').boundingBox();
+  const grip = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const { due, held, presses: [, p] } = await holdOverSave(page, grip, to);
+  expect(due, 'the click set a save going').toBe(true);
+  expect(p.lineUp && p.changedAt !== null, 'the grip changed the design with the line up').toBe(true);
+  expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
+  expect(await binsNow(page), 'one cell out each way').toEqual([[3, 3, 3, 3], [0, 6, 1, 1]]);
+  await lineGoes(page);
 });
 
 /* A point on a cut-map grid line the browser agrees is on it, as plates-undo.spec.js
@@ -169,8 +177,7 @@ const saveDue = (page) => page.evaluate(() => {
    found before the first click: the build that click sets going holds the page up. */
 test('a cut-map line pressed and held on a link that set yours aside still takes the click', async ({ page }) => {
   const rows = () => page.evaluate(() => state.splitMode === 'manual' ? state.rowCuts.slice() : null);
-  await arriveOverYours(page, H.openPlates, () => H.setField(page, 'drawerW', '420'),
-    H.PLATES_URL + '#w=300&d=300');
+  await arriveOverYours(page, PLATES_AT, () => H.setField(page, 'drawerW', '420'), 'w=300&d=300');
   // the pieces built, so that the build is not holding the page up when the clicks come
   await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
     null, { timeout: 20000 });
@@ -214,7 +221,7 @@ async function letGoElsewhere(page, at) {
 }
 
 test('a bin dragged and let go outside the page does not keep the saves waiting', async ({ page }) => {
-  await arriveOverYours(page, H.openBins, () => H.clickCell(page, 0, 0), H.BINS_URL + '#' + BINS_LINK);
+  await arriveOverYours(page, BINS_AT, () => H.clickCell(page, 0, 0), BINS_LINK);
   const from = await H.cellPoint(page, 3, 3), to = await H.cellPoint(page, 4, 3);
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
@@ -232,8 +239,7 @@ test('a bin dragged and let go outside the page does not keep the saves waiting'
 });
 
 test('a cut-map press let go outside the page does not keep the saves waiting', async ({ page }) => {
-  await arriveOverYours(page, H.openPlates, () => H.setField(page, 'drawerW', '420'),
-    H.PLATES_URL + '#w=300&d=300');
+  await arriveOverYours(page, PLATES_AT, () => H.setField(page, 'drawerW', '420'), 'w=300&d=300');
   await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
     null, { timeout: 20000 });
   await page.evaluate(() => document.getElementById('cutmap').scrollIntoView({ block: 'center' }));
@@ -257,15 +263,8 @@ test('a cut-map press let go outside the page does not keep the saves waiting', 
    loaded, and letting go set a save going that wrote another layout into the address and
    the local save after the hand-over, so Back came to a layout the other page was never
    given. The next page is held back here until the bin has been let go somewhere else
-   and that save would have come.
-   Over HTTP, as drawers.spec.js is: the header links point at directories, which file://
-   does not resolve, and a request the service worker answers never reaches page.route. */
+   and that save would have come. */
 test.describe('leaving with a bin still held', () => {
-  test.use({ serviceWorkers: 'block' });
-  let site;
-  test.beforeAll(async () => { site = await H.serveRoot(); });
-  test.afterAll(() => site.close());
-
   // BINS_LINK's layout with the 2 x 2 two cells right, as packBin writes it
   const HELD = BINS_LINK.replace(/^bl=3-3-/, '5-3-');
   const binsIn = (h) => (decodeURIComponent(h || '').match(/(?:^|[#&])bl=([^&]*)/) || [])[1];
@@ -274,7 +273,7 @@ test.describe('leaving with a bin still held', () => {
     const errors = page.__errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-    await page.goto(site.base + 'bins/#' + BINS_LINK);
+    await page.goto(BINS_AT() + '#' + BINS_LINK);
     await page.waitForFunction(() => typeof THREE !== 'undefined' && typeof drawers !== 'undefined');
     await page.waitForTimeout(600);                      // past the boot's save
   }
