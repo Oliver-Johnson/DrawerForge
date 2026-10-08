@@ -829,10 +829,18 @@ function cylinder(cx, cy, r, z0, z1, seg) {
 function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
   let cut = null;
   const add = (c) => { cut = cut ? csgUnion(cut, c) : c; };
+  /* A magnet's pocket is 14-sided, cut 0.1 mm over the magnet's radius at its corners:
+     0.2 over the diameter, the press fit bins/bin.js keeps as well ("the plate's rule").
+     Its flats are cos(π/14) of that, and past a 7.78 mm magnet they came inside the
+     magnet itself: 4.972 mm for a 10 mm one, a pocket narrower than what goes in it,
+     where bins/bin.js's 16 sides keep their flats outside every magnet its field takes.
+     So the corners go out as far as it takes for the flats to stand on the magnet's
+     radius. For a magnet up to 7.77 mm, the 6 mm default among them, nothing moves. */
+  const magnetR = Math.max(cfg.magnetD/2 + 0.1, cfg.magnetD/2 / Math.cos(Math.PI/14));
   if (cfg.magnets)
     add(cfg.magnetSide === 'top'
-      ? cylinder(0, 0, cfg.magnetD/2 + 0.1, magZ0, magZ1, 14)
-      : cylinder(0, 0, cfg.magnetD/2 + 0.1, -0.5, cfg.magnetH, 14));
+      ? cylinder(0, 0, magnetR, magZ0, magZ1, 14)
+      : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, 14));
   if (cfg.screws) {
     if (cfg.screwHeadD > cfg.screwHoleD)
       add(cylinder(0, 0, cfg.screwHeadD/2, -0.5, cfg.screwHeadDepth, 14));
@@ -2309,9 +2317,11 @@ function mountLimits(cfg) {
   const bosses = cfg.baseMode === 'bosses';
   const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
   const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // the fields step in tenths
+  const room = cfg.magnetSide === 'top' ? top : under;
   return {
-    // a magnet pocket is cut 0.1 mm over the magnet's radius
-    magnetD: r10(2 * ((cfg.magnetSide === 'top' ? top : under) - 0.1)),
+    // a magnet pocket's corners are 0.1 mm over the magnet's radius, or out to where its
+    // flats stand on that radius if that is further (fastenerCutter)
+    magnetD: r10(2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14))),
     screwHoleD: r10(2 * top),
     screwHeadD: r10(2 * under),
     // in the solid floor the pad grows to suit, so only a boss caps the depth
