@@ -2696,6 +2696,7 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
      its walls are the most of it, and a few tenths of a percent off there is all of
      the shape's corners counted wrong (a plus with 6.5 mm walls was 1.010). */
   const TOL = 0.015, CARVED_TOL = 0.003, tolOf = (c) => (c.cells ? CARVED_TOL : TOL);
+  const LIP_TOL = 0.001;   // the carved rows a unit tall, which weigh the lip's corners (below)
   const L3 = [[0, 0], [1, 0], [0, 1]], U5 = [[0, 0], [1, 0], [2, 0], [0, 1], [2, 1]];
   const PLUS = [[1, 0], [0, 1], [1, 1], [2, 1], [1, 2]];
   const NOTE = { labelMode: 1, note: 'M3 screws' };
@@ -2754,15 +2755,18 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
        as the wall: on a bin 15 units tall the lip is too little of it to show a corner
        counted wrong, so these are a unit tall. With every corner taken at the wall's
        thickness the whole way up, these were 0.9935 and 0.9929, and with only the lip's
-       upright part so (its 1.9 mm stretch), 0.9970, inside 0.3%, and 0.9967, the second
-       having no floor over its feet. */
-    ['carved plus, 10 mm walls, 1 unit', { u: 3, v: 3, hUnits: 1, wall: 10, cells: PLUS }],
-    ['carved plus, 10 mm, 1 unit, floor 0',{ u: 3, v: 3, hUnits: 1, wall: 10, floorT: 0, cells: PLUS }],
+       upright part so (its 1.9 mm stretch), 0.9970 and 0.9967, the second having no floor
+       over its feet. Against 0.3% that let the first through and caught the second by
+       0.03 points, and no other shape tried showed it more (a staircase, a T, a Z, a plus
+       of nine cells), nor holes in the plus's feet much (0.9966). So these are held to
+       LIP_TOL: they are 0.9999 as built, and the upright slip is 0.2 points past it. */
+    ['carved plus, 10 mm walls, 1 unit', { u: 3, v: 3, hUnits: 1, wall: 10, cells: PLUS }, LIP_TOL],
+    ['carved plus, 10 mm, 1 unit, floor 0',{ u: 3, v: 3, hUnits: 1, wall: 10, floorT: 0, cells: PLUS }, LIP_TOL],
   ];
   const off = [];
-  for (const [name, cfg] of CASES) {
+  for (const [name, cfg, tol = tolOf(cfg)] of CASES) {
     const est = binVolume(cfg, 0.15).raw, mesh = enclosedVolume(buildBin(G, cfg).polys);
-    const ratio = est / mesh, out = Math.abs(ratio - 1) > tolOf(cfg);
+    const ratio = est / mesh, out = Math.abs(ratio - 1) > tol;
     console.log(`  ${name.padEnd(40)} ${(est / 1000).toFixed(2).padStart(6)} of ${(mesh / 1000).toFixed(2).padStart(6)} cm³` +
                 `  ${ratio.toFixed(3)}${out ? '  OFF' : ''}`);
     if (out) off.push(name);
@@ -2826,7 +2830,7 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
     const asked = binHeights(c), plain = binHeights(Object.assign({}, c, { divX: 0, divY: 0 }));
     return asked.top !== plain.top || asked.inside !== plain.inside || asked.top !== c.hUnits * SPEC.unitH;
   });
-  console.log(`  within ${TOL * 100}% of what the mesh encloses, a carved shape ${CARVED_TOL * 100}%: ` +
+  console.log(`  within ${TOL * 100}% of what the mesh encloses, a carved shape ${CARVED_TOL * 100}%, up its lip ${LIP_TOL * 100}%: ` +
               (off.length ? `${off.length} OFF: ${off.join('; ')}` : `all ${CASES.length}`));
   console.log(`  carved and one-block bins built with no dividers: ` +
               (none.length ? 'COUNTED: ' + none.map(([n]) => n).join('; ') : 'none counted'));
