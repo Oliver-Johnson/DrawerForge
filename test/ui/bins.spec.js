@@ -172,10 +172,11 @@ test('a bin taller than the printer is called out', async ({ page }) => {
    heights it comes from. */
 test('a baseplate taller than the drawer leaves no room, said in words', async ({ page }) => {
   const link = '#w=200&d=200&dh=40&ph=44.3&bl=0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15';
-  /* Only the fragment is new, so goto returns at once and the page reloads itself to take
-     the link up (its hashchange listener); waitForFunction rides that out, as only the
-     page the link built has its one bin. */
-  await page.goto(H.BINS_URL + link);
+  /* Only the fragment is new, so goto returns at once, before the page reloads itself to
+     take the link up (its hashchange listener). Wait for that load: without it the check
+     below can run on the new page after the map is parsed but before B is defined, and
+     throw, as it did in 2 of 20 runs. */
+  await Promise.all([page.waitForEvent('load'), page.goto(H.BINS_URL + link)]);
   await page.waitForFunction(() => !!document.getElementById('fillmap') && B().length === 1);
   const why = "the baseplate alone is 44.3 mm tall and the drawer's usable height is 40 mm";
   const warn = page.locator('#warnings');
@@ -195,7 +196,9 @@ test('a baseplate taller than the drawer leaves no room, said in words', async (
    still named a tallest bin, "tallest single bin 1 units (7 mm + lip), limited by the
    drawer", while Checks said that no 1-unit bin fits. It says there is too little. */
 test('room above the baseplate too short for a 1-unit bin is said to be too little', async ({ page }) => {
-  await page.goto(H.BINS_URL + '#w=230&d=230&dh=10&ph=4.25&bl=0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15');
+  // the page reloads itself for the link, as above: wait for that load
+  await Promise.all([page.waitForEvent('load'),
+    page.goto(H.BINS_URL + '#w=230&d=230&dh=10&ph=4.25&bl=0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15')]);
   await page.waitForFunction(() => !!document.getElementById('fillmap') && B().length === 1);
   await expect(page.locator('#warnings')).toContainText('There is no room above the baseplate for even a 1-unit bin.');
   await expect(page.locator('#gridSummary'))
