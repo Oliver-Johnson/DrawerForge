@@ -693,7 +693,14 @@ currently installed):
   `touchesBuilt` compares the two shells' edges inside the band, and a jointed cell that
   shares one with a jointed cell built before it is cut again (`TOUCH_TRIES`: each cutter
   on its own, the cutters reversed, the faces reversed, the cutters one at a time from the
-  last), or else the earlier cell is; the top-insert pass does the same. Two cups put in
+  last), or else the earlier cell is; the top-insert pass does the same. Mounting pockets
+  do it with no joint at all: a pocket's wall, carried across its cell as a plane, splits
+  the cell's side where it crosses it, and that side stands on the same plane as the
+  neighbour's, so a split that lands on a corner of the neighbour's region is that
+  corner's edge in both shells (a 21.7 mm magnet from beneath at 55 mm, 0.03 microns off;
+  a 22.2 mm screw shank at 56.5 mm, on main too). With pockets on the piece, every cell
+  and margin is checked against the shells built beside it (`settle`), and the pockets of
+  one or the other are cut again moved 1.7 microns or turned a 28th of a turn. Two cups put in
   from above from each side of a piece one cell deep meet face to face at 14.44 mm (twice a
   cup's reach), and there they are built as one solid with `csgUnion`.
 - **A face that is nothing but a straight line has no middle.** A weld that closes a

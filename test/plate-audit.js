@@ -1972,6 +1972,18 @@ console.log('\nthe other limits, built at their ends:');
       if (widest.bad) bad++;
       if (over) bad++;
     }
+  /* Two shells sharing a cell corner's edge. A pocket's flat, carried across its cell by
+     the BSP, crossed the cell's side 0.03 microns from where the corner of the cell beside
+     it stands on that side: each shell closed, the corner's edge used four times. The
+     magnet built clean on main and not on 0bb9e4d; the screw shank, twice over, on
+     neither. A cell now checks the shells built beside it and cuts the pockets again,
+     its own or the other's (settle in core.js), so both have to build watertight. */
+  for (const [nm, o] of [['21.7 mm magnet at 55 mm', { pitch: 55, magnets: true, magnetD: 21.7 }],
+                         ['22.2 mm screw shank at 56.5', { pitch: 56.5, screws: true, screwHoleD: 22.2, screwHeadD: 22.2 }]]) {
+    const r = buildAll({ drawerW: 2 * o.pitch, drawerD: 2 * o.pitch, ...o });
+    console.log(`  ${nm.padEnd(28)} ${leakText(r)}`);
+    if (r.bad) bad++;
+  }
   /* The clearance one step past its end, which leaked, and that was why the end is where
      it is. It no longer does: the joint's cut taken again when it comes out open
      (cutAgain in core.js) closes it, as it closes the steps past the ceilings below. So it
