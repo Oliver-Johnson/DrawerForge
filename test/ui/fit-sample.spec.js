@@ -352,15 +352,16 @@ test('a coupon taken before a change has built is the coupon it builds', async (
   await page.waitForFunction(
     'printPlan && layout && Object.keys(builds).length === layout.pieces.length',
     null, { timeout: 40000 });
-  // the change and the coupon in one go, so the rebuild cannot land between them
+  // the change and the coupon in one go, so the rebuild cannot land between them; `was`
+  // is the height of the plate built when the coupon is taken
   const coupon = (cn) => page.evaluate((cn) => {
-    let was = null;
     if (cn) {
       const s = document.getElementById('connector');
       s.value = cn;
       s.dispatchEvent(new Event('change', { bubbles: true }));
-      was = builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : null;
     }
+    const built = builds[layout.pieces[0].id];
+    const was = built ? built.meta.H : null;
     const polys = fitSample().polys;
     let top = 0;
     for (const p of polys) for (const v of p.verts) top = Math.max(top, v[2]);
@@ -370,11 +371,14 @@ test('a coupon taken before a change has built is the coupon it builds', async (
     return { was, file: { top: Math.round(top * 1000) / 1000, bytes: b.length, fnv: h >>> 0 } };
   }, cn);
   const early = await coupon('puzzle');
-  await settle(page);
+  /* Built now, with no rebuild left waiting: settle() schedules one more, and a coupon
+     slower than its 260 ms could be taken while that rebuild has emptied builds. */
+  await page.evaluate(async () => { clearTimeout(buildTimer); await runBuild(); });
   const late = await coupon(null);
   expect(early.was, 'fixture: taken with the dovetail plate still built').not.toBeNull();
-  expect(early.was, 'fixture: the puzzle plate is a different height')
-    .not.toBe(await page.evaluate(() => builds[layout.pieces[0].id].meta.H));
+  expect(late.was, 'fixture: the puzzle plate is built').not.toBeNull();
+  expect(early.was, 'fixture: the puzzle plate is a different height').not.toBe(late.was);
   expect(early.file, 'the coupon taken at once').toEqual(late.file);
+  expect(late.file.top, 'the coupon is as tall as the plate built').toBe(late.was);
   expect(errors, 'the page threw while being driven').toEqual([]);
 });
