@@ -172,8 +172,10 @@ test('a bin taller than the printer is called out', async ({ page }) => {
    heights it comes from. */
 test('a baseplate taller than the drawer leaves no room, said in words', async ({ page }) => {
   const link = '#w=200&d=200&dh=40&ph=44.3&bl=0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15';
-  // the page reloads itself for a link that changes the layout: wait for that load
-  await Promise.all([page.waitForEvent('load'), page.goto(H.BINS_URL + link)]);
+  /* Only the fragment is new, so goto returns at once and the page reloads itself to take
+     the link up (its hashchange listener); waitForFunction rides that out, as only the
+     page the link built has its one bin. */
+  await page.goto(H.BINS_URL + link);
   await page.waitForFunction(() => !!document.getElementById('fillmap') && B().length === 1);
   const why = "the baseplate alone is 44.3 mm tall and the drawer's usable height is 40 mm";
   const warn = page.locator('#warnings');
