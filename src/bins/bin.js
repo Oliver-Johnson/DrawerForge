@@ -2081,7 +2081,8 @@ function fingerZ(s, x) {
  *             were there, and why, { why, walls, without }: 'many' when laid out
  *             without it they come to more than HOLES_MAX, 'high' when they stand too
  *             high for the slots in `walls` ('fb', say); `without` is holeLayout's answer
- *             for that layout
+ *             for that layout. 'many' keeps the holes the shelf's layout has; 'high'
+ *             leaves none, since any that layout had would stand too high as well
  *   scoop     the scoop a front slot holds it to, for buildBin to build, or null;
  *   scoopWas  the radius it would have been built at without the slots, and
  *   scoopNow  the one it is built at, 0 for none

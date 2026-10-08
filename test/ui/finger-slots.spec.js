@@ -339,7 +339,11 @@ test('a back slot gives the holes the label shelf’s room, or says they kept cl
 
   /* The same for a slot in another wall: with its front lowered to half, a 1x0.5x3 for AA
      cells 8 mm deep would have 2 of them in the shelf's room, standing too high for the
-     front slot. A slot asked for is not traded for holes, so both slots are built. */
+     front slot. The holes take the shelf's room only where that costs no slot the shelf's
+     layout builds, so here they keep in front of where it would be, which leaves room for
+     none, and both slots are built. (It is not that a slot is never traded for holes: with
+     a block too high for the back slot even in front of the shelf, the shelf stays and the
+     back slot is not built.) */
   await load(page, '0-0-1-0.5-3-1.2-1.2-0-0-0-0.5-1-1-1-0-8-0-0-0-0-15-24-0-1-8');
   expect(await page.evaluate(() => {
     const b = B()[0], m = geomFor(b).meta;

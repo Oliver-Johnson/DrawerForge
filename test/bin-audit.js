@@ -438,8 +438,9 @@ const CASES = [
   { name: '1x0.5x3-slot-b-aaa-L8', u: 1, v: 0.5, hUnits: 3, insert: 2, label: 8,
     fingerSlots: { b: true }, slots: { b: 1 }, gave: 'high:b' },
   /* Spread into its room, 2 AA cells would fit, but their block would stand too high for
-     the slot in the lowered front wall. A slot asked for is not traded for holes: they keep
-     in front of where the shelf would be, which leaves room for none, and both are built. */
+     the slot in the lowered front wall. The holes take the shelf's room only where that
+     costs no slot the shelf's layout builds: they keep in front of where the shelf would be,
+     which leaves room for none, and both are built. */
   { name: '1x0.5x3-slot-fb-aa-L8', u: 1, v: 0.5, hUnits: 3, insert: 1, insertDepth: 8, label: 8,
     edges: { f: 0.5 }, fingerSlots: { f: true, b: true }, slots: { f: 1, b: 1 }, gave: 'high:f' },
   /* Spread into its room, the hex bits would come to 2009 holes, past the 2000 one bin is

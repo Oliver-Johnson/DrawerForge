@@ -288,8 +288,9 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   one's rails and the gap between them. A slot on the back takes the label shelf's place.
   A slot on the front holds the scoop under its bottom. The slots stop over the block of
   holes across the floor. With a back slot those holes are laid out as with no shelf
-  (`floorPlan` asked with no label) when that builds the back slot, every other slot the
-  shelf's layout builds, and no fewer holes (past `HOLES_MAX` it builds none). Otherwise
+  (`floorPlan` asked with no label) when that builds the back slot, a slot in every other
+  wall the shelf's layout puts one in (wall by wall, not slot by slot: a wall left with
+  fewer counts as kept), and no fewer holes (past `HOLES_MAX` it builds none). Otherwise
   they keep where they are with the shelf (`holesGaveWay`, which says why), and the slots
   are whatever builds over them, as before: if the block is too high for the back one
   even then, the shelf stays. Either way it is one more `floorPlan`, not a loop.
