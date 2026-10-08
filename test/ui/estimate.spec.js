@@ -615,11 +615,12 @@ test.describe('the weight', () => {
     expect(f.job).toBeCloseTo(f.want, 6);
     expect(f.plan).toBeCloseTo(f.want, 6);
     /* the railed 1x1x3 and 2x1x6 were 13 g and 41 g, as their fixed twins were. Those
-       weigh the plastic their meshes enclose now, 15753 and 42059 mm³ by enclosedVolume,
-       where they were weighed as 15799 and 42850 (the 2x1x6's dividers twice where they
-       cross, and its lip by its area), so the 2x1x6 is 40 g. And the dividers' ends where
-       they stand in the lip's chamfer are counted once, which they were not at 15765 and
-       42073. */
+       weigh the plastic their meshes enclose now, give or take: 15754.4 and 42059.6 mm³
+       where enclosedVolume finds 15753.0 to 15753.1 and 42058.6 to 42058.7 (1.2 to 1.4 mm³
+       over, and 0.8 to 1.0, by the step it measures at). They were weighed as 15799 and
+       42850 (the 2x1x6's dividers twice where they cross, and its lip by its area), so the
+       2x1x6 is 40 g. And the dividers' ends where they stand in the lip's chamfer are
+       counted once, which they were not at 15765 and 42073. */
     expect(f.rows).toEqual(['10 g', '27 g', '13 g', '40 g']);
     expect(f.fixed[0]).toBeCloseTo(15754.3637, 3);
     expect(f.fixed[1]).toBeCloseTo(42059.5615, 3);
