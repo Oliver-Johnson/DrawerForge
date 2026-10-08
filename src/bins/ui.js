@@ -1288,13 +1288,17 @@ function setBinLimits(u, v, hUnits) {
    the plate and the clearance, and as go in past the lip and the shelf (railedMost). The
    ones along also as many as keep enough plate where they cross the ones across, or stand
    on the scoop, and leave the lip its corners (dividersBuilt), so `cfg` carries the count
-   across when this is asked for the count along. */
+   across when this is asked for the count along. A bin with a finger slot built in it has
+   no lip, and is counted without it (countedAs), up to as many as still leave a slot
+   built: more plates would leave it none, and its lip back. */
 function setDividerLimit(id, cfg) {
   const axis = id === 'divX' ? 'x' : 'y';
   let most = mostDividers(axis === 'x' ? cfg.u : cfg.v, cfg.wall);
   if (cfg.divRemovable) {
-    most = Math.min(most, railedMost(cfg, axis));
-    if (axis === 'y') most = dividersBuilt(Object.assign({}, cfg, { divY: most })).divY;
+    const by = countedAs(cfg);
+    most = Math.min(most, railedMost(by, axis));
+    if (axis === 'y' || by.lip !== Object.assign({}, BIN_DEFAULTS, cfg).lip)
+      most = dividersBuilt(Object.assign({}, cfg, { [id]: most }))[id];
   }
   $(id).max = most;
 }
@@ -3063,6 +3067,11 @@ function binIssues(b, k, claims) {
       // both, where one more would go wrong both ways (dividersWhy)
       crossCorners: (any) => `${any ? 'no more' : 'none'} keep ${PLATE_END} mm of plate where they ${stand}, ` +
         `and ${any ? 'more' : 'any'} would notch the stacking lip too close to its corners`,
+      /* A bin with a finger slot has no lip, and is counted without it, but for this: with
+         more plates it would have no slot, and so its lip, which they would notch too close
+         to its corners (dividersWhy). */
+      slot: (any) => `${any ? 'more' : 'any'} would leave no room for its finger slots, and it would have the ` +
+        `stacking lip back, which ${any ? 'no more' : 'none'} can have a notch through clear of its corners`,
     };
     const MANY = {
       lip: 'no more can have a notch through the stacking lip clear of its corners',
@@ -3071,6 +3080,8 @@ function binIssues(b, k, claims) {
       lipCorners: 'more along would notch the stacking lip too close to its corners',
       crossCorners: `no more along keep ${PLATE_END} mm of plate where they cross the ones across, or stand on the ` +
         'scoop, and more would notch the stacking lip too close to its corners',
+      slot: 'more would leave no room for their finger slots, and they would have the stacking lip back, which ' +
+        'no more can have a notch through clear of its corners',
     };
     for (const r of Object.keys(REASON)) {
       const these = short.filter(([k]) => why[k] === r);

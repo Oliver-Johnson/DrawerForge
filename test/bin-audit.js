@@ -475,6 +475,13 @@ const CASES = [
     fingerSlots: { f: true, l: true, r: true }, slots: { f: 2, l: 4, r: 4 } },
   { name: '3x2x4-slot-b-plates-L12', u: 3, v: 2, hUnits: 4, divX: 2, divY: 6, divRemovable: true, scoop: 8, label: 12,
     fingerSlots: { b: true }, slots: { b: 3 } },
+  /* The slot takes the lip, so the plates along are as many as fit with no notch to keep
+     clear of its corners: 11, where the lip's rule allows 10 (#58-SF-A); and with a plate
+     across as well, whose rails the two slots keep off. */
+  { name: '1x1x3-slot-f-plates-32', u: 1, v: 1, hUnits: 3, wall: 0.4, divY: 32, divRemovable: true,
+    fingerSlots: { f: true }, slots: { f: 1 } },
+  { name: '2x1x3-slot-f-plates-1x32', u: 2, v: 1, hUnits: 3, wall: 0.4, divX: 1, divY: 32, divRemovable: true,
+    fingerSlots: { f: true }, slots: { f: 2 } },
 ];
 
 /* Removable plates with a note raised on the label shelf: plates across, along and both,
@@ -3352,7 +3359,8 @@ console.log('\nfinger slots');
      the clearance over the scoop). The plates across are cut to the scoop as built, no
      more than twice their clearance above it, and a plate along over it stands on it.
      Where plates cross, each keeps a millimetre, and the two halve the height they share. No
-     lip, so no notches in one; and a back slot leaves no shelf, so none in that either,
+     lip, so no notches in one, and as many plates as fit with none; and a back slot leaves
+     no shelf, so none in that either,
      and the plates along are as many as with no shelf asked for, the plain count past the
      5 that keep in front of one. */
   for (const cs of CASES.filter((c) => c.slots && c.divRemovable)) {
@@ -3433,14 +3441,26 @@ console.log('\nfinger slots');
       faults.push(`${built.divY} plates along, kept in front of a shelf that is not built`);
     const shelved = c.label && seen.b && seen.b.length ? dividersBuilt(Object.assign({}, cs, { fingerSlots: null })).divY : NaN;
     if (shelved >= built.divY) faults.push(`fixture: ${shelved} plates along in front of the shelf, no fewer`);
+    /* No lip, so counted as the bin with none, and Checks puts the count down to something
+       it has: never to the lip's notches. With its lip, the same bin is counted by their
+       rule. */
+    const lipless = dividersBuilt(Object.assign({}, cs, { lip: false }));
+    if (built.divX !== lipless.divX || built.divY !== lipless.divY)
+      faults.push(`${built.divX} across and ${built.divY} along, where ${lipless.divX} and ${lipless.divY} fit with no lip`);
+    const why = dividersWhy(cs);
+    if (Object.values(why).some((w) => /lip|Corners/.test(w || ''))) faults.push(`Checks gives ${JSON.stringify(why)}`);
+    const lipped = dividersBuilt(Object.assign({}, cs, { fingerSlots: null }));
+    const byLip = c.label && seen.b && seen.b.length ? '' : ['divX', 'divY'].filter((k) => lipped[k] < built[k])
+      .map((k) => `${built[k]} ${k === 'divX' ? 'across' : 'along'} (${lipped[k]} with its lip)`).join(' and ');
     if (c.label && seen.b && seen.b.length)
       // the middle of each compartment, and each plate's slot, where the shelf was notched
       for (const x of [-iw].concat(pX).map((a, k, xs) => (a + (k + 1 < xs.length ? xs[k + 1] : iw)) / 2).concat(pX))
         if (highest(x, id - 0.3) > zf + 1e-6) { faults.push(`a shelf at x ${x.toFixed(2)}`); break; }
     console.log(`  ${cs.name.padEnd(22)} ` + (faults.length ? 'WRONG: ' + faults.slice(0, 4).join('; ')
-      : `${scoop}${isFinite(keep) ? `slots ${keep.toFixed(2)}+ off the rails` : 'no rails built'}, ` +
+      : `${scoop}${isFinite(keep) ? `slots ${keep.toFixed(2)}+ off the rails` : 'no rails on a wall with a slot'}, ` +
         `${pX.length && c.scoop ? 'plates across cut to the scoop, ' : ''}` +
-        `${standing ? `${standing} along standing on it, ` : ''}${halved ? `${halved} crossing${halved > 1 ? 's' : ''} halved, ` : ''}no lip${c.label ? `, no shelf and ${built.divY} along (${shelved} with it)` : ''}`));
+        `${standing ? `${standing} along standing on it, ` : ''}${halved ? `${halved} crossing${halved > 1 ? 's' : ''} halved, ` : ''}no lip${c.label ? `, no shelf and ${built.divY} along (${shelved} with it)` : ''}` +
+        `${byLip ? `, so ${byLip}` : ''}`));
     if (faults.length) bad++;
   }
 

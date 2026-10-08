@@ -299,9 +299,15 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   ones along. So `plateLayout` cuts the plates across to the scoop a front slot holds, the
   smaller of that and the plates' own cap, stands the plates along on it and counts them
   on it, and `railedLimit` keeps no plates along in front of a shelf a back slot takes
-  away, notches and all. The lip still limits the count, as whether a bin has any slot
-  at all is settled between the dividers it counts; a slotted bin builds no lip, so no
-  notches.
+  away, notches and all. Whether a bin has any slot at all is settled between the
+  dividers it counts, and a slotted bin builds no lip, so no notches: `dividersBuilt`
+  counts the plates with the lip's rule and without it, and takes the count without it
+  where a slot is still built between those plates (settled with them, `fingerSlotPlan`
+  given the count), and otherwise keeps the lip and its count. Checks and the fields go
+  by the bin without its lip then (`countedAs`), so neither names a lip it does not have.
+  The lip's rule only binds on plates packed a few millimetres apart, with no room for a
+  slot between them, so the walls their ends meet have no slot either way, and the slots
+  in the others stay where they were, as do the rails beside them.
   `fingerSlots` hands its answer to `buildBin` and `insertPlan` (`floor`), so the page
   counts the holes that are built, and to `binVolume`, which weighs the bin from it: no
   lip, the dips (`area`, the mean of the wall's two faces, times the wall) off the walls,
