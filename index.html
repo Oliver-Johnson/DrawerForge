@@ -6416,9 +6416,11 @@ const DRAWERS = (function () {
       },
       /* Whether `a` and `b` differ in this tool's own half alone (see restore): all that
          the other page sets, the drawer, bed and printer, o.given and its own settings
-         carried along, the same in both. */
+         carried along, the same in both. Not the plate height (ph): Baseplates never
+         saves it and every hand-over from Bins carries it, and it comes over as "5.00"
+         where Bins wrote "5". It follows from the plates' settings, compared here. */
       onlyMine(a, b) {
-        const rest = (s) => encodePairs((parsePairs(s) || []).filter(([k]) => !half(k))
+        const rest = (s) => encodePairs((parsePairs(s) || []).filter(([k]) => !half(k) && k !== 'ph')
           .sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)));
         return rest(a) === rest(b);
       },
@@ -9328,10 +9330,11 @@ let arrivedWith = '';    // the design string this page was opened with, if it s
     writeKey(PREV_KEY, saved);
     keptAside = readKey(PREV_KEY) === saved;
     if (keptAside) writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
-    /* Not kept, it is not written over either (unkept), unless a hand-over brings on
-       anything the other page sets: then the save holds the drawer, bed or the other
-       page's settings from before, and a bare visit took those back to the other page. */
-    else unkept = !handOver || drawers.onlyMine(saved, src);
+    /* Not kept, it is not written over either (unkept), unless a hand-over of your own
+       brings on anything the other page sets: then the save holds the drawer, bed or the
+       other page's settings from before, and a bare visit took those back to the other
+       page. One still carrying someone's link is that link, and your layout is kept. */
+    else unkept = !handOver || handOver.link.length > 0 || drawers.onlyMine(saved, src);
   }
   const canPutBack = (replaces && !kept && (keptAside || (savedLinked && !!readKey(PREV_KEY)))) ||
     (back && keptAside);

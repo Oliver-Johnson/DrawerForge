@@ -894,9 +894,11 @@ const DRAWERS = (function () {
       },
       /* Whether `a` and `b` differ in this tool's own half alone (see restore): all that
          the other page sets, the drawer, bed and printer, o.given and its own settings
-         carried along, the same in both. */
+         carried along, the same in both. Not the plate height (ph): Baseplates never
+         saves it and every hand-over from Bins carries it, and it comes over as "5.00"
+         where Bins wrote "5". It follows from the plates' settings, compared here. */
       onlyMine(a, b) {
-        const rest = (s) => encodePairs((parsePairs(s) || []).filter(([k]) => !half(k))
+        const rest = (s) => encodePairs((parsePairs(s) || []).filter(([k]) => !half(k) && k !== 'ph')
           .sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)));
         return rest(a) === rest(b);
       },

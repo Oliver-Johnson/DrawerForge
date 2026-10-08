@@ -324,6 +324,9 @@ for (const tool of ['bins', 'plates']) {
     await H.setField(page, 'drawerW', '400');
     await saveAs(page, 'Kitchen');
     if (tool === 'bins') { await toBins(page); await H.setField(page, field, before); }
+    /* Baseplates by way of Bins, so its save already carries the Bins settings a hand-over
+       brings: the trip below adds them otherwise, and the save no longer fits */
+    else { await toBins(page); await toPlates(page); }
     await settle(page);
     await page.evaluate(() => sessionStorage.setItem('full', '1'));
     if (tool === 'bins') await H.setField(page, field, refused);
@@ -349,6 +352,13 @@ for (const tool of ['bins', 'plates']) {
     await expect(page.locator('#setAside'), 'nothing is said to be set aside').toBeHidden();
     const local = () => page.evaluate((k) => localStorage.getItem(k), `drawerforge:${tool}:v1`);
     expect(await local(), 'the later change is still this browser\'s save').toContain(`${key}=${raced}`);
+    /* So it is after a trip to the other page and back that changes nothing there. Every
+       hand-over from Bins carries the plate height, which Baseplates never saves, and
+       counted as a change it lost the later change at every trip. */
+    if (tool === 'bins') { await toPlates(page); await toBins(page); }
+    else { await toBins(page); await toPlates(page); }
+    await settle(page);
+    expect(await local(), 'and after a trip to the other page and back').toContain(`${key}=${raced}`);
     /* Until the next change, which is saved there. On Bins first one the page does not
        count as a change of the design, the plate height alone: held back until a change it
        counted, that was never saved at all. */

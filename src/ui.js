@@ -2735,10 +2735,11 @@ let arrivedWith = '';    // the design string this page was opened with, if it s
     writeKey(PREV_KEY, saved);
     keptAside = readKey(PREV_KEY) === saved;
     if (keptAside) writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
-    /* Not kept, it is not written over either (unkept), unless a hand-over brings on
-       anything the other page sets: then the save holds the drawer, bed or the other
-       page's settings from before, and a bare visit took those back to the other page. */
-    else unkept = !handOver || drawers.onlyMine(saved, src);
+    /* Not kept, it is not written over either (unkept), unless a hand-over of your own
+       brings on anything the other page sets: then the save holds the drawer, bed or the
+       other page's settings from before, and a bare visit took those back to the other
+       page. One still carrying someone's link is that link, and your layout is kept. */
+    else unkept = !handOver || handOver.link.length > 0 || drawers.onlyMine(saved, src);
   }
   const canPutBack = (replaces && !kept && (keptAside || (savedLinked && !!readKey(PREV_KEY)))) ||
     (back && keptAside);
