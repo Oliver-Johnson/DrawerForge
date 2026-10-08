@@ -671,14 +671,12 @@ function geomFor(b) {
   if (!r) { r = buildBin(G, binCfg(b)); geoCache.set(k, r); }
   /* Weighed once a part, and again when the infill moves: the key names what binVolume
      reads but the infill, which it leaves out so that a new infill rebuilds nothing, so
-     the weight is kept with the build, and goes when pruneGeometry drops it. Bar one
-     thing: on a bin built without dividers the key leaves out whether they would be
-     removable, and their clearance, as the build does, but binVolume still cuts its sums
-     for the scoop and the shelf where those rails would stand. Two such bins sharing a
-     key can weigh a few tenths of a mm³ apart (0.3 at the most over scooped and shelved
-     bins), and both are given the first one's weight. Weighed afresh on every call, a
-     drawer of 1,600 bins of 700 parts asked binVolume 3,700 times a refresh, about 200
-     ms of it. */
+     the weight is kept with the build, and goes when pruneGeometry drops it. On a bin
+     built without dividers the key leaves out whether they would be removable, and their
+     plate and clearance, as the build does, and binVolume reads none of them either: it
+     weighs the bin as the one asking for none, as it is built, to the bit. Weighed afresh
+     on every call, a drawer of 1,600 bins of 700 parts asked binVolume 3,700 times a
+     refresh, about 200 ms of it. */
   const infill = state.infill === undefined ? 15 : state.infill;
   if (r.volInfill !== infill) {
     const vv = volumeMm3(b);

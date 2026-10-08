@@ -3373,22 +3373,28 @@ function binVolume(cfg, infill) {
   const iw = hwO - wall, id = hdO - wall, rI = Math.max(0.4, SPEC.r - wall);
   const { shelf: sh, holes: hb } = floorPlan(c, iw, id, H), holesOn = !!hb.n;
   const built = holesOn ? { divX: 0, divY: 0 } : dividersBuilt(c), half = wall / 2;
+  /* Whether the dividers it is built with are removable. A bin asking for removable ones
+     and built with none (holes across its floor, or no room for a slot) is weighed as
+     the bin asking for none, as it is built as one: read off the field, its scoop, shelf
+     and block of holes were summed in pieces cut where the rails would reach, and came
+     a few hundredths of a mm³ off that bin's weight. */
+  const removable = !!c.divRemovable && !!(built.divX || built.divY);
   const slot = c.divT / 2 + c.divClr, rail = slot + RAIL_T, deep = RAIL_D + c.divClr;
   const spansOf = (count, inner) => {
     const out = [];
     for (let k = 1; k <= count; k++) {
       const p = -inner + (2 * inner) * k / (count + 1);
-      if (c.divRemovable) out.push([p - rail, p - slot], [p + slot, p + rail]);
+      if (removable) out.push([p - rail, p - slot], [p + slot, p + rail]);
       else out.push([p - half, p + half]);
     }
     return spansClip(mergedSpans(out, BLOAT), -inner, inner);
   };
-  const reachOf = (inner) => (!c.divRemovable ? [[-inner, inner]]
+  const reachOf = (inner) => (!removable ? [[-inner, inner]]
     : deep >= inner - BLOAT / 2 ? [[-inner, inner]] : [[-inner, -inner + deep], [inner - deep, inner]]);
   const xs = spansOf(built.divX, iw), ys = spansOf(built.divY, id);   // x where divX stand, y where divY do
   const xReach = reachOf(id), yReach = reachOf(iw);                     // how far along each they stand
   const crossing = spansMeet(xs, yReach) * spansMeet(ys, xReach);
-  const divPlan = c.divRemovable
+  const divPlan = removable
     ? railArea(built.divX, iw, id, wall, c.divT, c.divClr) + railArea(built.divY, id, iw, wall, c.divT, c.divClr) - crossing
     : spansLength(xs) * 2 * id + spansLength(ys) * 2 * iw - crossing;
   let dividers = divPlan * hFull;
@@ -3458,7 +3464,7 @@ function binVolume(cfg, infill) {
      way across beyond the rails' reach of the back wall, and within it the slot alone:
      the rails beside it were counted there instead of the shelf. The lip's notches are
      taken off the lip below. */
-  const fit = c.divRemovable && (built.divX || built.divY) ? plateLayout(c, built) : null;
+  const fit = removable ? plateLayout(c, built) : null;
   let shelfCut = 0;
   if (fit && fit.printed && shelfD && fit.pX.length) {
     const yk = Math.min(id, shelfFront + Math.max(0, sh.top - t - slabTop));   // the underside meets the slab
@@ -3486,8 +3492,8 @@ function binVolume(cfg, infill) {
       return z <= zd ? A * z * z / (2 * L) : A * zd * zd / (2 * L) + d * (z - zd);
     };
     const over = (z0, d) => upTo(L, d) - upTo(Math.min(L, Math.max(0, z0)), d);
-    const dX = Math.min(A, !c.divRemovable || deep >= id - BLOAT / 2 ? A : deep);
-    const dY = Math.min(A, !c.divRemovable || deep >= iw - BLOAT / 2 ? A : deep);
+    const dX = Math.min(A, !removable || deep >= id - BLOAT / 2 ? A : deep);
+    const dY = Math.min(A, !removable || deep >= iw - BLOAT / 2 ? A : deep);
     const z0 = shelfD ? Math.min(H, sh.top) - (H - L) : 0;
     const yShelf = shelfD ? spansLength(spansClip(ys, shelfFront, id)) : 0;
     dividers -= spansLength(xs) * (over(0, dX) + over(z0, dX)) +
@@ -3569,7 +3575,7 @@ function binVolume(cfg, infill) {
       const top = (s) => { const x = sIn > 0 ? s * so / sIn : 0;
         return zAt(Math.max(self, ramp(frac(ka), x + so), ramp(frac(kb), so - x))); };
       const bends = [(len - so) * sIn / so, (so - len) * sIn / so];
-      const whole = !c.divRemovable || deep >= across - BLOAT / 2, reach = whole ? Infinity : deep;
+      const whole = !removable || deep >= across - BLOAT / 2, reach = whole ? Infinity : deep;
       const [p0, p1] = whole ? [-across - BLOAT, across + BLOAT]
         : k === 'f' || k === 'l' ? [-across - BLOAT, -across + deep] : [across - deep, across + BLOAT];
       const Rg = rI + grow;
@@ -3577,7 +3583,7 @@ function binVolume(cfg, infill) {
       // from u0 to u1 into a corner, what stands past what is counted, summed
       const past = (u0, u1, cut) => {
         const out = (a, b) => (cut ? F(Rg, b) - F(Rg, a) - rI * (b - a) : BLOAT * (b - a));
-        if (!c.divRemovable) return out(u0, u1);
+        if (!removable) return out(u0, u1);
         const uR = reach < rI ? Math.sqrt(rI * rI - (rI - reach) ** 2) : rI;   // where the arc is a rail deep
         const uG = cut && reach < rI ? Math.sqrt(Rg * Rg - (rI - reach) ** 2) : Infinity;
         const m = Math.min(u1, uR), g = Math.max(u0, uR), h = Math.min(u1, uG);
@@ -3586,11 +3592,11 @@ function binVolume(cfg, infill) {
       const corner = (u0, u1, cut, nb) => {
         const z = zAt(Math.max(self, frac(nb)));
         return past(u0, u1, cut) * (H - Math.max(slabTop, z)) -
-          (c.divRemovable ? 0 : arc(u0, u1) * Math.max(0, Math.min(z, H - lipDrop) - slabTop));
+          (removable ? 0 : arc(u0, u1) * Math.max(0, Math.min(z, H - lipDrop) - slabTop));
       };
       for (const [a, b] of spans) {
         const box = alongX ? [[a, p0], [b, p0], [b, p1], [a, p1]] : [[p0, a], [p1, a], [p1, b], [p0, b]];
-        const cut = (!alongX && !c.divRemovable && sh && Math.abs(a - shelfFront) < 10 * WELD) ||
+        const cut = (!alongX && !removable && sh && Math.abs(a - shelfFront) < 10 * WELD) ||
                     box.some(([x, y]) => outsideArc(hwO, hdO, x, y, n));
         const lo = Math.max(a, -sIn), hi = Math.min(b, sIn);
         if (hi > lo && self < 1) {
