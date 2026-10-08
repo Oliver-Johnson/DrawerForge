@@ -165,6 +165,30 @@ test('a bin taller than the printer is called out', async ({ page }) => {
   await expect(page.locator('#warnings')).toContainText('Z height');
 });
 
+/* A link can hand this page a baseplate taller than the drawer, and the room above it was
+   worked out anyway: Checks said "only -4.3 mm is available above the baseplate", the bin
+   that "reaches 24.9 mm, past the -4.3 mm available", the panel "-4.3 mm above the
+   baseplate" and the README the same. There is no room, and they say so, with the two
+   heights it comes from. */
+test('a baseplate taller than the drawer leaves no room, said in words', async ({ page }) => {
+  const link = '#w=200&d=200&dh=40&ph=44.3&bl=0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15';
+  // the page reloads itself for a link that changes the layout: wait for that load
+  await Promise.all([page.waitForEvent('load'), page.goto(H.BINS_URL + link)]);
+  await page.waitForFunction(() => !!document.getElementById('fillmap') && B().length === 1);
+  const why = "the baseplate alone is 44.3 mm tall and the drawer's usable height is 40 mm";
+  const warn = page.locator('#warnings');
+  await expect(warn).toContainText(`The tallest stack is 24.9 mm, but ${why}. ` +
+    'There is no room above the baseplate for even a 1-unit bin.');
+  await expect(warn).toContainText("reaches 24.9 mm, and the baseplate takes the drawer's whole height — " +
+    'there is no room for a bin at all where it stands');
+  // the panel says it too, and claims no tallest bin: it said "1 units"
+  await expect(page.locator('#gridSummary')).toHaveText(`Grid: 4 × 4 cells · no room above the baseplate, as ${why}`);
+  const readme = await page.evaluate(() => layoutReadme().split('\n').find((l) => l.startsWith('Height above')));
+  expect(readme).toBe(`Height above the baseplate: none, as ${why} | tallest stack here: 24.9 mm`);
+  for (const text of [await warn.textContent(), await page.locator('#gridSummary').textContent(), readme])
+    expect(text, 'no room is not a negative one').not.toMatch(/-\d+(\.\d+)? mm/);
+});
+
 /* The layout travels in the URL hash; a carved shape has to survive that like
    anything else, or sharing a link quietly changes what people print. */
 test('a carved layout survives a round trip through the url', async ({ page }) => {
