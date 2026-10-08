@@ -1395,9 +1395,16 @@ function activeKeyDims() {
 function activeKeyShape() {
   return state.connector === 'hclip' ? 'snap' : state.keyType;
 }
-// the plate height the first built piece came out at — the top clip is sized to it
+/* The height the plate is built to: the fit sample is cut to it, and the top clip is
+   handed it (snapTopClip does not use it). Worked out from the settings, as buildPiece
+   works it out (plateHeightMm), and not read off the first piece built, which is the
+   plate before a change for the 260 ms the rebuild waits and none at all while nothing
+   has built. The fit sample is offered through both, so it was cut for the wrong plate:
+   a 4.25 mm coupon with no floor for a 6.85 mm puzzle plate, picked and downloaded at
+   once. Once a piece has built the two are the same number.
+   test/ui/fit-sample.spec.js takes the coupon before the rebuild lands. */
 function builtH() {
-  return layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
+  return plateHeightMm();
 }
 /* The one loose part this configuration needs, built once.
 
@@ -1435,9 +1442,10 @@ function connectorPart() {
  * The kinds and their order match buildPiece's: a top-inserted snap takes the clip
  * whatever its housing says, so it is tested first.
  *
- * `pad` is read back off the height the build actually came out at rather than worked
- * out again from bottomPad and the joint's own minimum — the puzzle cavity is cut
- * relative to it, and the coupon has no other way to know.
+ * `pad` is read back off the height the plate is built to (builtH, which platePad works
+ * out for buildPiece too) rather than worked out again from bottomPad and the joint's
+ * own minimum — the puzzle cavity is cut relative to it, and the coupon has no other
+ * way to know.
  *
  * `clrMax` is the joint's clearance with the field at its ceiling, so the coupon offers
  * no pair looser than the field will take: the same ceiling the field is held to
