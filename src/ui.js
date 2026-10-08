@@ -1127,7 +1127,9 @@ const clampR = (r) => Math.max(60, Math.min(Math.max(2200, fitR * 2), r));
    the meshes alone are empty until the first piece finishes, which is when the first
    framing has to happen. */
 function sceneBox() {
-  // not builtH(): that reads the first piece, and a layout the checks stopped has none
+  /* The plate's height and the floor asked for, as the first framing has always been
+     worked out: not builtH(), which adds the floor a magnet, screw or key raises it to,
+     so a plate's framing before its first build stays as it was. */
   const h = (state.plateHeight || 4.25) + (state.bottomPad || 0);
   const box = new THREE.Box3(new THREE.Vector3(0, 0, 0),
                              new THREE.Vector3(state.drawerW, state.drawerD, h));
