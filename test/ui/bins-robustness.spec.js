@@ -418,6 +418,18 @@ test('shaped plates that would read alike say which bin, or which slot, each is 
   expect(await page.evaluate(() => dividerParts().filter((d) => d.axis === 'x').map((d) => `${d.name}: ${plateHow(d)}`))).toEqual([
     `divider-38.6x21.8x1.6mm-along-slots-down: ${along}, for the 1st slot from the front`,
     `divider-38.6x21.8x1.6mm-along-slots-down-2: ${along}, for the 2nd slot from the front`]);
+
+  /* The same bin beside one with no scoop: its back plate along is the other bin's too and
+     its front one isn't, so each already names different bins, and they were found alike
+     by their words. Neither said which slot of the scoop bin it was for. */
+  await page.goto('about:blank');
+  errors.push(...await openAt(page, 'w=600&d=600&dh=120&bl=' + removable(0, 1, 1.5, 4, 1, 2, 40, 12) + '_' +
+    removable(1, 1, 1.5, 4, 1, 2, 0, 12)));
+  await settle(page, 600);
+  const sc = 'bin-1x1.5x4-1x2div-scoop28-qty1.stl', no = 'bin-1x1.5x4-1x2div-qty1.stl';
+  expect(await page.evaluate(() => dividerParts().filter((d) => d.axis === 'x').map((d) => `${d.qty} x ${d.name}: ${plateHow(d)}`))).toEqual([
+    `3 x divider-38.6x21.8x1.6mm-along-slots-down: ${along}, for the 2nd slot from the front of ${sc}; the 1st and 2nd of ${no}`,
+    `1 x divider-38.6x21.8x1.6mm-along-slots-down-2: ${along}, for the 1st slot from the front of ${sc}`]);
   expect(errors).toEqual([]);
 });
 
