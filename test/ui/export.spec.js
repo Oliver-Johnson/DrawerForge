@@ -419,12 +419,17 @@ test('half-size bins download under their own sizes, with no holes they cannot h
    weighs its rails, so the total is 369 g, not 373, and nothing else in it changed. Then
    that bin's rails came to reach the clearance deeper, so that each end of its plates sits
    a whole rail's depth in them: its STL changed and nothing else did, not even the README,
-   whose 369 g they leave as it was. Then each bin came to be weighed as the plastic its
-   mesh encloses (bin.js, binVolume): the scoops and label shelves counted, the carved L
-   over its eight cells rather than nine and less its magnet holes, and the lip round each
-   bin's edge rather than in proportion to its area, which had weighed the 2x2 and 3x2
-   bins a few percent heavy. The README's weights and times moved, to 347 g from 369, and
-   no STL and no link did. */
+   whose 369 g they leave as it was. And then that 2x2x3 changed on purpose again: its lip
+   has a notch at each slot so the plates go in, and its two plates halve where they
+   cross, so they are two parts, one slotted from the top and one from the bottom, which
+   the README lists with how they go in. The README still said 369 g: the notches take
+   less than a gram from the lip. Nothing else in the ZIP moved. Then each bin came to be
+   weighed as the plastic its mesh encloses (bin.js, binVolume): the scoops and label
+   shelves counted, the carved L over its eight cells rather than nine and less its magnet
+   holes, the lip round each bin's edge rather than in proportion to its area, which had
+   weighed the 2x2 and 3x2 bins a few percent heavy, and that 2x2x3's lip less its
+   notches, as before. The README's weights and times moved, to 347 g from 369, and no
+   STL and no link did. */
 test('a link from before half sizes downloads the same files, byte for byte', async ({ page }) => {
   const crypto = require('crypto');
   const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
@@ -450,17 +455,21 @@ test('a link from before half sizes downloads the same files, byte for byte', as
   }
   got.link = sha(await page.evaluate(() => descString()));
   expect(got).toEqual({
-    'README.txt': 'ebd8d84e9095c623',
+    /* 22dc710829d27922 with the plates listed and how they go in, at 369 g, and
+       ebd8d84e9095c623 at 347 g with the plates not yet listed: now both */
+    'README.txt': '6cddcac780f685ac',
     'bin-2x1x3-low-f50-l25-qty1.stl': '4f879f2b46d2fef3',
     'bin-2x1x3-qty1.stl': '1d5dddd4cc82d4d4',
     'bin-2x1x4-qty1.stl': '4b028774e7cab92a',
     'bin-2x2x2-qty1.stl': 'aa35a25aa8f07fe3',
-    'bin-2x2x3-1x1div-qty1.stl': '366d3d8fa1eefbcf',
+    // 366d3d8fa1eefbcf with the deeper rails alone; now its lip is notched at each slot too
+    'bin-2x2x3-1x1div-qty1.stl': '4da44b7875702f1c',
     'bin-3x2x3-qty1.stl': 'fa1c2a7c90637b50',
     'bin-3x2x4-2x1div-magnets-screws-every-cell-qty1.stl': '94cba83351d3eef8',
     'bin-3x2x5-2x1div-qty1.stl': 'c584bd3b0e62f628',
     'bin-3x3x3-magnets-qty1.stl': 'c87e863e972d676a',
-    'divider-80.6x14.8x1.6mm.stl': '80621d18f770f536',
+    'divider-80.6x14.8x1.6mm-across-slots-up.stl': '277262412bde538f',
+    'divider-80.6x14.8x1.6mm-along-slots-down.stl': '72a5925c8435d991',
     'lid-2x1-lrb.stl': 'c29d7ff271cfed07',
     link: 'fea2dd5a633c087e',
   });

@@ -458,6 +458,29 @@ test('a bin with holes asking for 31 removable dividers is told they are left of
     expect(await rest(page)).toContain('Dividers are left off a bin with holes.');
   });
 
+/* Removable dividers both ways on a bin with its lip, a scoop and a shelf have their plates
+   notch the lip and the shelf, cut to the scoop and halve where they cross, and Checks
+   says how they go in. With holes across its floor there are none: no plates, no notches
+   weighed, no notes of them, and the bin weighs and builds as the bin asking for none. */
+test('a bin with holes asking for removable dividers both ways has no plates, notches or notes of them',
+  async ({ page }) => {
+    const link = (insert) => `#bl=0-0-2-2-3-1.2-1.2-2-2-0-1-1-1-1-8-12-0-0-1-0-15-0-0-${insert}-0`;
+    await arrive(page, link(0));
+    await expect(checks(page)).toContainText('halve together where they cross');
+    expect(await page.evaluate(() => dividerParts().length)).toBe(2);
+
+    await arrive(page, link(2));
+    await expect(checks(page)).toContainText('has holes for AAA batteries, so its dividers and scoop are left off');
+    for (const t of ['removable divider', 'halve together', 'bottom front corner', 'scoop rather than'])
+      await expect(checks(page)).not.toContainText(t);
+    expect(await page.evaluate(() => {
+      const b = B()[0], none = Object.assign({}, b, { divX: 0, divY: 0, divRemovable: false });
+      return [b.divX, b.divY, b.divRemovable, builtDivs(b), dividerParts().length, layoutReadme().includes('DIVIDER'),
+              geomFor(b).meta.holes > 0, buildBin(G, binCfg(b)).polys.length === buildBin(G, binCfg(none)).polys.length,
+              Math.abs(volumeMm3(b).raw - volumeMm3(none).raw) < 1e-6];
+    })).toEqual([2, 2, true, { divX: 0, divY: 0 }, 0, false, true, true, true]);
+  });
+
 // and one bin past it on its own has none, as a fault: what was asked for is not built
 test('a bin with more holes than one bin is built with has none, and says so', async ({ page }) => {
   await arrive(page, '#w=500&d=500&bl=' + linkBin(0, 0, 10, 10, 3, 4));

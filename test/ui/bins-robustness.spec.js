@@ -272,6 +272,201 @@ test('half-size bins are held to the removable dividers that fit them, and Check
   expect(errors).toEqual([]);
 });
 
+/* Removable plates that really go in. The lip has a notch at each slot, the plates across
+   are cut to the scoop, the plates along stand on it, and plates both ways halve where
+   they cross, so they go in in an order and one way round. The page says so in Checks,
+   in each plate's row and file name and in the README, and the hint says it before any
+   of that. A 1x1x4 with a 16 mm scoop, one across and three along: the front one along
+   stands on the scoop, the other two are alike. */
+const removable = (x, u, v, h, divX, divY, scoop, label) =>
+  `${x}-0-${u}-${v}-${h}-1.2-1.2-${divX}-${divY}-0-1-1-1-1-${scoop}-${label}-0-0-1-0-15`;
+test('removable plates both ways and over a scoop say how they go in, in Checks, the downloads and the hint', async ({ page }) => {
+  const errors = await openAt(page, 'bl=' + removable(0, 1, 1, 4, 1, 3, 16, 0));
+  await settle(page, 600);
+  const parts = await page.evaluate(() => dividerParts().map((d) => ({ name: dividerName(d), qty: d.qty,
+    bad: checkManifold(d.polys).bad, how: plateHow(d) })));
+  expect(parts).toEqual([
+    { name: 'divider-38.6x21.8x1.6mm-along-slots-down', qty: 2, bad: 0,
+      how: 'along, slots down: these go in over the plates across' },
+    { name: 'divider-38.6x21.8x1.6mm-across-slots-up-scoop', qty: 1, bad: 0,
+      how: 'across, slots up: these go in first, cut corner to the front, over the scoop' },
+    { name: 'divider-38.6x20.2x1.6mm-along-slots-down-on-scoop', qty: 1, bad: 0,
+      how: 'along, slots down: these go in over the plates across, stands on the scoop, for the 1st slot from the front' },
+  ]);
+  // the bin they go in is whole, notches and all
+  expect(await page.evaluate(() => checkManifold(geomFor(B()[0]).polys).bad)).toBe(0);
+
+  const notes = await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent));
+  const at = 'Layer 1, the 1×1 bin at column 1 row 1: ';
+  expect(notes).toEqual(expect.arrayContaining([
+    at + 'has removable dividers both ways, which halve together where they cross: put the plates across in first, slots up, then drop the plates along over them, slots down.',
+    at + 'has its plates across cut at the bottom front corner to follow the scoop: that corner goes to the front.',
+    at + 'has plates along that stand on the scoop, each made for its own slot: its row in the downloads says which.',
+  ]));
+
+  await page.locator('#openExport').click();
+  const rows = await page.$$eval('#exFiles [data-ex="divider"]', (els) =>
+    els.map((e) => e.closest('.exrow').textContent));
+  expect(rows).toHaveLength(3);
+  expect(rows.join(' | ')).toContain('across, slots up: these go in first, cut corner to the front, over the scoop · slides into a 2.10 mm slot');
+  expect(rows.join(' | ')).toContain('stands on the scoop, for the 1st slot from the front · slides into a 2.10 mm slot');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#exFiles [data-ex="zip"]').click()]);
+  const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
+  expect(Object.keys(zip.files).filter((n) => n.startsWith('divider-')).sort()).toEqual([
+    'divider-38.6x20.2x1.6mm-along-slots-down-on-scoop.stl',
+    'divider-38.6x21.8x1.6mm-across-slots-up-scoop.stl',
+    'divider-38.6x21.8x1.6mm-along-slots-down.stl']);
+  const readme = await zip.file('README.txt').async('string');
+  expect(readme).toContain('DIVIDER PLATES:\n' +
+    '    2 x  divider-38.6x21.8x1.6mm-along-slots-down.stl  (along, slots down: these go in over the plates across)\n' +
+    '    1 x  divider-38.6x21.8x1.6mm-across-slots-up-scoop.stl  (across, slots up: these go in first, cut corner to the front, over the scoop)\n' +
+    '    1 x  divider-38.6x20.2x1.6mm-along-slots-down-on-scoop.stl  (along, slots down: these go in over the plates across, stands on the scoop, for the 1st slot from the front)\n' +
+    '  Where plates cross they halve together: put the plates across in first, slots up,\n' +
+    '  then drop the plates along over them, slots down. Lift them out the other way round.\n');
+  await page.keyboard.press('Escape');
+
+  // the hint, with the bin chosen: what the notches are for, and the order
+  await H.clickCell(page, 0, 0);
+  await settle(page, 400);
+  const hint = page.locator('#divRemovableHint');
+  await expect(hint).toBeVisible();
+  await expect(hint.locator('.moretext')).toBeHidden();
+  await hint.locator('button.more').click();
+  await expect(hint.locator('.moretext')).toBeVisible();
+  await expect(hint).toContainText('the stacking lip has a notch at each slot; a bin stacked on top still sits on the lip between the notches and round the corners');
+  await expect(hint).toContainText('put the plates across in first, slots up, then drop the plates along over them, slots down');
+  await expect(hint).toContainText('that corner goes to the front');
+  await expect(hint).toContainText('The label shelf has a notch at each plate across, and a note raised on it goes in the widest space between them; the plates along stay in front of it.');
+  /* ...and ends saying where the plates are told apart, once: it read "The platesThe
+     plates' rows in Download, ... which is which.rsquo; rows under Download your bins,
+     ..." */
+  await expect(hint.locator('.moretext')).toHaveText(/slots down\. The plates\u2019 rows under Download your bins, their files\u2019 names and the README all say which is which\.$/);
+  expect(errors).toEqual([]);
+});
+
+/* Two bin types can take the same plate standing on the scoop in different slots: a 2x2x6
+   with a 40 mm scoop takes the 35.2 mm one in its 1st slot along with 2 along, and in its
+   2nd with 5, where its 1st takes a 29.2 mm one. The plate is one file, and its row and the
+   README said it was for the 1st slot of both: put there in the second bin it stands about
+   1.9 mm over the lip. They say which slot of which bin, by the bins' files. */
+test('a plate standing on the scoop that two bin types share says which slot of which bin it is for', async ({ page }) => {
+  const pair = 'w=300&d=200&dh=80&bl=' + removable(0, 2, 2, 6, 0, 2, 40, 0) + '_' + removable(2, 2, 2, 6, 0, 5, 40, 0);
+  const errors = await openAt(page, pair);
+  await settle(page, 600);
+  const A = 'bin-2x2x6-0x2div-qty1.stl', Bn = 'bin-2x2x6-0x5div-qty1.stl';
+  const parts = await page.evaluate(() => dividerParts().map((d) => ({ name: dividerName(d), qty: d.qty, how: plateHow(d) })));
+  expect(parts).toEqual([
+    { name: 'divider-80.6x35.8x1.6mm', qty: 4, how: '' },
+    { name: 'divider-80.6x35.2x1.6mm-along-on-scoop', qty: 2,
+      how: `along, stands on the scoop, for the 1st slot from the front of ${A}; the 2nd of ${Bn}` },
+    { name: 'divider-80.6x29.2x1.6mm-along-on-scoop', qty: 1,
+      how: `along, stands on the scoop, for the 1st slot from the front of ${Bn}` },
+  ]);
+  await page.locator('#openExport').click();
+  const rows = await page.$$eval('#exFiles [data-ex="divider"]', (els) => els.map((e) => e.closest('.exrow').textContent));
+  expect(rows.join(' | ')).toContain(`for the 1st slot from the front of ${A}; the 2nd of ${Bn} \u00b7 slides into a 2.10 mm slot`);
+  expect(rows.join(' | ')).toContain(`for the 1st slot from the front of ${Bn} \u00b7 slides into a 2.10 mm slot`);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#exFiles [data-ex="zip"]').click()]);
+  const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
+  // the bins it names are the files beside it
+  expect(Object.keys(zip.files).filter((n) => n.startsWith('bin-')).sort()).toEqual([A, Bn]);
+  expect(await zip.file('README.txt').async('string')).toContain('DIVIDER PLATES:\n' +
+    `    2 x  divider-80.6x35.2x1.6mm-along-on-scoop.stl  (along, stands on the scoop, for the 1st slot from the front of ${A}; the 2nd of ${Bn})\n` +
+    `    1 x  divider-80.6x29.2x1.6mm-along-on-scoop.stl  (along, stands on the scoop, for the 1st slot from the front of ${Bn})\n`);
+  await page.keyboard.press('Escape');
+  // each bin on its own reads as it did, with no bin named
+  for (const [bl, ks] of [[removable(0, 2, 2, 6, 0, 2, 40, 0), ['1st']], [removable(0, 2, 2, 6, 0, 5, 40, 0), ['1st', '2nd']]]) {
+    await page.goto('about:blank');
+    errors.push(...await openAt(page, 'w=300&d=200&dh=80&bl=' + bl));
+    await settle(page, 600);
+    const how = await page.evaluate(() => dividerParts().filter((d) => d.meta.stands).map(plateHow));
+    expect(how.sort()).toEqual(ks.map((k) => `along, stands on the scoop, for the ${k} slot from the front`));
+  }
+  expect(errors).toEqual([]);
+});
+
+/* Plates of one size and shape of name but cut differently read alike: two 1x1x3 bins with
+   a plate across each and scoops of 8 and 10 mm listed "-across-scoop" and "-across-scoop-2"
+   with the same words, in the README and in two export rows word for word the same. The
+   one cut for the 8 mm scoop goes into the other bin 0.79 mm high, its top over the rim.
+   Where plates go in more than one bin type, each shaped one names the bins it is for. And
+   two plates along of one name for different slots of one bin say their slots. */
+test('shaped plates that would read alike say which bin, or which slot, each is for', async ({ page }) => {
+  const pair = 'w=600&d=600&dh=120&bl=' + removable(0, 1, 1, 3, 1, 0, 8, 0) + '_' + removable(1, 1, 1, 3, 1, 0, 10, 0);
+  const errors = await openAt(page, pair);
+  await settle(page, 600);
+  const s8 = 'bin-1x1x3-1x0div-scoop8-qty1.stl', s10 = 'bin-1x1x3-1x0div-scoop10-qty1.stl';
+  const cut = 'across, cut corner to the front, over the scoop';
+  await page.locator('#openExport').click();
+  const rows = await page.$$eval('#exFiles [data-ex="divider"]', (els) => els.map((e) => e.closest('.exrow').textContent));
+  expect(rows).toHaveLength(2);
+  expect(rows.some((r) => r.includes(`${cut}, for ${s8} · slides into`))).toBe(true);
+  expect(rows.some((r) => r.includes(`${cut}, for ${s10} · slides into`))).toBe(true);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#exFiles [data-ex="zip"]').click()]);
+  const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
+  expect(Object.keys(zip.files).filter((n) => n.startsWith('bin-')).sort()).toEqual([s10, s8]);
+  const readme = await zip.file('README.txt').async('string');
+  expect(readme).toContain(`    1 x  divider-38.6x14.8x1.6mm-across-scoop.stl  (${cut}, for ${s8})\n`);
+  expect(readme).toContain(`    1 x  divider-38.6x14.8x1.6mm-across-scoop-2.stl  (${cut}, for ${s10})\n`);
+  await page.keyboard.press('Escape');
+
+  // one bin, a 1x1.5x4 with a 40 mm scoop and a shelf: its two plates along differ by 0.14 mm
+  await page.goto('about:blank');
+  errors.push(...await openAt(page, 'bl=' + removable(0, 1, 1.5, 4, 1, 2, 40, 12)));
+  await settle(page, 600);
+  const along = 'along, slots down: these go in over the plates across';
+  expect(await page.evaluate(() => dividerParts().filter((d) => d.axis === 'x').map((d) => `${d.name}: ${plateHow(d)}`))).toEqual([
+    `divider-38.6x21.8x1.6mm-along-slots-down: ${along}, for the 1st slot from the front`,
+    `divider-38.6x21.8x1.6mm-along-slots-down-2: ${along}, for the 2nd slot from the front`]);
+
+  /* The same bin beside one with no scoop: its back plate along is the other bin's too and
+     its front one isn't, so each already names different bins, and they were found alike
+     by their words. Neither said which slot of the scoop bin it was for. */
+  await page.goto('about:blank');
+  errors.push(...await openAt(page, 'w=600&d=600&dh=120&bl=' + removable(0, 1, 1.5, 4, 1, 2, 40, 12) + '_' +
+    removable(1, 1, 1.5, 4, 1, 2, 0, 12)));
+  await settle(page, 600);
+  const sc = 'bin-1x1.5x4-1x2div-scoop28-qty1.stl', no = 'bin-1x1.5x4-1x2div-qty1.stl';
+  expect(await page.evaluate(() => dividerParts().filter((d) => d.axis === 'x').map((d) => `${d.qty} x ${d.name}: ${plateHow(d)}`))).toEqual([
+    `3 x divider-38.6x21.8x1.6mm-along-slots-down: ${along}, for the 2nd slot from the front of ${sc}; the 1st and 2nd of ${no}`,
+    `1 x divider-38.6x21.8x1.6mm-along-slots-down-2: ${along}, for the 1st slot from the front of ${sc}`]);
+  expect(errors).toEqual([]);
+});
+
+/* The label shelf stands over the back of the cavity, and a plate along the depth would
+   have to slide in under it: so the plates along stay in front of it. 23 fit a 2x2 by
+   their rails, 5 in front of a 12 mm shelf; the link asking for 8 opens unchanged, and
+   Checks says why it has 5. Chosen, the field offers no more than 5. */
+test('a removable bin with a label shelf keeps its plates along in front of it, and Checks says why', async ({ page }) => {
+  const errors = await openAt(page, 'bl=' + removable(0, 2, 2, 3, 0, 8, 0, 12));
+  await settle(page, 600);
+  const before = await page.evaluate(() => location.hash);
+  expect(await page.evaluate(() => dividerParts().reduce((n, d) => n + d.qty, 0))).toBe(5);
+  const notes = (await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent)))
+    .filter((t) => t.includes('removable dividers'));
+  expect(notes).toEqual(['Layer 1, the 2×2 bin at column 1 row 1: is built with 5 removable dividers along, not the 8 ' +
+    'it asks for, as no more fit in front of the label shelf, which a plate along cannot drop in under.']);
+  await H.clickCell(page, 0, 0);
+  await settle(page, 600);
+  expect(await page.evaluate(() => +document.getElementById('divY').max)).toBe(5);
+  expect(await page.inputValue('#divY')).toBe('8');
+  expect(await page.evaluate(() => location.hash)).toBe(before);
+  expect(errors).toEqual([]);
+});
+
+/* On a short bin a big scoop would leave the plates across too little front end in their
+   rails, so it is built smaller, and Checks says so: 7.2 mm is the most a 2x2x2 builds,
+   6.6 leaves the plates their millimetre. */
+test('a scoop too big for the plates across to keep their ends is built smaller, and Checks says so', async ({ page }) => {
+  const errors = await openAt(page, 'bl=' + removable(0, 2, 2, 2, 3, 0, 20, 0));
+  await settle(page, 600);
+  const notes = await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent));
+  expect(notes).toEqual(expect.arrayContaining(['Layer 1, the 2×2 bin at column 1 row 1: is built with a 6.6 mm scoop ' +
+    'rather than 7.2 mm, so the plates across keep 1 mm of their front ends in their rails.']));
+  expect(await page.evaluate(() => checkManifold(geomFor(B()[0]).polys).bad)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
 /* One removable divider has no neighbour, so it needs only its slot and a rail either
    side. Held to a neighbour's spacing as well, a half-cell bin with a 3 mm wall at a 5 mm
    plate and 1 mm clearance was built with none, its field allowed none, and Checks said
@@ -306,6 +501,27 @@ test('one removable divider is not built where the rails the other way would sta
     .filter((t) => t.includes('removable dividers'))).toEqual(['Layer 1, the 0.5×1 bin at column 1 row 1: is built with ' +
     'no removable dividers across, not the 1 it asks for, as even one would leave too little room beside its slot ' +
     'for the rails of dividers the other way, with a 5 mm plate at 1 mm clearance.']);
+  expect(errors).toEqual([]);
+});
+
+/* A plate under a millimetre long is no plate, as one under a millimetre tall is not
+   listed: a 1x0.5 with a 9.9 mm wall at 0.3 mm clearance listed one 0.1 mm long, in the
+   downloads, the README and the weight, and built rails for it. None is built, the field
+   offers none, and Checks says why. */
+test('no removable divider is built whose plate would be under a millimetre long', async ({ page }) => {
+  const errors = await openAt(page, 'bl=0-0-1-0.5-3-9.9-1.2-1-0-0-1-1-1-1-0-0-0-0-1-0-15&bdt=1.6&bdc=0.3');
+  await settle(page, 600);
+  expect(await page.evaluate(() => [state.divClr, B()[0].wall, B()[0].divX, builtDivs(B()[0])]))
+    .toEqual([0.3, 9.9, 1, { divX: 0, divY: 0 }]);
+  expect(await page.evaluate(() => dividerParts().map((d) => d.name))).toEqual([]);
+  expect(await page.evaluate(() => layoutReadme())).not.toContain('DIVIDER');
+  expect((await page.$$eval('#warnings .w', (els) => els.map((e) => e.textContent)))
+    .filter((t) => t.includes('removable dividers'))).toEqual(['Layer 1, the 1×0.5 bin at column 1 row 1: is built with ' +
+    'no removable dividers across, not the 1 it asks for, as the clearance at a plate\'s ends would leave it under 1 mm ' +
+    'long, with a 1.6 mm plate at 0.3 mm clearance.']);
+  await H.clickCell(page, 0, -0.25);
+  await settle(page, 600);
+  expect(await page.evaluate(() => +document.getElementById('divX').max)).toBe(0);
   expect(errors).toEqual([]);
 });
 
@@ -346,11 +562,13 @@ test('a bin whose floor fills it is not said to be short of room for removable d
 /* Both ways, where the end spacing on both axes was a rail and its reach, the tip of the
    end rail one way met the end rail the other way corner to corner, on one edge used four
    times: a 1x1 with a 0.4 mm wall and 10 each way at the usual plate and clearance, which
-   Checks said nothing about. */
+   Checks said nothing about. That 1x1 is now built with 9 along, since a tenth would
+   notch its stacking lip too close to the corners, so it is the half-cell square with a
+   1 mm wall and 4 each way, whose lip keeps its corners, that meets so here. */
 test('removable dividers both ways build watertight where the end rails meet at a corner', async ({ page }) => {
-  const errors = await openAt(page, 'bl=0-0-1-1-3-0.4-1.2-10-10-0-1-1-1-1-0-0-0-0-1-0-15&bdt=1.6&bdc=0.25');
+  const errors = await openAt(page, 'bl=0-0-0.5-0.5-3-1-1.2-4-4-0-1-1-1-1-0-0-0-0-1-0-15&bdt=1.6&bdc=0.25');
   await settle(page, 600);
-  expect(await page.evaluate(() => builtDivs(B()[0]))).toEqual({ divX: 10, divY: 10 });
+  expect(await page.evaluate(() => builtDivs(B()[0]))).toEqual({ divX: 4, divY: 4 });
   expect(await page.evaluate(() => checkManifold(geomFor(B()[0]).polys).bad)).toBe(0);
   expect(errors).toEqual([]);
 });
@@ -625,8 +843,13 @@ test('without WebGL the map, the table, the export and saving all still work',
       await page.waitForFunction(() => !!document.getElementById('fillmap'));
       await settle(page);
       expect(await page.evaluate(() => B().length)).toBe(2);
-      await page.locator('#startFresh').click();
-      await page.waitForFunction(() => !!document.getElementById('fillmap') && !location.hash);
+      /* Start fresh loads the page again at its address with no link. Read that address
+         off the load itself: the fresh page writes the empty layout's link 400 ms on, and
+         a check of the address bar that came after it waited for a bare address that
+         never came back, until the test timed out. */
+      await Promise.all([page.waitForEvent('load'), page.locator('#startFresh').click()]);
+      expect(await page.evaluate(() => new URL(performance.getEntriesByType('navigation')[0].name).hash)).toBe('');
+      await page.waitForFunction(() => !!document.getElementById('fillmap'));
       await settle(page);
       expect(await page.evaluate(() => B().length)).toBe(0);
 
