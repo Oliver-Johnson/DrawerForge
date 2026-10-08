@@ -7139,6 +7139,7 @@ function drawMap() {
 }
 
 function onMapClick(ev) {
+  if (mapLeft) return;   // the release of a press the page let go of as it left (leave)
   const el = ev.currentTarget;
   // seed manual state from the current layout
   if (state.splitMode !== 'manual') {
@@ -8568,13 +8569,18 @@ $('tryAnyway').addEventListener('click', tryAnyway);
    from a press on the map to its release, wherever that is; a save that came due in
    between is set going again by the release (saveHeld). */
 let mapHeld = false, saveHeld = false;
+/* A press on the cut map that leave() let go of. A press let go in another window makes
+   no click, but one ended as the page is left can still be let go on the line it was
+   pressed on while the next page loads, and its click is then no cut. The next press on
+   the map is a press again. */
+let mapLeft = false;
 function rememberState() {
   if (!hashReady) return;
   clearTimeout(hashSaveT);
   addEventListener('beforeunload', dropSave);
   hashSaveT = setTimeout(() => { if (mapHeld) saveHeld = true; else saveNow(); }, 400);
 }
-$('cutmap').addEventListener('pointerdown', () => { mapHeld = true; });
+$('cutmap').addEventListener('pointerdown', () => { mapHeld = true; mapLeft = false; });
 const letGoOfMap = () => {
   if (!mapHeld) return;
   mapHeld = false;
@@ -8664,8 +8670,14 @@ function binsHref() {
    they do not replace yours there without setting it aside. Left out of the comparison,
    they did, after any edit at all.
    A change still waiting to be saved is saved now, not dropped as the page goes: Back
-   comes to this page's address, and that and the drawer must both have the change. */
+   comes to this page's address, and that and the drawer must both have the change.
+   A press still held on the cut map is let go first, as one let go in another window is
+   (letGoOfMap), and makes no cut (mapLeft): the link can be followed from the keyboard
+   while the mouse holds a grid line. Left held, letting go on the line made its click, a
+   cut, while the next page loaded, and the save that set going put another layout in the
+   address, the local save and the drawer after this one had been handed over. */
 function leave(href) {
+  if (mapHeld) { mapLeft = true; letGoOfMap(); }
   if (hashReady) saveNow();
   drawers.handoff(href.slice(href.indexOf('#') + 1),
     linkKeys(encodeDesc(descriptor()), heldLink));
