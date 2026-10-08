@@ -161,6 +161,13 @@ const ERR_EL = { errDrawerW: () => $('errDrawerW'), errDrawerD: () => $('errDraw
   errMagnet: () => $('errMagnet'), errScrew: () => $('errScrew'), errConnClr: () => $('errConnClr') };
 
 const roundMm = (n) => +n.toFixed(2);
+/* The size a half cell is quoted at: half the pitch, rounded UP to the hundredth. Checks
+   rounds the room left over DOWN when it says there is no room for one, so the two figures
+   can never come out equal. Rounded to the nearest, a half with a third decimal in it
+   could: at a 42.01 mm pitch the page said "21 mm is left across … and a half cell needs
+   21 mm", which is a contradiction in the one line meant to explain the gap. The menu and
+   the README quote the same figure, so a half cell has one size wherever the page says it. */
+const halfCellMm = () => Math.ceil(state.pitch / 2 * 100 - 1e-6) / 100;
 /* The drawer's own measurements: the fields the unit switch in panel 01 converts. Every
    other number on the page — the bed, the pitch, magnet and screw sizes — stays in
    millimetres whatever the drawer was measured in, because millimetres are how every
@@ -290,7 +297,7 @@ function readControls() {
      whatever it was. Written only when it changes, so a screen reader is not told the
      menu changed on every keystroke elsewhere. */
   const halfOpt = $('marginMode').querySelector('option[value="half"]');
-  const halfText = `Fill with half cells where they fit (${roundMm(state.pitch / 2)} mm)`;
+  const halfText = `Fill with half cells where they fit (${halfCellMm()} mm)`;
   if (halfOpt && halfOpt.textContent !== halfText) halfOpt.textContent = halfText;
   $('magRow').style.display = state.magnets ? '' : 'none';
   $('screwRow').style.display = state.screws ? '' : 'none';
@@ -473,6 +480,59 @@ function warningsList() {
   if (!heightFits())
     out.push({ err: true, t: `The plate is ${roundMm(plateHeightMm())} mm tall, more than ` +
       `your printer's ${state.bedH} mm build height — lower the extra floor, or check the bed height.` });
+  /* A key on each side of a piece one cell deep (or wide), facing each other. Their
+     housings run into each other below about 14.35 mm and the plate leaks; keysMeet in
+     core.js has the measurements and why this is refused rather than built. A moved cut,
+     a larger pitch or another joint clears it, and the joints named are the ones
+     jointsThatFit finds clear on this layout at a pitch they were measured to build clean
+     at — test/plate-audit.js builds each of them across the range it refuses. Not on a
+     grid past the caps above, which is refused already and would be thousands of housings
+     to measure on every redraw. */
+  if (!overCap()) {
+    const meet = keysMeet(state, layout);
+    if (meet.length) {
+      const ids = meet.map((m) => m.id), one = ids.length === 1;
+      const needs = Math.ceil(Math.max(...meet.map((m) => m.needs)) * 100 - 1e-6) / 100;
+      const list = (xs) => xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
+      // deep where the two seams are front and back, wide where they are left and right
+      const dirs = [...new Set(meet.map((m) => m.across))];
+      const dir = dirs.length === 1 ? dirs[0] : null;
+      const pieces = (xs, P) => `${P}iece${xs.length > 1 ? 's' : ''} ` +
+        (xs.length < 2 ? xs[0] : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+      /* Both ways at once says which piece is which. It said "Pieces A2 and B3 have one
+         cell between two seams … Move a cut so they have two", which leaves you to work
+         out which way each one is narrow. */
+      const across = (way) => meet.filter((m) => m.across === way).map((m) => m.id);
+      const is = dir ? `${pieces(ids, 'P')} ${one ? 'is' : 'are'} one cell ${dir}`
+        : `${pieces(across('deep'), 'P')} ${across('deep').length > 1 ? 'are' : 'is'} one cell deep ` +
+          `and ${pieces(across('wide'), 'p')} one cell wide`;
+      const keyName = { bowtie: 'bowtie keys', puzzlekey: 'puzzle keys', snap: 'snap clips' }[state.connector];
+      /* Each named the way it is set: the insert direction is part of the joint (an H-clip
+         from above leaks where one from beneath is watertight), and a snap clip goes in
+         from above only from inside the walls, where the page has the insert control. */
+      const JOINT = { dovetail: 'dovetail tabs', hclip: 'H-clips put in from beneath',
+                      'snap top': 'snap clips inside the walls, put in from above',
+                      wall: `${keyName} inside the walls, put in from beneath`,
+                      cup: `${keyName} inside the walls, put in from above` };
+      // on a snap plate the snap clip from above is the key in use in the wall from above
+      const ok = jointsThatFit(state, layout)
+        .map((j) => (state.connector === 'snap' && j.id === 'snap top' ? 'cup' : j.id));
+      // the key in the wall both ways is one item, not the same words twice over
+      if (ok.includes('wall') && ok.includes('cup'))
+        JOINT.wall = `${keyName} inside the walls, put in from beneath or above`;
+      const fit = ok.filter((id) => !(id === 'cup' && ok.includes('wall'))).map((id) => JOINT[id]);
+      // items that have a comma of their own are kept apart with semicolons
+      const named = fit.some((t) => t.includes(','))
+        ? (fit.length < 2 ? fit.join('') : `${fit.slice(0, -1).join('; ')}; or ${fit[fit.length - 1]}`)
+        : list(fit);
+      out.push({ err: true, t: `${is} between two seams, and at this ${state.pitch} mm pitch ` +
+        `the keys on ${one ? 'its' : 'their'} two sides are too close: their housings run into ` +
+        'each other, which leaves holes in the plate. Move a cut so ' +
+        (dir ? `${one ? 'it is' : 'they are'} two cells ${dir}` : 'each has two cells between its seams') +
+        `, use a pitch of ${needs} mm or more` +
+        (fit.length ? `, or use a joint that fits at ${state.pitch} mm: ${named}.` : '.') });
+    }
+  }
   if (layout.pieces.some(pc => pc.nx*pc.ny === 1 && !pc.hR && !pc.hB))
     out.push({ t: 'A piece is a single cell — printable, but consider moving a cut for a sturdier layout.' });
   /* One axis at a time. It fired on either and then printed both, so a drawer narrower
@@ -497,10 +557,10 @@ function warningsList() {
      whole-size bin does not fit one, and buildPiece cuts no mounting holes in them. */
   if (state.marginMode === 'half' && !tooSmall &&
       !fieldErrors.has('drawerW') && !fieldErrors.has('drawerD')) {
-    const half = roundMm(state.pitch / 2), down = (n) => Math.floor(n * 100 + 1e-6) / 100;
+    const down = (n) => Math.floor(n * 100 + 1e-6) / 100;
     if (!layout.hX && !layout.hY)
       out.push({ t: `No room for half cells: ${down(remX)} mm is left across and ` +
-        `${down(remY)} mm deep, and a half cell needs ${half} mm.` });
+        `${down(remY)} mm deep, and a half cell needs ${halfCellMm()} mm.` });
     else
       out.push({ t: 'Half cells take half-size bins only, and have no magnet or screw holes.' });
   }
@@ -1650,7 +1710,7 @@ function readmeText() {
   const [mL, mR, mF, mB] = solidMargins();
   lines.push(`Margins: L ${mL.toFixed(1)} R ${mR.toFixed(1)} F ${mF.toFixed(1)} B ${mB.toFixed(1)} mm`);
   if (layout.hX || layout.hY)
-    lines.push(`Half cells: ${halfStripText()} (${roundMm(state.pitch / 2)} mm), for ` +
+    lines.push(`Half cells: ${halfStripText()} (${halfCellMm()} mm), for ` +
                'half-size bins only; no magnet or screw holes in them');
   lines.push(`Split: ${splitName()} | Pieces: ${layout.pieces.length} in ${plural(rows, 'row band')}`);
   lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
