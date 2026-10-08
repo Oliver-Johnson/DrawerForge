@@ -235,10 +235,12 @@ test('dividers along that cut the shelf short print nothing', async ({ page }) =
   await expect(checks(page)).toContainText(
     'has dividers along it that cut its label shelf too short for its note, so its note is not printed');
   expect(await page.evaluate(() => typeKey(scratch).includes('-n')), 'the plain part').toBe(false);
+  /* Removable plates along stay in front of the label shelf, which they could not drop
+     in under: of the 3 asked for, one is built, in front of it, and the note prints. */
   await page.check('#divRemovable');
   await settle(page);
-  expect(await lead(page)).toBe(
-    'The dividers along the bin cut the label shelf too short from front to back for the note, so nothing prints.');
+  expect(await page.evaluate(() => builtDivs(scratch))).toEqual({ divX: 0, divY: 1 });
+  expect(await lead(page)).toBe('Prints 3.9 mm tall on one line, between the dividers.');
 
   /* ...but only where they are what is in the way. Half a cell deep and 3 units tall, with
      a divider across as well, the space between the ones across is too narrow for the note
@@ -247,6 +249,29 @@ test('dividers along that cut the shelf short print nothing', async ({ page }) =
   expect(await lead(page)).toBe('The dividers leave no space on the label shelf wide enough for the note, so nothing prints.');
   await H.setField(page, 'divX', 0);
   expect(await lead(page), 'without the one across it prints').toMatch(/^Prints /);
+});
+
+/* Removable plates along stay in front of the label shelf, and with a note raised on a
+   short bin that shelf is shallower: 7 mm on a 1x2x2 with a 2 mm wall where 8 is asked.
+   Counted against the plain shelf, the bin was built with 7 along and its field offered
+   no more, where 8 stand in front of the shelf it is built with and the note prints. */
+test('removable plates along come up to the shallower shelf a raised note stands on', async ({ page }) => {
+  await page.evaluate(() => startScratch());
+  await settle(page);
+  for (const [id, x] of [['v', 2], ['hUnits', 2], ['wall', 2], ['label', 8], ['divY', 8]]) await H.setField(page, id, x);
+  await page.check('#divRemovable');
+  await settle(page);
+  // no note: in front of the plain shelf, 8 mm deep at the rim
+  expect(await page.evaluate(() => [builtDivs(scratch), +document.getElementById('divY').max])).toEqual([{ divX: 0, divY: 7 }, 7]);
+  await raise(page);
+  await note(page, 'M3');
+  await H.setField(page, 'divY', 8);
+  expect(await page.evaluate(() => [scratch.labelMode, scratch.label, builtDivs(scratch), +document.getElementById('divY').max]))
+    .toEqual([1, 8, { divX: 0, divY: 8 }, 8]);
+  expect(await lead(page)).toMatch(/^Prints /);
+  expect(await page.evaluate(() => { const s = shelfNote(binCfg(scratch)); return s.fit ? +s.depth.toFixed(2) : s.why; }),
+    'the shelf it is built with').toBe(7);
+  await expect(checks(page)).not.toContainText('removable dividers');
 });
 // a shelf 6 mm deep is shallow by itself: the letters print, under 3 mm, and Checks says so
 test('letters under 3 mm on a shallow shelf are named in Checks', async ({ page }) => {
