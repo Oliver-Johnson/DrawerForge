@@ -3498,10 +3498,13 @@ function refresh() {
   $('gridSummary').textContent =
     `Grid: ${g.nx} × ${g.ny} cells` +
     (inch ? ` (${gw} × ${gd} mm, ${FIELDS.inchText(gw)} × ${FIELDS.inchText(gd)} in)` : '') +
-    // with no room there is no tallest bin either: capUnits is never under 1
+    /* With no room there is no tallest bin either, nor with room under a 1-unit bin and
+       its lip: capUnits is never under 1, and it said "tallest single bin 1 units" there
+       while Checks said no 1-unit bin fits. */
     (noRoomAbove(g) ? ` · no room above the baseplate, as ${whyNoRoom(also)}` :
-    ` · ${g.avail.toFixed(1)} mm${also(g.avail)} above the baseplate · ` +
-    `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`);
+    ` · ${g.avail.toFixed(1)} mm${also(g.avail)} above the baseplate · ` + (unitsUnder(g.avail) < 1
+      ? `too little for even a 1-unit bin (${SPEC.unitH} mm${also(SPEC.unitH)} + lip)`
+      : `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`));
   // and the half cell under the size fields, which said 21 mm whatever the drawer was in
   $('halfCellLen').textContent = `${SPEC.pitch / 2} mm${also(SPEC.pitch / 2)}`;
   const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);

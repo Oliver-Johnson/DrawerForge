@@ -189,6 +189,17 @@ test('a baseplate taller than the drawer leaves no room, said in words', async (
     expect(text, 'no room is not a negative one').not.toMatch(/-\d+(\.\d+)? mm/);
 });
 
+/* With room above the baseplate but less than a 1-unit bin and its lip take, the panel
+   still named a tallest bin, "tallest single bin 1 units (7 mm + lip), limited by the
+   drawer", while Checks said that no 1-unit bin fits. It says there is too little. */
+test('room above the baseplate too short for a 1-unit bin is said to be too little', async ({ page }) => {
+  await page.goto(H.BINS_URL + '#w=230&d=230&dh=10&ph=4.25&bl=0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15');
+  await page.waitForFunction(() => !!document.getElementById('fillmap') && B().length === 1);
+  await expect(page.locator('#warnings')).toContainText('There is no room above the baseplate for even a 1-unit bin.');
+  await expect(page.locator('#gridSummary'))
+    .toHaveText('Grid: 5 × 5 cells · 5.8 mm above the baseplate · too little for even a 1-unit bin (7 mm + lip)');
+});
+
 /* The layout travels in the URL hash; a carved shape has to survive that like
    anything else, or sharing a link quietly changes what people print. */
 test('a carved layout survives a round trip through the url', async ({ page }) => {
