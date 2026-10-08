@@ -2174,10 +2174,13 @@ function healCsgSeams(polys) {
      convex), on the triangles polysToTriangles will make. Counted with the rest. */
   if (mended.length) {
     const tri = new Map();   // edge -> the unit normals of the triangles on it
+    // the corners those edges run between, so a face with none of them is passed over
+    const near = new Uint8Array(verts.length);
     const on = (a, b, u) => {
       if (a < 0 || b < 0) return;   // a spoke to a flat face's average is in no other face
       const k = a < b ? a * EKEY + b : b * EKEY + a, l = tri.get(k);
       if (l) l.push(u); else tri.set(k, [u]);
+      near[a] = near[b] = 1;
     };
     for (const { ids, vs } of mended)
       for (let i = 2; i < ids.length; i++) {
@@ -2190,7 +2193,9 @@ function healCsgSeams(polys) {
       if (dirty[fi]) continue;
       const f = faces[fi];
       for (let i = 0; i < f.length; i++) {
-        const a = f[i], b = f[(i + 1) % f.length], l = tri.get(a < b ? a * EKEY + b : b * EKEY + a);
+        const a = f[i], b = f[(i + 1) % f.length];
+        if (!near[a] || !near[b]) continue;
+        const l = tri.get(a < b ? a * EKEY + b : b * EKEY + a);
         if (l) l.push(planes[fi].n);
       }
     }
@@ -3906,15 +3911,24 @@ function mountLimits(cfg) {
   const bosses = cfg.baseMode === 'bosses';
   const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
   const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // the fields step in tenths
-  const room = cfg.magnetSide === 'top' ? top : under;
+  /* A cell's four sites are 2 × holeOffset apart, 26 mm, so past a pitch of about 50 mm
+     the room above lets a cut reach the one beside it before it reaches anything else:
+     two 1-inch magnet pockets met at a 55 mm pitch and left 52 open edges. Each cut keeps
+     half a MOUNT_WALL to the one beside it, which stops a pocket's corners at 12.5 mm. */
+  const beside = off - MOUNT_WALL / 2;
+  const fit = (r) => Math.min(r, beside);
+  const room = fit(cfg.magnetSide === 'top' ? top : under);
   return {
     // a magnet pocket's corners are 0.1 mm over the magnet's radius, or out to where its
     // flats stand on that radius if that is further (fastenerCutter)
     magnetD: r10(2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14))),
-    screwHoleD: r10(2 * top),
-    screwHeadD: r10(2 * under),
+    // a screw's bores have their corners on its size
+    screwHoleD: r10(2 * fit(top)),
+    screwHeadD: r10(2 * fit(under)),
     // in the solid floor the pad grows to suit, so only a boss caps the depth
     depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
+    // which of the sizes the cut beside it stops, rather than the floor, cell or boss
+    beside: { magnetD: room === beside, screwHoleD: top >= beside, screwHeadD: under >= beside },
   };
 }
 
@@ -4409,12 +4423,23 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * has nothing turned over and shares no edge is kept; otherwise the first cut stands.
    * The same goes for the top-insert pass below. Edges are compared as checkManifold
    * counts them, the triangles polysToTriangles makes with corners to a thousandth, and
-   * only inside the band, so a cell with nothing there costs a pass over its polygons. */
+   * only inside the band, so a cell with nothing there costs a pass over its polygons.
+   *
+   * A corner is one number, its thousandths packed: x and y from the band's corner, z
+   * offset by 2^21 (2 m either way, past any plate). Text for each corner cost a jointed
+   * 42 mm plate a millisecond or more. A band too big for x and y to pack exactly in what
+   * a double holds, over about 46 mm square, which no band between two cells comes near,
+   * keys its corners as text instead; either way two corners are the same key exactly
+   * when their thousandths are. `each` is handed every edge in the band, lower key first,
+   * and stops the pass by returning true. */
   const jointCells = [];
-  const bandEdges = (polys, b) => {
-    const k = (v) => Math.round(v[0] * 1000) + ',' + Math.round(v[1] * 1000) + ',' + Math.round(v[2] * 1000);
+  const bandEdges = (polys, b, each) => {
+    const X0 = Math.round(b[0] * 1000), Y0 = Math.round(b[1] * 1000), NY = Math.round(b[3] * 1000) - Y0 + 1;
+    const k = (Math.round(b[2] * 1000) - X0 + 1) * NY < 2 ** 31
+      ? (v) => ((Math.round(v[0] * 1000) - X0) * NY + Math.round(v[1] * 1000) - Y0) * 2 ** 22 +
+               Math.round(v[2] * 1000) + 2 ** 21
+      : (v) => Math.round(v[0] * 1000) + ',' + Math.round(v[1] * 1000) + ',' + Math.round(v[2] * 1000);
     const inBand = (v) => v[0] >= b[0] && v[0] <= b[2] && v[1] >= b[1] && v[1] <= b[3];
-    const out = new Set();
     for (const p of polys) {
       const vs = p.verts;
       for (let i = 2; i < vs.length; i++) {
@@ -4423,20 +4448,27 @@ function buildPiece(cfg, layout, piece, onStatus) {
           const a = t[e], c = t[(e + 1) % 3];
           if (!inBand(a) || !inBand(c)) continue;
           const ka = k(a), kc = k(c);
-          out.add(ka < kc ? ka + '|' + kc : kc + '|' + ka);
+          if (ka < kc ? each(ka, kc) : each(kc, ka)) return;
         }
       }
     }
-    return out;
   };
   // does this shell share an edge with built shell c, inside the band where the two overlap?
   const touchesBuilt = (polys, own, c) => {
     const b = [Math.max(own[0], c.box[0]) - 1e-3, Math.max(own[1], c.box[1]) - 1e-3,
                Math.min(own[2], c.box[2]) + 1e-3, Math.min(own[3], c.box[3]) + 1e-3];
-    const theirs = bandEdges(c.polys || shells[c.i], b);
+    const theirs = new Map();   // lower corner -> the higher corners it has an edge to
+    bandEdges(c.polys || shells[c.i], b, (lo, hi) => {
+      const l = theirs.get(lo);
+      if (l) l.push(hi); else theirs.set(lo, [hi]);
+    });
     if (!theirs.size) return false;
-    for (const e of bandEdges(polys, b)) if (theirs.has(e)) return true;
-    return false;
+    let shared = false;
+    bandEdges(polys, b, (lo, hi) => {
+      const l = theirs.get(lo);
+      return (shared = !!l && l.includes(hi));
+    });
+    return shared;
   };
   const TOUCH_TRIES = [(solid, cut) => oneByOne(solid, cut),
                        (solid, cut) => csgSubtract(solid, cut.slice().reverse()),
@@ -4621,11 +4653,14 @@ function buildPiece(cfg, layout, piece, onStatus) {
            a cutter's own corner, before it happens; none of the 3,893 is open now).
            healCsgSeams says when its result is still open, and then the same cut is
            taken again: the cutters in the other order, the cell's faces in the other
-           order, and last the cutters turned a 28th of a turn about their axes.
-           The first two are the same solids handed to the BSP in another order, which
-           builds other trees and so other splits; the last is the same pocket with the
-           corners of its 14-sided bores where their flats were, the same circle inside
-           each for the magnet or screw head to sit against. The first closed result is
+           order, the cutters turned a 28th of a turn about their axes, moved 1.7 microns
+           one way along the diagonal and then the other (NUDGE, as cutAgain does for a
+           joint), and last each site's cutter on its own. The reordered ones are the same
+           solids handed to the BSP in another order, which builds other trees and so
+           other splits; the turned one is the same pocket with the corners of its 14-sided
+           bores where their flats were, the same circle inside each for the magnet or
+           screw head to sit against; a nudge moves every plane off the crossing that lost
+           the sliver. The first closed result is
            kept; a cell that comes out closed first time, which is nearly every one, is
            built exactly as before. A try that throws (healCsgSeams' T-junction pass limit,
            which the turned cutters reach on a few engine-only cells) is passed over and
@@ -4637,15 +4672,21 @@ function buildPiece(cfg, layout, piece, onStatus) {
            has. Over 8,900 random mount designs (page designs at 34 to 50 mm, engine-only
            ones at 20 to 34 mm with the sites moved in, and small ones), 357 cells were cut
            again, open by 1 to 23, and 157 of them closed; none of the 10,730 cells open by
-           more than 24 closed on any try, and 32 of the 3,367 page designs with a solid
-           floor are left open, as they are on main. The turned cutters close most (140); they
-           are the only try that closed cells nothing else did (56). The cell's faces and
-           the cutters both reversed closed 101, but one of the first two had closed each
-           of those already, so that try is not taken. */
+           more than 24 closed on any try. The turned cutters close most (140); of those
+           three they are the only one that closed cells nothing else did (56). The cell's
+           faces and the cutters both reversed closed 101, but one of the first two had
+           closed each of those already, so that try is not taken. The nudges and the one
+           site at a time came after: of 3,367 random page designs with a solid floor, the
+           three tries left 24 open and these leave 16, none worse; and from 50 to 60 mm,
+           magnets and screws from 15 mm up, they closed six of the nine left open. */
         if (next.open && next.open <= 24) {
+          const n4 = cut.length / 4;   // fasteners() lays the four sites' cutters one after another
           const tries = [() => csgSubtract(region, cut.slice().reverse()),
                          () => csgSubtract(region.slice().reverse(), cut),
-                         () => csgSubtract(region, fasteners(turnedFastener()))];
+                         () => csgSubtract(region, fasteners(turnedFastener())),
+                         () => csgSubtract(region, movePolys(cut, NUDGE, NUDGE)),
+                         () => csgSubtract(region, movePolys(cut, -NUDGE, -NUDGE)),
+                         () => [0, 1, 2, 3].reduce((r, q) => csgSubtract(r, cut.slice(q * n4, (q + 1) * n4)), region)];
           for (const t of tries) {
             let again;
             try { again = t(); } catch (e) { continue; }   // the first cut stands
@@ -4655,7 +4696,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
         return next;
       };
       /* The cell's cuts in turn. `alt` takes the joint's another way, and a result that is
-         open or has a face turned over fails the whole try (see touchesBuilt). */
+         open or has a face turned over fails the whole try (see touchesBuilt). The mounting
+         pockets come last and are cut again when they come out open, as on the first cut,
+         so a try can still end open there; one that ends more open or with more turned over
+         than the cut it would replace is not taken (`worse`). */
       const base = region;
       const cutCell = (alt) => {
         let r = base;
@@ -4667,6 +4711,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
         }
         return r;
       };
+      const worse = (a, b) => (a.open || 0) > (b.open || 0) || (a.turned || 0) > (b.turned || 0);
       region = cutCell(null);
       if (cuts.notch.length || cuts.key.length || cuts.puzzle.length) {
         const own = [x0, y0, x1, y1];
@@ -4676,7 +4721,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
         for (const alt of touching.length ? TOUCH_TRIES : []) {
           let again;
           try { again = cutCell(alt); } catch (e) { continue; }
-          if (again && !beside.some((c) => touchesBuilt(again, own, c))) { region = again; touching = []; break; }
+          if (again && !worse(again, region) && !beside.some((c) => touchesBuilt(again, own, c))) {
+            region = again; touching = []; break;
+          }
         }
         // or the cell it touches, cut again instead, if that touches nothing else
         const mine = { box: own, polys: region };
@@ -4686,7 +4733,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
           for (const alt of TOUCH_TRIES) {
             let again;
             try { again = c.recut(alt); } catch (e) { continue; }
-            if (again && !touchesBuilt(again, c.box, mine) &&
+            if (again && !worse(again, shells[c.i]) && !touchesBuilt(again, c.box, mine) &&
                 !others.some((d) => touchesBuilt(again, c.box, d))) { shells[c.i] = again; break; }
           }
         }
