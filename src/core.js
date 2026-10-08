@@ -3064,11 +3064,14 @@ function buildPiece(cfg, layout, piece, onStatus) {
            a cutter's own corner, before it happens; none of the 3,893 is open now).
            healCsgSeams says when its result is still open, and then the same cut is
            taken again: the cutters in the other order, the cell's faces in the other
-           order, and last the cutters turned a 28th of a turn about their axes.
-           The first two are the same solids handed to the BSP in another order, which
-           builds other trees and so other splits; the last is the same pocket with the
-           corners of its 14-sided bores where their flats were, the same circle inside
-           each for the magnet or screw head to sit against. The first closed result is
+           order, the cutters turned a 28th of a turn about their axes, moved 1.7 microns
+           one way along the diagonal and then the other (NUDGE, as cutAgain does for a
+           joint), and last each site's cutter on its own. The reordered ones are the same
+           solids handed to the BSP in another order, which builds other trees and so
+           other splits; the turned one is the same pocket with the corners of its 14-sided
+           bores where their flats were, the same circle inside each for the magnet or
+           screw head to sit against; a nudge moves every plane off the crossing that lost
+           the sliver. The first closed result is
            kept; a cell that comes out closed first time, which is nearly every one, is
            built exactly as before. A try that throws (healCsgSeams' T-junction pass limit,
            which the turned cutters reach on a few engine-only cells) is passed over and
@@ -3080,15 +3083,21 @@ function buildPiece(cfg, layout, piece, onStatus) {
            has. Over 8,900 random mount designs (page designs at 34 to 50 mm, engine-only
            ones at 20 to 34 mm with the sites moved in, and small ones), 357 cells were cut
            again, open by 1 to 23, and 157 of them closed; none of the 10,730 cells open by
-           more than 24 closed on any try, and 32 of the 3,367 page designs with a solid
-           floor are left open, as they are on main. The turned cutters close most (140); they
-           are the only try that closed cells nothing else did (56). The cell's faces and
-           the cutters both reversed closed 101, but one of the first two had closed each
-           of those already, so that try is not taken. */
+           more than 24 closed on any try. The turned cutters close most (140); of those
+           three they are the only one that closed cells nothing else did (56). The cell's
+           faces and the cutters both reversed closed 101, but one of the first two had
+           closed each of those already, so that try is not taken. The nudges and the one
+           site at a time came after: of 3,367 random page designs with a solid floor, the
+           three tries left 24 open and these leave 16, none worse; and from 50 to 60 mm,
+           magnets and screws from 15 mm up, they closed six of the nine left open. */
         if (next.open && next.open <= 24) {
+          const n4 = cut.length / 4;   // fasteners() lays the four sites' cutters one after another
           const tries = [() => csgSubtract(region, cut.slice().reverse()),
                          () => csgSubtract(region.slice().reverse(), cut),
-                         () => csgSubtract(region, fasteners(turnedFastener()))];
+                         () => csgSubtract(region, fasteners(turnedFastener())),
+                         () => csgSubtract(region, movePolys(cut, NUDGE, NUDGE)),
+                         () => csgSubtract(region, movePolys(cut, -NUDGE, -NUDGE)),
+                         () => [0, 1, 2, 3].reduce((r, q) => csgSubtract(r, cut.slice(q * n4, (q + 1) * n4)), region)];
           for (const t of tries) {
             let again;
             try { again = t(); } catch (e) { continue; }   // the first cut stands

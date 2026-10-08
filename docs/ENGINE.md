@@ -652,7 +652,8 @@ currently installed):
   `healCsgSeams`' tolerance, and the same sliver goes. So `healCsgSeams` says when its
   result is still open (`.open` on what it returns), and `buildPiece` cuts that cell's
   pockets again: the cutters in the other order, the cell's faces in the other order,
-  and then the cutters turned a 28th of a turn. A cell that closes first time,
+  the cutters turned a 28th of a turn, moved 1.7 microns along the diagonal one way and
+  then the other, and last one site at a time. A cell that closes first time,
   nearly every one, is built exactly as before. Over 3,893 random mount designs (magnets,
   screws or both, from below or above, 42 or 50 mm, one to three cells each way, random
   margins and corners) none is left open, where main leaves 30; 8 cells were cut again,
@@ -660,12 +661,14 @@ currently installed):
   again (six at each of four pockets). Cells cut again have been open by 1 to 24 edges,
   and cells open by 21 and 24 have closed; none open by more than 24 has. Over a broader
   8,900 random mount designs, 357 cells were cut again (open by 1 to 23) and 157 closed,
-  none of 10,730 cells open by more than 24 closed on any try, and 32 of the 3,367 page
-  designs with a solid floor stay open, as on main. Only the turned cutters closed cells
-  nothing else did (56 of the 157). Both orders reversed at once, once a fourth try,
-  closed none that one of the first two had not, and is no longer taken. A try
-  that throws (the turned cutters there reach `healCsgSeams`' T-junction pass limit) is
-  passed over and the first cut stands, where it used to fail the whole build.
+  and none of 10,730 cells open by more than 24 closed on any try. Of those tries only
+  the turned cutters closed cells nothing else did (56 of the 157). Both orders reversed
+  at once, once a fourth try, closed none that one of the first two had not, and is no
+  longer taken. The nudges and the one site at a time came later: of 3,367 random page
+  designs with a solid floor, the first three tries left 24 open and all of them leave
+  16, none worse. A try that throws (the turned cutters there reach `healCsgSeams`'
+  T-junction pass limit) is passed over and the first cut stands, where it used to fail
+  the whole build.
 - **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
   straight walls run only 2.5 mm either side of a cell's middle at 13.5 mm, so every
   housing, notch and clip pocket crosses its corner arcs and cones, at points that move
