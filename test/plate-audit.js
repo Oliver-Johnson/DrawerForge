@@ -97,20 +97,17 @@ const CASES = [
     opens: true },
   { name: '9x9 bowtie wall top', drawerW: 400, drawerD: 400, connector: 'bowtie',
     keyType: 'bowtie', keyMount: 'wall', keyInsert: 'top', opens: true },
-  /* Watertight, and the only key housing in the file that still folds. It is also the
-     only one whose cutter crosses the socket's CORNER cone: a key site sits where four
-     cells meet, the wall mount puts the pocket in the rim rather than in a floor pad, and
-     top insert makes it run from below the pocket floor up past the plate top. So a lobe
-     arc and a cone arc cross at a shallow angle and csgSubtract dices the crossing into
-     slivers a few microns wide, of which healCsgSeams folds a handful — the class
-     ENGINE.md records under the puzzle notch ceiling, and the same one the puzzle fit
-     coupon is quarantined for further down. 14 coplanar folds, 1e-4 mm² each, on 2 of the
-     4 pieces at arcSegs 12; ZERO at the arcSegs 6 the tool ships. Chasing it means either
-     retuning healCsgSeams, which is load-bearing for everything else, or moving the lobe,
-     which moves the joint. */
+  /* Watertight, and until unfoldFinished the only key housing in the file that still
+     folded. It is also the only one whose cutter crosses the socket's CORNER cone: a key
+     site sits where four cells meet, the wall mount puts the pocket in the rim rather than
+     in a floor pad, and top insert makes it run from below the pocket floor up past the
+     plate top. So a lobe arc and a cone arc cross at a shallow angle and csgSubtract dices
+     the crossing into slivers a few microns wide, which fanned as they come stand on edge
+     and fold: 12 coplanar folds, 1e-4 mm² each, on 3 of the 4 pieces at arcSegs 12 (14 on
+     main), none at the arcSegs 6 the tool ships. It was quarantined for them; laid out on
+     the finished piece they are gone, and the row now holds it clean. */
   { name: '9x9 puzzlekey wall top', drawerW: 400, drawerD: 400, connector: 'puzzlekey',
-    keyType: 'puzzlekey', keyMount: 'wall', keyInsert: 'top', opens: true,
-    oriQuarantine: 'lobe arc crosses the socket corner cone' },
+    keyType: 'puzzlekey', keyMount: 'wall', keyInsert: 'top', opens: true },
   { name: '9x9 snap wall top', drawerW: 400, drawerD: 400, connector: 'snap',
     keyType: 'snap', keyMount: 'wall', keyInsert: 'top', opens: true },
   /* The same housing over a floor pad rather than a wall, so the pocket sits 2.8 mm
@@ -177,35 +174,173 @@ const CASES = [
   { name: 'half magnets above', ...HALF_SMALL, magnets: true, magnetSide: 'top' },
   { name: 'half extra floor', ...HALF_SMALL, bottomPad: 2 },
 
+  /* Quarantined until now. The lobe's far pole points along the seam, the boundary
+     between two cell regions runs down that same line, and both regions cut the same
+     notch — so both carried the apex vertex and the vertical edge either side of it: one
+     edge per notch used 4 times, two closed shells sharing an edge. It was left because
+     every fix tried cost joint geometry: sliding the joint 0.09 mm along the seam landed
+     the lobe on the socket's flat wall and opened five real edges, and reshaping the lobe
+     moved the notch's reach, which the fit section at the foot of this file holds to 1e-9.
+
+     Nothing about the notch has to move: the region does. The one past the pole now
+     starts half a BLOAT beyond it rather than a BLOAT short, so the pole is in one region
+     only (buildPiece). The notch, its reach and the plate's shape are what they were.
+
+     It mattered beyond these cases because the count was luck. Where the two regions
+     happened to split their copies of the apex edge at different heights the four uses
+     landed on two edges and read clean, so anything that changed a region's outline —
+     a margin's cut moving, a floor cap triangulated another way — turned a clean piece
+     into a leaking one and back. Both smoothnesses, and half cells. */
+  { name: '9x9 puzzle', drawerW: 400, drawerD: 400, connector: 'puzzle' },
+  { name: '9x9 puzzle @6', drawerW: 400, drawerD: 400, connector: 'puzzle', arcSegs: 6 },
+  { name: 'half split puzzle', ...HALF_SPLIT, connector: 'puzzle' },
+  /* And with margins of four widths by a rounded corner, at the page's arc smoothness:
+     the margins' cuts touching shells on main, and once they moved, a pole edge on two
+     pieces where main's luck had held on one. */
+  { name: 'puzzle, four margins', pitch: 20, drawerW: 80.25, drawerD: 60.55, mLeft: 0.05,
+    mRight: 0.2, mFront: 0.4, mBack: 0.15, connector: 'puzzle', outerRadius: 4,
+    bedW: 50, bedD: 50, arcSegs: 6 },
+  /* Watertight, and folded until healCsgSeams fanned a dented face from a point that sees
+     all of it. Where it puts a vertex back into an edge it sits a thousandth or two off,
+     the face it mends comes out with a dent too small to see, and the fan from the face's
+     first corner, or from its average, turned a sliver across the dent the wrong way:
+     three coplanar folds on a piece, where main had edges used four times or nothing
+     wrong at all. In the bed face by a puzzle notch on two pieces of the first two, which
+     were pinned here as known; on one of the third, a 55 mm bed's split; and in the side
+     of a tab on one of the fourth, which has four margins. It is not the puzzle's: the
+     dent comes wherever the weld has to reach, the bottom face by a mounting pocket
+     among them (see the mounting cases below). Each is now held to no fold on any piece.
+     Over 1,200 random puzzle designs, 4,686 pieces, 143 pieces folded before and 2 do
+     now, both on one design, with the one fold each that they have on main. */
+  { name: 'puzzle 30 rows', pitch: 30, drawerW: 90, drawerD: 90, splitMode: 'manual',
+    rowCuts: [1, 2], colCuts: [[], [], []], connector: 'puzzle', outerRadius: 4, arcSegs: 6,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.2 } },
+  { name: 'puzzle 20 quads', pitch: 20, drawerW: 80, drawerD: 80, splitMode: 'manual',
+    rowCuts: [2], colCuts: [[2], [2]], connector: 'puzzle', outerRadius: 0, arcSegs: 6,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 } },
+  { name: 'puzzle 22, 55 bed', pitch: 22, drawerW: 88.3, drawerD: 66.3, marginMode: 'auto',
+    bedW: 55, bedD: 55, splitMode: 'plates', connector: 'puzzle', outerRadius: 4, arcSegs: 6,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.1 } },
+  { name: 'puzzle 18, a tab side', pitch: 18, drawerW: 54.7, drawerD: 55.3, mLeft: 0.2,
+    mRight: 0.5, mFront: 0.3, mBack: 1, splitMode: 'manual', rowCuts: [1, 2],
+    colCuts: [[], [], []], connector: 'puzzle', outerRadius: 4, arcSegs: 6,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.1 } },
+  /* A skeleton plate whose far cuts moved half a thousandth, clear of a vertex 0.0995 mm
+     from them, so the strip its cells keep solid where the margin was ended a hair from
+     the margin's own region: four edges each used four times. A cut that moves now moves
+     at least a hundredth (clearCut in buildPiece). */
+  { name: 'skeleton, cut a hair', drawerW: 85.25, drawerD: 85.25, mLeft: 0.417,
+    mRight: 0.833, mFront: 0.417, mBack: 0.833, outerRadius: 6, connector: 'none',
+    plateStyle: 'skeleton', arcSegs: 6 },
+  /* The corner of what a skeleton cell hollows a thousandth or two inside the corner arc,
+     the arc's next vertex that far past it: a needle of no width in the strip's underside
+     and 12 open edges in the bed face of each. See openSplit, and the section on the
+     hollow's corner further down, which sweeps the family. */
+  { name: 'skeleton, needle 3.08', drawerW: 84.2, drawerD: 88.16, mLeft: 0.1, mRight: 0.1,
+    mFront: 2.08, mBack: 2.08, outerRadius: 3.08, connector: 'none', plateStyle: 'skeleton',
+    arcSegs: 6 },
+  { name: 'skeleton, needle 4', drawerW: 84.29, drawerD: 89.43, mLeft: 0.145, mRight: 0.145,
+    mFront: 2.715, mBack: 2.715, outerRadius: 4, connector: 'none', plateStyle: 'skeleton',
+    arcSegs: 6 },
+
+  /* A spoke of a cell's bottom cap a few thousandths from a corner of a mounting cutter.
+     The cutter's two sides there cross the spoke a couple of thousandths apart,
+     healCsgSeams takes the two crossings for one point, and the sliver of floor between
+     them and the corner goes with it: three or six open edges in the bottom face at the
+     pocket's rim. One cell with 6 mm magnets and 4 mm corners had it on main, at every
+     arc smoothness, and was quarantined for it as near-coincident outlines in the cap,
+     past healCsgSeams' tolerance; this is the shape of the bin fit test tile. A margin
+     of 0.25 or 0.08 mm joined to the cell beside the corner (clearCut) moved the fan's
+     centre onto two more. The fan now moves off any spoke that close (fanCentre). */
+  { name: '1x1 magnets', drawerW: 42, drawerD: 42, magnets: true },
+  { name: 'magnets, joined margins', drawerW: 84.75, drawerD: 84.75, mLeft: 0.25, mRight: 0.5,
+    mFront: 0.25, mBack: 0.5, outerRadius: 4, magnets: true, connector: 'none', arcSegs: 6 },
+  { name: 'screws, joined margins', drawerW: 84.24, drawerD: 84.24, mLeft: 0.08, mRight: 0.16,
+    mFront: 0.08, mBack: 0.16, outerRadius: 4.88, magnets: true, screws: true, connector: 'none',
+    arcSegs: 6 },
+  /* And where fanCentre does not reach. Two sides of a cutter, carried across the cell
+     as planes by the BSP, cross a spoke of the cap 0.031 mm apart, or the pocket's
+     ceiling is welded a hair past healCsgSeams' tolerance, and the same sliver goes:
+     three or six open edges at the rim of a pocket, on three plates that were closed on
+     main until joined margins moved their cuts. Moving the fan's centre closed the first
+     at every offset tried, the second at some and the third at none, so buildPiece now
+     cuts a cell's pockets again when healCsgSeams says they came out open (see the
+     fastener cut there). The fourth was closed and folded: three coplanar folds where a
+     weld dented the bottom face and the fan from its first corner turned a sliver back
+     (see the dented faces in healCsgSeams). */
+  { name: 'magnets 50, joined', pitch: 50, drawerW: 50.47, drawerD: 102.19, mLeft: 0,
+    mRight: 0.47, mFront: 1.13, mBack: 1.06, outerRadius: 6, magnets: true, connector: 'none',
+    arcSegs: 6 },
+  { name: 'from above 50, joined', pitch: 50, drawerW: 150.66, drawerD: 152.11, mLeft: 0.66,
+    mRight: 0, mFront: 0.64, mBack: 1.47, outerRadius: 3, magnets: true, magnetSide: 'top',
+    screws: true, connector: 'none', arcSegs: 6 },
+  { name: '10 mm magnets, joined', drawerW: 42.64, drawerD: 126.99, mLeft: 0.64, mRight: 0,
+    mFront: 0.19, mBack: 0.8, outerRadius: 5.75, magnets: true, magnetD: 10, connector: 'none',
+    arcSegs: 6 },
+  { name: 'screws, two sides joined', drawerW: 84.59, drawerD: 84.58, mLeft: 0.59, mRight: 0,
+    mFront: 0.58, mBack: 0, outerRadius: 6, magnets: true, screws: true, connector: 'none',
+    arcSegs: 6 },
+  /* A dented face with no point that sees all of it: a dent between two straight runs, in
+     the bottom face beside a screw hole. Only the ears lay it right; without them it is
+     three coplanar folds (clean on main). */
+  { name: 'ears, a dent between runs', pitch: 50, drawerW: 100, drawerD: 102, mLeft: 0,
+    mRight: 0, mFront: 0.63, mBack: 1.37, outerRadius: 1.31, magnets: true, magnetSide: 'top',
+    screws: true, connector: 'none', arcSegs: 6 },
+  /* And three that laying a dented face out again made worse, each through the engine alone:
+     the mounting sites 2 or 3.5 mm from a cell's centre (holeOffset, which the page does not
+     set) with pockets small enough to fit there, at the small pitches. On the socket's
+     sloped wall, a corner's fan stood triangles in the plane of an H-clip pocket's wall and
+     folded them against it (four coplanar folds on each of two pieces that are clean on
+     main); where a bowtie's cup cuts that wall, a corner's fan and then ears used two edges
+     four times; ears turned a 3-corner sliver the weld had turned over back to face the
+     plane, so its edges ran the same way as its neighbours' (three on each of two pieces).
+     healCsgSeams now lays a face out again only where its plain fan lies back to back with
+     it, and only in a layout whose every triangle lies within 60 degrees of the face, keeps
+     its winding and repeats no edge. The bowtie keeps folds where main has them by the
+     cup, fewer (6 and 3 against main's 10 and 5). The puzzle tabs keep three on each of
+     the two pieces, at the sliver itself, which faces the wrong way however it is laid
+     out; main builds those two clean, because its puzzle notch regions are cut
+     differently (the pole moved into one region, above). */
+  { name: 'H-clip above, holes in', pitch: 14.3, drawerW: 3 * 14.3, drawerD: 3 * 14.3,
+    bedW: 400, bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], []],
+    connector: 'hclip', keyType: 'bowtie', keyInsert: 'top', magnets: true, magnetSide: 'top',
+    holeOffset: 2, magnetD: 2.4, hclip: { ...G.DEFAULTS.hclip, clr: 0.08 }, arcSegs: 6 },
+  { name: 'bowtie cup, holes in', pitch: 14.5, drawerW: 3 * 14.5, drawerD: 3 * 14.5,
+    bedW: 400, bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], []],
+    connector: 'bowtie', keyType: 'bowtie', keyMount: 'wall', keyInsert: 'top', magnets: true,
+    magnetSide: 'top', holeOffset: 2, magnetD: 2.5, key: { ...G.DEFAULTS.key, clr: 0.1 },
+    arcSegs: 6, oriQuarantine: 'slivers by the cup, folded as on main, fewer',
+    oriWorst: { A2: 6, A3: 3 } },
+  { name: 'puzzle 20, holes in', pitch: 20, drawerW: 60, drawerD: 100, bedW: 400, bedD: 400,
+    splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]], connector: 'puzzle',
+    keyType: 'bowtie', magnets: true, magnetSide: 'top', holeOffset: 3.5, magnetD: 5.1,
+    puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 }, tab: { ...G.DEFAULTS.tab, clr: 0.3 }, arcSegs: 6,
+    oriQuarantine: 'a 3-corner sliver the weld turned over', oriWorst: { B3: 3, C3: 3 } },
+  /* An H-clip from above with its clearance at the top of the field, at a pitch Checks
+     can offer it at: the side of the clip's pocket fans into slivers standing on edge,
+     folded against the faces beside them (eight coplanar folds on main). Laying out only
+     the faces whose fan folds onto itself, healCsgSeams leaves three on each of two pieces;
+     unfoldFinished lays them out on the finished piece. */
+  { name: 'H-clip above, clearance at the top', pitch: 14.3, drawerW: 3 * 14.3,
+    drawerD: 3 * 14.3, bedW: 400, bedD: 400, splitMode: 'manual', rowCuts: [1, 2],
+    colCuts: [[], [], []], connector: 'hclip', keyInsert: 'top', arcSegs: 6,
+    tab: { ...G.DEFAULTS.tab, clr: 0.98 }, puzzle: { ...G.DEFAULTS.puzzle, clr: 0.98 },
+    key: { ...G.DEFAULTS.key, clr: 0.93 }, hclip: { ...G.DEFAULTS.hclip, clr: 0.93 } },
+  /* A cell whose pockets come out open is cut again (see the fastener cut in buildPiece),
+     and here the turned cutters' cut throws: healCsgSeams' T-junction pass limit. Taken
+     unguarded, that one try made the whole plate fail to build, where main builds it open;
+     now the first cut stands. Engine-only again (the sites 2.5 mm in, at 15.5 mm), and
+     open by 3 to 9 edges a piece, where main has 9 and folds on every piece. */
+  { name: 'a retry that throws', pitch: 15.5, drawerW: 3 * 15.5, drawerD: 5 * 15.5, bedW: 400,
+    bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]],
+    connector: 'snap', keyType: 'snap', keyInsert: 'top', magnets: true, screws: true,
+    holeOffset: 2.5, magnetD: 3.3, screwHeadD: 3.3, screwHoleD: 1.7, arcSegs: 6,
+    tab: { ...G.DEFAULTS.tab, clr: 0.3 }, puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 },
+    key: { ...G.DEFAULTS.key, clr: 0.25 }, hclip: { ...G.DEFAULTS.hclip, clr: 0.25 },
+    quarantine: 'pocket slivers with the sites moved in, open as on main', worst: 9 },
+
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 
-  /* The lobe's far pole points along the seam, the boundary between two cell regions runs
-     down that same line, and both regions cut the same notch — so both carry the apex
-     vertex and the vertical edge either side of it. One edge per notch, always used 4,
-     never once: two closed shells sharing an edge, exactly like the bosses below.
-
-     It is here rather than fixed because every fix costs joint geometry. Sliding the joint
-     0.09 mm along the seam to get the apex out of the overlap band does clear it — and
-     lands the lobe on the socket's flat wall at x = 2.15 instead, which opens five REAL
-     boundary edges. Reshaping the lobe so no vertex sits at the pole moves the notch's
-     reach, and the fit section at the foot of this file asserts that reach to 1e-9. (The
-     puzzle KEY has the same defect from the same cause and is fixed rather than
-     quarantined, because its housing is a pocket and a pocket can be inflated back to size
-     — see keyHalf. A notch that mates with a printed tab cannot.)
-
-     BOTH smoothnesses are listed, and the second one is a correction. The note here used
-     to say the count was deterministic — one per notch at arcSegs 6 and 8, none at 12 and
-     24 — and the first half is right while the second was luck. At 12 the two regions
-     happened to subdivide their copies of the apex edge at different heights, so the four
-     uses landed on two different edges and the count read clean. Changing the floor cap
-     of a padded cell from an ear clip to a centre fan, which has nothing to do with the
-     joint, made the two subdivisions agree and the defect appeared at its true size. An
-     edge count that depends on two shells disagreeing about where to put a vertex was
-     never evidence of anything. */
-  { name: '9x9 puzzle', drawerW: 400, drawerD: 400, connector: 'puzzle',
-    quarantine: 'lobe apex sits on a region boundary' },
-  { name: '9x9 puzzle @6', drawerW: 400, drawerD: 400, connector: 'puzzle', arcSegs: 6,
-    quarantine: 'lobe apex sits on a region boundary' },
   /* Benign, but it has to be named rather than waved through: corner bosses of adjacent
      cells ABUT face to face on the cell boundary instead of overlapping by BLOAT, so
      every shared face is counted twice. All counts are 4 and 6, never 1 — no boundary
@@ -215,25 +350,9 @@ const CASES = [
     baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
   { name: '3x3 bosses+screws', drawerW: 126, drawerD: 126, screws: true,
     baseMode: 'bosses', quarantine: 'bosses abut, not overlap' },
-  /* Found by the pocket-floor section further down, and older than it: one cell, with
-     magnets opened from below, leaves a sliver hole in the bottom face at the rim of the
-     two left-hand pockets — six edges used once, at every arc smoothness. It needs the
-     4 mm rounded corners and the 6 mm magnet together (no corner radius, a 1 mm one, a
-     5 or 6.5 mm magnet, or a second cell in either direction all come out watertight),
-     so it is two near-coincident outlines in the bottom cap's triangulation, a few
-     microns apart and past healCsgSeams' tolerance. It matters because this is the
-     shape of the bin fit test tile, which is built the same way.
-     `worst` pins it where it stands. A quarantine alone fails only when the case comes
-     good, so the hole could have grown to sixty edges or six hundred and this line
-     would have read "known" over every one of them. */
-  { name: '1x1 magnets', drawerW: 42, drawerD: 42, magnets: true,
-    quarantine: 'bottom-face sliver at the pocket rim', worst: 6 },
-  /* The two classes above with half cells, which add nothing to either: the loop builds
-     each one again as solid margin and requires the same edges used the same number of
-     times. The lobes sit on whole-cell junctions and the bosses on whole cells, so the
-     strips meet neither. */
-  { name: 'half split puzzle', ...HALF_SPLIT, connector: 'puzzle',
-    quarantine: 'lobe apex sits on a region boundary' },
+  /* The bosses with half cells, which add nothing: the loop builds the case again as
+     solid margin and requires the same edges used the same number of times. The bosses
+     sit on whole cells, so the strips do not meet them. */
   { name: 'half bosses+magnets', ...HALF_SMALL, magnets: true, baseMode: 'bosses',
     quarantine: 'bosses abut, not overlap' },
 ];
@@ -321,13 +440,24 @@ for (const cs of CASES) {
   /* Orientation gets its own quarantine key. The two questions are independent — a case
      can be watertight and folded, or leak and be perfectly wound — so one flag covering
      both would excuse a defect nobody had looked at. */
+  /* And it is held to the size on file, piece by piece, as `worst` holds a leak: folds on
+     any piece past its `oriWorst`, on a piece with none on file, or a defect of any other
+     kind fail it. Without that a quarantine for a few folds on two pieces waved through
+     any number on all of them. */
   if (oriBad.length || cs.oriQuarantine) {
+    const past = !cs.oriQuarantine ? []
+      : !cs.oriWorst ? ['NO SIZE ON FILE']
+      : oris.map((o, i) => [L.pieces[i].id, o])
+          .filter(([id, o]) => o.folds > (cs.oriWorst[id] || 0) || o.inverted.length || o.wind)
+          .map(([id, o]) => `${id}: ${orientationNote(o)}`);
     const oriNote = cs.oriQuarantine
-      ? (oriBad.length ? `  known: ${cs.oriQuarantine}` : '  NOW CLEAN — take it out of quarantine')
+      ? (!oriBad.length ? '  NOW CLEAN — take it out of quarantine'
+         : past.length ? `  WORSE than on file (${past.join('; ')}) for: ${cs.oriQuarantine}`
+         : `  known: ${cs.oriQuarantine}`)
       : '';
     console.log(`${''.padEnd(24)} ${oriBad.length}/${pieces.length} pieces: ` +
                 `${oriBad.length ? orientationNote(oriBad[0]) : 'oriented'}${oriNote}`);
-    if (cs.oriQuarantine ? !oriBad.length : true) bad++;
+    if (cs.oriQuarantine ? !oriBad.length || past.length : true) bad++;
   }
 
   /* Watertight is not the same as built. A top-insert plate with the pocket never cut and
@@ -1006,12 +1136,131 @@ console.log('\nrounded outer corners, on the plate and nowhere else:');
               `otherwise eat the corner socket's rim`);
 }
 
+/* A rounded corner beside a half cell keeps its rim.
+ *
+ * A half cell's short side is a quarter pitch, and its socket ring's corner is held to that
+ * side less the cutoff, so below about 17.6 mm the ring's corner shrinks and comes out
+ * towards the plate's. buildPiece caps the plate's arc there by the half cell's own ring
+ * (rMaxHalf, from rcHalf), solved, as the whole cell's cap is, to leave WALL — 0.2 mm —
+ * between the two arcs. Before that cap the arc folded through the rim at pitch 14, and
+ * at 16 and 17 it did not fold and left 0.031 and 0.134 mm of rim. Every other check here
+ * passed those: a rim a few hundredths thick is exactly as watertight, and as well wound,
+ * as one of 0.2.
+ *
+ * So the rim is measured off the mesh, as the least distance between the plate's outer
+ * wall along the corner arc (its vertical faces that run neither along x nor along y) and
+ * the socket's top edge (the sloped faces' edges at the plate top). What it is held to is
+ * what the cap promises the mesh: WALL, or the rim cutoff where that is thinner, since
+ * along the straight sides the cutoff is the rim; less what the outline gives up by
+ * drawing the arc as NARC chords, each up to rc(1 − cos(π/4·NARC)) inside it — 15 µm at
+ * 4.88. The socket's ring is drawn inside its own arc too, which only adds rim. Measured
+ * from 13.5 to 60 mm, every cutoff and tolerance, at arcSegs 6 to 24, the thinnest rim
+ * lands on that bar to 1e-14 and never under it, so the bar is the cap's and not a
+ * tolerance chosen to pass. The cap itself is right on the arc; the chord's share is the
+ * outline's, and a whole cell's capped corner gives up the same. */
+console.log('\na rounded corner beside a half cell keeps its rim:');
+{
+  const WALL = 0.2, NARC = 10;
+  const sag = (rc) => rc * (1 - Math.cos(Math.PI / (4 * NARC)));
+  /* Every rounded corner of every piece: the least distance from the arc's chords to the
+     socket edges within reach of that corner, and the arc's radius, read off the arc's two
+     ends where they sit on the plate's edges. */
+  const cornerRims = (cfg, L) => {
+    const H = G.platePad(cfg) + cfg.plateHeight, out = [];
+    const ptSeg = (p, a, b) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx*dx + dy*dy;
+      const t = l2 ? Math.max(0, Math.min(1, ((p[0]-a[0])*dx + (p[1]-a[1])*dy) / l2)) : 0;
+      return Math.hypot(p[0] - a[0] - t*dx, p[1] - a[1] - t*dy);
+    };
+    const gap = (a, b) => Math.min(ptSeg(a[0], b[0], b[1]), ptSeg(a[1], b[0], b[1]),
+                                   ptSeg(b[0], a[0], a[1]), ptSeg(b[1], a[0], a[1]));
+    for (const pc of L.pieces) {
+      const r = G.buildPiece(cfg, L, pc);
+      const arc = [], rim = [];
+      for (const t of G.polysToTriangles(r.polys)) {
+        const top = t.filter((v) => Math.abs(v[2] - H) < 1e-6);
+        if (top.length !== 2) continue;
+        const u = [0, 1, 2].map((k) => t[1][k] - t[0][k]), w = [0, 1, 2].map((k) => t[2][k] - t[0][k]);
+        const n = [u[1]*w[2] - u[2]*w[1], u[2]*w[0] - u[0]*w[2], u[0]*w[1] - u[1]*w[0]];
+        const len = Math.hypot(...n);
+        if (len < 1e-12) continue;
+        const e = top.map((v) => [v[0], v[1]]);
+        if (Math.abs(n[2] / len) > 1e-6) rim.push(e);
+        else if (Math.abs(e[1][0] - e[0][0]) > 1e-6 && Math.abs(e[1][1] - e[0][1]) > 1e-6) arc.push(e);
+      }
+      const corners = { ll: [0, 0], lr: [r.W, 0], ur: [r.W, r.D], ul: [0, r.D] };
+      const halfAt = { ll: false, lr: !!pc.hR, ur: !!(pc.hR || pc.hB), ul: !!pc.hB };
+      for (const [k, [cx, cy]] of Object.entries(corners)) {
+        const within = (d) => (s) => s.every(([x, y]) => Math.abs(x - cx) < d && Math.abs(y - cy) < d);
+        const chords = arc.filter(within(7)), edges = rim.filter(within(12));
+        if (!chords.length || !edges.length) continue;
+        let thin = Infinity, rc = 0;
+        for (const a of chords) for (const b of edges) thin = Math.min(thin, gap(a, b));
+        for (const s of chords) for (const [x, y] of s) {
+          if (Math.abs(y - cy) < 1e-6) rc = Math.max(rc, Math.abs(x - cx));
+          if (Math.abs(x - cx) < 1e-6) rc = Math.max(rc, Math.abs(y - cy));
+        }
+        out.push({ at: `${pc.id} ${k}`, half: halfAt[k], rim: thin, rc,
+                   bar: Math.min(cfg.topCutoff, WALL) - sag(rc) });
+      }
+    }
+    return out;
+  };
+  const C = G.PLATE_RANGES.topCutoff;
+  const pitches = [];
+  for (let p = G.PLATE_RANGES.pitch.min; p <= 18 + 1e-9; p += 0.5) pitches.push(p);
+  pitches.push(42);
+  const LAYS = {
+    'column and row': (p) => ({ drawerW: 3*p + p/2, drawerD: 2*p + p/2 }),
+    'column': (p) => ({ drawerW: 3*p + p/2, drawerD: 2*p }),
+    'row': (p) => ({ drawerW: 3*p, drawerD: 2*p + p/2 }),
+  };
+  let builds = 0, halves = 0, worst = null;
+  const under = [];
+  for (const arcSegs of [6, 12])
+    for (const p of pitches)
+      for (const topCutoff of [C.min, G.DEFAULTS.topCutoff, C.max])
+        for (const outerRadius of [4.88, 6])
+          for (const [ln, lay] of Object.entries(LAYS)) {
+            const cfg = Object.assign({}, G.DEFAULTS, { pitch: p, marginMode: 'half', connector: 'none',
+              outerRadius, topCutoff, arcSegs }, lay(p));
+            const L = G.computeLayout(cfg);
+            builds++;
+            for (const c of cornerRims(cfg, L)) {
+              if (c.half) halves++;
+              if (c.rim < c.bar - 1e-9)
+                under.push(`${p} mm, cutoff ${topCutoff}, radius ${outerRadius}, ${ln}, arcSegs ${arcSegs}, ` +
+                           `${c.at}${c.half ? ' (half)' : ''}: ${c.rim.toFixed(4)} under ${c.bar.toFixed(4)}`);
+              if (c.half && (!worst || c.rim - c.bar < worst.rim - worst.bar))
+                worst = Object.assign({ p, topCutoff, outerRadius }, c);
+            }
+          }
+  /* The reviewer's two, by name: the default cutoff, the stock cap's radius, a half column
+     and a half row, at the shipped smoothness. */
+  const named = [16, 17].map((p) => {
+    const cfg = Object.assign({}, G.DEFAULTS, { pitch: p, marginMode: 'half', connector: 'none',
+      outerRadius: 4.88 }, LAYS['column and row'](p));
+    const hs = cornerRims(cfg, G.computeLayout(cfg)).filter((c) => c.half);
+    return `${p} mm ${Math.min(...hs.map((c) => c.rim)).toFixed(3)}`;
+  });
+  console.log(`  ${builds} plates, ${halves} half-cell corners: ` +
+              (under.length ? `RIM UNDER WHAT THE CAP LEAVES: ${under.slice(0, 4).join('; ')}` +
+                              (under.length > 4 ? ` and ${under.length - 4} more` : '')
+                            : `none under WALL ${WALL} (or the cutoff) less the arc's chords`) +
+              (halves ? '' : '   NO HALF-CELL CORNER MEASURED'));
+  if (worst)
+    console.log(`  nearest its bar: ${worst.rim.toFixed(4)} mm at ${worst.p} mm, cutoff ` +
+                `${worst.topCutoff}, radius ${worst.outerRadius} capped to ${worst.rc.toFixed(3)}, ` +
+                `against ${worst.bar.toFixed(4)}; at the stock cutoff, 16 and 17 mm: ${named.join(', ')}`);
+  if (under.length || !halves) bad++;
+}
+
 /* Shared by the sections below: build every piece of a design and count its bad edges,
    and how many of those are open (used an odd number of times) rather than shells
    touching. `beyond` is how far any piece reaches past its own footprint and the tabs or
    lobes buildPiece says stick out of it — the room the print plan packs it into, and the
    line the next piece starts at. */
-function buildAll(over) {
+function designCfg(over) {
   const cfg = Object.assign({}, G.DEFAULTS, {
     marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0,
     magnets: false, screws: false, arcSegs: 6 }, over);
@@ -1021,6 +1270,10 @@ function buildAll(over) {
     for (const j of ['tab', 'key', 'hclip', 'puzzle'])
       cfg[j] = Object.assign({}, G.DEFAULTS[j], { clr: fit[j] });
   }
+  return cfg;
+}
+function buildAll(over) {
+  const cfg = designCfg(over);
   const L = G.computeLayout(cfg);
   const built = L.pieces.map((pc) => G.buildPiece(cfg, L, pc));
   const pieces = built.map((r) => r.polys);
@@ -1107,8 +1360,8 @@ console.log('\nmagnet and screw pockets keep a floor:');
       cfg: { screws: true, screwHeadDepth: 2.5 } },
   ];
   for (const pk of POCKETS) {
-    // 2 × 2 rather than one cell: a single cell with magnets from below has a leak of
-    // its own, quarantined at the top of this file, and this is not about that
+    // 2 × 2 rather than one cell, as it was when one cell with magnets from below had a
+    // leak of its own at the pocket rim; that is the cases' at the top of this file now
     const r = buildAll(Object.assign({ drawerW: 84, drawerD: 84, arcSegs: 12 }, pk.cfg));
     const polys = r.pieces[0];
     const c = r.cfg.pitch / 2;
@@ -1138,6 +1391,225 @@ console.log('\nmagnet and screw pockets keep a floor:');
   }
 }
 
+/* The area of a plate's cross-section at height z: every triangle the plane crosses gives
+   a segment, wound so the solid is on its left, and along each scanline the overlapping
+   shells add up — inside the plate wherever the count is above zero. Scanlines `dy`
+   apart, so a change narrower than that in y can slip between two; one in x cannot. */
+function sectionArea(polys, z, dy) {
+  const segs = [];
+  for (const t of G.polysToTriangles(polys)) {
+    const [a, b, c] = t;
+    const n = [(b[1]-a[1])*(c[2]-a[2]) - (b[2]-a[2])*(c[1]-a[1]),
+               (b[2]-a[2])*(c[0]-a[0]) - (b[0]-a[0])*(c[2]-a[2])];
+    const pts = [];
+    for (let [p, q] of [[a, b], [b, c], [c, a]]) {
+      // the same edge in two triangles gives the same point, whichever way round it runs
+      if (p[2] > q[2] || (p[2] === q[2] && (p[0] > q[0] || (p[0] === q[0] && p[1] > q[1])))) [p, q] = [q, p];
+      if ((p[2] < z) !== (q[2] < z)) {
+        const s = (z - p[2]) / (q[2] - p[2]);
+        pts.push([p[0] + s*(q[0]-p[0]), p[1] + s*(q[1]-p[1])]);
+      }
+    }
+    if (pts.length !== 2) continue;
+    let [p, q] = pts;
+    if ((q[0]-p[0])*-n[1] + (q[1]-p[1])*n[0] < 0) [p, q] = [q, p];
+    segs.push([p, q, Math.min(p[1], q[1]), Math.max(p[1], q[1])]);
+  }
+  segs.sort((u, v) => u[2] - v[2]);
+  const top = Math.max(...segs.map((s) => s[3]));
+  let area = 0, next = 0, live = [];
+  for (let k = 0; ; k++) {
+    const y = segs[0][2] + dy/2 + k*dy;
+    if (y >= top) break;
+    while (next < segs.length && segs[next][2] <= y) live.push(segs[next++]);
+    live = live.filter((s) => s[3] > y);
+    const xs = [];
+    for (const [p, q, lo] of live)
+      if (y >= lo) xs.push([p[0] + (y - p[1]) * (q[0] - p[0]) / (q[1] - p[1]), q[1] < p[1] ? 1 : -1]);
+    xs.sort((u, v) => u[0] - v[0]);
+    let w = 0, from = 0;
+    for (const [x, s] of xs) {
+      if (w <= 0 && w + s > 0) from = x;
+      else if (w > 0 && w + s <= 0) area += (x - from) * dy;
+      w += s;
+    }
+  }
+  return area;
+}
+
+/* A margin of any width beside a corner, square or rounded.
+ *
+ * A margin is a region of its own, cut from the plate's outline beside the cells it runs
+ * along, and each region is built BLOAT past the cut so the two shells overlap. That only
+ * works while the band where they overlap holds no vertex of the outline. One that does is
+ * in both shells, and each puts a vertical edge of the plate's side wall on it: an edge
+ * used four times, two closed shells touching where they were meant to overlap. A margin
+ * under a BLOAT puts the corner itself in the band, and with it the whole of the side wall
+ * either side; beside a rounded corner the arc's own vertices are spread across the first
+ * millimetre or so of the edge, so 0.15, 0.4 and 0.75 mm beside a 4 mm corner each did it
+ * once a side.
+ *
+ * So the cut moves out towards the plate's edge until the band is clear, and a margin with
+ * no room left joins its cells. That changes which region a strip of plate belongs to and
+ * must change nothing else — and on a skeleton plate it did: a skeleton cell is hollow
+ * underneath out to the edge of its region, so a cell whose region had grown over a margin
+ * hollowed the margin too, and 48 of 105 skeleton plates in one sweep lost plastic on the
+ * bed while their meshes stayed perfectly clean. A 1 mm margin by a 1 mm corner lost its
+ * whole solid border, 815 mm² of footprint down to 459. Nothing here could see it.
+ *
+ * A region's corners are points of its outline too: where the arc crosses a clip line of
+ * the other axis, a BLOAT either side of a cut, every region along that line has the same
+ * point. With 2.2 mm margins front and back, side margins of 0.54 to 0.8 mm beside a 4 or
+ * 4.88 mm corner put one of those in the band once their cuts had moved, 58 plates of the
+ * row below, solid and skeleton. And a skeleton cell beside a moved cut hollows only as
+ * far as the margin was cut before, so where the arc runs through that corner of the
+ * hollow the solid strip around it pinched to a point: 0.69 mm margins left and front and
+ * 1.38 right and back, by a 4.88 mm corner.
+ *
+ * So every margin from none to 1 mm, a hundredth at a time, on all four sides of one cell,
+ * beside square corners, the default radius and the largest the cap allows; the same past
+ * a strip of half cells, which is a margin cut of its own; on the sides only, beside
+ * 2.2 mm front and back; and on the left and front, with twice that on the right and
+ * back; each as a solid plate and as a skeleton. Every one has to come back with no bad
+ * edge at all, open or touching. And
+ * the shape: the area of each plate's cross-section just off the bed, at 1.3 mm, and at
+ * 3.1 mm above the hollow, summed over each row of 101 plates, has to be what it was
+ * before any cut could move — measured on main at 21b1dc4, whose cuts were where its
+ * margins ended, to within 0.01 mm² a row. A change here is a change to the printed
+ * plate; if it is meant, the line printed says what to put in its place. */
+console.log('\na margin of any width beside a corner:');
+{
+  const touched = [];
+  const ZS = [0.137, 1.3, 3.1], DY = 0.02;
+  const WAS = {
+    'solid margins r0': [52296.615, 44205.427, 35244.483],
+    'solid past half cells r0': [134588.378, 111585.760, 85866.769],
+    'skeleton margins r0': [21029.262, 21312.539, 35244.483],
+    'skeleton past half cells r0': [102885.028, 88257.595, 85866.769],
+    'solid margins r4': [50888.745, 42797.557, 33836.614],
+    'solid past half cells r4': [133183.770, 110181.152, 84462.161],
+    'skeleton margins r4': [27875.451, 26002.964, 33836.614],
+    'skeleton past half cells r4': [101832.387, 87204.954, 84462.161],
+    'solid margins r4.88': [50200.920, 42109.732, 33148.789],
+    'solid past half cells r4.88': [132496.762, 109494.144, 83775.153],
+    'skeleton margins r4.88': [34609.233, 30746.763, 33148.789],
+    // the same as solid: the arc leaves the corner cell short of whole, so it is not hollowed
+    'skeleton past half cells r4.88': [132496.762, 109494.144, 83775.153],
+    'solid beside 2.2 mm margins r0': [67027.862, 58938.779, 49978.919],
+    'skeleton beside 2.2 mm margins r0': [35698.979, 35985.081, 49978.919],
+    'solid beside 2.2 mm margins r4': [65619.993, 57530.910, 48571.049],
+    'skeleton beside 2.2 mm margins r4': [34299.969, 34586.071, 48571.049],
+    'solid beside 2.2 mm margins r4.88': [64932.168, 56843.085, 47883.224],
+    'skeleton beside 2.2 mm margins r4.88': [33656.240, 33942.342, 47883.224],
+    'solid twice that right and back r0': [56692.937, 48601.749, 39640.806],
+    'skeleton twice that right and back r0': [25425.585, 25708.862, 39640.806],
+    'solid twice that right and back r4': [55287.689, 47196.501, 38235.558],
+    'skeleton twice that right and back r4': [29749.751, 28540.591, 38235.558],
+    'solid twice that right and back r4.88': [54600.540, 46509.353, 37548.409],
+    'skeleton twice that right and back r4.88': [34032.406, 31496.592, 37548.409],
+  };
+  const sums = {};
+  let builds = 0;
+  for (let i = 0; i <= 100; i++) {
+    const m = i / 100;
+    for (const outerRadius of [0, 4, 4.88]) {
+      const DESIGNS = {
+        'margins': { drawerW: 42 + 2 * m, drawerD: 42 + 2 * m, mLeft: m, mRight: m, mFront: m, mBack: m },
+        // the leftover past a half column and a half row, all of it on the far side
+        'past half cells': { drawerW: 42 + 21 + m, drawerD: 42 + 21 + m, marginMode: 'half',
+                             alignX: 'end', alignY: 'end' },
+        // where a moved cut's clip lines cross the arc beside a margin of another width
+        'beside 2.2 mm margins': { drawerW: 42 + 2 * m, drawerD: 42 + 4.4, mLeft: m, mRight: m,
+                                   mFront: 2.2, mBack: 2.2 },
+        // and where the arc runs through the corner of what a skeleton cell hollows
+        'twice that right and back': { drawerW: 42 + 3 * m, drawerD: 42 + 3 * m, mLeft: m,
+                                       mRight: 2 * m, mFront: m, mBack: 2 * m },
+      };
+      for (const plateStyle of ['solid', 'skeleton'])
+        for (const [dn, d] of Object.entries(DESIGNS)) {
+          const r = buildAll({ ...d, outerRadius, connector: 'none', plateStyle });
+          builds++;
+          if (r.bad) touched.push(`${plateStyle} ${dn} ${m.toFixed(2)} mm, radius ${outerRadius}: ${leakText(r)}`);
+          const row = `${plateStyle} ${dn} r${outerRadius}`;
+          sums[row] = sums[row] || ZS.map(() => 0);
+          ZS.forEach((z, k) => { sums[row][k] += sectionArea(r.pieces[0], z, DY); });
+        }
+    }
+  }
+  console.log(`  0 to 1 mm by 0.01, ${builds} plates: ` +
+              (touched.length ? `NOT CLEAN: ${touched.slice(0, 6).join('; ')}` +
+                                (touched.length > 6 ? ` and ${touched.length - 6} more` : '')
+                              : 'every one watertight with no shells touching'));
+  bad += touched.length;
+  const moved = Object.entries(sums).filter(([row, s]) =>
+    !WAS[row] || s.some((a, k) => Math.abs(a - WAS[row][k]) > 0.01));
+  for (const [row, s] of moved)
+    console.log(`  ${row}: cross-sections at z ${ZS.join(', ')} sum to ` +
+                `[${s.map((a) => a.toFixed(3)).join(', ')}] mm², ` +
+                (WAS[row] ? `NOT [${WAS[row].join(', ')}] — THE PLATE CHANGED SHAPE` : 'NOTHING ON FILE'));
+  console.log(`  cross-sections of ${Object.keys(sums).length} rows of plates, at z ${ZS.join(', ')}: ` +
+              (moved.length ? `${moved.length} CHANGED` : 'each the shape it was before the cuts could move'));
+  bad += moved.length;
+}
+
+/* A skeleton cell's hollow with its corner on the corner arc.
+ *
+ * Beside a moved cut a skeleton cell hollows only as far as the margin was cut before
+ * (the section above), and where that corner of the hollow lands on the plate's corner
+ * arc, openSplit puts it into the outline. A corner a thousandth or two inside the arc,
+ * with the arc's next vertex that far past it on the hollow's side line, left a needle of
+ * no width in the strip's underside and a hole in the bed face: 0.1 mm margins beside
+ * 2.08 mm ones by a 3.08 mm corner had 12 open edges, and 62 of the 686 plates here had
+ * holes. Every margin row above missed it, because it takes the two margins together to
+ * put the corner there.
+ *
+ * So margins chosen to put that corner on the arc: on each of its ten segments, at a
+ * vertex and 0.4% of the segment either side of one, rounded to a thousandth as the page's
+ * fields are, beside corners from 1 to 4.88 mm, both ways round. Every one watertight,
+ * and the shape what main built, to within 0.004 mm² a plate summed over them all: where
+ * the arc pinches the strip at that corner the hollow's corner is cut off a hair, and the
+ * outline moves a hundredth at most (openSplit). */
+console.log('\na skeleton cell\'s hollow with its corner on the arc:');
+{
+  const BLOAT = 0.05, NARC = 10, ZS = [0.137, 1.3, 3.1], DY = 0.02;
+  const WAS = [188938.601, 190857.982, 285277.342];   // main at 21b1dc4
+  const radii = Array.from({ length: 33 }, (_, i) => Math.round((1 + i * 0.12) * 100) / 100).concat(4.88);
+  const designs = [], seen = new Set();
+  for (const r of radii)
+    for (let k = 0; k < NARC; k++)
+      for (const t of [0, 0.004, 0.996]) {
+        // the arc as buildPiece draws it, about the front left corner
+        const a0 = (180 + 90 * k / NARC) * Math.PI / 180, a1 = (180 + 90 * (k + 1) / NARC) * Math.PI / 180;
+        const x = r + r * Math.cos(a0) + t * r * (Math.cos(a1) - Math.cos(a0));
+        const y = r + r * Math.sin(a0) + t * r * (Math.sin(a1) - Math.sin(a0));
+        const m = Math.round((x - BLOAT) * 1000) / 1000, f = Math.round((y - BLOAT) * 1000) / 1000;
+        if (m <= 0.011 || f <= 0.011) continue;
+        for (const [ml, mf] of [[m, f], [f, m]]) {
+          if (seen.has(`${r} ${ml} ${mf}`)) continue;
+          seen.add(`${r} ${ml} ${mf}`);
+          designs.push({ outerRadius: r, mLeft: ml, mRight: ml, mFront: mf, mBack: mf,
+                         drawerW: Math.round((42 + 2 * ml) * 1000) / 1000,
+                         drawerD: Math.round((42 + 2 * mf) * 1000) / 1000 });
+        }
+      }
+  const holed = [], sums = ZS.map(() => 0);
+  for (const d of designs) {
+    const r = buildAll({ ...d, connector: 'none', plateStyle: 'skeleton' });
+    if (r.bad) holed.push(`${d.mLeft}/${d.mFront} mm by ${d.outerRadius}: ${leakText(r)}`);
+    ZS.forEach((z, k) => { sums[k] += sectionArea(r.pieces[0], z, DY); });
+  }
+  const off = sums.map((s, k) => Math.abs(s - WAS[k]));
+  const changed = off.some((o) => o > 0.004 * designs.length);
+  console.log(`  ${designs.length} plates: ` +
+              (holed.length ? `NOT CLEAN: ${holed.slice(0, 6).join('; ')}` +
+                              (holed.length > 6 ? ` and ${holed.length - 6} more` : '')
+                            : 'every one watertight') +
+              `; cross-sections at z ${ZS.join(', ')} sum to [${sums.map((s) => s.toFixed(3)).join(', ')}] mm², ` +
+              (changed ? `NOT [${WAS.join(', ')}] — THE PLATES CHANGED SHAPE`
+                       : `within ${(0.004 * designs.length).toFixed(2)} of main's`));
+  bad += holed.length + (changed ? 1 : 0);
+}
+
 /* The limits the page enforces, built at their ends.
  *
  * PLATE_RANGES and mountLimits are where the page stops accepting a number, and each end
@@ -1146,6 +1618,7 @@ console.log('\nmagnet and screw pockets keep a floor:');
  * the extremes are built here; and the one step past each that justified the pitch floor
  * is built too, so that if the engine ever closes it the floor can come down and this
  * says so, the way a quarantined case does. */
+
 console.log('\nthe smallest pitch the page allows:');
 {
   const P = G.PLATE_RANGES.pitch.min;
@@ -1162,23 +1635,62 @@ console.log('\nthe smallest pitch the page allows:');
     'snap top': { connector: 'snap', keyInsert: 'top' },
     skeleton: { connector: 'none', plateStyle: 'skeleton' },
   };
-  const LAYOUTS = PIECE_LAYOUTS;
-  // the puzzle's own quarantine above, at this pitch too: the same edge, used 4 times
-  const QUARANTINE = { 'puzzle @ 2x2 pieces': 'lobe apex sits on a region boundary' };
+  /* And two layouts in which a piece is one cell deep between two seams, rows and then
+     columns, so that it takes a key from each side. Below about 14.3 mm the two housings
+     meet in the middle of it (keysMeet in core.js), and the page refuses the design: Checks
+     says why and nothing is built. Neither layout was here, and every keyed joint in the
+     floor leaked on both, as did a key in the wall put in from above. So a refused design
+     has to be one the engine really cannot build — open at this pitch — and at the first
+     pitch the page takes it again it has to come back clean. */
+  const LAYOUTS = Object.assign({}, PIECE_LAYOUTS, {
+    'rows one cell deep': (p) => ({ drawerW: 3 * p, drawerD: 3 * p, splitMode: 'manual',
+                                    rowCuts: [1, 2], colCuts: [[], [], []] }),
+    'columns one cell wide': (p) => ({ drawerW: 3 * p, drawerD: 3 * p, splitMode: 'manual',
+                                       rowCuts: [], colCuts: [[1, 2]] }),
+  });
+  const refused = [];
   for (const [ln, lay] of Object.entries(LAYOUTS)) {
     const leaks = [];
     for (const [cn, conf] of Object.entries(CONFIGS)) {
       const r = buildAll(Object.assign({ pitch: P }, lay(P), conf));
-      const q = QUARANTINE[`${cn} @ ${ln}`];
-      if (q) {
-        console.log(`  ${cn} @ ${ln}: ${leakText(r)}` +
-                    (r.bad ? `  known: ${q}` : '  NOW PASSES — take it out of quarantine'));
-        if (!r.bad || r.open) bad++;
-      } else if (r.bad) leaks.push(`${cn} ${leakText(r)}`);
+      const meet = G.keysMeet(r.cfg, r.L);
+      if (meet.length) { refused.push({ cn, ln, r, meet }); continue; }
+      if (r.bad) leaks.push(`${cn} ${leakText(r)}`);
     }
-    console.log(`  ${P} mm, ${ln}: ${Object.keys(CONFIGS).length} configurations, ` +
+    const no = refused.filter((f) => f.ln === ln).length;
+    console.log(`  ${P} mm, ${ln}: ${Object.keys(CONFIGS).length} configurations` +
+                `${no ? `, ${no} refused (below)` : ''}, ` +
                 (leaks.length ? `LEAKING: ${leaks.join('; ')}` : 'every other one watertight'));
     bad += leaks.length;
+  }
+  for (const { cn, ln, r, meet } of refused) {
+    const needs = Math.max(...meet.map((m) => m.needs));
+    // up a hundredth at a time to the first pitch the page takes, which has to build clean
+    const meets = (p) => {
+      const c = designCfg(Object.assign({ pitch: p }, LAYOUTS[ln](p), CONFIGS[cn]));
+      return G.keysMeet(c, G.computeLayout(c)).length > 0;
+    };
+    let p = P;
+    while (meets(p)) p = Math.round((p + 0.01) * 100) / 100;
+    const ok = buildAll(Object.assign({ pitch: p }, LAYOUTS[ln](p), CONFIGS[cn]));
+    const earned = r.open > 0, clean = !ok.bad;
+    /* And every joint Checks names as one that fits instead, at this pitch on this
+       layout: each has to build watertight, or the page is sending you to another leak. */
+    const fit = G.jointsThatFit(r.cfg, r.L).map((j) => {
+      const b = buildAll(Object.assign({ pitch: P }, LAYOUTS[ln](P), CONFIGS[cn], j.over));
+      return { id: j.id, b, refused: G.keysMeet(b.cfg, b.L).length > 0 };
+    });
+    const badFit = fit.filter((f) => f.b.bad || f.refused);
+    const many = meet.length > 1;
+    console.log(`  refused: ${cn} @ ${ln}, ${many ? 'pieces' : 'piece'} ` +
+                `${meet.map((m) => m.id).join(', ')} ${many ? 'need' : 'needs'} ` +
+                `${needs.toFixed(2)} mm: ${leakText(r)} at ${P}` +
+                `${earned ? '' : ' — NOT OPEN, SO THE REFUSAL COSTS A PLATE THAT BUILDS'}; ` +
+                `taken again at ${p}, ${leakText(ok)}${clean ? '' : '   FAIL'}; ` +
+                `${fit.length} joints named instead, ` +
+                (badFit.length ? `NOT ALL BUILD: ${badFit.map((f) => `${f.id} ${f.refused ? 'REFUSED' : leakText(f.b)}`).join('; ')}`
+                               : `each watertight at ${P}`));
+    if (!earned || !clean || badFit.length || !fit.length) bad++;
   }
   // the step below: 13.3 opened the narrow pieces of four joints
   const below = Math.round((P - 0.2) * 10) / 10;
@@ -1187,6 +1699,132 @@ console.log('\nthe smallest pitch the page allows:');
   console.log(`  ${below} mm, 1-cell pieces: ${opened.length ? `open on ${opened.join(', ')} — the floor is earned`
                                                               : 'ALL CLOSED — the pitch floor can come down'}`);
   if (!opened.length) bad++;
+}
+
+/* The joints Checks names in place of keys that meet, across every pitch it refuses at.
+ *
+ * The section above builds them at 13.5 mm and the default clearance only, and named
+ * that way the message sent people to plates that leaked. jointsThatFit now names a
+ * joint only from the pitch it was swept clean from (KEY_ALTERNATIVES in core.js), and
+ * this holds it to that two ways.
+ *
+ * First, a plate from that sweep for each joint the rule holds back, each just short of
+ * where it is named from: it has to leak still, or the bound can come down, and Checks
+ * must not name it. 006ea48 named all but the cup, which it never named.
+ *
+ * Then what it does name, built the way it is named, insert and all: the H-clip put in
+ * from beneath, the snap clip inside the walls from above. Every 0.4 mm from 13.5 to
+ * 15.9, the last pitch anything is refused at, and at each joint's own bound; rows one
+ * cell deep, and rows beside columns one cell wide in one drawer; the field every 0.1
+ * from 0, and 0.74, as far as the joint in use goes. The joint named is built at that
+ * field, or at its own ceiling where that is lower: the page refuses a field over the
+ * ceiling ("Fit clearance must be ... or less") until it is lowered, and the ceiling is
+ * as far as it has to come. A plate that leaks, or that keysMeet refuses after all,
+ * fails it.
+ *
+ * The fields were 0, 0.3 and the ceiling, and the H-clip was named with the design's
+ * own insert: after a key put in from above it was the H-clip from above, which leaks
+ * at a field of 0.74 at every pitch (see KEY_ALTERNATIVES), and none of the three met
+ * it. Built here as it was named then, this section fails on it at 14.3 mm. */
+console.log('\nthe joints named in place of keys that meet, wherever they meet:');
+{
+  const LAYS = {
+    rows: (p) => ({ drawerW: 3 * p, drawerD: 3 * p, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], []] }),
+    both: (p) => ({ drawerW: 3 * p, drawerD: 5 * p, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]] }),
+  };
+  const IN_USE = {
+    bowtie: { connector: 'bowtie' }, puzzlekey: { connector: 'puzzlekey' }, snap: { connector: 'snap' },
+    'bowtie wall top': { connector: 'bowtie', keyMount: 'wall', keyInsert: 'top' },
+    'puzzlekey wall top': { connector: 'puzzlekey', keyMount: 'wall', keyInsert: 'top' },
+  };
+  const OVER = {
+    dovetail: { connector: 'dovetail' }, puzzle: { connector: 'puzzle' },
+    hclip: { connector: 'hclip', keyInsert: 'bottom' },
+    wall: { keyMount: 'wall', keyInsert: 'bottom' }, cup: { keyMount: 'wall', keyInsert: 'top' },
+  };
+  // the joint named, at the field as it stands or at the joint's own ceiling if lower
+  const named = (p, lay, conf, f, over) => {
+    const base = { pitch: p, ...lay(p), ...conf, ...over };
+    return { ...base, clr: Math.min(f, G.connClrCeiling(designCfg(base)).max) };
+  };
+  const HELD = [
+    ['dovetail', 'bowtie', 13.6, 0.3], ['hclip', 'snap', 14.2, 1], ['puzzle', 'snap', 15.94, 1],
+    ['wall', 'puzzlekey', 14.48, 0.3], ['wall', 'snap', 15.24, 1], ['cup', 'bowtie', 14.44, 0.3],
+  ];
+  const held = [], unheld = [];
+  for (const [id, cn, p, f] of HELD) {
+    const cfg = designCfg({ pitch: p, ...LAYS.rows(p), ...IN_USE[cn], clr: f });
+    const L = G.computeLayout(cfg);
+    const r = buildAll(named(p, LAYS.rows, IN_USE[cn], f, OVER[id]));
+    const says = G.jointsThatFit(cfg, L).some((j) => j.id === id);
+    held.push(`${id} for ${cn} at ${p}, ${leakText(r)}`);
+    if (!G.keysMeet(cfg, L).length) unheld.push(`${id} for ${cn} at ${p}: NOTHING REFUSED`);
+    else if (says) unheld.push(`${id} for ${cn} at ${p}: NAMED, ${leakText(r)}`);
+    else if (!r.bad) unheld.push(`${id} for ${cn} at ${p}: NOW CLEAN — its bound can come down`);
+  }
+  console.log(`  held back: ${held.join('; ')}` + (unheld.length ? `   FAIL: ${unheld.join('; ')}` : ''));
+  bad += unheld.length;
+
+  const pitches = new Set([14.3, 14.5, 15.3]);
+  for (let p = 13.5; p <= 15.9 + 1e-9; p = Math.round((p + 0.4) * 10) / 10) pitches.add(p);
+  const built = new Set(), leaks = [], names = {}, folded = {};
+  let refused = 0;
+  const t0 = Date.now();
+  for (const p of [...pitches].sort((a, b) => a - b))
+    for (const [ln, lay] of Object.entries(LAYS))
+      for (const [cn, conf] of Object.entries(IN_USE)) {
+        const most = G.connClrCeiling(designCfg({ pitch: p, ...lay(p), ...conf })).max;
+        const fields = [0.74];
+        for (let i = 0; i <= 10; i++) fields.push(i / 10);
+        for (const f of new Set(fields.map((x) => Math.min(x, most)))) {
+          const cfg = designCfg({ pitch: p, ...lay(p), ...conf, clr: f });
+          const L = G.computeLayout(cfg);
+          if (!G.keysMeet(cfg, L).length) continue;
+          refused++;
+          for (const j of G.jointsThatFit(cfg, L)) {
+            names[j.id] = (names[j.id] || 0) + 1;
+            const over = named(p, lay, conf, f, j.over), k = JSON.stringify(over);
+            if (built.has(k)) continue;
+            built.add(k);
+            const r = buildAll(over);
+            const meets = G.keysMeet(r.cfg, r.L).length > 0;
+            if (r.bad || meets)
+              leaks.push(`${j.id} for ${cn} at ${p} mm, ${ln}, field ${over.clr}: ${meets ? 'REFUSED' : leakText(r)}`);
+            // once a plate: the same H-clip is built again for each key it stands in for
+            const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+            const at = `${p} mm ${ln} ${over.clr}`, xs = folded[j.id] = folded[j.id] || [];
+            if (folds && !xs.some((x) => x.at === at)) xs.push({ at, folds });
+          }
+        }
+      }
+  console.log(`  ${refused} designs refused; named instead ${Object.entries(names).map(([id, n]) => `${id} ${n}`).join(', ')}; ` +
+              `${built.size} plates built in ${((Date.now() - t0) / 1000).toFixed(0)} s: ` +
+              (leaks.length ? `NOT ALL CLEAN: ${leaks.slice(0, 6).join('; ')}` +
+                              (leaks.length > 6 ? ` and ${leaks.length - 6} more` : '')
+                            : 'every one watertight'));
+  bad += leaks.length + (refused && built.size ? 0 : 1);
+  /* And folds, which an edge count cannot see. The H-clip put in from beneath has them on
+     main as it does here, the same plates and the same counts: a sliver of the bed face
+     by the clip's pocket turned over, four on a piece, and no edge open. Here it is where
+     the pitch is 14.1 mm more than the field; a sweep every 0.05 mm and every 0.02 of
+     the field finds it on 27 plates of 5,202 from 14.3 to 15.95 mm (86 on main, and 67
+     before unfoldFinished laid out the slivers that stand on edge). It is held to the
+     plates on file, as a quarantine is; any other joint named here that folds fails. */
+  const FOLDED = { hclip: { plates: 8, most: 8 } };
+  const foldNotes = [], foldFails = [];
+  for (const [id, xs] of Object.entries(folded)) {
+    if (!xs.length) continue;
+    const on = FOLDED[id], most = Math.max(...xs.map((x) => x.folds));
+    const say = `${id} on ${xs.length} plates, up to ${most} folds (${xs.slice(0, 3).map((x) => x.at).join('; ')}` +
+                `${xs.length > 3 ? '; ...' : ''})`;
+    if (!on) foldFails.push(`${say}, NONE ON FILE`);
+    else if (xs.length > on.plates || most > on.most) foldFails.push(`${say}, WORSE than ${on.plates} plates and ${on.most} on file`);
+    else foldNotes.push(`${say}, known`);
+  }
+  for (const id of Object.keys(FOLDED))
+    if (!(folded[id] || []).length) foldFails.push(`${id} NOW CLEAN — take it off the folds on file`);
+  console.log(`  folded: ${foldNotes.join('; ') || 'none'}` + (foldFails.length ? `   FAIL: ${foldFails.join('; ')}` : ''));
+  bad += foldFails.length;
 }
 
 console.log('\nthe other limits, built at their ends:');
@@ -1261,8 +1899,7 @@ console.log('\nthe other limits, built at their ends:');
  * on both piece layouts, at the bottom of each pitch band the ceiling changes at, where it
  * has least room — 13.5; 13.6, where the puzzle reaches 0.3; and 20 — and at a few
  * pitches between. Each has to come back closed and inside its own width: nothing past
- * its footprint but the tabs and lobes buildPiece declares. The puzzle's shells touching
- * at its lobe apex is the quarantine at the top of this file.
+ * its footprint but the tabs and lobes buildPiece declares.
  *
  * Then the step past each ceiling that set it, which has to be open or across the seam
  * still: if the engine closes one, this says that ceiling can go up. It has to be past the
@@ -1305,11 +1942,11 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
     }
     return [...new Set([...at, 16, C.smallPitch - 0.5, 30, 42])].sort((a, b) => a - b);
   };
-  /* Shells touching rather than a hole, each at one clearance, each pinned at what it
-     is: the puzzle's is the quarantine at the top of this file, and the dovetail's notch
-     at 0.3 puts its top back edge, 2.2 mm in and 2.4 up, on an edge of the region next
-     to it on the 1-cell layout's narrow pieces — 0.295 is clear of it, and it is no
-     hole. */
+  /* Shells touching rather than a hole, at one clearance, pinned at what it is: the
+     dovetail's notch at 0.3 puts its top back edge, 2.2 mm in and 2.4 up, on an edge of
+     the region next to it on the 1-cell layout's narrow pieces — 0.295 is clear of it,
+     and it is no hole. The puzzle's lobe apex was let through here as well, at any count,
+     until the region past it stopped carrying it (see the cases at the top). */
   const KNOWN = { 'dovetail @ 42 mm 1-cell pieces': 3 };
   const OVER = 1e-6;
   /* How near a snap-from-above housing comes to the seam face it opens onto: every vertex
@@ -1354,8 +1991,8 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
           if (!found) fails.push(`${P} mm ${ln}: NO SNAP HOUSING FOUND TO MEASURE`);
         }
         const pinned = KNOWN[`${vn} @ ${P} mm ${ln}`];
-        const touching = r.bad && !r.open && (vn === 'puzzle' || r.bad <= pinned);
-        if (touching && vn !== 'puzzle') known.push(`${P} mm ${ln}: ${leakText(r)}`);
+        const touching = r.bad && !r.open && r.bad <= pinned;
+        if (touching) known.push(`${P} mm ${ln}: ${leakText(r)}`);
         if (pinned !== undefined && !r.bad) fails.push(`${P} mm ${ln}: NOW CLEAN — unpin it`);
         if ((r.bad && !touching) || r.beyond > OVER)
           fails.push(`${P} mm ${ln} at ${most}: ${leakText(r)}` +
@@ -1607,8 +2244,11 @@ console.log('\nplates without half cells build the same bytes:');
       alignX: 'start', alignY: 'start', connector: 'none' }, '0643a57626c1be52'],
     ['190 x 170, margin right and back', { drawerW: 190, drawerD: 170, marginMode: 'auto',
       alignX: 'end', alignY: 'end', connector: 'none' }, '37b5f305cc4da6dd'],
+    // fanCentre moved four of its nine cells' bottom caps off a spoke a few thousandths from
+    // a cutter's corner: the same bottom face fanned from another point, its area and the
+    // volume unchanged
     ['126 x 126, magnets and screws', { drawerW: 126, drawerD: 126, marginMode: 'custom',
-      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, '061f12cb36018140'],
+      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, '5b339b75bd8c513e'],
     ['140 x 140, corner pockets', { drawerW: 140, drawerD: 140, marginMode: 'auto',
       magnets: true, baseMode: 'bosses' }, '7088f24def428095'],
     ['168 x 180, skeleton', { drawerW: 168, drawerD: 180, marginMode: 'auto',

@@ -150,6 +150,123 @@ test.describe('ranges on the geometry fields', () => {
     await page.locator('#openExport').click();
     expect(await text(page, 'exFit')).toMatch(/24\.25 mm tall and your printer builds 20 mm high/);
   });
+
+  /* Three rows, each its own piece, so the middle one is one cell deep with a seam on
+     each side and a bowtie key from each, at the same place along both. Below 14.35 mm
+     the two housings overlap and that piece came out with 47 open edges; the page said
+     nothing and offered the download (test/plate-audit.js, the smallest pitch). The
+     joints it names are the ones that clear at this pitch and were swept clean there
+     (jointsThatFit), and the audit builds each. */
+  const rows = (p, w) => `#pi=${p}&w=${w}&d=${w}&sp=manual&rc=1,2&cc=__&cn=bowtie`;
+  const instead = 'or use a joint that fits at 13\\.5 mm: snap clips inside the walls, put in ' +
+    'from above; or bowtie keys inside the walls, put in from beneath\\.';
+  test('keys that meet across a piece one cell deep are a check, not a plate', async ({ page }) => {
+    const errors = await openAt(page, rows(13.5, 40.5));
+    expect(await page.evaluate(() => layout.pieces.map((pc) => `${pc.id} ${pc.nx}x${pc.ny}`)),
+      'fixture: three rows, one cell deep each').toEqual(['A1 3x1', 'A2 3x1', 'A3 3x1']);
+    expect(await text(page, 'warnings')).toMatch(new RegExp(
+      'Piece A2 is one cell deep between two seams, and at this 13\\.5 mm pitch the keys ' +
+      'on its two sides are too close: their housings run into each other, which leaves ' +
+      'holes in the plate\\. Move a cut so it is two cells deep, use a pitch of ' +
+      '14\\.35 mm or more, ' + instead));
+    expect(await text(page, 'pieceTail')).toMatch(/not building/);
+    await page.locator('#openExport').click();
+    expect(await text(page, 'exFit')).toMatch(/Piece A2 is one cell deep.*Nothing can be exported until that is fixed\./);
+    expect(errors).toEqual([]);
+  });
+
+  // the same across three columns, where the piece is one cell wide
+  test('keys that meet across a piece one cell wide say wide', async ({ page }) => {
+    const errors = await openAt(page, '#pi=13.5&w=40.5&d=40.5&sp=manual&rc=&cc=1.2&cn=bowtie');
+    expect(await page.evaluate(() => layout.pieces.map((pc) => `${pc.id} ${pc.nx}x${pc.ny}`)),
+      'fixture: three columns, one cell wide each').toEqual(['A1 1x3', 'B1 1x3', 'C1 1x3']);
+    expect(await text(page, 'warnings')).toMatch(new RegExp(
+      'Piece B1 is one cell wide between two seams, .* Move a cut so it is two cells wide, ' +
+      'use a pitch of 14\\.35 mm or more, ' + instead));
+    expect(errors).toEqual([]);
+  });
+
+  /* Clear of each other is not the same as clean. At 13.6 mm with a clearance of 0.3 the
+     dovetail's tabs are clear of each other, and it was named, and that plate has 12
+     open edges; the H-clip has 6 at 14.2 with a clearance of 1. A joint is named only
+     from the pitch it was swept clean from. */
+  test('a joint that leaks at this pitch is not named', async ({ page }) => {
+    const errors = await openAt(page,
+      '#pi=13.6&w=40.8&d=40.8&mm=custom&ml=0&mr=0&mf=0&mb=0&sp=manual&rc=1,2&cc=__&cn=bowtie&cl=0.3');
+    const said = await text(page, 'warnings');
+    expect(said).toMatch(/Piece A2 is one cell deep between two seams/);
+    expect(said).toMatch(new RegExp('or use a joint that fits at 13\\.6 mm: snap clips inside ' +
+      'the walls, put in from above; or bowtie keys inside the walls, put in from beneath\\.'));
+    expect(said).not.toMatch(/dovetail tabs|H-clips|puzzle tabs/);
+    expect(errors).toEqual([]);
+  });
+
+  // and at 14.5 mm, where they were, the dovetail, the H-clip and the key from above come back
+  test('the joints come back at the pitch they build clean from', async ({ page }) => {
+    const errors = await openAt(page, rows(14.5, 43.5) + '&cl=0.3');
+    expect(await text(page, 'warnings')).toMatch(new RegExp('or use a joint that fits at ' +
+      '14\\.5 mm: dovetail tabs; H-clips put in from beneath; snap clips inside the walls, ' +
+      'put in from above; or bowtie keys inside the walls, put in from beneath or above\\.'));
+    expect(errors).toEqual([]);
+  });
+
+  /* Each joint is named the way it builds watertight, insert and all. The H-clip was
+     named with the design's own insert, so from a key put in from above it named H-clips,
+     and the H-clip from above leaks at a field of 0.74 (six bad edges on two of three
+     rows at 42 mm, on main as well); from beneath it is watertight, and following the
+     words clears the check. */
+  test('the H-clip is named put in from beneath, and that one clears the check', async ({ page }) => {
+    const errors = await openAt(page, '#pi=14.38&w=43.14&d=43.14&mm=custom&ml=0&mr=0&mf=0&mb=0' +
+      '&sp=manual&rc=&cc=1.2&cn=bowtie&km=wall&ki=top&cl=0.74');
+    expect(await text(page, 'warnings')).toMatch(new RegExp('Piece B1 is one cell wide .* ' +
+      'or use a joint that fits at 14\\.38 mm: H-clips put in from beneath; snap clips inside ' +
+      'the walls, put in from above; or bowtie keys inside the walls, put in from beneath\\.'));
+    await page.selectOption('#connector', 'hclip');
+    expect(await page.locator('#keyInsert').inputValue(), 'fixture: the design is put in from above')
+      .toBe('top');
+    await page.selectOption('#keyInsert', 'bottom');
+    await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent));
+    expect(await text(page, 'warnings')).not.toMatch(/between two seams/);
+    expect(errors).toEqual([]);
+  });
+
+  /* On a snap plate the snap clip from above is the snap clip inside the walls from
+     above, so it is named once: it was named as "snap clips put in from above" and again
+     as "snap clips inside the walls, put in from above". */
+  for (const [p, w, rest] of [['15.29', '45.87', 'or snap clips inside the walls, put in from above'],
+                              ['15.3', '45.9', 'or snap clips inside the walls, put in from beneath or above']])
+    test(`a snap plate at ${p} mm names the snap clip once`, async ({ page }) => {
+      const errors = await openAt(page, `#pi=${p}&w=${w}&d=${w}&mm=custom&ml=0&mr=0&mf=0&mb=0` +
+        '&sp=manual&rc=1,2&cc=__&cn=snap&cl=1');
+      // the whole list, from the pitch to its full stop, so nothing is named twice
+      const named = (await text(page, 'warnings')).split('or use a joint that fits at ')[1] || '';
+      expect(named).toMatch(new RegExp(`^${p.replace('.', '\\.')} mm: dovetail tabs; H-clips put ` +
+        `in from beneath; ${rest}\\.`));
+      expect(errors).toEqual([]);
+    });
+
+  /* Rows one cell deep and columns one cell wide in one drawer. It said "Pieces A2 and
+     B3 have one cell between two seams … Move a cut so they have two", which left you to
+     work out which piece was narrow which way. */
+  test('keys that meet both ways say which piece is which', async ({ page }) => {
+    const errors = await openAt(page,
+      '#pi=13.5&w=40.5&d=67.5&mm=custom&ml=0&mr=0&mf=0&mb=0&sp=manual&rc=1,2&cc=__1.2&cn=bowtie');
+    expect(await text(page, 'warnings')).toMatch(new RegExp(
+      'Piece A2 is one cell deep and piece B3 one cell wide between two seams, and at this ' +
+      '13\\.5 mm pitch the keys on their two sides are too close: their housings run into ' +
+      'each other, which leaves holes in the plate\\. Move a cut so each has two cells ' +
+      'between its seams, use a pitch of 14\\.35 mm or more, ' + instead));
+    expect(errors).toEqual([]);
+  });
+
+  // and the pitch it names is enough: the same split builds, with nothing to say
+  test('at the pitch the check names, the same rows build', async ({ page }) => {
+    const errors = await openAt(page, rows(14.35, 43.05));
+    expect(await page.evaluate(() => layout.pieces.length)).toBe(3);
+    expect(await text(page, 'warnings')).not.toMatch(/between two seams/);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(errors).toEqual([]);
+  });
 });
 
 /* ---- limits no tighter than the geometry ------------------------------------------ */
@@ -592,6 +709,31 @@ test.describe('half cells from a link', () => {
       .toHaveText('No room for half cells: 20.99 mm is left across and 20.99 mm deep, and a half cell needs 21 mm.');
   });
 
+  /* And the half cell is rounded up. Rounded to the nearest, a pitch with a third decimal
+     in its half — 42.01, 13.51, 13.53 — quoted the same figure as the room left: "21 mm
+     is left across … and a half cell needs 21 mm". The menu and the README quote that
+     size too, so all three say the same number. */
+  test('the size a half cell needs is never rounded down to the room left', async ({ page }) => {
+    const note = () => page.locator('#warnings .w').filter({ hasText: 'No room for half cells' });
+    const menu = () => page.evaluate(() =>
+      document.querySelector('#marginMode option[value="half"]').textContent);
+    const readme = () => page.evaluate(() => readmeText());
+    await openAt(page, '#pi=42.01&w=399.09&d=300&mm=half');
+    await expect(note()).toHaveText(
+      'No room for half cells: 21 mm is left across and 5.93 mm deep, and a half cell needs 21.01 mm.');
+    expect(await menu()).toBe('Fill with half cells where they fit (21.01 mm)');
+    for (const [pi, w, left, size] of [[13.51, 141.85, 6.75, 6.76], [13.53, 142.06, 6.76, 6.77]]) {
+      await openAt(page, `#pi=${pi}&w=${w}&d=${w}&mm=half`);
+      await expect(note()).toHaveText(`No room for half cells: ${left} mm is left across and ` +
+        `${left} mm deep, and a half cell needs ${size} mm.`);
+      expect(await menu()).toBe(`Fill with half cells where they fit (${size} mm)`);
+      // one more hundredth across, and the column fits; the README quotes it at the same size
+      await openAt(page, `#pi=${pi}&w=${(w + 0.01).toFixed(2)}&d=${w}&mm=half`);
+      expect(await page.evaluate(() => [layout.hX, layout.hY])).toEqual([1, 0]);
+      expect(await readme()).toContain(`Half cells: a half column on the right (${size} mm)`);
+    }
+  });
+
   /* A piece of 1½ × 1½ cells is not a single cell, and the note suggesting a cut be moved
      for a sturdier layout said it was. A whole single cell still gets it. */
   test('a piece with half cells on it is not a single cell', async ({ page }) => {
@@ -617,8 +759,10 @@ test.describe('half cells from a link', () => {
       if (opt) opt.remove();
       loadFromHash('w=400&d=330&mm=half');
       recomputeLayout();
+      /* `|| 0` for the same page: its layout has no hX or hY at all, and a strip it never
+         heard of is no strip. Read straight, the test failed there on undefined. */
       return { menu: document.getElementById('marginMode').value, mode: state.marginMode,
-               strips: [layout.hX, layout.hY], link: descriptor().mm,
+               strips: [layout.hX || 0, layout.hY || 0], link: descriptor().mm,
                margins: [layout.mL, layout.mR, layout.mF, layout.mB] };
     });
     expect(s.menu).toBe('auto');

@@ -289,10 +289,14 @@ construction — was wrong twice over. Overlapping shells do not produce bad edg
 shell is closed on its own, so every edge is still used exactly twice. The 20% was holes,
 and treating it as normal is what let them stay for the life of the project.
 
-Four configurations still leak, and they are **quarantined by name in
-`test/plate-audit.js` rather than excused here**, so the summary line cannot say
-"watertight" over them. Do not generalise from them to a new tolerance for nonzero
-counts; the whole point of naming them is that the number for everything else is zero.
+Four configurations still leak: three of them corner bosses that abut, and one that only
+the engine can build, mounting sites moved in close at a small pitch, whose pockets come
+out open by a few slivers as they do on main (it is there for the retry that throws; see
+the mounting pockets below). They are
+**quarantined by name in `test/plate-audit.js` rather than excused here**, so the summary
+line cannot say "watertight" over them. Do not generalise from them to a new tolerance
+for nonzero counts; the whole point of naming them is that the number for everything else
+is zero.
 
 **A configuration with no case is worse than one with a quarantined case**, and this file
 had four of them. `keyInsert: 'top'` had never been built by the audit in any of its
@@ -332,11 +336,12 @@ bugs, and clearing one tells you nothing about the other.**
   couple of them into spurs — a face that is real surface everywhere except for one
   out-and-back excursion, which no single-face test could see.
 
-What is quarantined now is **`connector: 'puzzle'` at every smoothness**, and it is the
-second kind: exactly one edge per notch, always used 4, never once. The lobe's far pole
-points along the seam, the boundary between two cell regions runs along that same line,
-and both regions cut the same notch — so both carry the apex vertex and the vertical edge
-either side of it. Two closed shells sharing an edge, the bosses bug in miniature.
+What was quarantined after that was **`connector: 'puzzle'` at every smoothness**, and it
+was the second kind: exactly one edge per notch, always used 4, never once. The lobe's far
+pole points along the seam, the boundary between two cell regions runs along that same
+line, and both regions cut the same notch — so both carried the apex vertex and the
+vertical edge either side of it. Two closed shells sharing an edge, the bosses bug in
+miniature.
 
 **"12 and 24 carry none" was in this paragraph and it was wrong**, and the way it was wrong
 is worth more than the number. At those smoothnesses the two regions happened to subdivide
@@ -347,13 +352,20 @@ and the defect appeared at 12 too, at exactly twice the size (the edge is split 
 there, so 14 rather than 7). It was called "deterministic, not luck" on the strength of a
 sweep over four smoothnesses and six drawer sizes, and the sweep was measuring a
 coincidence that held across all of them. **An edge count that depends on two shells
-disagreeing about where to put a vertex is not evidence of anything.**
+disagreeing about where to put a vertex is not evidence of anything.** Moving a margin's
+cut, which has nothing to do with the joint either, later flipped three clean puzzle
+pieces into leaking ones the same way.
 
-It is quarantined rather than fixed because **every fix costs joint geometry**, which is
-worse than the defect. Sliding the joint 0.09 mm along the seam gets the apex out of the
-overlap band and lands the lobe on the socket's flat wall at x = 2.15 instead, opening
-five real boundary edges. Reshaping the lobe so no vertex sits at the pole changes the
-notch's reach, and the audit asserts that reach to 1e-9 against the tab it mates with.
+It stayed quarantined for a while because every fix to the **notch** costs joint geometry.
+Sliding the joint 0.09 mm along the seam gets the apex out of the overlap band and lands
+the lobe on the socket's flat wall at x = 2.15 instead, opening five real boundary edges.
+Reshaping the lobe so no vertex sits at the pole changes the notch's reach, and the audit
+asserts that reach to 1e-9 against the tab it mates with. **The fix was to move the region,
+not the notch**: `buildPiece` starts the region past the pole half a BLOAT beyond it rather
+than a BLOAT short, so the pole is inside one region only. The two regions still overlap,
+from that edge to the neighbour's, and the notch is the same notch. The three puzzle cases
+are out of quarantine, and the audit has a puzzle plate with four different margins by a
+4 mm corner as a case of its own.
 
 The puzzle **key** had the identical defect from the identical cause — 14 edges a plate on
 every floor mount — and it is fixed rather than quarantined, which is the difference
@@ -363,7 +375,7 @@ inflates the arc by `1/cos(Δ/2)` so the facet that spans the pole still reaches
 nominal radius. The pocket comes out the same size to the micron and up to 26 µm looser
 elsewhere, which is the harmless direction. A notch that a printed tab has to enter has no
 such slack. If you take the notch on, the rule to aim at is the one the dovetail obeys by
-accident:
+accident, and that the notch now obeys by having the boundary moved:
 **a cutter straddling a region boundary must cross it with a face, not a vertex.**
 
 Run the headless audits:
@@ -450,14 +462,15 @@ Two things the checks must **not** treat as defects, and do not:
   surface; on an open one the tetrahedra do not cancel and the number is arbitrary. A
   top-insert hclip pocket reads −359 mm³ inside a 27 mm³ bounding box. Volume is asserted
   only on shells every edge of which is used an even number of times.
-- **Abutting shells are not inverted shells.** `baseMode: 'bosses'` and the puzzle lobe
-  apex both put two correctly-wound shells face to face or edge to edge.
+- **Abutting shells are not inverted shells.** `baseMode: 'bosses'` puts two
+  correctly-wound shells face to face, as the puzzle lobe apex used to put them edge to edge.
   Their shared edges come out balanced 2 and 2, and the fold test only looks at edges used
   by exactly two triangles, so it never sees them. Measured clean on every quarantined
   case.
 
-Two orientation defects are quarantined by name rather than fixed, on the same terms as
-the leaks:
+Four orientation defects are quarantined by name rather than fixed, on the same terms as
+the leaks. The plate audit holds its three to their size on file, piece by piece or plate
+by plate, so a quarantine for a few folds cannot wave through more:
 
 - **The carved bins' reflex fillet**, in `test/bin-audit.js`. One inside-out closed shell
   of 212 triangles per reflex corner, −214.259 mm³ (−282.322 on the taller `bigL-5x4`), so
@@ -466,21 +479,106 @@ the leaks:
   reversed, which only traces anticlockwise while `outer` is the larger radius. Convex
   corners pass `[CR, CR - t]` and are right; the reflex fillet passes `[CR, CR + t + OVER]`
   and reverses the loop, with nothing downstream renormalising it.
-- **The top-inserted wall cup for the puzzle key**, in `test/plate-audit.js`. 14 coplanar
-  slivers of about 1e-4 mm² on 2 of the 4 pieces at arcSegs 12, and **none at the arcSegs 6
-  the tool ships**. It is the only key housing whose cutter crosses the socket's *corner*
-  cone: a key site is where four cells meet, the wall mount puts the pocket in the rim
-  rather than in a floor pad, and top insert runs the cutter from below the pocket floor up
-  past the plate top. A lobe arc and a cone arc then cross at a shallow angle, and both are
-  made of near-tangent facets. Sensitive enough to be worth a warning: over segment counts
-  17/19/21/25/33 the same plate ranges from 0 folds to 89, with no monotonicity, which is
-  what a sliver lottery looks like from the outside.
+- **The H-clip put in from beneath, at pitches just past where keys meet**, in the joint
+  section of `test/plate-audit.js`. Four coplanar folds on a piece, a sliver of the bed
+  face by the clip's pocket turned over, no edge open; on main the same plates and the
+  same counts. The section builds every joint Checks names in place of keys that meet,
+  and finds it on 8 of the H-clips it builds, wherever the pitch is 14.1 mm more than the
+  field.
+- **Two plates only the engine can build**, mounting sites 2 or 3.5 mm from a cell's
+  centre (`holeOffset`, which the page does not set) at small pitches, in
+  `test/plate-audit.js`. A bowtie's cup in the wall at 14.5 mm keeps folds by the cup
+  where main has them, fewer of them (6 and 3 on two pieces, against main's 10 and 5).
+  Puzzle tabs at 20 mm keep three on each of two pieces, at a 3-corner sliver the weld
+  turned right over, which faces the wrong way however it is laid out; main builds those
+  two clean, and the sliver came with the puzzle notch's pole moving into one region.
+
+  The top-inserted wall cup for the puzzle key used to be quarantined here too: 12 coplanar
+  slivers of about 1e-4 mm² on 3 of the 4 pieces at arcSegs 12 (14 on main), none at the
+  arcSegs 6 the tool ships. It is the only key housing whose cutter crosses the socket's
+  *corner* cone, where a lobe arc and a cone arc cross at a shallow angle, both made of
+  near-tangent facets (over segment counts 17/19/21/25/33 the same plate ranged from 0
+  folds to 89, with no monotonicity: a sliver lottery). The slivers stand on edge, and
+  laid out on the finished piece (`unfoldFinished`, below) they fold no more.
 
   The puzzle fit sample used to be quarantined here for six slivers of 5.2e-5 to 5.5e-4 mm²
   on two of its four tiles, and it is clean now. The honest account is that the coupon's
   tiles went from 8 mm deep to 10 — because a top-insert cup's wall needs the room — and
   the cutter's planes now graze the tile's corner arc somewhere else. Nothing in
   `csgSubtract` changed. If it comes back, that is what it is.
+
+One kind of fold is fixed rather than quarantined. Where `healCsgSeams` welds a vertex
+onto its group it can land a thousandth or two across the line of its neighbours, and the
+face it mends comes out with a dent too small to see. Fanned from its first corner, or
+from its average, one sliver of the fan can lie back to back with the face: three coplanar
+folds by a puzzle notch, in the bottom face beside a mounting pocket, or in the side of a
+puzzle tab. A mended face whose plain fan lays a triangle within 8 degrees of back to back
+with it is laid out again from the first of these that is sound: each of its corners in
+turn, then ears cut in its own plane. Sound means every triangle has area, is wound the
+face's way and lies within 60 degrees of it, and no diagonal is already an edge of another
+face. A face with nothing sound goes out as it was. The face's own average is not tried:
+over the page's designs below it laid out nothing a corner did not, and through the engine
+alone it traded folds for open edges on two pieces (3 and 14 edges), which no corner and no
+ear did anywhere.
+
+Nothing else is touched. The first version of this took any face whose fan turned a
+triangle back by the sign of its normal alone, and a third of the faces it touched over
+the random mount designs below (341 of 1,081) had no fold in them: slivers that lean or
+stand on edge. Laying those out again made some pieces worse through the engine alone
+(folds against an H-clip pocket's wall, edges used four times by a bowtie's cup, a
+turned-over sliver re-wound against its neighbours; three rows of the plate audit hold
+them), and dropping the ears instead let a page design fold again (the audit's dent
+between two straight runs). Widening it again inside `healCsgSeams`, with the checks
+above, does not pay either. Taking as well every face whose fan folds within itself, or
+turns a triangle back, or stands one more than 60 degrees off the face, leaves fewer
+engine-only pieces with any defect (316, 282 and 216 of 2,060 against 410, over the
+designs named below), but each of the three puts the bowtie cup row's edges used four
+times back, and the wider two open a hole in an engine-only piece that only folded. A
+face laid out differently there is cut again by whatever comes next, and the next cut
+goes differently: sound triangles do not make a sound cut.
+
+Every face `healCsgSeams` lays out again on the page's designs had a fold in its plain
+fan, by `test/orientation.js`'s own test: 740 over 3,893 random mount designs, 195 over
+1,200 random puzzle designs, 188 over the 960 joint designs below. Through the engine
+alone (595 designs at 14.3 to 17.5 mm pitches with the mounting sites moved in) it lays
+out 5,944 faces, and 10 of them had no such fold: 3 laid a triangle within 3 degrees of
+back to back with the face, 7 one between 3 and 8 degrees. The first version laid out
+578 like that there. A face whose plain fan lies right is laid out exactly as before, and
+so is every plate with no such face.
+
+What does pay is the same care on the finished piece, where nothing cuts it again. A
+sliver can stand on edge and fold against the face beside it, or against another sliver
+of its own face, without lying back to back with its own plane: the side of an H-clip
+pocket put in from above, with the clearance at the top of the field, at the pitches
+Checks offers it. With only the faces above laid out again, 68 of 5,202 such plates
+(14.3 to 15.95 mm every 0.05 mm, rows, columns and both, every 0.02 of the field) fold
+more than they did under the first version, though less than on main, and the plate
+audit holds one of them. So `unfoldFinished` takes each polygon of the finished piece
+whose plain fan (from its first corner, as the STL is written) lays a triangle more than
+60 degrees off its plane and has a triangle in a fold, by the orientation test's own
+rule, and lays it out from the first of its corners, or failing those ears in its plane,
+that is sound: every triangle has area and lies within 60 degrees of the plane, no
+diagonal is an edge the piece already has, and no triangle lies back to back with the
+one across its edge (positions keyed to a thousandth, as both checks key them). An edge
+of the polygon stays an edge and a diagonal is new, used by the polygon's own two
+triangles, so it cannot open a hole or use an edge four times, and it adds no fold.
+
+Every polygon it lays out was in a fold, by that rule. It touches none on the 3,893
+random mount designs, the 960 joint designs or the snap wall sweep; 2 over the 1,200
+puzzle designs, the last two puzzle folds; 466 on 183 of the 5,202 H-clip plates from
+above (folded plates 90, against main's 659 and the first version's 231) and 80 on 40 of
+the 5,202 from beneath (27, against 86 and 67); and through the engine alone 592 on 128
+of 595 designs, finding 13 more folded with nothing sound (pieces with any defect 207 of
+2,060, against main's 1,132, the first version's 348, and 410 with only the faces above
+laid out). It also clears the puzzle key's wall cup at arcSegs 12, which was quarantined
+for its slivers (above). No piece it touched is worse in any of them. With nothing to lay
+out it is a scan of the polygons, 2 ms of the 330 the page as it opens takes to build;
+where it lays some out it tables only the edges near those, 3 to 8 ms on the H-clip
+plates.
+
+Over 960 designs of eight joints (five pitches, four clearances, rows and quads, three
+corner radii) main has 528 folds on 134 pieces and this has none; over 1,200 random
+puzzle designs none of the 4,686 pieces folds, where 144 of them fold on main.
 
 A warning about writing checks for this file. The rim-cap check originally asserted two
 things and claimed they were complementary: no triangle inverted, and the signed areas
@@ -543,4 +641,24 @@ currently installed):
   latent defects — the vestigial `triangulateRing` underside, and the ear clip's chords
   skimming the mounting cylinders — only surfaced once the radii were connected. If you
   change what the outline is made of, re-run the audit with magnets *and* screws on: they
-  are the cases with cutters close enough to a cap's triangulation to feel it.
+  are the cases with cutters close enough to a cap's triangulation to feel it. The fan
+  that replaced the ear clip felt it too, more rarely: a spoke a few thousandths from a
+  corner of a cutter's wall is crossed by the two sides meeting there a couple of
+  thousandths apart, `healCsgSeams` welds the two crossings, and the sliver of floor
+  between them and the corner goes. One cell with magnets from below was quarantined for
+  that until `fanCentre` moved the fan off any spoke so close. That is not the only way
+  in: two of a cutter's sides, carried across the cell as planes by the BSP, can cross a
+  spoke 0.031 mm apart, or a weld on the pocket's ceiling can land a hair past
+  `healCsgSeams`' tolerance, and the same sliver goes. So `healCsgSeams` says when its
+  result is still open (`.open` on what it returns), and `buildPiece` cuts that cell's
+  pockets again: the cutters in the other order, the cell's faces in the other order,
+  both, and then the cutters turned a 28th of a turn. A cell that closes first time,
+  nearly every one, is built exactly as before. Over 3,893 random mount designs (magnets,
+  screws or both, from below or above, 42 or 50 mm, one to three cells each way, random
+  margins and corners) none is left open, where main leaves 30; 8 cells were cut again,
+  each open by 3 or 6 edges, for a second in 25 minutes of building. Only a cell open by
+  at most 24 edges is cut again (six at each of four pockets): over 935 engine-only
+  designs with the sites moved in at small pitches, no cell open by more than 19 ever
+  closed, and the ones open by more than 24 had been running half of all the tries. A try
+  that throws (the turned cutters there reach `healCsgSeams`' T-junction pass limit) is
+  passed over and the first cut stands, where it used to fail the whole build.
