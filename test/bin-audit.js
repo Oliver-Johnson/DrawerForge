@@ -2142,6 +2142,10 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
        chamfer is deepest. Counted in the lip and in the rails, this was 1.015. */
     ['1x1x2, 0.4 mm walls, 9 x 9 removable', { u: 1, v: 1, hUnits: 2, wall: 0.4, divX: 9, divY: 9, divRemovable: true,
                                                divT: 0.8, divClr: 0 }],
+    /* Rails where the walls are open: they stand in the air past the cavity, to the
+       wall's outside, where nothing else is. Left out, this was 0.980. */
+    ['1x1x12, walls open, 10 x 10 removable', { u: 1, v: 1, hUnits: 12, divX: 10, divY: 10, divRemovable: true,
+                                                edges: { f: 0, b: 0, l: 0, r: 0 } }],
     /* A carved shape's reflex corners, where its walls turn round a notch: carvedBody
        builds each from pieces that overlap, rounded on the cavity's side, and the
        thicker the walls the more that differs from two walls running square into each

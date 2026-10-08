@@ -8639,8 +8639,10 @@ function shelfNote(cfg) {
  * walls, and up to a quarter more with holes in the feet. Where two parts meet
  * — a divider through the scoop or the label shelf, two dividers crossing, a removable
  * divider's rails both ways, the block of holes across the floor under the label shelf,
- * and a divider's ends, its rails and the block where they stand in the lip's chamfer —
- * the plastic they share is counted once as well. On a carved shape every corner is
+ * a divider's ends, its rails and the block where they stand in the lip's chamfer, and a
+ * divider's ends and its rails where they stand in a wall, rounded corners and all — the
+ * plastic they share is counted once as well. Where a wall is lowered or open, what of
+ * them stands in the air over it is counted too, and on a carved shape every corner is
  * counted as carvedBody builds it.
  *
  * `filament` is what a slicer lays down for it at `infill` (0 to 1). The feet and the
@@ -8654,9 +8656,10 @@ function shelfNote(cfg) {
  *
  * Left out, each a few hundredths of a gram on any bin the fields allow:
  *   - the note's raised letters, 0.22 g at the most (a full shelf of the biggest);
- *   - fixed dividers packed into the cavity's rounded corners, which are counted as if
- *     the corners were square there, under 1 mm³ a divider, and where they or rails
- *     stand in the lip's chamfer there, as along a straight wall;
+ *   - dividers and rails in the cavity's rounded corners where they stand in the lip's
+ *     chamfer, which is counted there as along a straight wall, and where two dividers
+ *     cross behind a corner's arc: 0.07 g on a 1x1 with 32 fixed dividers each way and
+ *     0.4 mm walls, the most packed there is;
  *   - the corner arcs of a rectangle and of the feet, which are counted as true arcs where
  *     buildBin builds chords: at the coarsest smoothness the outline encloses 0.1% less
  *     (a carved shape's are counted on their chords);
@@ -8963,8 +8966,8 @@ function binVolume(cfg, infill) {
   const hFull = H - slabTop;
   const ring = outer - areaIn(wall);
   let walls = ring * hFull;
+  const frac = (k) => Math.max(0, Math.min(1, c.edges && c.edges[k] !== undefined ? c.edges[k] : 1));
   if (full && !allFull) {
-    const frac = (k) => Math.max(0, Math.min(1, c.edges && c.edges[k] !== undefined ? c.edges[k] : 1));
     const tall = (f) => Math.max(0, f * (H - floorZ) - BLOAT);
     const run = { f: 2 * (hwO - SPEC.r), b: 2 * (hwO - SPEC.r), l: 2 * (hdO - SPEC.r), r: 2 * (hdO - SPEC.r) };
     const ends = { f: ['l', 'r'], b: ['l', 'r'], l: ['f', 'b'], r: ['f', 'b'] };
@@ -9104,6 +9107,75 @@ function binVolume(cfg, infill) {
     const yShelf = shelfD ? spansLength(spansClip(ys, shelfFront, id)) : 0;
     dividers -= spansLength(xs) * (over(0, dX) + over(z0, dX)) +
                 2 * ((spansLength(ys) - yShelf) * over(0, dY) + yShelf * over(z0, dY));
+  }
+  /* Where a divider, or a removable one's rails, meets a wall. It stands BLOAT into the
+     wall along a straight (buildBin's reach), and behind the cavity's arc as well in a
+     rounded corner; a box buildBin cuts to the cavity's outline grown a little stands out
+     to that instead. Up to the wall's top all of it is in the wall, which is counted: so a
+     fixed divider, counted out to a square corner, has the part of the square behind the
+     arc taken off there, while a rail, counted only in front of the arc (railArea), has
+     nothing to take off. Over a wall that is lowered or open it stands free, from the
+     wall's top, or the slab's, up to H: along a straight, the wall's top at the same
+     fraction of the outer straight (edgeHeights, ramps and all), and in a corner the
+     corner's, the taller of its two walls. There what stands past what is counted is
+     added: BLOAT along a straight, and in a corner all of a rail behind the arc, or what
+     a fixed divider has past the square corner, which on a cut box is less than nothing.
+     Against true arcs, as railArea's are; in the chamfer under a lip a corner is left to
+     the sum above, as a straight wall. */
+  if (xs.length || ys.length) {
+    const S = (r, u) => Math.sqrt(Math.max(0, r * r - u * u));
+    const F = (r, u) => (u * S(r, u) + r * r * Math.asin(Math.min(1, u / r))) / 2;   // S's integral from 0
+    const zAt = (f) => floorZ + f * (H - floorZ);
+    // H less the higher of the slab's top and z, along a piece w long with z linear z0 to z1
+    const free = (z0, z1, w) => {
+      if (Math.min(z0, z1) >= slabTop) return w * (H - (z0 + z1) / 2);
+      if (Math.max(z0, z1) <= slabTop) return w * hFull;
+      const x = w * (slabTop - z0) / (z1 - z0), [lo, hi] = z0 < z1 ? [x, w - x] : [w - x, x];
+      return lo * hFull + hi * (H - (slabTop + Math.max(z0, z1)) / 2);
+    };
+    for (const [k, spans, along, across, ka, kb, grow] of [
+      ['f', xs, iw, id, 'l', 'r', 0.8 * BLOAT], ['b', xs, iw, id, 'l', 'r', 0.8 * BLOAT],
+      ['l', ys, id, iw, 'f', 'b', 0.6 * BLOAT], ['r', ys, id, iw, 'f', 'b', 0.6 * BLOAT]]) {
+      const self = frac(k), alongX = k === 'f' || k === 'b';
+      const so = (alongX ? hwO : hdO) - SPEC.r, sIn = along - rI, len = rampLen(2 * so);
+      const ramp = (nbr, dist) => (nbr <= self + 1e-9 || len <= 1e-6 || dist >= len ? self
+        : self + (nbr - self) * (1 - dist / len));
+      const top = (s) => { const x = sIn > 0 ? s * so / sIn : 0;
+        return zAt(Math.max(self, ramp(frac(ka), x + so), ramp(frac(kb), so - x))); };
+      const bends = [(len - so) * sIn / so, (so - len) * sIn / so];
+      const whole = !c.divRemovable || deep >= across - BLOAT / 2, reach = whole ? Infinity : deep;
+      const [p0, p1] = whole ? [-across - BLOAT, across + BLOAT]
+        : k === 'f' || k === 'l' ? [-across - BLOAT, -across + deep] : [across - deep, across + BLOAT];
+      const Rg = rI + grow;
+      const arc = (a, b) => rI * (b - a) - F(rI, b) + F(rI, a);            // the square past the arc
+      // from u0 to u1 into a corner, what stands past what is counted, summed
+      const past = (u0, u1, cut) => {
+        const out = (a, b) => (cut ? F(Rg, b) - F(Rg, a) - rI * (b - a) : BLOAT * (b - a));
+        if (!c.divRemovable) return out(u0, u1);
+        const uR = reach < rI ? Math.sqrt(rI * rI - (rI - reach) ** 2) : rI;   // where the arc is a rail deep
+        const uG = cut && reach < rI ? Math.sqrt(Rg * Rg - (rI - reach) ** 2) : Infinity;
+        const m = Math.min(u1, uR), g = Math.max(u0, uR), h = Math.min(u1, uG);
+        return (m > u0 ? out(u0, m) + arc(u0, m) : 0) + (h > g ? out(g, h) + reach * (h - g) : 0);
+      };
+      const corner = (u0, u1, cut, nb) => {
+        const z = zAt(Math.max(self, frac(nb)));
+        return past(u0, u1, cut) * (H - Math.max(slabTop, z)) -
+          (c.divRemovable ? 0 : arc(u0, u1) * Math.max(0, Math.min(z, H - lipDrop) - slabTop));
+      };
+      for (const [a, b] of spans) {
+        const box = alongX ? [[a, p0], [b, p0], [b, p1], [a, p1]] : [[p0, a], [p1, a], [p1, b], [p0, b]];
+        const cut = (!alongX && !c.divRemovable && sh && Math.abs(a - shelfFront) < 10 * WELD) ||
+                    box.some(([x, y]) => outsideArc(hwO, hdO, x, y, n));
+        const lo = Math.max(a, -sIn), hi = Math.min(b, sIn);
+        if (hi > lo && self < 1) {
+          const at = [lo, ...bends.filter((s) => s > lo && s < hi), hi];
+          for (let i = 0; i + 1 < at.length; i++)
+            dividers += (cut ? grow : BLOAT) * free(top(at[i]), top(at[i + 1]), at[i + 1] - at[i]);
+        }
+        if (b > sIn) dividers += corner(Math.max(a, sIn) - sIn, b - sIn, cut, kb);
+        if (a < -sIn) dividers += corner(-Math.min(b, -sIn) - sIn, -a - sIn, cut, ka);
+      }
+    }
   }
   /* The block of holes across the floor (holeLayout): the cavity's outline, less the
      holes, from the slab's top to the block's top, which is half a millimetre under the
