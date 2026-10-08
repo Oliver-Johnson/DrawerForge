@@ -812,8 +812,13 @@ test('without WebGL the map, the table, the export and saving all still work',
       await page.waitForFunction(() => !!document.getElementById('fillmap'));
       await settle(page);
       expect(await page.evaluate(() => B().length)).toBe(2);
-      await page.locator('#startFresh').click();
-      await page.waitForFunction(() => !!document.getElementById('fillmap') && !location.hash);
+      /* Start fresh loads the page again at its address with no link. Read that address
+         off the load itself: the fresh page writes the empty layout's link 400 ms on, and
+         a check of the address bar that came after it waited for a bare address that
+         never came back, until the test timed out. */
+      await Promise.all([page.waitForEvent('load'), page.locator('#startFresh').click()]);
+      expect(await page.evaluate(() => new URL(performance.getEntriesByType('navigation')[0].name).hash)).toBe('');
+      await page.waitForFunction(() => !!document.getElementById('fillmap'));
       await settle(page);
       expect(await page.evaluate(() => B().length)).toBe(0);
 
