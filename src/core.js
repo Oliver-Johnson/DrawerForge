@@ -585,10 +585,13 @@ function healCsgSeams(polys) {
      convex), on the triangles polysToTriangles will make. Counted with the rest. */
   if (mended.length) {
     const tri = new Map();   // edge -> the unit normals of the triangles on it
+    // the corners those edges run between, so a face with none of them is passed over
+    const near = new Uint8Array(verts.length);
     const on = (a, b, u) => {
       if (a < 0 || b < 0) return;   // a spoke to a flat face's average is in no other face
       const k = a < b ? a * EKEY + b : b * EKEY + a, l = tri.get(k);
       if (l) l.push(u); else tri.set(k, [u]);
+      near[a] = near[b] = 1;
     };
     for (const { ids, vs } of mended)
       for (let i = 2; i < ids.length; i++) {
@@ -601,7 +604,9 @@ function healCsgSeams(polys) {
       if (dirty[fi]) continue;
       const f = faces[fi];
       for (let i = 0; i < f.length; i++) {
-        const a = f[i], b = f[(i + 1) % f.length], l = tri.get(a < b ? a * EKEY + b : b * EKEY + a);
+        const a = f[i], b = f[(i + 1) % f.length];
+        if (!near[a] || !near[b]) continue;
+        const l = tri.get(a < b ? a * EKEY + b : b * EKEY + a);
         if (l) l.push(planes[fi].n);
       }
     }
@@ -2829,12 +2834,23 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * has nothing turned over and shares no edge is kept; otherwise the first cut stands.
    * The same goes for the top-insert pass below. Edges are compared as checkManifold
    * counts them, the triangles polysToTriangles makes with corners to a thousandth, and
-   * only inside the band, so a cell with nothing there costs a pass over its polygons. */
+   * only inside the band, so a cell with nothing there costs a pass over its polygons.
+   *
+   * A corner is one number, its thousandths packed: x and y from the band's corner, z
+   * offset by 2^21 (2 m either way, past any plate). Text for each corner cost a jointed
+   * 42 mm plate a millisecond or more. A band too big for x and y to pack exactly in what
+   * a double holds, over about 46 mm square, which no band between two cells comes near,
+   * keys its corners as text instead; either way two corners are the same key exactly
+   * when their thousandths are. `each` is handed every edge in the band, lower key first,
+   * and stops the pass by returning true. */
   const jointCells = [];
-  const bandEdges = (polys, b) => {
-    const k = (v) => Math.round(v[0] * 1000) + ',' + Math.round(v[1] * 1000) + ',' + Math.round(v[2] * 1000);
+  const bandEdges = (polys, b, each) => {
+    const X0 = Math.round(b[0] * 1000), Y0 = Math.round(b[1] * 1000), NY = Math.round(b[3] * 1000) - Y0 + 1;
+    const k = (Math.round(b[2] * 1000) - X0 + 1) * NY < 2 ** 31
+      ? (v) => ((Math.round(v[0] * 1000) - X0) * NY + Math.round(v[1] * 1000) - Y0) * 2 ** 22 +
+               Math.round(v[2] * 1000) + 2 ** 21
+      : (v) => Math.round(v[0] * 1000) + ',' + Math.round(v[1] * 1000) + ',' + Math.round(v[2] * 1000);
     const inBand = (v) => v[0] >= b[0] && v[0] <= b[2] && v[1] >= b[1] && v[1] <= b[3];
-    const out = new Set();
     for (const p of polys) {
       const vs = p.verts;
       for (let i = 2; i < vs.length; i++) {
@@ -2843,20 +2859,27 @@ function buildPiece(cfg, layout, piece, onStatus) {
           const a = t[e], c = t[(e + 1) % 3];
           if (!inBand(a) || !inBand(c)) continue;
           const ka = k(a), kc = k(c);
-          out.add(ka < kc ? ka + '|' + kc : kc + '|' + ka);
+          if (ka < kc ? each(ka, kc) : each(kc, ka)) return;
         }
       }
     }
-    return out;
   };
   // does this shell share an edge with built shell c, inside the band where the two overlap?
   const touchesBuilt = (polys, own, c) => {
     const b = [Math.max(own[0], c.box[0]) - 1e-3, Math.max(own[1], c.box[1]) - 1e-3,
                Math.min(own[2], c.box[2]) + 1e-3, Math.min(own[3], c.box[3]) + 1e-3];
-    const theirs = bandEdges(c.polys || shells[c.i], b);
+    const theirs = new Map();   // lower corner -> the higher corners it has an edge to
+    bandEdges(c.polys || shells[c.i], b, (lo, hi) => {
+      const l = theirs.get(lo);
+      if (l) l.push(hi); else theirs.set(lo, [hi]);
+    });
     if (!theirs.size) return false;
-    for (const e of bandEdges(polys, b)) if (theirs.has(e)) return true;
-    return false;
+    let shared = false;
+    bandEdges(polys, b, (lo, hi) => {
+      const l = theirs.get(lo);
+      return (shared = !!l && l.includes(hi));
+    });
+    return shared;
   };
   const TOUCH_TRIES = [(solid, cut) => oneByOne(solid, cut),
                        (solid, cut) => csgSubtract(solid, cut.slice().reverse()),
