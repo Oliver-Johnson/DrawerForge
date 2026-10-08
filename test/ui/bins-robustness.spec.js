@@ -385,6 +385,42 @@ test('a plate standing on the scoop that two bin types share says which slot of 
   expect(errors).toEqual([]);
 });
 
+/* Plates of one size and shape of name but cut differently read alike: two 1x1x3 bins with
+   a plate across each and scoops of 8 and 10 mm listed "-across-scoop" and "-across-scoop-2"
+   with the same words, in the README and in two export rows word for word the same. The
+   one cut for the 8 mm scoop goes into the other bin 0.79 mm high, its top over the rim.
+   Where plates go in more than one bin type, each shaped one names the bins it is for. And
+   two plates along of one name for different slots of one bin say their slots. */
+test('shaped plates that would read alike say which bin, or which slot, each is for', async ({ page }) => {
+  const pair = 'w=600&d=600&dh=120&bl=' + removable(0, 1, 1, 3, 1, 0, 8, 0) + '_' + removable(1, 1, 1, 3, 1, 0, 10, 0);
+  const errors = await openAt(page, pair);
+  await settle(page, 600);
+  const s8 = 'bin-1x1x3-1x0div-scoop8-qty1.stl', s10 = 'bin-1x1x3-1x0div-scoop10-qty1.stl';
+  const cut = 'across, cut corner to the front, over the scoop';
+  await page.locator('#openExport').click();
+  const rows = await page.$$eval('#exFiles [data-ex="divider"]', (els) => els.map((e) => e.closest('.exrow').textContent));
+  expect(rows).toHaveLength(2);
+  expect(rows.some((r) => r.includes(`${cut}, for ${s8} · slides into`))).toBe(true);
+  expect(rows.some((r) => r.includes(`${cut}, for ${s10} · slides into`))).toBe(true);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#exFiles [data-ex="zip"]').click()]);
+  const zip = await JSZip.loadAsync(fs.readFileSync(await dl.path()));
+  expect(Object.keys(zip.files).filter((n) => n.startsWith('bin-')).sort()).toEqual([s10, s8]);
+  const readme = await zip.file('README.txt').async('string');
+  expect(readme).toContain(`    1 x  divider-38.6x14.8x1.6mm-across-scoop.stl  (${cut}, for ${s8})\n`);
+  expect(readme).toContain(`    1 x  divider-38.6x14.8x1.6mm-across-scoop-2.stl  (${cut}, for ${s10})\n`);
+  await page.keyboard.press('Escape');
+
+  // one bin, a 1x1.5x4 with a 40 mm scoop and a shelf: its two plates along differ by 0.14 mm
+  await page.goto('about:blank');
+  errors.push(...await openAt(page, 'bl=' + removable(0, 1, 1.5, 4, 1, 2, 40, 12)));
+  await settle(page, 600);
+  const along = 'along, slots down: these go in over the plates across';
+  expect(await page.evaluate(() => dividerParts().filter((d) => d.axis === 'x').map((d) => `${d.name}: ${plateHow(d)}`))).toEqual([
+    `divider-38.6x21.8x1.6mm-along-slots-down: ${along}, for the 1st slot from the front`,
+    `divider-38.6x21.8x1.6mm-along-slots-down-2: ${along}, for the 2nd slot from the front`]);
+  expect(errors).toEqual([]);
+});
+
 /* The label shelf stands over the back of the cavity, and a plate along the depth would
    have to slide in under it: so the plates along stay in front of it. 23 fit a 2x2 by
    their rails, 5 in front of a 12 mm shelf; the link asking for 8 opens unchanged, and
