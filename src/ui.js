@@ -1127,7 +1127,9 @@ const clampR = (r) => Math.max(60, Math.min(Math.max(2200, fitR * 2), r));
    the meshes alone are empty until the first piece finishes, which is when the first
    framing has to happen. */
 function sceneBox() {
-  // not builtH(): that reads the first piece, and a layout the checks stopped has none
+  /* The plate's height and the floor asked for, as the first framing has always been
+     worked out: not builtH(), which adds the floor a magnet, screw or key raises it to,
+     so a plate's framing before its first build stays as it was. */
   const h = (state.plateHeight || 4.25) + (state.bottomPad || 0);
   const box = new THREE.Box3(new THREE.Vector3(0, 0, 0),
                              new THREE.Vector3(state.drawerW, state.drawerD, h));
@@ -1395,9 +1397,16 @@ function activeKeyDims() {
 function activeKeyShape() {
   return state.connector === 'hclip' ? 'snap' : state.keyType;
 }
-// the plate height the first built piece came out at — the top clip is sized to it
+/* The height the plate is built to: the fit sample is cut to it, and the top clip is
+   handed it (snapTopClip does not use it). Worked out from the settings, as buildPiece
+   works it out (plateHeightMm), and not read off the first piece built, which is the
+   plate before a change for the 260 ms the rebuild waits and none at all while nothing
+   has built. The fit sample is offered through both, so it was cut for the wrong plate:
+   a 4.25 mm coupon with no floor for a 6.85 mm puzzle plate, picked and downloaded at
+   once. Once a piece has built the two are the same number.
+   test/ui/fit-sample.spec.js takes the coupon before the rebuild lands. */
 function builtH() {
-  return layout && builds[layout.pieces[0].id] ? builds[layout.pieces[0].id].meta.H : 4.25;
+  return plateHeightMm();
 }
 /* The one loose part this configuration needs, built once.
 
@@ -1435,9 +1444,10 @@ function connectorPart() {
  * The kinds and their order match buildPiece's: a top-inserted snap takes the clip
  * whatever its housing says, so it is tested first.
  *
- * `pad` is read back off the height the build actually came out at rather than worked
- * out again from bottomPad and the joint's own minimum — the puzzle cavity is cut
- * relative to it, and the coupon has no other way to know.
+ * `pad` is the floor under the sockets as buildPiece builds it: builtH less the plate's
+ * own height, where builtH is platePad's sum, the one buildPiece cuts to. It is not
+ * worked out again here from bottomPad and the joint's own minimum — the puzzle cavity
+ * is cut relative to it, and the coupon has no other way to know.
  *
  * `clrMax` is the joint's clearance with the field at its ceiling, so the coupon offers
  * no pair looser than the field will take: the same ceiling the field is held to
@@ -2321,11 +2331,16 @@ const drawers = DRAWERS.create({
 });
 // Hand the drawer across to the bins tool. Only the shared keys travel; the bins
 // tool re-emits anything it doesn't recognise, so a round trip is lossless.
+/* The plate height is worked out from the settings, as buildPiece works it out
+   (plateHeightMm), and not read off the first piece built. The pieces are rebuilt 260 ms
+   after a change, behind the debounce, so a link followed in that time carried the plate
+   from before it: tick Magnets and go, and Bins was told 4.25 mm about a 7.05 mm plate.
+   With nothing built, as when the checks stop the build, it was 4.25 mm with no floor
+   under it. Once a piece has built the two are the same number.
+   test/ui/bins-plate-grid.spec.js follows both links before the rebuild lands. */
 function binsHref() {
-  const built = layout && layout.pieces.length && builds[layout.pieces[0].id];
-  const H = built ? built.meta.H : state.plateHeight;
   // full baseplate state plus the plate height bins needs; extras ride along
-  return 'bins/#' + encodeDesc(Object.assign(descriptor(), { ph: (+H).toFixed(2) }));
+  return 'bins/#' + encodeDesc(Object.assign(descriptor(), { ph: plateHeightMm().toFixed(2) }));
 }
 /* Each hand-over leaves one note in this tab for the page at the other end to read once
    (handoff in drawers.js, which also tells the saved drawer, if this is one, so that page
