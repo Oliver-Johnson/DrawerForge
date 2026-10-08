@@ -1807,17 +1807,13 @@ console.log('\nthe smallest pitch the page allows:');
 /* The joints Checks names in place of keys that meet, across every pitch it refuses at.
  *
  * The section above builds them at 13.5 mm and the default clearance only, and named
- * that way the message sent people to plates that leaked. jointsThatFit now names a
- * joint only from the pitch it was swept clean from (KEY_ALTERNATIVES in core.js), and
- * this holds it to that two ways.
+ * that way the message sent people to plates that leaked. jointsThatFit names a joint
+ * only from the pitch it was swept clean from (KEY_ALTERNATIVES in core.js). It held
+ * some back from where they leaked, 006ea48 named all but the cup, and this built a plate
+ * just short of each bound; the joint's cut taken again (cutAgain in core.js) closed
+ * every one of them, so every joint is named wherever it clears and none is held back.
  *
- * First, a plate from that sweep for each joint the rule holds back, each just short of
- * where it is named from: it has to leak still, or the bound can come down, and Checks
- * must not name it. 006ea48 named all but the cup, which it never named. There are none
- * now: the joint's cut taken again (cutAgain in core.js) closed every plate held back
- * here, and every joint is named wherever it clears.
- *
- * Then what it does name, built the way it is named, insert and all: the H-clip put in
+ * So this builds what it names, the way it is named, insert and all: the H-clip put in
  * from beneath or from above, the snap clip inside the walls from above. Every 0.4 mm
  * from 13.5 to 15.9, the last pitch anything is refused at, and at 14.3, 14.5 and 15.3,
  * where joints used to be held back from; rows one cell deep, and rows beside columns
@@ -1840,36 +1836,20 @@ console.log('\nthe joints named in place of keys that meet, wherever they meet:'
     'bowtie wall top': { connector: 'bowtie', keyMount: 'wall', keyInsert: 'top' },
     'puzzlekey wall top': { connector: 'puzzlekey', keyMount: 'wall', keyInsert: 'top' },
   };
-  const OVER = {
-    dovetail: { connector: 'dovetail' }, puzzle: { connector: 'puzzle' },
-    hclip: { connector: 'hclip', keyInsert: 'bottom' }, 'hclip top': { connector: 'hclip', keyInsert: 'top' },
-    wall: { keyMount: 'wall', keyInsert: 'bottom' }, cup: { keyMount: 'wall', keyInsert: 'top' },
-  };
   // the joint named, at the field as it stands or at the joint's own ceiling if lower
   const named = (p, lay, conf, f, over) => {
     const base = { pitch: p, ...lay(p), ...conf, ...over };
     return { ...base, clr: Math.min(f, G.connClrCeiling(designCfg(base)).max) };
   };
-  /* [joint, key in use, pitch, field]. These were held back, and leaked: the dovetail for
-     a bowtie at 13.6 with 0.3, the H-clip from beneath for a snap clip at 14.2 with 1,
-     puzzle tabs for a snap clip at 15.94 with 1, a puzzle key in the wall from beneath at
-     14.48 with 0.3 and a snap clip at 15.24 with 1, a bowtie in a cup at 14.44 with 0.3.
-     Each builds clean now and is named. */
-  const HELD = [];
-  const held = [], unheld = [];
-  for (const [id, cn, p, f] of HELD) {
-    const cfg = designCfg({ pitch: p, ...LAYS.rows(p), ...IN_USE[cn], clr: f });
-    const L = G.computeLayout(cfg);
-    const r = buildAll(named(p, LAYS.rows, IN_USE[cn], f, OVER[id]));
-    const says = G.jointsThatFit(cfg, L).some((j) => j.id === id);
-    held.push(`${id} for ${cn} at ${p}, ${leakText(r)}`);
-    if (!G.keysMeet(cfg, L).length) unheld.push(`${id} for ${cn} at ${p}: NOTHING REFUSED`);
-    else if (says) unheld.push(`${id} for ${cn} at ${p}: NAMED, ${leakText(r)}`);
-    else if (!r.bad) unheld.push(`${id} for ${cn} at ${p}: NOW CLEAN — its bound can come down`);
-  }
-  console.log(`  held back: ${held.join('; ') || 'none'}` + (unheld.length ? `   FAIL: ${unheld.join('; ')}` : ''));
-  bad += unheld.length;
-
+  /* These were held back, and leaked: the dovetail for a bowtie at 13.6 with 0.3, the
+     H-clip from beneath for a snap clip at 14.2 with 1, puzzle tabs for a snap clip at
+     15.94 with 1, a puzzle key in the wall from beneath at 14.48 with 0.3 and a snap clip
+     at 15.24 with 1, a bowtie in a cup at 14.44 with 0.3. Each builds clean now and is
+     named, so nothing is held back and nothing is checked for it. Should a sweep (every
+     0.01 mm from 13.5 to 16, every 0.05 of the field, both layouts below) find a joint
+     that leaks where it would be named, it goes back into KEY_ALTERNATIVES with a bound,
+     and a plate just short of that bound goes here: built as named it has to leak still,
+     keysMeet has to refuse the key in use, and jointsThatFit must not name the joint. */
   const pitches = new Set([14.3, 14.5, 15.3]);
   for (let p = 13.5; p <= 15.9 + 1e-9; p = Math.round((p + 0.4) * 10) / 10) pitches.add(p);
   const built = new Set(), leaks = [], names = {}, folded = {};
@@ -1994,12 +1974,16 @@ console.log('\nthe other limits, built at their ends:');
     }
   /* The clearance one step past its end, which leaked, and that was why the end is where
      it is. It no longer does: the joint's cut taken again when it comes out open
-     (cutAgain in core.js) closes it, as it closes the steps past the ceilings below. The
-     cap stays where it is until a sweep as fine as the one that found the small-pitch
-     leaks says how far it can go; this says which it is. */
+     (cutAgain in core.js) closes it, as it closes the steps past the ceilings below. So it
+     has to stay closed, and the field has to go on refusing it: the cap stays where it is
+     until a sweep says how far it can go, the dovetail every 0.01 mm of pitch and every
+     0.05 of the field past 0.3, on both piece layouts, clean up to the new cap. */
   const past = buildAll({ ...split, connector: 'dovetail', clr: 0.35 });
+  const capped = 0.35 > G.connClrCeiling({ ...G.DEFAULTS, connector: 'dovetail' }).max + 1e-9;
   console.log(`  ${'dovetail at 0.35 clearance'.padEnd(28)} ${leakText(past)}` +
-              (past.open ? ' — the cap is earned' : ' — closed, the cap waits on a sweep'));
+              (!capped ? '   THE FIELD TAKES IT' : past.bad ? '   OPEN AGAIN — cutAgain no longer closes it'
+                : ' — closed, and the cap waits on a sweep'));
+  if (!capped || past.bad) bad++;
 
   /* A corner boss is 2.6 mm tall and does not grow, so the pocket in it is capped — at
      what leaves a layer over it, which takes the spec's 6.5 × 2.4 magnet. Built at every
@@ -2167,9 +2151,11 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
 
      The last four were earned by open edges alone, and the joint's cut taken again when
      it comes out open (cutAgain in core.js) closes all four. Those ceilings stay where
-     they are until a sweep as fine as the one that found the small-pitch leaks (every
-     0.01 mm, every 0.05 of the field) says how far each can go: `waits` marks a step
-     that may build clean meanwhile. The field still has to refuse it. */
+     they are until a sweep as fine as the one that found the small-pitch leaks says how
+     far each can go: the joint every 0.01 mm over its pitch band and every 0.05 of the
+     field past its ceiling, on both piece layouts, clean up to the new one. `waits` marks
+     such a step: it has to stay closed, or cutAgain has lost ground, and the field still
+     has to refuse it. */
   const PAST = [
     ['snap from above, 0.35 at 42', { connector: 'snap', keyInsert: 'top', pitch: 42, clr: 0.35 }, '2x2 pieces'],
     ['puzzle, 0.3 at 13.5', { connector: 'puzzle', pitch: 13.5, clr: 0.3 }, '1-cell pieces'],
@@ -2195,9 +2181,10 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
       : inFace ? `its slot ${(Math.round(face.near * 1e4) / 1e4 + 0).toFixed(3)} mm off the seam face`
       : leakText(r)}` +
                 (!refused ? `   THE FIELD TAKES IT: the ceiling went up to ${most}`
-                  : still ? ' — the ceiling is earned'
-                  : waits ? ' — closed, the ceiling waits on a sweep' : '   NOW CLEAN — that ceiling can go up'));
-    if ((!still && !waits) || !refused) bad++;
+                  : waits ? (still ? '   OPEN AGAIN — cutAgain no longer closes it'
+                                   : ' — closed, and the ceiling waits on a sweep')
+                  : still ? ' — the ceiling is earned' : '   NOW CLEAN — that ceiling can go up'));
+    if (!refused || (waits ? still : !still)) bad++;
   }
 
   /* activeJoint in src/ui.js, with the field at the ceiling — a fixture, as in the coupon
