@@ -5237,13 +5237,17 @@ const drawers = DRAWERS.create({
    comes to this page's address, and that and the drawer must both have the change.
    A press still held on the map is let go first, as one the page loses is (letGoOfMap):
    the link can be followed from the keyboard, or tapped on a touch screen, while the
-   mouse holds a bin. The bin stays where the drag had it, which is the design `href`
-   was made from, and what is saved is a design let go of. Left held, the bin went on
-   following the pointer while the next page loaded, and letting go of it set a save
-   going that put another layout in the address, the local save and the drawer after
-   this one had been handed over. */
-function leave(href) {
+   mouse holds a bin. The bin stays where the drag had it, and what is saved is a design
+   let go of. Left held, the bin went on following the pointer while the next page
+   loaded, and letting go of it set a save going that put another layout in the address,
+   the local save and the drawer after this one had been handed over. An edit still
+   waiting for its pass lands too (landEdit), and only then is the address the next page
+   is given made (`to`): made before, a width typed and the link followed at once handed
+   over the width from before it, and the page saved the new one after. */
+function leave(to) {
   letGoOfMap();
+  landEdit();
+  const href = to();
   if (hashReady) saveNow();
   drawers.handoff(href.slice(href.indexOf('#') + 1), linkKeys(descString(), heldLink));
   location.href = href;
@@ -5251,7 +5255,7 @@ function leave(href) {
 // the guide holds no state, so hand it ours and it can hand it back
 $('navGuide').addEventListener('click', (e) => {
   e.preventDefault();
-  leave('../guide/#' + descString());
+  leave(() => '../guide/#' + descString());
 });
 $('shareBtn').addEventListener('click', () => {
   const link = shareLink();
@@ -5262,7 +5266,7 @@ $('shareBtn').addEventListener('click', () => {
 // the whole bins descriptor travels; baseplates re-emits what it doesn't own
 function platesHref() { return '../#' + descString(); }
 for (const id of ['toPlates', 'navPlates'])
-  $(id).addEventListener('click', (e) => { e.preventDefault(); leave(platesHref()); });
+  $(id).addEventListener('click', (e) => { e.preventDefault(); leave(platesHref); });
 
 /* ---------- boot ---------------------------------------------------------- */
 let timer = null;
