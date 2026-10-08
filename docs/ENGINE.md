@@ -656,3 +656,35 @@ currently installed):
   closed, and the ones open by more than 24 had been running half of all the tries. A try
   that throws (the turned cutters there reach `healCsgSeams`' T-junction pass limit) is
   passed over and the first cut stands, where it used to fail the whole build.
+- **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
+  straight walls run only 2.5 mm either side of a cell's middle at 13.5 mm, so every
+  housing, notch and clip pocket crosses its corner arcs and cones, at points that move
+  with the pitch. Two planes crossing a face a couple of thousandths apart lose a sliver
+  (open edges) or leave it turned over (a fold: two triangles back to back across an edge,
+  which an edge count cannot see). From 13.5 to 16 mm every 0.01, at the clearances as
+  they come, main took 14,194 plates of the smallest-pitch audit's joints and layouts and
+  45 had open edges, 115 folds; the H-clip put in from above was open at a field of 0.74
+  at every pitch. `healCsgSeams` now also counts the faces it leaves turned over
+  (`.turned`), and `cutAgain` in `buildPiece` takes a joint's cut again while the result is
+  open or turned: the cutters reversed, the faces reversed, the faces started a third and
+  two thirds of the way round, the cutters moved 1.7 microns two ways, and each cutter on
+  its own. A cut that is right first time, nearly every one, is built as before. One
+  sliver no order of the cut kept: a bottom-cap spoke 8.1 microns from the corner of a
+  puzzle notch's lobe (columns beside rows, 14.71 mm, field 0.3). `fanCentre` keeps the
+  spokes clear of the joint cutters' corners now as well as the mounting cutters', with
+  `FAN_JOINT` more room; a plate with no joint fans where it did.
+- **Two cells can share an edge without either being open.** Cells overlap by `BLOAT`, and
+  a cutter on the line between two is cut out of both. The BSP splits one cutter's faces
+  along another's planes the same way in both cells, so a split inside the band they share
+  is the same edge in two shells, used four times (229 of those 14,194 plates on main).
+  `touchesBuilt` compares the two shells' edges inside the band, and a jointed cell that
+  shares one with a jointed cell built before it is cut again (`TOUCH_TRIES`: each cutter
+  on its own, the cutters reversed, the faces reversed, the cutters one at a time from the
+  last), or else the earlier cell is; the top-insert pass does the same. Two cups put in
+  from above from each side of a piece one cell deep meet face to face at 14.44 mm (twice a
+  cup's reach), and there they are built as one solid with `csgUnion`.
+- **A face that is nothing but a straight line has no middle.** A weld that closes a
+  T-junction can leave three corners on one line. Fanned from its average, the spokes land
+  a fraction of a micron from a corner and read, to `checkManifold`'s thousandths, as the
+  face's own edges a second time (a puzzle key in the wall from beneath with magnets from
+  above at 42 mm: four edges used four times). Such a face goes out as it is.

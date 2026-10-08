@@ -507,20 +507,25 @@ function warningsList() {
         : `${pieces(across('deep'), 'P')} ${across('deep').length > 1 ? 'are' : 'is'} one cell deep ` +
           `and ${pieces(across('wide'), 'p')} one cell wide`;
       const keyName = { bowtie: 'bowtie keys', puzzlekey: 'puzzle keys', snap: 'snap clips' }[state.connector];
-      /* Each named the way it is set: the insert direction is part of the joint (an H-clip
-         from above leaks where one from beneath is watertight), and a snap clip goes in
-         from above only from inside the walls, where the page has the insert control. */
-      const JOINT = { dovetail: 'dovetail tabs', hclip: 'H-clips put in from beneath',
+      /* Each named the way it is set: the insert direction is part of the joint, and a
+         snap clip goes in from above only from inside the walls, where the page has the
+         insert control. The H-clip is named by its insert too, each way that clears, since
+         picking H-clips keeps the Key insertion you had: it was named from beneath alone,
+         and a key put in from above became an H-clip from above that Checks never named. */
+      const JOINT = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', hclip: 'H-clips put in from beneath',
+                      'hclip top': 'H-clips put in from above',
                       'snap top': 'snap clips inside the walls, put in from above',
                       wall: `${keyName} inside the walls, put in from beneath`,
                       cup: `${keyName} inside the walls, put in from above` };
       // on a snap plate the snap clip from above is the key in use in the wall from above
       const ok = jointsThatFit(state, layout)
         .map((j) => (state.connector === 'snap' && j.id === 'snap top' ? 'cup' : j.id));
-      // the key in the wall both ways is one item, not the same words twice over
+      // a joint both ways is one item, not the same words twice over
       if (ok.includes('wall') && ok.includes('cup'))
         JOINT.wall = `${keyName} inside the walls, put in from beneath or above`;
-      const fit = ok.filter((id) => !(id === 'cup' && ok.includes('wall'))).map((id) => JOINT[id]);
+      if (ok.includes('hclip') && ok.includes('hclip top')) JOINT.hclip = 'H-clips put in from beneath or above';
+      const fit = ok.filter((id) => !(id === 'cup' && ok.includes('wall')) &&
+                                    !(id === 'hclip top' && ok.includes('hclip'))).map((id) => JOINT[id]);
       // items that have a comma of their own are kept apart with semicolons
       const named = fit.some((t) => t.includes(','))
         ? (fit.length < 2 ? fit.join('') : `${fit.slice(0, -1).join('; ')}; or ${fit[fit.length - 1]}`)
