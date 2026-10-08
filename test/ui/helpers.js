@@ -18,11 +18,12 @@ const BINS_URL = pathToFileURL(path.join(ROOT, 'bins', 'index.html')).href;
 const PLATES_URL = pathToFileURL(path.join(ROOT, 'index.html')).href;
 const CELL = 40;   // the map's own viewBox units per grid cell
 
-async function openBins(page) {
+// `url` for the page served elsewhere than from disk, as by serveRoot below
+async function openBins(page, url = BINS_URL) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto(BINS_URL);
+  await page.goto(url);
   await page.waitForFunction(() => !!document.getElementById('fillmap'));
   await page.waitForTimeout(200);
   return errors;
@@ -32,11 +33,11 @@ async function openBins(page) {
    window after load in which the piece table, the print plan and the export dialog are
    all still empty. Waiting for the table to say "ready" is waiting for the real thing
    rather than for a duration that happens to be long enough on this machine. */
-async function openPlates(page) {
+async function openPlates(page, url = PLATES_URL) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto(PLATES_URL);
+  await page.goto(url);
   await page.waitForFunction(() => {
     const t = document.getElementById('pieceTail');
     return t && /ready/.test(t.textContent);
