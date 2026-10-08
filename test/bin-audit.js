@@ -2100,13 +2100,17 @@ console.log('\nnotes raised on the label shelf');
  * weighed as 297 mm³ where it is 555), and an L of three cells with fixed dividers
  * 1.246. Over 3157 bins, whole, half and carved, walls 0.4 to 10 mm, with and without
  * all of those, holes across the floor and edges lowered and open among them, it ranged
- * from 0.483 to 1.555; it ranges from 0.995 to 1.008 now, and 800 more drawn as the 40
- * below are from 0.994 to 1.006. */
+ * from 0.483 to 1.555; it ranges from 0.995 to 1.005 now, the carved ones 1.000, and 800
+ * more drawn as the 40 below are from 0.998 to 1.001. */
 console.log('\nwhat a bin weighs is the plastic it is built of');
 {
   const { enclosedVolume } = require('./enclosed-volume.js');
-  const TOL = 0.015;
+  /* A carved shape is weighed to its corners now, inside and out, so it is held closer:
+     its walls are the most of it, and a few tenths of a percent off there is all of
+     the shape's corners counted wrong (a plus with 6.5 mm walls was 1.010). */
+  const TOL = 0.015, CARVED_TOL = 0.003, tolOf = (c) => (c.cells ? CARVED_TOL : TOL);
   const L3 = [[0, 0], [1, 0], [0, 1]], U5 = [[0, 0], [1, 0], [2, 0], [0, 1], [2, 1]];
+  const PLUS = [[1, 0], [0, 1], [1, 1], [2, 1], [1, 2]];
   const NOTE = { labelMode: 1, note: 'M3 screws' };
   const CASES = [
     ['2x2x3, 8 mm scoop, 12 mm shelf', { u: 2, v: 2, hUnits: 3, scoop: 8, label: 12 }],
@@ -2138,14 +2142,20 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
        chamfer is deepest. Counted in the lip and in the rails, this was 1.015. */
     ['1x1x2, 0.4 mm walls, 9 x 9 removable', { u: 1, v: 1, hUnits: 2, wall: 0.4, divX: 9, divY: 9, divRemovable: true,
                                                divT: 0.8, divClr: 0 }],
+    /* A carved shape's reflex corners, where its walls turn round a notch: carvedBody
+       builds each from pieces that overlap, rounded on the cavity's side, and the
+       thicker the walls the more that differs from two walls running square into each
+       other. Counted as those, these were 1.017 and 1.010. */
+    ['carved plus, 10 mm walls, 15 units', { u: 3, v: 3, hUnits: 15, wall: 10, cells: PLUS }],
+    ['carved plus, 6.5 mm walls, 15 units', { u: 3, v: 3, hUnits: 15, wall: 6.5, cells: PLUS }],
   ];
   const off = [];
   for (const [name, cfg] of CASES) {
     const est = binVolume(cfg, 0.15).raw, mesh = enclosedVolume(buildBin(G, cfg).polys);
-    const ratio = est / mesh;
+    const ratio = est / mesh, out = Math.abs(ratio - 1) > tolOf(cfg);
     console.log(`  ${name.padEnd(40)} ${(est / 1000).toFixed(2).padStart(6)} of ${(mesh / 1000).toFixed(2).padStart(6)} cm³` +
-                `  ${ratio.toFixed(3)}${Math.abs(ratio - 1) > TOL ? '  OFF' : ''}`);
-    if (Math.abs(ratio - 1) > TOL) off.push(name);
+                `  ${ratio.toFixed(3)}${out ? '  OFF' : ''}`);
+    if (out) off.push(name);
   }
   /* And bins drawn at random, the same ones every run (a fixed seed): whole, half and
      carved, walls 0.4 to 10 mm, edges lowered and open, a scoop, a label shelf with and
@@ -2154,7 +2164,9 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
      to what fits, as a link holds them (unpackBin): more than that are thicker together
      than the cavity is deep, which neither the fields nor a link can ask for. Each new
      term in binVolume, or each change to how buildBin builds a part, meets a few dozen
-     bins here that nobody picked for it. */
+     bins here that nobody picked for it. Among the shapes is a plus, with a reflex
+     corner on each side, and half of them have walls past 3.35 mm, where a corner
+     counted wrong shows. */
   const seeded = (seed) => () => {               // mulberry32
     seed = (seed + 0x6D2B79F5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
@@ -2164,7 +2176,7 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
   const SEED = 56, DRAWN = 40, rnd = seeded(SEED);
   const pick = (list) => list[Math.floor(rnd() * list.length)], chance = (p) => rnd() < p;
   const SHAPES = [{ u: 0.5, v: 0.5 }, { u: 1, v: 0.5 }, { u: 1, v: 1 }, { u: 1.5, v: 1 }, { u: 2, v: 1 },
-                  { u: 1, v: 1.5 }, { u: 2, v: 2, cells: L3 }];
+                  { u: 1, v: 1.5 }, { u: 2, v: 2, cells: L3 }, { u: 3, v: 3, cells: PLUS }];
   const drawn = [];
   let lo = Infinity, hi = 0;
   for (let i = 0; i < DRAWN; i++) {
@@ -2185,7 +2197,7 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
     if (chance(0.1)) c.lip = false;
     const ratio = binVolume(c, 0.15).raw / enclosedVolume(buildBin(G, Object.assign({}, c)).polys);
     lo = Math.min(lo, ratio); hi = Math.max(hi, ratio);
-    if (Math.abs(ratio - 1) > TOL) drawn.push(`${ratio.toFixed(3)} ${JSON.stringify(c)}`);
+    if (Math.abs(ratio - 1) > tolOf(c)) drawn.push(`${ratio.toFixed(3)} ${JSON.stringify(c)}`);
   }
   console.log(`  ${DRAWN} drawn at random (seed ${SEED}), from ${lo.toFixed(3)} to ${hi.toFixed(3)}` +
               (drawn.length ? `: ${drawn.length} OFF: ${drawn.join('; ')}` : ''));
@@ -2204,7 +2216,7 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
     const asked = binHeights(c), plain = binHeights(Object.assign({}, c, { divX: 0, divY: 0 }));
     return asked.top !== plain.top || asked.inside !== plain.inside || asked.top !== c.hUnits * SPEC.unitH;
   });
-  console.log(`  within ${TOL * 100}% of what the mesh encloses: ` +
+  console.log(`  within ${TOL * 100}% of what the mesh encloses, a carved shape ${CARVED_TOL * 100}%: ` +
               (off.length ? `${off.length} OFF: ${off.join('; ')}` : `all ${CASES.length}`));
   console.log(`  carved and one-block bins built with no dividers: ` +
               (none.length ? 'COUNTED: ' + none.map(([n]) => n).join('; ') : 'none counted'));

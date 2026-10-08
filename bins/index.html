@@ -8640,7 +8640,8 @@ function shelfNote(cfg) {
  * — a divider through the scoop or the label shelf, two dividers crossing, a removable
  * divider's rails both ways, the block of holes across the floor under the label shelf,
  * and a divider's ends, its rails and the block where they stand in the lip's chamfer —
- * the plastic they share is counted once as well.
+ * the plastic they share is counted once as well. On a carved shape every corner is
+ * counted as carvedBody builds it.
  *
  * `filament` is what a slicer lays down for it at `infill` (0 to 1). The feet and the
  * floor slab are a thick block that it shells and infills, and so are the scoop and the
@@ -8656,11 +8657,9 @@ function shelfNote(cfg) {
  *   - fixed dividers packed into the cavity's rounded corners, which are counted as if
  *     the corners were square there, under 1 mm³ a divider, and where they or rails
  *     stand in the lip's chamfer there, as along a straight wall;
- *   - on a carved shape, the inside of each reflex corner, where the wall turns round a
- *     quarter circle rather than a square: (1 - π/4)t² for a wall t thick, 0.3 mm² at
- *     the usual wall, along the corner's height;
- *   - the corner arcs, which are counted as true arcs where buildBin builds chords: at
- *     the coarsest smoothness the outline encloses 0.1% less;
+ *   - the corner arcs of a rectangle and of the feet, which are counted as true arcs where
+ *     buildBin builds chords: at the coarsest smoothness the outline encloses 0.1% less
+ *     (a carved shape's are counted on their chords);
  *   - the block of holes where it stands in the lip's chamfer in a rounded corner, which
  *     is counted along straight walls, and in a half-millimetre strip behind the label
  *     shelf's front, both a few mm³.
@@ -8766,12 +8765,76 @@ function holeVoid(plan) {
   return { vol, sides, roof, mouth: segs[0][2] ? area(segs[0][2]) : 0 };
 }
 
+/* At a carved shape's reflex corner, the plastic carvedBody builds in plan less what
+   binVolume counts there, in mm², with the walls t thick; and with onSlab, where the
+   cells' floor slab stands round them too, as it does for the slab's last 2·BLOAT.
+   binVolume counts the two walls running square into each other at the notch corner,
+   with the fillet outside them, (1 - π/4)·CR², whole. carvedBody builds the corner from
+   pieces that overlap: the two cells' panels, ending 2·BLOAT past their cells, a lap
+   along each, a quarter disc of radius t on NARC chords, and the fillet as a band CR to
+   CR + t + OVER about the fillet's centre, which reaches the notch corner only on walls
+   of 1.35 mm or more and stands OVER into the cavity either side of it. Under them the
+   slab of the cell across from the notch runs BLOAT past its two shared sides into it.
+   The union is taken by scanlines: cut at every vertex and every crossing of two edges,
+   its width is linear in x between two cuts, so its width halfway times the gap is exact.
+   Kept by t, as a page weighs the same walls over and over. The notch corner is at the
+   origin, and the material is towards +x and +y. */
+const reflexOver = (() => {
+  const memo = new Map();
+  const box = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  const unionArea = (polys) => {
+    const edges = polys.map((p) => p.map((a, i) => [a, p[(i + 1) % p.length]])
+      .filter(([a, b]) => a[0] !== b[0]).map(([a, b]) => (a[0] < b[0] ? [a, b] : [b, a])));
+    const all = edges.flat(), cuts = all.flat().map((p) => p[0]);
+    for (let i = 0; i < all.length; i++)
+      for (let j = i + 1; j < all.length; j++) {
+        const [a, b] = all[i], [p, q] = all[j];
+        const lo = Math.max(a[0], p[0]), hi = Math.min(b[0], q[0]);
+        const s = (b[1] - a[1]) / (b[0] - a[0]), u = (q[1] - p[1]) / (q[0] - p[0]);
+        if (!(hi > lo) || s === u) continue;
+        const x = (p[1] - u * p[0] - a[1] + s * a[0]) / (s - u);
+        if (x > lo && x < hi) cuts.push(x);
+      }
+    cuts.sort((a, b) => a - b);
+    let area = 0;
+    for (let i = 0; i + 1 < cuts.length; i++) {
+      const x0 = cuts[i], x1 = cuts[i + 1], x = (x0 + x1) / 2, spans = [];
+      if (!(x1 > x0)) continue;
+      for (const es of edges) {
+        const ys = es.filter(([a, b]) => a[0] < x && b[0] > x)
+          .map(([a, b]) => a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])).sort((a, b) => a - b);
+        for (let j = 0; j + 1 < ys.length; j += 2) spans.push([ys[j], ys[j + 1]]);
+      }
+      area += spansLength(mergedSpans(spans)) * (x1 - x0);
+    }
+    return area;
+  };
+  return (t, onSlab) => {
+    const key = (onSlab ? 's' : 'w') + t;
+    if (memo.has(key)) return memo.get(key);
+    const d = SPEC.pitch / 2 - SPEC.half, CR = SPEC.half - SPEC.centre, NARC = 8, OVER = 4 * BLOAT;
+    const lap = d + 2 * BLOAT, A = CR + 1, B = t + OVER + 1;      // A, B: room round all of it
+    const arc = (r, o) => Array.from({ length: NARC + 1 }, (_, q) =>
+      [o + r * Math.cos(Math.PI / 2 * q / NARC), o + r * Math.sin(Math.PI / 2 * q / NARC)]);
+    const built = [box(0, -A, t, 2 * BLOAT - d), box(-A, 0, 2 * BLOAT - d, t),
+      box(0, -lap, t, OVER), box(-lap, 0, OVER, t), [[0, 0]].concat(arc(t, 0)),
+      arc(CR + t + OVER, -CR).concat(arc(CR, -CR).reverse())];
+    const v = onSlab
+      ? unionArea(built.concat([box(0, -A, B, B), box(-A, 0, 0, B), box(-d - BLOAT, -d - BLOAT, 0, 0)])) -
+        ((A + B) ** 2 - A * A)
+      : unionArea(built) - (2 * A * t + t * t + (1 - Math.PI / 4) * CR * CR);
+    if (memo.size > 4096) memo.clear();
+    memo.set(key, v);
+    return v;
+  };
+})();
+
 function binVolume(cfg, infill) {
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg || {})));
   c.floorT = builtFloorT(c);
   if (isHalfSize(c)) c.cells = null;
   const fill = Math.max(0, Math.min(1, isFinite(infill) ? infill : 0.15));
-  const P = SPEC.pitch, C = SPEC.centre, n = c.arcSegs, wall = c.wall;
+  const P = SPEC.pitch, C = SPEC.centre, CR = SPEC.half - C, n = c.arcSegs, wall = c.wall;
   const H = c.hUnits * SPEC.unitH, full = isFullRect(c), floorZ = floorTop(c);
   const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) => c.edges[k] === undefined || c.edges[k] >= 1);
   const hasLip = c.lip && allFull && !c.solid;
@@ -8784,13 +8847,13 @@ function binVolume(cfg, infill) {
      is square in its slab and filleted to the same radius in its walls (carvedBody).
      The feet are binFeet's, whatever the shape. */
   const hwO = (c.u - 1) * P / 2 + SPEC.half - c.shrink, hdO = (c.v - 1) * P / 2 + SPEC.half - c.shrink;
-  let areaIn, perim, fillets = 0;
+  let areaIn, perim, fillets = 0, reflex = 0, convex = 0;
   if (full) {
     areaIn = (t) => areaRR(hwO - t, hdO - t, Math.max(0.4, SPEC.r - t));
     perim = perimRR(hwO, hdO, SPEC.r);
   } else {
     const mask = maskOf(c), has = (x, y) => mask.has(cellKey(x, y));
-    let exposed = 0, convex = 0, reflex = 0;
+    let exposed = 0;
     for (const key of mask) {
       const [x, y] = key.split(',').map(Number);
       const e = [!has(x, y - 1), !has(x + 1, y), !has(x, y + 1), !has(x - 1, y)];
@@ -8803,13 +8866,18 @@ function binVolume(cfg, infill) {
         if (around.some(([i, j]) => i < 0 || j < 0 || i >= c.u || j >= c.v)) continue;
         if (around.filter(([i, j]) => !has(i, j)).length === 1) reflex++;
       }
-    const d = P / 2 - SPEC.half, CR = SPEC.half - C, k = 1 - Math.PI / 4;
+    const d = P / 2 - SPEC.half, k = 1 - Math.PI / 4;
     areaIn = (t) => mask.size * P * P - (d + t) * exposed * P + (d + t) * (d + t) * (convex - reflex) -
       convex * k * Math.max(0, CR - t) ** 2;
     perim = exposed * P - 2 * d * (convex - reflex) - convex * (2 - Math.PI / 2) * CR;
     fillets = reflex * k * CR * CR;
   }
   const area0 = areaIn(0), outer = area0 + fillets;
+  /* What carvedBody builds at a carved shape's corners, less what that outline counts
+     there, in plan with the walls t thick: its convex corners are arcs on 8 chords, inside
+     and out, and its reflex corners pieces that overlap (reflexOver). */
+  const seg = (r) => r * r * (Math.PI / 4 - 4 * Math.sin(Math.PI / 16));   // a quarter arc less its 8 chords
+  const cornersAt = (t) => (reflex ? reflex * reflexOver(t) : 0) + convex * (seg(Math.max(0, CR - t)) - seg(CR));
 
   /* The base block: the feet, added up foot by foot (binFeet) — a carved bin has fewer
      than its bounding box, and a half-size bin stands on quarter feet, 10.5 mm in on
@@ -8847,7 +8915,14 @@ function binVolume(cfg, infill) {
   const slabTop = solidBody ? H : cavityFloor + BLOAT;
   const slabH = slabTop - SPEC.footH;
   const holes = sites * hole.vol;
-  const baseRaw = footV + area0 * slabH - holes;
+  /* A carved shape's corners in the slab (cornersAt): the convex ones' chords; at each
+     reflex corner the slab of the cell across from the notch, which runs BLOAT past its
+     two shared sides into it; and in the slab's last 2·BLOAT, the corner's own pieces,
+     which start there (on a carved shape built as one block, its last BLOAT + 0.01). */
+  const on = Math.min(slabTop, hasLip ? H + lipH : H) - (cavityFloor - BLOAT);
+  const slabCorners = full ? 0 : -convex * seg(CR) * slabH +
+    (reflex ? reflex * ((P / 2 - SPEC.half + BLOAT) ** 2 * (slabH + BLOAT - on) + reflexOver(wall, true) * on) : 0);
+  const baseRaw = footV + area0 * slabH + slabCorners - holes;
   const baseShell = (footLat + perim * slabH + sites * hole.sides) * SHELL_T +
                     (botA - sites * hole.mouth + area0 + sites * hole.roof) * SKIN_T;
   const baseFil = Math.min(baseRaw, baseShell + fill * Math.max(0, baseRaw - baseShell));
@@ -8867,7 +8942,8 @@ function binVolume(cfg, infill) {
       lipDrop = Math.min(base - wall, Math.max(BLOAT, H - (SPEC.footH + c.floorT) - 0.3));
     else if (cavity && !full)
       lipDrop = Math.min(Math.max(BLOAT, base - wall), Math.max(BLOAT, H - cavityFloor - 0.3));
-    lip += simpsonOf((z) => areaIn(wall) - areaIn(Math.max(wall, wall + (base - wall) * z / lipDrop)), 0, lipDrop, 4);
+    // (on a carved shape with walls thicker than the lip's base, it narrows to it instead)
+    lip += simpsonOf((z) => areaIn(wall) - areaIn(wall + (base - wall) * z / lipDrop), 0, lipDrop, 4);
   }
 
   if (!cavity) {
@@ -8907,6 +8983,15 @@ function binVolume(cfg, infill) {
       walls += corner * tall(Math.max(frac(a), frac(b)));
   }
   if (!full) {
+    /* ...and its corners (cornersAt) up the walls' own profile: the wall's thickness, then
+       the chamfer's and the lip's. */
+    const prof = [[slabTop, wall], [H - lipDrop, wall]]
+      .concat(hasLip ? LIP.concat([[lipH, c.lipMin]]).map(([dz, t]) => [H + dz, t]) : []);
+    for (let q = 0; q + 1 < prof.length; q++) {
+      const [z0, t0] = prof[q], [z1, t1] = prof[q + 1];
+      walls += t0 === t1 ? cornersAt(t0) * (z1 - z0)
+        : simpsonOf((z) => cornersAt(t0 + (t1 - t0) * (z - z0) / (z1 - z0)), z0, z1, 4);
+    }
     const parts = { base: baseRaw, walls, lip, dividers: 0, scoop: 0, shelf: 0, block: 0, holes };
     return { raw: baseRaw + walls + lip, filament: baseFil + walls + lip, parts };
   }
