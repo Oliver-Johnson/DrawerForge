@@ -660,13 +660,13 @@ currently installed):
   for a second in 25 minutes of building. Only a cell open by at most 24 edges is cut
   again (six at each of four pockets). Cells cut again have been open by 1 to 24 edges,
   and cells open by 21 and 24 have closed; none open by more than 24 has. Over a broader
-  8,900 random mount designs, 357 cells were cut again (open by 1 to 23) and 157 closed,
-  and none of 10,730 cells open by more than 24 closed on any try. Of those tries only
-  the turned cutters closed cells nothing else did (56 of the 157). Both orders reversed
+  2,163 random mount designs, 99 cells were cut again (open by 1 to 23) and 51 closed,
+  and none of 2,733 cells open by more than 24 closed on any try. Of those tries only
+  the turned cutters closed cells nothing else did (26 of the 51). Both orders reversed
   at once, once a fourth try, closed none that one of the first two had not, and is no
-  longer taken. The nudges and the one site at a time came later: of 3,367 random page
-  designs with a solid floor, the first three tries left 24 open and all of them leave
-  16, none worse. A try that throws (the turned cutters there reach `healCsgSeams`'
+  longer taken. The nudges and the one site at a time came later: of 687 random page
+  designs with a solid floor, the first three tries left 6 open and all of them leave
+  4, none worse. A try that throws (the turned cutters there reach `healCsgSeams`'
   T-junction pass limit) is passed over and the first cut stands, where it used to fail
   the whole build.
 - **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
