@@ -1290,7 +1290,9 @@ function setBinLimits(u, v, hUnits) {
    on the scoop, and leave the lip its corners (dividersBuilt), so `cfg` carries the count
    across when this is asked for the count along. A bin with a finger slot built in it has
    no lip, and is counted without it (countedAs), up to as many as still leave a slot
-   built: more plates would leave it none, and its lip back. */
+   built: more plates would leave it none, and its lip back. Whether it has one is settled
+   between the plates both ways, so `cfg` carries the count along when this is asked for
+   the count across, too. */
 function setDividerLimit(id, cfg) {
   const axis = id === 'divX' ? 'x' : 'y';
   let most = mostDividers(axis === 'x' ? cfg.u : cfg.v, cfg.wall);
@@ -1456,7 +1458,12 @@ function readControls() {
   // the smallest bin's footprint, with what this pass gives every bin it applies to
   const lim = binCfg(Object.assign({}, t, { u: minU, v: minV, cells: null, divX: 0, divY: 0,
                                             divRemovable: t.divRemovable && !!own }));
-  setDividerLimit('divX', lim);
+  /* The count across is held with the plates along the field asks for, as the count along
+     is with the ones across: plates along can leave a side wall no room for its finger
+     slot, and the bin then has its lip, which holds the plates across to fewer. Held as
+     if there were none, a 1x1x3 with a 0.4 mm wall, a left slot and one plate along was
+     let ask for 11 across and built 10. */
+  setDividerLimit('divX', Object.assign({}, lim, { divY: divCount('divY', mostDividers(minV, t.wall)) }));
   t.divX = divCount('divX', mostDividers(minU, t.wall));
   setDividerLimit('divY', Object.assign(lim, { divX: t.divX }));
   t.divY = divCount('divY', mostDividers(minV, t.wall));
@@ -3069,7 +3076,7 @@ function binIssues(b, k, claims) {
         `and ${any ? 'more' : 'any'} would notch the stacking lip too close to its corners`,
       /* A bin with a finger slot has no lip, and is counted without it, but for this: with
          more plates it would have no slot, and so its lip, which they would notch too close
-         to its corners (dividersWhy). */
+         to its corners (dividersWhy). A fallback: no bin swept has reached it. */
       slot: (any) => `${any ? 'more' : 'any'} would leave no room for its finger slots, and it would have the ` +
         `stacking lip back, which ${any ? 'no more' : 'none'} can have a notch through clear of its corners`,
     };

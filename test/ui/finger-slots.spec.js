@@ -267,13 +267,43 @@ test('a slotted bin has no lip, so its plates are not counted as if it had', asy
   await expect(page.locator('#divY')).toHaveAttribute('max', '11');
   await H.setField(page, 'divY', 11);
   expect(await seen()).toEqual({ asked: 11, built: { divX: 0, divY: 11 }, lip: false, slots: 1, plates: 11 });
-  await expect(checks(page)).not.toContainText('removable divider');
+  await expect(checks(page)).not.toContainText('removable dividers along, not');
 
   // without the slot it has its lip, and the lip's rule holds it to 10 again
   await slot(page, 'F', false);
   expect(await seen()).toEqual({ asked: 11, built: { divX: 0, divY: 10 }, lip: true, slots: 0, plates: 10 });
   await expect(checks(page)).toContainText('is built with 10 removable dividers along, not the 11 it asks for, ' +
     'as no more can have a notch through the stacking lip clear of its corners');
+});
+
+/* The reviewer's link (#58-SF-B): the same bin with a slot in its left wall, one plate
+   along and 32 across asked for. The plate along leaves the left wall no compartment wide
+   enough for a slot, so the bin has its lip and takes 10 across. The across field was
+   held as if there were no plates along, where the slot builds and 11 fit: it offered 11,
+   and the bin built 10 and said so in Checks. Held with the plate along, it offers 10. */
+test('the across field offers as many plates as are built with the plates along it has', async ({ page }) => {
+  await page.goto('about:blank');
+  await page.goto(H.BINS_URL + '#bl=0-0-1-1-3-0.4-1.2-32-1-0-1-1-1-1-0-0-0-0-1-0-15-32&w=400&d=400&bw=400&bd=400');
+  await page.waitForFunction(() => !!document.getElementById('fillmap'));
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  const seen = () => page.evaluate(() => {
+    const b = B()[0], m = geomFor(b).meta;
+    return { asked: [b.divX, b.divY], built: builtDivs(b), lip: m.hasLip, slots: m.fingers };
+  });
+  expect(await seen()).toEqual({ asked: [32, 1], built: { divX: 10, divY: 1 }, lip: true, slots: 0 });
+  await expect(page.locator('#divX')).toHaveAttribute('max', '10');
+  await H.setField(page, 'divX', 10);
+  expect(await seen()).toEqual({ asked: [10, 1], built: { divX: 10, divY: 1 }, lip: true, slots: 0 });
+  await expect(checks(page)).not.toContainText('removable dividers across, not');
+
+  // with none along the slot is built, the lip goes, and 11 fit across
+  await H.setField(page, 'divY', 0);
+  await expect(page.locator('#divX')).toHaveAttribute('max', '11');
+  await H.setField(page, 'divX', 11);
+  expect(await seen()).toEqual({ asked: [11, 0], built: { divX: 11, divY: 0 }, lip: false, slots: 1 });
+  await expect(checks(page)).not.toContainText('removable dividers across, not');
 });
 
 test('a drawer of slotted bins hears each note once, and a bin cannot stand on one', async ({ page }) => {
