@@ -289,3 +289,66 @@ test('the drawer is drawn where the plate sits in it', async ({ page }) => {
     .toEqual({ left: 264, right: 0, front: 0, back: 2 });
   expect(errors).toEqual([]);
 });
+
+/* The plate's height goes over in the link too, as `ph`: Bins takes it off the drawer's
+   height for the room its bins have, and the guide passes it on. It was read off the
+   first piece built. The page rebuilds 260 ms after a change, behind a debounce, so a
+   link followed in that time carried the plate from before the change: tick Magnets and
+   go straight to Bins, and Bins was told 4.25 mm about a 7.05 mm plate. With nothing
+   built at all it was 4.25 mm and no floor, whatever floor the plate has.
+   The height Bins should have is the one the plate builds at, so each test first builds
+   the plate it is going to hand over and reads that off the piece. */
+const PLATE = '#w=84&d=84';   // one small piece: quick to build
+const pieceH = (page) => page.evaluate(() => builds[layout.pieces[0].id].meta.H);
+const phOf = (url) => new URL(url).hash.match(/[#&]ph=([^&]*)/)[1];
+
+test('a change still waiting to build goes to Bins and the guide at the plate\'s new height',
+  async ({ page }) => {
+    const errors = watch(page);
+    await H.forgetSaved(page);
+    await page.goto(site.base + PLATE + '&mg=1');
+    await platesReady(page);
+    const tall = await pieceH(page);
+    for (const [link, at] of [['toBins', /\/bins\/#/], ['navGuide', /\/guide\/#/]]) {
+      await page.goto('about:blank');
+      await page.goto(site.base + PLATE);
+      await platesReady(page);
+      const low = await pieceH(page);
+      expect(tall, 'fixture: magnets must make the plate taller').toBeGreaterThan(low + 1);
+      // the tick and the click in one go, so the rebuild cannot land between them
+      const [, before] = await Promise.all([page.waitForURL(at), page.evaluate((link) => {
+        document.getElementById('magnets').click();
+        const before = builds[layout.pieces[0].id].meta.H;
+        document.getElementById(link).click();
+        return before;
+      }, link)]);
+      expect(before, `${link}: fixture: followed with the plate before the tick still built`)
+        .toBe(low);
+      expect(phOf(page.url()), `${link}: the height handed over`).toBe(tall.toFixed(2));
+      if (link === 'toBins') {
+        await binsReady(page);
+        expect(await page.evaluate(() => state.plateH), 'the plate Bins has').toBe(+tall.toFixed(2));
+      }
+    }
+    expect(errors).toEqual([]);
+  });
+
+/* A plate the checks stop from building still has a height, and Bins still needs it:
+   this one is too tall for the bed, which is a printing problem, not a reason to tell
+   Bins its bins have 20 mm more room above the plate than they do. */
+test('a plate the checks stop from building goes to Bins at its own height', async ({ page }) => {
+  const errors = watch(page);
+  await H.forgetSaved(page);
+  await page.goto(site.base + PLATE + '&bp=20');
+  await platesReady(page);
+  const tall = await pieceH(page);
+  await page.goto('about:blank');
+  await page.goto(site.base + PLATE + '&bp=20&bh=20');
+  await page.waitForFunction(
+    () => /not building/.test(document.getElementById('pieceTail')?.textContent || ''));
+  expect(await page.evaluate(() => Object.keys(builds).length), 'fixture: nothing built').toBe(0);
+  await toBins(page);
+  expect(phOf(page.url()), 'the height handed over').toBe(tall.toFixed(2));
+  expect(await page.evaluate(() => state.plateH), 'the plate Bins has').toBe(+tall.toFixed(2));
+  expect(errors).toEqual([]);
+});
