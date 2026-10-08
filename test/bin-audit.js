@@ -1417,9 +1417,10 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
   if (!exact || fails.length) bad++;
 }
 /* Edges used other than twice once every vertex within `step` of another is one with it,
-   as a slicer may weld them. */
-const weldBad = (polys, step) => {
-  const key = (v) => v.map((x) => Math.round(x / step)).join(',');
+   as some tools that repair a mesh weld them: on a grid `step` across, moved `off` along
+   each axis. */
+const weldBad = (polys, step, off = 0) => {
+  const key = (v) => v.map((x) => Math.round((x - off) / step)).join(',');
   const edges = new Map();
   for (const t of G.polysToTriangles(polys)) {
     const ks = t.map(key);
@@ -2282,6 +2283,19 @@ console.log('\nremovable dividers: the plates a bin lists, and why it has fewer'
     : `${NONE.length} bins (${NONE.map(([name]) => name).join(', ')}) list none; with rails, ${kept.join(' and ')}`));
   if (listed.length || kept.some((n) => !n)) bad++;
 
+  /* Nor a reason it has fewer than it asks for (dividersWhy): a bin with no rails at all
+     has none whatever it asks for, not too few. The carved, solid and filled ones were
+     each given 'lipCorners', and one with holes across its floor 'slots' both ways, which
+     only the page's own check kept out of Checks. A half-size bin rails, and says why. */
+  const RAILLESS = NONE.slice(0, 3).concat([['holes across the floor', { u: 1, v: 1, hUnits: 3, divX: 31, divY: 31, divRemovable: true, insert: 1 }]]);
+  const given = RAILLESS.map(([name, c]) => [name, dividersWhy(c)]).filter(([, w]) => w.divX !== null || w.divY !== null);
+  const half = dividersWhy({ u: 0.5, v: 1, hUnits: 3, divY: 12, divRemovable: true, cells: [[0, 0]] }).divY;
+  console.log(`  ${'no rails, no reason'.padEnd(22)} ` + (given.length || half !== 'slots'
+    ? 'FAILED: ' + given.map(([name, w]) => `${name} says ${[w.divX, w.divY].filter((r) => r !== null).join(' and ')}`)
+      .concat(half !== 'slots' ? [`a half-size bin asking for 12 along says ${half}`] : []).join('; ')
+    : `${RAILLESS.length} bins (${RAILLESS.map(([name]) => name).join(', ')}) give none; a half-size one, 'slots'`));
+  if (given.length || half !== 'slots') bad++;
+
   /* Below what the rails allow, a bin is built with fewer along where one more would keep
      too little plate where they cross or stand on the scoop, or notch the lip too close to
      its corners (dividersBuilt), and Checks names what stops one more (dividersWhy): both,
@@ -2601,6 +2615,121 @@ console.log('\nnotes raised on the label shelf');
     : `${ALL_GLYPHS.length} glyphs, ${shells} shells, each watertight, oriented, every cap n - 2 triangles`));
   if (fails.length) bad++;
 
+  /* ...and still so once welded on a grid 10 µm across, as some tools that repair a mesh
+     do: every vertex put on the grid, and the ones in one cell of it made one. Each shell
+     is closed on its own, so an edge used other than twice after that is two shells with
+     corners in one cell. Moved 5 µm, "Fuses 5A, 10A" on a 2x1x2 with a 10 mm shelf did it
+     with two discs whose corners were 8 µm apart, and the 0.004 mm a stroke's end moved
+     a lane and the 0.003 mm a shell's bottom did were no defence. In the sweep below 321
+     of the 720 notes did it at one of the four offsets or another, and all 720 had two
+     shells with corners under 20 µm apart. So each note of a sweep over notes, shelves,
+     walls and widths is welded on a 10 µm grid at four offsets, and every edge has to be
+     used twice; and no two shells may have corners closer than 20 µm in x and in y both,
+     the NOTE_APART noteShells keeps wherever a move allows it, as it does for all of
+     these. Every shell's top is at one height, so x and y are all that keep two apart,
+     and two corners 10 µm apart in either are never in one cell of a 10 µm grid, at any
+     offset. A coarser weld is another matter: Cura melds vertices within 30 µm, and
+     there 667 of these notes still have two shells sharing an edge (main: all 720), which
+     Cura copes with on its own. The bin it was found on is welded whole as well. */
+  // the nearest two corners of different shells, the more of x and y, by squares 0.02 across
+  const nearestApart = (rings) => {
+    const grid = new Map(), A = 0.02;
+    let close = Infinity;
+    rings.forEach((ring, i) => {
+      for (const [x, y] of ring) {
+        const cx = Math.floor(x / A), cy = Math.floor(y / A);
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++)
+          for (const [j, qx, qy] of grid.get(`${cx + dx},${cy + dy}`) || [])
+            if (j !== i) close = Math.min(close, Math.max(Math.abs(x - qx), Math.abs(y - qy)));
+      }
+      for (const [x, y] of ring) {
+        const k = `${Math.floor(x / A)},${Math.floor(y / A)}`;
+        if (!grid.has(k)) grid.set(k, []);
+        grid.get(k).push([i, x, y]);
+      }
+    });
+    return close;
+  };
+  {
+    const APART = 0.02, offs = [0, 0.0025, 0.005, 0.0075];
+    const notes = ['M3 screws', 'Fuses 5A, 10A', 'Drill bits 1-6 mm', 'Assorted M3 M4 nuts, washers',
+                   'Resistors 10k to 100k', 'M2', 'Zip ties', 'Hex bits 1/4 inch', ...NOTE_GLYPHS];
+    const welded = [], near = [];
+    let tried = 0, printed = 0, nearest = Infinity;
+    for (const note of notes) for (const label of [7.5, 10, 12, 15]) for (const wall of [0.8, 1.2, 2])
+      for (const [u, v, hUnits] of [[1, 1, 3], [2, 1, 2], [3, 1, 3], [4, 1, 3], [1.5, 1, 4]]) {
+        const cfg = { u, v, hUnits, wall, label, labelMode: 1, note }, s = shelfNote(cfg);
+        tried++;
+        if (!s.fit) continue;
+        printed++;
+        const name = `${u}x${v}x${hUnits} wall ${wall}, ${label} mm shelf, "${note}"`;
+        const rings = [];
+        const rec = Object.assign({}, G, { extrudePoly: (pts, z0, z1) => {
+          rings.push(pts);
+          return G.extrudePoly(pts, z0, z1);
+        } });
+        const polys = NOTE_TEXT.noteShells(rec, s.fit.segs, s.top - 0.05, hUnits * SPEC.unitH - NOTE_CLEAR);
+        const counts = offs.map((o) => weldBad(polys, 0.01, o));
+        if (counts.some(Boolean)) welded.push(`${name}: ${counts.join('/')}`);
+        const close = nearestApart(rings);
+        nearest = Math.min(nearest, close);
+        if (close < APART) near.push(`${name}: ${(close * 1000).toFixed(1)} µm`);
+      }
+    const found = { u: 2, v: 1, hUnits: 2, wall: 1.2, label: 10, labelMode: 1, note: 'Fuses 5A, 10A' };
+    const whole = offs.map((o) => weldBad(buildBin(G, found).polys, 0.01, o));
+    const fault = whole.some(Boolean) || welded.length || near.length;
+    console.log(`  welded at 10 µm        ` + (fault
+      ? `FAILED: the 2x1x2 it was found on ${whole.join('/')} edges used other than twice (offsets 0/2.5/5/7.5 µm); ` +
+        `${welded.length} of ${printed} notes weld one, among them ${welded.slice(0, 3).join('; ')}; ` +
+        `${near.length} have two shells' corners under 20 µm apart, among them ${near.slice(0, 3).join('; ')}`
+      : `${printed} of ${tried} notes print, each clean at 0, 2.5, 5 and 7.5 µm, and the 2x1x2 it was found on ` +
+        `whole; no two shells' corners nearer than ${(nearest * 1000).toFixed(1)} µm`));
+    if (fault || printed < tried / 2) bad++;
+  }
+
+  /* ...and notes nobody picked, the same ones every run (a fixed seed): any of the
+     font's characters, up to 28 of them, on shelves 6 to 26 mm deep, walls 0.4 to 2 mm
+     and bins of every width. Now and then no move a stroke's end may make clears the
+     corners laid before it, and noteShells then keeps the one with the most room, which
+     nothing holds to NOTE_APART. Kept where it started instead, it left 4 of these with
+     two shells' corners under 15 µm apart, two of them 3.5 µm. They are held to 15 µm,
+     the figure noteShells gives: more than the 10 µm that keeps a 10 µm grid from joining
+     two at any offset, and than the 14.2 µm a 10 µm cell spans turned any way. */
+  {
+    const HELD = 0.015, DRAWN = 6000;
+    let seed = 62;
+    const rnd = () => {                        // mulberry32
+      seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const pick = (list) => list[Math.floor(rnd() * list.length)];
+    const near = [];
+    let printed = 0, short = 0, nearest = Infinity;
+    for (let i = 0; i < DRAWN; i++) {
+      let note = '';
+      for (let k = 1 + Math.floor(rnd() * 28); k > 0; k--) note += rnd() < 0.12 ? ' ' : pick(ALL_GLYPHS);
+      const cfg = { u: pick([1, 1.5, 2, 3, 4, 5]), v: pick([0.5, 1, 1.5, 2]), hUnits: pick([2, 3, 4, 6]),
+                    wall: pick([0.4, 0.8, 1.2, 2]), label: Math.round((6 + rnd() * 20) * 10) / 10, labelMode: 1, note };
+      const s = shelfNote(cfg);
+      if (!s.fit) continue;
+      printed++;
+      const rings = [];
+      NOTE_TEXT.noteShells(Object.assign({}, G, { extrudePoly: (pts) => { rings.push(pts); return []; } }),
+                           s.fit.segs, 0, 1);
+      const close = nearestApart(rings);
+      nearest = Math.min(nearest, close);
+      if (close < 0.02) short++;
+      if (close < HELD) near.push(`${(close * 1000).toFixed(2)} µm, ${JSON.stringify(cfg)}`);
+    }
+    console.log(`  ${'random notes'.padEnd(22)} ` + (near.length || printed < DRAWN / 2
+      ? `FAILED: ${near.length} of ${printed} have two shells' corners under 15 µm apart, among them ${near.slice(0, 3).join('; ')}`
+      : `${printed} of ${DRAWN} print (seed 62), no two shells' corners nearer than ${(nearest * 1000).toFixed(1)} µm; ` +
+        `${short} with no move that keeps them 20 µm apart`));
+    if (near.length || printed < DRAWN / 2) bad++;
+  }
+
   /* The font's data goes into the page inside a script tag, where a less-than sign and a
      slash together could end the script. None of it may hold one, and the file may not
      either. And the four notes above have to be every glyph the font draws, or "every
@@ -2743,6 +2872,7 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
      its walls are the most of it, and a few tenths of a percent off there is all of
      the shape's corners counted wrong (a plus with 6.5 mm walls was 1.010). */
   const TOL = 0.015, CARVED_TOL = 0.003, tolOf = (c) => (c.cells ? CARVED_TOL : TOL);
+  const LIP_TOL = 0.001;   // the carved rows a unit tall, which weigh the lip's corners (below)
   const L3 = [[0, 0], [1, 0], [0, 1]], U5 = [[0, 0], [1, 0], [2, 0], [0, 1], [2, 1]];
   const PLUS = [[1, 0], [0, 1], [1, 1], [2, 1], [1, 2]];
   const NOTE = { labelMode: 1, note: 'M3 screws' };
@@ -2802,10 +2932,13 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
        as the wall: on a bin 15 units tall the lip is too little of it to show a corner
        counted wrong, so these are a unit tall. With every corner taken at the wall's
        thickness the whole way up, these were 0.9935 and 0.9929, and with only the lip's
-       upright part so (its 1.9 mm stretch), 0.9970, inside 0.3%, and 0.9967, the second
-       having no floor over its feet. */
-    ['carved plus, 10 mm walls, 1 unit', { u: 3, v: 3, hUnits: 1, wall: 10, cells: PLUS }],
-    ['carved plus, 10 mm, 1 unit, floor 0',{ u: 3, v: 3, hUnits: 1, wall: 10, floorT: 0, cells: PLUS }],
+       upright part so (its 1.9 mm stretch), 0.9970 and 0.9967, the second having no floor
+       over its feet. Against 0.3% that let the first through and caught the second by
+       0.03 points, and no other shape tried showed it more (a staircase, a T, a Z, a plus
+       of nine cells), nor holes in the plus's feet much (0.9966). So these are held to
+       LIP_TOL: they are 0.9999 as built, and the upright slip is 0.2 points past it. */
+    ['carved plus, 10 mm walls, 1 unit', { u: 3, v: 3, hUnits: 1, wall: 10, cells: PLUS }, LIP_TOL],
+    ['carved plus, 10 mm, 1 unit, floor 0',{ u: 3, v: 3, hUnits: 1, wall: 10, floorT: 0, cells: PLUS }, LIP_TOL],
     /* Finger slots (fingerSlots): no lip, and so no notches in one, the dips out of the
        walls, a back slot's shelf left off with its notches and its raised note, and with
        holes asked for those laid out for the shelf it takes away (the 1x1x4's spread into
@@ -2837,9 +2970,9 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
                                                  label: 12, fingerSlots: { b: true } }],
   ];
   const off = [], meshes = new Map();
-  for (const [name, cfg] of CASES) {
+  for (const [name, cfg, tol = tolOf(cfg)] of CASES) {
     const est = binVolume(cfg, 0.15).raw, mesh = enclosedVolume(buildBin(G, cfg).polys);
-    const ratio = est / mesh, out = Math.abs(ratio - 1) > tolOf(cfg);
+    const ratio = est / mesh, out = Math.abs(ratio - 1) > tol;
     meshes.set(name, mesh);
     console.log(`  ${name.padEnd(40)} ${(est / 1000).toFixed(2).padStart(6)} of ${(mesh / 1000).toFixed(2).padStart(6)} cm³` +
                 `  ${ratio.toFixed(3)}${out ? '  OFF' : ''}`);
@@ -2934,7 +3067,7 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
     const asked = binHeights(c), plain = binHeights(Object.assign({}, c, { divX: 0, divY: 0 }));
     return asked.top !== plain.top || asked.inside !== plain.inside || asked.top !== c.hUnits * SPEC.unitH;
   });
-  console.log(`  within ${TOL * 100}% of what the mesh encloses, a carved shape ${CARVED_TOL * 100}%: ` +
+  console.log(`  within ${TOL * 100}% of what the mesh encloses, a carved shape ${CARVED_TOL * 100}%, up its lip ${LIP_TOL * 100}%: ` +
               (off.length ? `${off.length} OFF: ${off.join('; ')}` : `all ${CASES.length}`));
   console.log(`  carved and one-block bins built with no dividers: ` +
               (none.length ? 'COUNTED: ' + none.map(([n]) => n).join('; ') : 'none counted'));
@@ -3174,11 +3307,15 @@ function weldOpen(polys, tol) {
      so those are the rows. Notes ride in bnotes, so the two that print one are given it.
      The removable dividers' row is as the table of links from before the feet holes has
      it: 857e407d on main, 7b838b80 once its rails reached the clearance further (#50),
-     and 576daddc since its lip is notched where its plates go in. */
+     and 576daddc since its lip is notched where its plates go in. The 1x1x3's note was
+     e43cbc54 until its letters' shells were laid with no two corners closer than a
+     slicer's weld joins (noteShells), and d3caaa09 since: some of its strokes stop up to
+     a few hundredths of a millimetre elsewhere, and nothing else in it changed. The 2x1x2
+     over screws prints no note (its shelf is too shallow), so it is the same bytes. */
   const crypto = require('crypto');
   const BEFORE = [
     ['2x1x4, label shelf 12', '0-0-2-1-4-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15', {}, '314a909d03d54277'],
-    ['1x1x3, note raised', '0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-1', { note: 'M3 screws' }, 'e43cbc548a2737ae'],
+    ['1x1x3, note raised', '0-0-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-12-0-0-0-0-15-0-1', { note: 'M3 screws' }, 'd3caaa093f004e13'],
     ['3x2x5, dividers, scoop, label, magnets', '0-0-3-2-5-1.2-1.2-2-1-0-1-1-1-1-8-12-0-0-0-0-15-1', {}, '378b909714f22d86'],
     ['2x2x3, removable dividers', '0-0-2-2-3-1.2-1.2-1-1-0-1-1-1-1-0-0-0-0-1-0-15', {}, '576daddcf6ccc8e5'],
     ['1.5x1x3, scoop and label', '0-0-1.5-1-3-1.2-1.2-0-0-0-1-1-1-1-8-10-0-0-0-0-15', {}, '4a2046d7ad5c3eae'],
