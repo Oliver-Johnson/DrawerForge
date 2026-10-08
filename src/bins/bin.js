@@ -1827,8 +1827,11 @@ function fingerZ(s, x) {
  *   floor     floorPlan's { shelf, holes } the slots were settled against, which buildBin
  *             builds and insertPlan answers with; null where there are none to settle
  *   shelfOff  a back slot is built where a label shelf would have been
- *   holesGaveWay  and the holes across the floor are laid out as if the shelf were
- *             there, because laid out without it they stand too high for the slot
+ *   holesGaveWay  false, or the holes across the floor are laid out as if that shelf
+ *             were there, and why, { why, walls, without }: 'many' when laid out
+ *             without it they come to more than HOLES_MAX, 'high' when they stand too
+ *             high for the slots in `walls` ('fb', say); `without` is holeLayout's answer
+ *             for that layout
  *   scoop     the scoop a front slot holds it to, for buildBin to build, or null;
  *   scoopWas  the radius it would have been built at without the slots, and
  *   scoopNow  the one it is built at, 0 for none
@@ -1986,19 +1989,25 @@ function fingerSlots(c) {
   };
 
   /* The shelf and the holes as floorPlan settles them, which decide each other. A back
-     slot takes the shelf away, so with holes asked for they are laid out as they would be
-     with no shelf, as long as the slot is still built over them: a 1x1x4 with AA cells and
-     a 12 mm shelf gets 4, not the 2 that keep in front of a shelf it does not have. Laid
-     out without the shelf they can stand too high for the slot, the row of AAA cells in a
-     1x0.5x3 with an 8 mm shelf, and then they keep where they would be with it
-     (holesGaveWay), which there is nowhere, and the slot is built. */
+     slot takes the shelf away, so with holes asked for they are laid out as with no shelf
+     where that costs nothing: a 1x1x4 with AA cells and a 12 mm shelf gets 4, not the 2
+     that keep in front of a shelf it does not have. It costs something when that layout
+     comes to more than HOLES_MAX, which builds none (a 9x8.5x3 of hex bits: 2009 there,
+     1960 in front of an 8 mm shelf), or stands the block too high for a slot the shelf's
+     layout builds, the back one or another (the row of AAA cells in a 1x0.5x3 with an
+     8 mm shelf). Then the holes keep where they are with the shelf, as they always did
+     (holesGaveWay), which there may be nowhere, and every slot that builds over them is
+     built: never fewer holes, nor fewer walls with slots, than that. */
   const asIs = floorPlan(c, iw, id, H);
   if (c.fingerSlots.b && asIs.shelf && insertOf(c)) {
-    const bare = settle(floorPlan(Object.assign({}, c, { label: 0 }), iw, id, H), asIs.shelf);
-    if (bare.sides.b.slots.length) return bare;
-    const plan = settle(asIs, asIs.shelf);
-    plan.holesGaveWay = plan.shelfOff;
-    return plan;
+    const kept = settle(asIs, asIs.shelf);
+    const without = floorPlan(Object.assign({}, c, { label: 0 }), iw, id, H);
+    const bare = settle(without, asIs.shelf);
+    const fewer = (without.holes.n || 0) < (asIs.holes.n || 0);
+    const lost = asked.filter((k) => (k === 'b' || kept.sides[k].slots.length) && !bare.sides[k].slots.length).join('');
+    if (!fewer && !lost) return bare;
+    if (kept.shelfOff) kept.holesGaveWay = { why: fewer ? 'many' : 'high', walls: fewer ? '' : lost, without: without.holes };
+    return kept;
   }
   return settle(asIs, asIs.shelf);
 }

@@ -257,9 +257,12 @@ test('a link carries the slots, and one without them is written as it always was
     .toEqual(['bin-1x1x3-magnets-qty1', 'bin-2x1x3-1x0div-slot-fr-qty1']);
 });
 
-/* Load a layout from its link and select the bin at the first cell. */
-const load = async (page, bl) => {
-  await page.evaluate((h) => { clearSel(); loadFromHash('bl=' + encodeURIComponent(h)); readControls(); refresh(); }, bl);
+/* Load a layout from its link, with the rest of the link after it, and select the bin at
+   the first cell. */
+const load = async (page, bl, rest = '') => {
+  await page.evaluate(([h, more]) => {
+    clearSel(); loadFromHash('bl=' + encodeURIComponent(h) + more); readControls(); refresh();
+  }, [bl, rest]);
   await settle(page);
   expect(await page.evaluate(() => packLayers(layers)), 'the layout loaded').toBe(bl);
   await H.clickCell(page, 0, 0);
@@ -291,7 +294,68 @@ test('a back slot gives the holes the label shelf’s room, or says they kept cl
   await expect(checks(page)).not.toContainText('label shelf too deep');
   await expect(page.locator('#insertHint')).toContainText('The holes keep clear of where the label shelf would be, ' +
     'to leave room for the finger slot in the back wall, and in front of it there is no room for even one hole for AAA batteries.');
+  // and what the bin would be without the shelf: holes, and no slot
+  await expect(page.locator('#insertHint')).toContainText('spread into its room the holes would stand too high for ' +
+    'that slot. Asked for no label shelf, this bin has 3 holes and no finger slot in the back wall.');
   expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
+
+  /* The same for a slot in another wall: with its front lowered to half, a 1x0.5x3 for AA
+     cells 8 mm deep would have 2 of them in the shelf's room, standing too high for the
+     front slot. A slot asked for is not traded for holes, so both slots are built. */
+  await load(page, '0-0-1-0.5-3-1.2-1.2-0-0-0-0.5-1-1-1-0-8-0-0-0-0-15-24-0-1-8');
+  expect(await page.evaluate(() => {
+    const b = B()[0], m = geomFor(b).meta;
+    return [m.holes, holesIn(b), m.fingerWalls];
+  })).toEqual([0, null, 'fb']);
+  await expect(checks(page)).toContainText('has no holes for AA batteries: they keep in front of where its label ' +
+    'shelf would be, to leave room for the finger slot in its front wall, and there is no room there for even one');
+  await expect(page.locator('#insertHint')).toContainText('The finger slot in the back wall takes the label shelf ' +
+    'away, but spread into its room the holes would stand too high for the finger slot in the front wall. Asked for ' +
+    'no label shelf, this bin has 2 holes and no finger slot in the front wall.');
+  expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
+});
+
+test('past the most holes one bin is built with, they keep clear of the shelf’s room, and the slot builds over them', async ({ page }) => {
+  /* A 9x8.5x3 for hex bits at -0.3 mm with an 8 mm shelf: spread into the shelf's room
+     they would come to 2009, more than one bin is built with, so they keep to the 1960 in
+     front of where it would be, as without the slot, and the back slot builds over them. */
+  const big = (label) => `0-0-9-8.5-3-1.2-1.2-0-0-0-1-1-1-1-0-${label}-0-0-0-0-15-16-0-4-0`;
+  const rest = '&bhc=-0.3&w=400&d=400&bw=400&bd=400';
+  await load(page, big(8), rest);
+  expect(await page.evaluate(() => {
+    const b = B()[0], m = geomFor(b).meta;
+    return [m.holes, (holesIn(b) || { n: 0 }).n, m.fingerWalls];
+  })).toEqual([1960, 1960, 'b']);
+  await expect(checks(page)).toContainText('has its holes for hex bits kept clear of where its label shelf would be, ' +
+    'since spread into that room there would be 2009 holes, more than the 2000 one bin is built with');
+  await expect(checks(page)).toContainText('has a finger slot in its back wall, so its label shelf is left off');
+  await expect(checks(page)).not.toContainText('so it has none');
+  expect(await page.locator('#warnings .w.err').count(), 'notes, not faults').toBe(0);
+  await expect(page.locator('#insertHint')).toContainText('1960 holes, 8.3 mm deep.');
+  await expect(page.locator('#insertHint')).toContainText('They keep clear of where the label shelf would be: the ' +
+    'finger slot in the back wall takes the label shelf away, but spread into its room there would be 2009 holes, ' +
+    'more than the 2000 one bin is built with.');
+
+  /* The block fills the wedge under where the shelf would be, as the bin has no shelf to
+     fill it: the slotted bin weighs what the bin without the slot does, less its slot and
+     lip, and that wedge more. */
+  expect(await page.evaluate(() => {
+    const b = B()[0], a = Object.assign({}, b, { fingerSlots: { f: false, b: false, l: false, r: false } });
+    const hwO = (b.u - 1) * SPEC.pitch / 2 + SPEC.half, hdO = (b.v - 1) * SPEC.pitch / 2 + SPEC.half;
+    const wall = Math.max(WALL_MIN, b.wall), lipV = areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9;
+    const h = holesIn(a), foot = h.shelf.top - BIN_DEFAULTS.labelT - h.shelf.depth, lo = Math.max(h.floor, foot);
+    const wedge = ((h.top - foot) ** 2 - (lo - foot) ** 2) / 2 * 2 * (hwO - wall);
+    return [+(volumeMm3(b).raw + fingerSlotVolume(b, wall, lipV) - volumeMm3(a).raw - wedge).toFixed(6), wedge > 1000];
+  })).toEqual([0, true]);
+
+  /* Where the holes are goes by how deep the shelf would be, so the bin is keyed by it:
+     at 10 mm they are 2 mm further forward, another part. */
+  const key = () => page.evaluate(() => typeKey(B()[0]));
+  const at8 = await key();
+  await load(page, big(10), rest);
+  expect(await page.evaluate(() => holesIn(B()[0]).n)).toBe(1960);
+  expect([at8, await key()]).toEqual(['9x8.5x3-w1.2-f1.2-L8-i4w6.35d8.333-slot-b',
+                                      '9x8.5x3-w1.2-f1.2-L10-i4w6.35d8.333-slot-b']);
 });
 
 test('bins built alike are one part, whatever shelf or scoop their slots took away', async ({ page }) => {

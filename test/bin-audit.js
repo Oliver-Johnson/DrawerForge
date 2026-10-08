@@ -424,9 +424,20 @@ const CASES = [
     fingerSlots: { b: true }, slots: { b: 1 } },
   /* Spread into its room, the AAA cells' block stands 0.5 under the rim, too high for the
      slot, so they keep in front of where the shelf would be, which leaves room for none,
-     and the page is told they gave way (holesGaveWay) rather than that the shelf took it. */
+     and the page is told they gave way (holesGaveWay) rather than that the shelf took it,
+     and why: too high for the slot in the back wall. */
   { name: '1x0.5x3-slot-b-aaa-L8', u: 1, v: 0.5, hUnits: 3, insert: 2, label: 8,
-    fingerSlots: { b: true }, slots: { b: 1 }, gave: true },
+    fingerSlots: { b: true }, slots: { b: 1 }, gave: 'high:b' },
+  /* Spread into its room, 2 AA cells would fit, but their block would stand too high for
+     the slot in the lowered front wall. A slot asked for is not traded for holes: they keep
+     in front of where the shelf would be, which leaves room for none, and both are built. */
+  { name: '1x0.5x3-slot-fb-aa-L8', u: 1, v: 0.5, hUnits: 3, insert: 1, insertDepth: 8, label: 8,
+    edges: { f: 0.5 }, fingerSlots: { f: true, b: true }, slots: { f: 1, b: 1 }, gave: 'high:f' },
+  /* Spread into its room, the hex bits would come to 2009 holes, past the 2000 one bin is
+     built with, which builds none: they keep in front of where the shelf would be, 1960 of
+     them, and the slot builds over them. */
+  { name: '9x8.5x3-slot-b-hex-L8', u: 9, v: 8.5, hUnits: 3, insert: 4, holeClr: -0.3, label: 8, holes: 1960,
+    fingerSlots: { b: true }, slots: { b: 1 }, gave: 'many' },
   // on a thick wall the outer face is the wider: the inner one, where a finger goes, is to spec
   { name: '2x1x3-slot-wall5', u: 2, v: 1, hUnits: 3, wall: 5, fingerSlots: { f: true, l: true },
     slots: { f: 1, l: 1 } },
@@ -2305,11 +2316,13 @@ function weldOpen(polys, tol) {
          that checkManifold, which rounds to a micron, could miss. */
       const open = weldOpen(r.polys, 0.01), was = weldOpen(buildBin(G, Object.assign({}, cs, { insert: 0 })).polys, 0.01);
       if (open > was) faults.push(`${open} edges open welded at 10 microns, where the bin without holes has ${was}`);
+      // the shelf as built: noteOnShelf's depth with a note, else as asked (12 fits all of these)
+      const sd = shelf && shelf.depth ? shelf.depth : cs.label;
+      // given way to a back slot, they keep clear of where it would be, as if it were there
+      if ((shelved || cs.gave) && backY > hd - Wl - sd - 0.8 + 1e-9)
+        faults.push(`a hole reaches under ${shelved ? 'the shelf' : 'where the shelf would be'}, to ${backY.toFixed(2)}`);
       if (shelved) {
-        // the shelf as built: noteOnShelf's depth with a note, else as asked (12 fits all of these)
-        const sd = shelf && shelf.depth ? shelf.depth : cs.label;
         const top = shelf && shelf.fit ? H - 1.0 : H;
-        if (backY > hd - Wl - sd - 0.8 + 1e-9) faults.push(`a hole reaches under the shelf, to ${backY.toFixed(2)}`);
         const under = at(0, hd - Wl - sd / 2);
         if (!under.some((z) => near(z, floor + depth))) faults.push('no block under the shelf');
         if (!near(under[under.length - 1], top)) faults.push(`the block comes through the shelf: ${under[under.length - 1].toFixed(2)}`);
@@ -2440,12 +2453,15 @@ console.log('\nfinger slots');
     const n = want.reduce((s, [, k]) => s + k, 0);
     if (r.meta.fingers !== n) faults.push(`${r.meta.fingers} slots built, ${n} wanted`);
     /* The holes the page is told of are the ones built, and with a back slot over a
-       shelf, whether they gave way to it. */
+       shelf, whether they gave way to it, and why: 'many' when spread into its room they
+       would come to more than one bin is built with, 'high' and the walls whose slots they
+       would stand too high for. */
     const plan = fingerSlotPlan(cs), told = cs.insert ? insertPlan(cs).n || 0 : 0;
     if ((r.meta.holes || 0) !== (cs.holes || 0) || told !== (cs.holes || 0))
       faults.push(`${r.meta.holes || 0} holes built, ${told} said, ${cs.holes || 0} wanted`);
     if (plan.shelfOff !== !!(cs.label && cs.slots.b)) faults.push(`shelfOff ${plan.shelfOff}`);
-    if (!!plan.holesGaveWay !== !!cs.gave) faults.push(`holesGaveWay ${!!plan.holesGaveWay}, not ${!!cs.gave}`);
+    const g = plan.holesGaveWay, gave = g ? g.why + (g.walls ? ':' + g.walls : '') : false;
+    if (gave !== (cs.gave || false)) faults.push(`holesGaveWay ${gave}, not ${cs.gave || false}`);
     let worstSide = 0, narrowest = Infinity, widest = 0, bottoms = [];
     for (const side of ['f', 'b', 'l', 'r']) {
       const e = cs.edges && cs.edges[side] !== undefined ? cs.edges[side] : 1;
