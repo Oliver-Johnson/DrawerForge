@@ -12982,9 +12982,16 @@ function dividerParts() {
     }
   }
   const out = [...m.values()].sort((a, b) => b.qty - a.qty);
-  // where plates go in more than one bin type, which bin a plate's slots are in (slotsFor)
+  /* Where plates go in more than one bin type, which bins a shaped plate is for, by their
+     files in the download (plateHow). The names are worked out once here: typeNames
+     builds every type's dividers, and asked for each plate's words it made the export
+     rows of 56 bins of 20 types take 195 ms rather than 16. */
   const withPlates = new Set(out.flatMap((d) => d.uses.map((u) => u.t.key)));
-  for (const d of out) d.binned = withPlates.size > 1;
+  const binned = withPlates.size > 1, names = binned && out.some((d) => d.meta.outline) ? typeNames() : null;
+  for (const d of out) {
+    d.binned = binned;
+    if (names) for (const u of d.uses) u.file = (names.get(u.t.key) || typeName(u.t)) + '.stl';
+  }
   /* Named by size, and a shaped one by which way it stands and what it is shaped for, so
      the file says how it goes in: "across-slots-up", "along-slots-down", "-scoop" for the
      corner cut to the scoop, "-on-scoop" for one that stands on it. Two of a name that
@@ -12998,41 +13005,66 @@ function dividerParts() {
     const n = (seen.get(base) || 0) + 1;
     seen.set(base, n);
     d.name = n > 1 ? `${base}-${n}` : base;
+    d.base = base;
   }
+  /* And its words, once, for its row and the README. Two plates along of one name can
+     still read alike, made for different slots of one bin: on a 1x1.5x4 with a 40 mm
+     scoop, one across and two along, the plate across meets the scoop beside the front
+     crossing, so the front plate along has its slot from the bottom 0.14 mm taller than
+     the back one's. Those say their slots as well, as one on the scoop does. */
+  for (const d of out) d.how = plateHow(d);
+  const alike = new Map();
+  for (const d of out) {
+    if (!d.meta.outline || d.axis !== 'x' || d.meta.stands) continue;
+    const k = `${d.base} ${d.how}`;
+    if (!alike.has(k)) alike.set(k, []);
+    alike.get(k).push(d);
+  }
+  for (const g of alike.values()) if (g.length > 1) for (const d of g) { d.bySlot = true; d.how = undefined; d.how = plateHow(d); }
   return out;
 }
 const dividerName = (d) => d.name;
 const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
 const andList = (n) => (n.length < 2 ? n.join('') : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`);
 const slotsFromFront = (ks) => `the ${andList(ks.map(ordinal))} slot${ks.length > 1 ? 's' : ''} from the front`;
-/* Which slots a plate standing on the scoop is for. It is made for its own slot, and two
+/* Which slots a plate along is for, where it stands on the scoop or would read as another
+   of its size does (bySlot, dividerParts). It is made for its own slot, and two
    bin types that take the same plate need not take it in the same one: a 2x2x6 with a
    40 mm scoop takes it in its 1st slot with 2 along and its 2nd with 5. So where plates
    go in more than one bin type, the slots are said bin by bin, naming each bin by its
-   file in the download, and the bins that take it in the same slots together; with
-   plates for one bin type, as a layout of one bin always has, they are said as before. */
+   file in the download (dividerParts), and the bins that take it in the same slots
+   together; with plates for one bin type, as a layout of one bin always has, they are
+   said as before. */
 function slotsFor(d) {
   if (!d.binned) return slotsFromFront(d.uses[0].ks);
-  const by = new Map(), names = typeNames();
+  const by = new Map();
   for (const u of d.uses) {
     const k = u.ks.join(',');
     if (!by.has(k)) by.set(k, { ks: u.ks, bins: [] });
-    const n = (names.get(u.t.key) || typeName(u.t)) + '.stl', g = by.get(k);
-    if (!g.bins.includes(n)) g.bins.push(n);
+    const g = by.get(k);
+    if (!g.bins.includes(u.file)) g.bins.push(u.file);
   }
   return [...by.values()].map((x, i) => `${i ? `the ${andList(x.ks.map(ordinal))}` : slotsFromFront(x.ks)} of ` +
     andList(x.bins)).join('; ');
 }
 /* How a shaped plate goes in, for its row and the README; '' for a plain one, which goes
-   in any slot either way round. */
+   in any slot either way round. Where plates go in more than one bin type, a shaped one
+   names the bins it is for as well, as one on the scoop names its slots in them: two
+   plates across of one size, cut to scoops of 8 and 10 mm, were two rows word for word
+   alike, and the one for the 8 mm scoop goes into the other bin 0.79 mm high, over the
+   rim. A plain plate goes in any bin of its size, and says nothing. Worked out once for
+   each plate in dividerParts, which keeps it as d.how. */
 function plateHow(d) {
+  if (d.how !== undefined) return d.how;
   const m = d.meta;
   if (!m.outline) return '';
+  const where = m.stands || d.bySlot ? `for ${slotsFor(d)}`
+    : d.binned ? `for ${andList([...new Set(d.uses.map((u) => u.file))])}` : '';
   if (d.axis === 'y')
     return [m.slots ? 'across, slots up: these go in first' : 'across',
-            m.cut ? 'cut corner to the front, over the scoop' : ''].filter(Boolean).join(', ');
+            m.cut ? 'cut corner to the front, over the scoop' : '', where].filter(Boolean).join(', ');
   return [m.slots ? 'along, slots down: these go in over the plates across' : 'along',
-          m.stands ? `stands on the scoop, for ${slotsFor(d)}` : ''].filter(Boolean).join(', ');
+          m.stands ? 'stands on the scoop' : '', where].filter(Boolean).join(', ');
 }
 
 function types() {
