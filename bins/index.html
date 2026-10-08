@@ -7728,6 +7728,22 @@ function noteOnShelf(c, iw, id, H, footAt, built) {
   return { why: '', top, depth, text, fit, divided };
 }
 
+/* The scoop as buildBin builds it, for a rectangle with a cavity and no holes across its
+   floor (those leave the scoop off): its radius, or 0 for none, one sum which buildBin
+   builds it by and binVolume weighs it by. `id` is the cavity's half depth, and floorZ
+   its floor. The label shelf's is floorPlan's, for both, as the holes need it.
+   There is no scoop where the front is open: it fills the corner between the floor and
+   the front wall, and an open front has no corner to fill. No taller than the front wall
+   it fills the corner of, either. With the front lowered, a scoop held only to the full
+   height stood above the wall, and above the height binTop quotes: a 2x1x4 with every
+   wall at a quarter and an 8.5 mm scoop was 14.45 mm built and 11.5 quoted, to its
+   README and the bed check (scoopRadius). And on a bin with removable plates across, no
+   taller than leaves their front ends standing in their rails: plateLayout's, which works
+   it out with the plates, `fit` where the caller has it already. */
+function scoopBuilt(c, id, H, floorZ, fit) {
+  return c.divRemovable ? (fit || plateLayout(c, dividersBuilt(c))).r : scoopRadius(c, H, floorZ, id);
+}
+
 /* Stacking lip.
  *
  * The lip's inner surface is a baseplate socket: a bin stacks on a bin exactly as
@@ -8855,8 +8871,12 @@ const holeSize = (x, lim, d) => Math.min(lim.max, Math.max(lim.min, isFinite(x) 
    four sites, sx and sy each +1 or -1. "Corners" means the bin's outer corners, which a
    cell owns where neither of its neighbours along that corner's two edges is in the
    bin — so a rectangle gets four however big it is, and a carved L gets the five convex
-   corners of its outline. Pure, so the page counts magnets without building anything. */
-function holeSites(c) {
+   corners of its outline. Pure, so the page counts magnets without building anything.
+   Of the size as it is built, to the nearest half cell (halfSized), as buildBin asks it:
+   asked of a 1.2 x 1 as given, every cell counted two columns, 8 holes where the bin
+   built as 1 x 1 has 4. Neither page hands it such a size; a script can. */
+function holeSites(cfg) {
+  const c = halfSized(Object.assign({}, cfg));
   if ((!c.magnets && !c.screws) || feetHolesOff(c)) return [];
   const mask = maskOf(c), has = (x, y) => mask.has(cellKey(x, y)), out = [];
   for (let i = 0; i < c.u; i++)
@@ -9286,7 +9306,7 @@ const wallEdge = (c, k) => (c.edges && c.edges[k] !== undefined ? c.edges[k] : 1
 const lipNotched = (c) => !!c.lip && !c.solid && ['f', 'b', 'l', 'r'].every((k) => wallEdge(c, k) >= 1) &&
   LIP[0][1] - c.wall >= BLOAT;
 /* The scoop's radius as buildBin builds it, 0 for none: no taller than the front wall it
-   fills the corner of (see buildBin), and with plates across a removable bin no taller
+   fills the corner of (see scoopBuilt), and with plates across a removable bin no taller
    than leaves their front ends `plate` mm to stand in. */
 function scoopRadius(c, H, floorZ, id, plate) {
   const eF = wallEdge(c, 'f');
@@ -9436,9 +9456,19 @@ const railedMost = (cfg, axis) => railedLimit(cfg, axis).most;
 /* The dividers a bin is built with: as many as it asks for, bar removable ones past the
    most that fit. What a bin asks for is left as it is, in the link and everywhere it is
    kept, so a design from before this held them there opens unchanged; the page says in
-   Checks that it is built with fewer, and the plates it lists are the ones built. */
+   Checks that it is built with fewer, and the plates it lists are the ones built.
+   And none at all on a carved shape or a solid block, whatever it asks for: buildBin
+   builds both without dividers, as it does a bin whose floor fills it (builtSolid). A
+   half-size bin is never carved, so its mask is dropped first, as buildBin drops it.
+   Counted as asked, a carved L of three cells asking for two across and one along was
+   listed with 6 compartments, named bin-2x2x3-2x1div and weighed with three walls across
+   it that it does not have, and a solid block asking the same was listed and named the
+   same way. */
 function dividersBuilt(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg);
+  const shape = halfSized(Object.assign({}, c));
+  if (isHalfSize(shape)) shape.cells = null;
+  if (!isFullRect(shape) || builtSolid(shape)) return { divX: 0, divY: 0 };
   const n = (key, axis) => Math.min(c[key] || 0, c.divRemovable ? railedMost(c, axis) : Infinity);
   const out = { divX: n('divX', 'x'), divY: n('divY', 'y') };
   /* Removable plates along the depth have to keep enough plate where they stand: over the
@@ -10060,16 +10090,12 @@ function buildBin(G, cfg) {
        attach them to (an open front has no corner to fill). The shelf and the holes
        across the floor are settled at the top (floorPlan), because the holes keep in
        front of the shelf and under it, and a bin with holes has no scoop and no
-       dividers: the holes take the floor. */
+       dividers: the holes take the floor. The scoop is scoopBuilt's, which binVolume
+       weighs it by: with removable plates across, no taller than leaves their front ends
+       standing in their rails, which plateLayout works out with the plates. */
     const iw = hw - c.wall, id = hd - c.wall, poke = cornersPoke(hw, hd, iw, id, n);
     const { shelf, holes } = floor;
-    /* No taller than the front wall it fills the corner of. With the front lowered,
-       a scoop held only to the full height stood above the wall, and above the
-       height binTop quotes: a 2x1x4 with every wall at a quarter and an 8.5 mm scoop
-       was 14.45 mm built and 11.5 quoted, to its README and the bed check. With
-       removable plates across, no taller than leaves their front ends standing in their
-       rails, which plateLayout works out with the plates. */
-    const rS = holesOn ? 0 : c.divRemovable ? fit.r : scoopRadius(c, H, floorZ, id);
+    const rS = holesOn ? 0 : scoopBuilt(c, id, H, floorZ, fit);
     if (rS) polys.push(...(poke ? scoopRounded(G, iw, id, c.wall, floorZ, rS, Math.max(4, n), n)
                                 : scoopPrism(G, iw, id, floorZ, rS, Math.max(4, n))));
     if (shelf) {
@@ -10305,6 +10331,671 @@ function shelfNote(cfg) {
   return say(noteOnShelf(holed ? Object.assign({}, c, { divX: 0, divY: 0 }) : c, iw, id, H, shelfFoot(c)));
 }
 
+/* ---------- what a bin weighs ----------------------------------------------------
+ * The plastic in a bin, worked out from the numbers buildBin builds it from, so the page
+ * can weigh and time a whole layout without building any of it: binVolume gives
+ * { raw, filament, parts } in mm³.
+ *
+ * `raw` is the plastic the bin is made of: every part buildBin builds, as it sizes it,
+ * and nothing it leaves off. The mesh is shells that overlap on purpose (BLOAT, and the
+ * wall ring buried up to a millimetre in the floor slab), and where they overlap the
+ * plastic is there once, so it is counted once here: the shells' volumes added up come
+ * to 2 to 11% more than the plastic on a plain bin, the most on small bins with thick
+ * walls, and up to a quarter more with holes in the feet. Where two parts meet
+ * — a divider through the scoop or the label shelf, two dividers crossing, a removable
+ * divider's rails both ways, the block of holes across the floor under the label shelf,
+ * a divider's ends, its rails and the block where they stand in the lip's chamfer, and a
+ * divider's ends and its rails where they stand in a wall, rounded corners and all — the
+ * plastic they share is counted once as well. Where a wall is lowered or open, what of
+ * them stands in the air over it is counted too, and on a carved shape every corner is
+ * counted as carvedBody builds it. A removable bin's lip and label shelf are weighed less
+ * the notch each has at every slot for its plates to go in past (notchedLip, plateLayout),
+ * and its scoop as low as its plates across hold it (scoopBuilt); the plates themselves
+ * are parts of their own, which the page weighs by their own outlines.
+ *
+ * `filament` is what a slicer lays down for it at `infill` (0 to 1). The feet and the
+ * floor slab are a thick block that it shells and infills, and so are the scoop and the
+ * label shelf, which are as thick as they are deep (a 12 mm shelf is 13 mm thick at the
+ * wall), and the block of holes across the floor. The walls, the lip, the dividers and their rails are a few perimeters wide and
+ * come out solid. Assumes 2 perimeters (0.8 mm) and 4 solid top and bottom layers
+ * (0.8 mm), a common default. A wall past 1.6 mm is infilled too, which this does not
+ * model: a 3x2x6 with 5 mm walls weighs 121 g here, and with the middle of its walls at
+ * the same 15% it would be about 50 g less; at 3 mm about 20 g, at 2 mm 6 g.
+ *
+ * Left out, each under a quarter of a gram on any bin the fields allow, and most a few
+ * hundredths:
+ *   - the note's raised letters, 0.22 g at the most (a full shelf of the biggest);
+ *   - dividers and rails in the cavity's rounded corners where they stand in the lip's
+ *     chamfer, which is counted there as along a straight wall, and where two dividers
+ *     cross behind a corner's arc: 0.13 g (0.5%) on a 2x0.5x2 with 66 fixed dividers
+ *     across, 14 along and an 8 mm label shelf, the most found, and 0.06 g on a 1x1x3
+ *     with 32 each way and 0.4 mm walls;
+ *   - the corner arcs of a rectangle and of the feet, and a notch in the lip where it
+ *     cuts one, which are counted as true arcs where buildBin builds chords: at the
+ *     coarsest smoothness the outline encloses 0.1% less (a carved shape's are counted on
+ *     their chords);
+ *   - where a notch in the lip ends beside a rail or beside the end of a piece of the
+ *     label shelf, strips half a BLOAT wide, a few hundredths of a mm³ a notch;
+ *   - the block of holes where it stands in the lip's chamfer in a rounded corner, which
+ *     is counted along straight walls, and in a half-millimetre strip behind the label
+ *     shelf's front, both a few mm³.
+ */
+const SHELL_T = 0.8, SKIN_T = 0.8;
+// a rounded rectangle's area and perimeter, half-widths hw x hd and corner radius r
+const areaRR = (hw, hd, r) => 4 * hw * hd - (4 - Math.PI) * r * r;
+const perimRR = (hw, hd, r) => 4 * hw + 4 * hd - 8 * r + 2 * Math.PI * r;
+// the integral of f from a to b, by Simpson's rule on k pairs of panels: exact for a
+// quadratic, which every area here is in the height it is taken at
+function simpsonOf(f, a, b, k = 1) {
+  if (!(b > a)) return 0;
+  const n = 2 * k, h = (b - a) / n;
+  let s = f(a) + f(b);
+  for (let i = 1; i < n; i++) s += (i % 2 ? 4 : 2) * f(a + i * h);
+  return s * h / 3;
+}
+/* ...and by three-point Gauss on k panels, which never asks f at a or b: what stands on
+   the floor steps up at the label shelf's front, and the step is where a piece ends. */
+function gaussOf(f, a, b, k = 2) {
+  if (!(b > a)) return 0;
+  const h = (b - a) / k, g = Math.sqrt(3 / 5) / 2;
+  let s = 0;
+  for (let i = 0; i < k; i++) {
+    const m = a + (i + 0.5) * h;
+    s += (5 * f(m - g * h) + 8 * f(m) + 5 * f(m + g * h)) / 18;
+  }
+  return s * h;
+}
+// intervals [[lo, hi], ...]: merged where they meet or overlap, and their total length
+const mergedSpans = (list, gap = 0) => {
+  const out = [];
+  for (const [lo, hi] of list.slice().sort((a, b) => a[0] - b[0])) {
+    const last = out[out.length - 1];
+    if (last && lo <= last[1] + gap) last[1] = Math.max(last[1], hi);
+    else out.push([lo, hi]);
+  }
+  return out;
+};
+const spansLength = (list) => list.reduce((a, [lo, hi]) => a + Math.max(0, hi - lo), 0);
+const spansClip = (list, lo, hi) => list.map(([a, b]) => [Math.max(a, lo), Math.min(b, hi)]).filter(([a, b]) => b > a);
+const spansMeet = (A, B) => spansLength(A.flatMap(([a, b]) => spansClip(B, a, b)));
+const inSpans = (list, x) => list.some(([lo, hi]) => x > lo && x < hi);
+
+/* The plan area of the rails `n` removable dividers stand in along one direction: each a
+   slot between two ribs RAIL_T thick, standing out from each of the two facing walls its
+   plate slides between, as deep as buildBin's reach() builds them: a rail's depth and the
+   clearance, or the whole way across a cavity too shallow for two. `along` is half the
+   length of those walls inside the cavity, hwI for the dividers that stand at a fixed x
+   (divX), hdI for the others, as buildBin's spans() and reach() take them, and `across`
+   half the distance between them. Placed, sorted and merged where two meet exactly as
+   spans() does it, so dividers packed close enough for one's rail to run into the next
+   count the plastic they share once.
+   A rail beside an end wall can stand in the cavity's rounded corner, where buildBin
+   either leaves it buried in the wall or, if it would stand out through the bin, cuts it
+   to the cavity's outline. Either way the part behind the arc is wall, already counted,
+   so only the part in front of it is counted here: the rail's depth left in front of
+   the arc, summed along it, against a true arc of the cavity's radius rather than the
+   chords it is built from (under a rail 1.2 mm wide the two differ by a few hundredths
+   of a square millimetre at the coarsest smoothness). A rail on a straight run is
+   counted whole, so at any count that keeps the rails out of the corners the sum is
+   exactly the rails' own area. */
+function railArea(n, along, across, wall, divT, divClr) {
+  if (!(n > 0) || !(along > 0)) return 0;
+  const slot = divT / 2 + divClr, rail = slot + RAIL_T;
+  const deep = RAIL_D + divClr >= across - BLOAT / 2 ? across : RAIL_D + divClr;
+  const spans = [];
+  for (let k = 1; k <= n; k++) {
+    const p = -along + (2 * along) * k / (n + 1);
+    spans.push([p - rail, p - slot], [p + slot, p + rail]);
+  }
+  const merged = mergedSpans(spans, BLOAT);
+  /* t into a corner, the arc stands rI - sqrt(rI² - t²) in front of the wall's straight
+     line, and takes the whole of a rail's depth at tEnd (or never quite, where the
+     radius is no deeper than the rail). `under` is the depth left in front of it, summed
+     from the corner's start to t; `upTo` the same from the middle of the wall to x, both
+     ways, so a span's area is upTo(hi) - upTo(lo). Past the end wall it adds nothing. */
+  const rI = Math.max(0.4, SPEC.r - wall), straight = Math.max(0, along - rI);
+  const tEnd = deep >= rI ? rI : Math.sqrt(rI * rI - (rI - deep) * (rI - deep));
+  const under = (t) => {
+    t = Math.min(Math.max(t, 0), tEnd);
+    return (deep - rI) * t + (t * Math.sqrt(rI * rI - t * t) + rI * rI * Math.asin(t / rI)) / 2;
+  };
+  const upTo = (x) => Math.sign(x) * (deep * Math.min(Math.abs(x), straight) + under(Math.abs(x) - straight));
+  return 2 * merged.reduce((a, [lo, hi]) => a + upTo(hi) - upTo(lo), 0);  // both walls
+}
+
+/* What one holed site leaves empty, bottom up through holePlan's pieces, and the area
+   of its sides and its roof for the slicer's shells. Each piece runs a BLOAT into the
+   next, whose opening is inside its own, so where two overlap the next one's opening is
+   what is open; with screws the hole goes on up through the slab to the screw's end. A
+   round hole is its polygon, as buildBin builds it. */
+function holeVoid(plan) {
+  const area = (h) => (h.kind === 'circle' ? h.n / 2 * h.r * h.r * Math.sin(2 * Math.PI / h.n) : 4 * h.hx * h.hy);
+  const side = (h) => (h.kind === 'circle' ? 2 * h.n * h.r * Math.sin(Math.PI / h.n) : 4 * (h.hx + h.hy));
+  const segs = plan.foot.map(([z0, z1, h], k) =>
+    [z0, k + 1 < plan.foot.length ? plan.foot[k + 1][0] : plan.screws ? FOOT_HOLES.screwTop : z1, h]);
+  let vol = 0, sides = 0, roof = 0;
+  for (const [z0, z1, h] of segs) {
+    if (!h) continue;
+    vol += area(h) * (z1 - z0); sides += side(h) * (z1 - z0); roof = area(h);
+  }
+  return { vol, sides, roof, mouth: segs[0][2] ? area(segs[0][2]) : 0 };
+}
+
+/* At a carved shape's reflex corner, the plastic carvedBody builds in plan less what
+   binVolume counts there, in mm², with the walls t thick; and with onSlab, where the
+   cells' floor slab stands round them too, as it does for the slab's last 2·BLOAT.
+   binVolume counts the two walls running square into each other at the notch corner,
+   with the fillet outside them, (1 - π/4)·CR², whole. carvedBody builds the corner from
+   pieces that overlap: the two cells' panels, ending 2·BLOAT past their cells, a lap
+   along each, a quarter disc of radius t on NARC chords, and the fillet as a band CR to
+   CR + t + OVER about the fillet's centre, which reaches the notch corner only on walls
+   of 1.35 mm or more and stands OVER into the cavity either side of it. Under them the
+   slab of the cell across from the notch runs BLOAT past its two shared sides into it.
+   The union is taken by scanlines: cut at every vertex and every crossing of two edges,
+   its width is linear in x between two cuts, so its width halfway times the gap is exact.
+   Kept by t, as a page weighs the same walls over and over. The notch corner is at the
+   origin, and the material is towards +x and +y. */
+const reflexOver = (() => {
+  const memo = new Map();
+  const box = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  const unionArea = (polys) => {
+    const edges = polys.map((p) => p.map((a, i) => [a, p[(i + 1) % p.length]])
+      .filter(([a, b]) => a[0] !== b[0]).map(([a, b]) => (a[0] < b[0] ? [a, b] : [b, a])));
+    const all = edges.flat(), cuts = all.flat().map((p) => p[0]);
+    for (let i = 0; i < all.length; i++)
+      for (let j = i + 1; j < all.length; j++) {
+        const [a, b] = all[i], [p, q] = all[j];
+        const lo = Math.max(a[0], p[0]), hi = Math.min(b[0], q[0]);
+        const s = (b[1] - a[1]) / (b[0] - a[0]), u = (q[1] - p[1]) / (q[0] - p[0]);
+        if (!(hi > lo) || s === u) continue;
+        const x = (p[1] - u * p[0] - a[1] + s * a[0]) / (s - u);
+        if (x > lo && x < hi) cuts.push(x);
+      }
+    cuts.sort((a, b) => a - b);
+    let area = 0;
+    for (let i = 0; i + 1 < cuts.length; i++) {
+      const x0 = cuts[i], x1 = cuts[i + 1], x = (x0 + x1) / 2, spans = [];
+      if (!(x1 > x0)) continue;
+      for (const es of edges) {
+        const ys = es.filter(([a, b]) => a[0] < x && b[0] > x)
+          .map(([a, b]) => a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])).sort((a, b) => a - b);
+        for (let j = 0; j + 1 < ys.length; j += 2) spans.push([ys[j], ys[j + 1]]);
+      }
+      area += spansLength(mergedSpans(spans)) * (x1 - x0);
+    }
+    return area;
+  };
+  return (t, onSlab) => {
+    const key = (onSlab ? 's' : 'w') + t;
+    if (memo.has(key)) return memo.get(key);
+    const d = SPEC.pitch / 2 - SPEC.half, CR = SPEC.half - SPEC.centre, NARC = 8, OVER = 4 * BLOAT;
+    const lap = d + 2 * BLOAT, A = CR + 1, B = t + OVER + 1;      // A, B: room round all of it
+    const arc = (r, o) => Array.from({ length: NARC + 1 }, (_, q) =>
+      [o + r * Math.cos(Math.PI / 2 * q / NARC), o + r * Math.sin(Math.PI / 2 * q / NARC)]);
+    const built = [box(0, -A, t, 2 * BLOAT - d), box(-A, 0, 2 * BLOAT - d, t),
+      box(0, -lap, t, OVER), box(-lap, 0, OVER, t), [[0, 0]].concat(arc(t, 0)),
+      arc(CR + t + OVER, -CR).concat(arc(CR, -CR).reverse())];
+    const v = onSlab
+      ? unionArea(built.concat([box(0, -A, B, B), box(-A, 0, 0, B), box(-d - BLOAT, -d - BLOAT, 0, 0)])) -
+        ((A + B) ** 2 - A * A)
+      : unionArea(built) - (2 * A * t + t * t + (1 - Math.PI / 4) * CR * CR);
+    if (memo.size > 4096) memo.clear();
+    memo.set(key, v);
+    return v;
+  };
+})();
+
+function binVolume(cfg, infill) {
+  const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg || {})));
+  c.floorT = builtFloorT(c);
+  if (isHalfSize(c)) c.cells = null;
+  const fill = Math.max(0, Math.min(1, isFinite(infill) ? infill : 0.15));
+  const P = SPEC.pitch, C = SPEC.centre, CR = SPEC.half - C, n = c.arcSegs, wall = c.wall;
+  const H = c.hUnits * SPEC.unitH, full = isFullRect(c), floorZ = floorTop(c);
+  const allFull = !c.edges || ['f', 'b', 'l', 'r'].every((k) => c.edges[k] === undefined || c.edges[k] >= 1);
+  const hasLip = c.lip && allFull && !c.solid;
+  const lipH = lipHeight(c.lipMin), base = LIP[0][1];
+
+  /* The outline in plan, as the area inside it `t` in from its outer face, and its
+     perimeter. A rectangle is buildBin's rounded one. A carved shape is its cells, each
+     outer face `half` from its cell's centre, so a quarter of a millimetre in from the
+     grid line, with every convex corner on an arc of the spec's radius; a reflex corner
+     is square in its slab and filleted to the same radius in its walls (carvedBody).
+     The feet are binFeet's, whatever the shape. */
+  const hwO = (c.u - 1) * P / 2 + SPEC.half - c.shrink, hdO = (c.v - 1) * P / 2 + SPEC.half - c.shrink;
+  let areaIn, perim, fillets = 0, reflex = 0, convex = 0;
+  if (full) {
+    areaIn = (t) => areaRR(hwO - t, hdO - t, Math.max(0.4, SPEC.r - t));
+    perim = perimRR(hwO, hdO, SPEC.r);
+  } else {
+    const mask = maskOf(c), has = (x, y) => mask.has(cellKey(x, y));
+    let exposed = 0;
+    for (const key of mask) {
+      const [x, y] = key.split(',').map(Number);
+      const e = [!has(x, y - 1), !has(x + 1, y), !has(x, y + 1), !has(x - 1, y)];
+      exposed += e.filter(Boolean).length;
+      for (let k = 0; k < 4; k++) if (e[k] && e[(k + 1) % 4]) convex++;
+    }
+    for (let vx = 0; vx <= c.u; vx++)
+      for (let vy = 0; vy <= c.v; vy++) {
+        const around = [[vx - 1, vy - 1], [vx, vy - 1], [vx - 1, vy], [vx, vy]];
+        if (around.some(([i, j]) => i < 0 || j < 0 || i >= c.u || j >= c.v)) continue;
+        if (around.filter(([i, j]) => !has(i, j)).length === 1) reflex++;
+      }
+    const d = P / 2 - SPEC.half, k = 1 - Math.PI / 4;
+    areaIn = (t) => mask.size * P * P - (d + t) * exposed * P + (d + t) * (d + t) * (convex - reflex) -
+      convex * k * Math.max(0, CR - t) ** 2;
+    perim = exposed * P - 2 * d * (convex - reflex) - convex * (2 - Math.PI / 2) * CR;
+    fillets = reflex * k * CR * CR;
+  }
+  const area0 = areaIn(0), outer = area0 + fillets;
+  /* What carvedBody builds at a carved shape's corners, less what that outline counts
+     there, in plan with the walls t thick: its convex corners are arcs on 8 chords, inside
+     and out, and its reflex corners pieces that overlap (reflexOver). */
+  const seg = (r) => r * r * (Math.PI / 4 - 4 * Math.sin(Math.PI / 16));   // a quarter arc less its 8 chords
+  const cornersAt = (t) => (reflex ? reflex * reflexOver(t) : 0) + convex * (seg(Math.max(0, CR - t)) - seg(CR));
+
+  /* The base block: the feet, added up foot by foot (binFeet) — a carved bin has fewer
+     than its bounding box, and a half-size bin stands on quarter feet, 10.5 mm in on
+     every side — and the floor slab over the whole outline, from the top of the feet to
+     the cavity's floor, or to the top for a bin built as one block. Less what the holes
+     in the feet leave empty. */
+  const sizes = new Map();                       // how far in from a whole foot -> how many
+  for (const f of binFeet(c)) sizes.set(f.inset, (sizes.get(f.inset) || 0) + 1);
+  const footAt = (inset, g) => (z) => {
+    let w = SPEC.prof[SPEC.prof.length - 1][1];
+    for (let q = 0; q + 1 < SPEC.prof.length; q++) {
+      const [z0, w0] = SPEC.prof[q], [z1, w1] = SPEC.prof[q + 1];
+      if (z >= z0 && z <= z1) { w = w0 + (w1 - w0) * (z1 > z0 ? (z - z0) / (z1 - z0) : 0); break; }
+    }
+    const h = w - c.shrink;
+    return g(h - inset, h - inset, h - C);
+  };
+  let footV = 0, footLat = 0, botA = 0;
+  for (const [inset, count] of sizes) {
+    for (let q = 0; q + 1 < SPEC.prof.length; q++) {
+      const z0 = SPEC.prof[q][0], z1 = SPEC.prof[q + 1][0];
+      footV += count * simpsonOf(footAt(inset, areaRR), z0, z1);
+      footLat += count * simpsonOf(footAt(inset, perimRR), z0, z1);
+    }
+    botA += count * footAt(inset, areaRR)(0);
+  }
+  const plan = holePlan(c), sites = plan ? holeSites(c).length : 0;
+  const hole = plan ? holeVoid(plan) : { vol: 0, sides: 0, roof: 0, mouth: 0 };
+  /* Where the slab ends: a rectangle built as one block goes to the top; a carved one to
+     a hundredth under it, and a carved one with a floor at or past the top keeps a
+     sliver of wall over its floor (carvedBody). The slab runs a BLOAT past the floor, and
+     that is the floor a part stands on. */
+  const solidBody = full && builtSolid(c);
+  const cavityFloor = full ? floorZ : c.solid ? H - 0.01 : Math.min(floorZ, H - 0.25);
+  const slabTop = solidBody ? H : cavityFloor + BLOAT;
+  const slabH = slabTop - SPEC.footH;
+  const holes = sites * hole.vol;
+  /* A carved shape's corners in the slab (cornersAt): the convex ones' chords; at each
+     reflex corner the slab of the cell across from the notch, which runs BLOAT past its
+     two shared sides into it; and in the slab's last 2·BLOAT, the corner's own pieces,
+     which start there (on a carved shape built as one block, its last BLOAT + 0.01). */
+  const on = Math.min(slabTop, hasLip ? H + lipH : H) - (cavityFloor - BLOAT);
+  const slabCorners = full ? 0 : -convex * seg(CR) * slabH +
+    (reflex ? reflex * ((P / 2 - SPEC.half + BLOAT) ** 2 * (slabH + BLOAT - on) + reflexOver(wall, true) * on) : 0);
+  const baseRaw = footV + area0 * slabH + slabCorners - holes;
+  const baseShell = (footLat + perim * slabH + sites * hole.sides) * SHELL_T +
+                    (botA - sites * hole.mouth + area0 + sites * hole.roof) * SKIN_T;
+  const baseFil = Math.min(baseRaw, baseShell + fill * Math.max(0, baseRaw - baseShell));
+
+  /* The lip: the socket profile standing on the walls, from H to H + lipH, and under H
+     the 45 degree chamfer from the wall out to the lip's base, beyond the wall (lipRing,
+     and carvedBody's wallProfile). A bin built as one block keeps the part above H. */
+  let lip = 0, lipDrop = 0;
+  const cavity = !solidBody && !(c.solid && !full);
+  if (hasLip) {
+    const steps = LIP.concat([[lipH, c.lipMin]]);
+    for (let q = 0; q + 1 < steps.length; q++) {
+      const [dz0, t0] = steps[q], [dz1, t1] = steps[q + 1];
+      lip += simpsonOf((z) => outer - areaIn(t0 + (t1 - t0) * (z - dz0) / (dz1 - dz0)), dz0, dz1);
+    }
+    if (cavity && full && base - wall >= BLOAT)
+      lipDrop = Math.min(base - wall, Math.max(BLOAT, H - (SPEC.footH + c.floorT) - 0.3));
+    else if (cavity && !full)
+      lipDrop = Math.min(Math.max(BLOAT, base - wall), Math.max(BLOAT, H - cavityFloor - 0.3));
+    // (on a carved shape with walls thicker than the lip's base, it narrows to it instead)
+    lip += simpsonOf((z) => areaIn(wall) - areaIn(wall + (base - wall) * z / lipDrop), 0, lipDrop, 4);
+  }
+
+  if (!cavity) {
+    const parts = { base: baseRaw, walls: 0, lip, dividers: 0, scoop: 0, shelf: 0, block: 0, holes };
+    return { raw: baseRaw + lip, filament: baseFil + lip, parts };
+  }
+
+  /* The walls, from the slab's top up: to H all round, or on a rectangle to each wall's
+     own height (edgeHeights), the straight runs at their own and each corner at the
+     taller of its two, a lower wall rising to a taller neighbour over rampLen of it. A
+     carved shape's walls are full height, and its reflex corners are filleted.
+     A straight is the band wallRing builds between the outer straight and the inner one,
+     their vertices paired at the same fractions along each: a rectangle while the
+     cavity's corner shares the outer corner's centre (walls up to SPEC.r - 0.4), and past
+     that, where the cavity's corner stays at 0.4 mm, a trapezoid, longer outside than in.
+     A ramp spans the same fraction of both, so it is weighed at the band's mean width. */
+  const hFull = H - slabTop;
+  const ring = outer - areaIn(wall);
+  let walls = ring * hFull;
+  const frac = (k) => Math.max(0, Math.min(1, c.edges && c.edges[k] !== undefined ? c.edges[k] : 1));
+  if (full && !allFull) {
+    const tall = (f) => Math.max(0, f * (H - floorZ) - BLOAT);
+    const run = { f: 2 * (hwO - SPEC.r), b: 2 * (hwO - SPEC.r), l: 2 * (hdO - SPEC.r), r: 2 * (hdO - SPEC.r) };
+    const ends = { f: ['l', 'r'], b: ['l', 'r'], l: ['f', 'b'], r: ['f', 'b'] };
+    const inset = 2 * (wall + Math.max(0.4, SPEC.r - wall) - SPEC.r);   // how much shorter inside
+    const band = (k) => wall * (run[k] + Math.max(0, run[k] - inset)) / 2;
+    const corner = (ring - band('f') - band('b') - band('l') - band('r')) / 4;
+    walls = 0;
+    for (const k of ['f', 'b', 'l', 'r']) {
+      walls += band(k) * tall(frac(k));
+      for (const o of ends[k]) {
+        const rise = tall(frac(o)) - tall(frac(k));
+        if (rise > 0 && run[k] > 0) walls += band(k) / run[k] * rise * rampLen(run[k]) / 2;
+      }
+    }
+    for (const [a, b] of [['f', 'l'], ['f', 'r'], ['b', 'l'], ['b', 'r']])
+      walls += corner * tall(Math.max(frac(a), frac(b)));
+  }
+  if (!full) {
+    /* ...and its corners (cornersAt) up the walls' own profile: the wall's thickness, then
+       the chamfer's and the lip's. */
+    const prof = [[slabTop, wall], [H - lipDrop, wall]]
+      .concat(hasLip ? LIP.concat([[lipH, c.lipMin]]).map(([dz, t]) => [H + dz, t]) : []);
+    for (let q = 0; q + 1 < prof.length; q++) {
+      const [z0, t0] = prof[q], [z1, t1] = prof[q + 1];
+      walls += t0 === t1 ? cornersAt(t0) * (z1 - z0)
+        : simpsonOf((z) => cornersAt(t0 + (t1 - t0) * (z - z0) / (z1 - z0)), z0, z1, 4);
+    }
+    const parts = { base: baseRaw, walls, lip, dividers: 0, scoop: 0, shelf: 0, block: 0, holes };
+    return { raw: baseRaw + walls + lip, filament: baseFil + walls + lip, parts };
+  }
+
+  /* Inside a rectangle: the dividers, the scoop, the label shelf and the block of holes
+     across the floor, sized by the sums buildBin builds them by (floorPlan, dividersBuilt,
+     scoopBuilt). A bin with holes has no dividers and no scoop. A divider, or a removable
+     one's rails, stands from the floor to H, so where one stands nothing else there
+     counts; the scoop and the shelf are counted across the rest of the cavity's width, in
+     the cavity's rounded outline. Where the two meet, on a bin too shallow for both, they
+     are counted once. */
+  const iw = hwO - wall, id = hdO - wall, rI = Math.max(0.4, SPEC.r - wall);
+  const { shelf: sh, holes: hb } = floorPlan(c, iw, id, H), holesOn = !!hb.n;
+  const built = holesOn ? { divX: 0, divY: 0 } : dividersBuilt(c), half = wall / 2;
+  /* Whether the dividers it is built with are removable. A bin asking for removable ones
+     and built with none (holes across its floor, or no room for a slot) is weighed as
+     the bin asking for none, as it is built as one: read off the field, its scoop, shelf
+     and block of holes were summed in pieces cut where the rails would reach, and came
+     a few hundredths of a mm³ off that bin's weight. */
+  const removable = !!c.divRemovable && !!(built.divX || built.divY);
+  const slot = c.divT / 2 + c.divClr, rail = slot + RAIL_T, deep = RAIL_D + c.divClr;
+  const spansOf = (count, inner) => {
+    const out = [];
+    for (let k = 1; k <= count; k++) {
+      const p = -inner + (2 * inner) * k / (count + 1);
+      if (removable) out.push([p - rail, p - slot], [p + slot, p + rail]);
+      else out.push([p - half, p + half]);
+    }
+    return spansClip(mergedSpans(out, BLOAT), -inner, inner);
+  };
+  const reachOf = (inner) => (!removable ? [[-inner, inner]]
+    : deep >= inner - BLOAT / 2 ? [[-inner, inner]] : [[-inner, -inner + deep], [inner - deep, inner]]);
+  const xs = spansOf(built.divX, iw), ys = spansOf(built.divY, id);   // x where divX stand, y where divY do
+  const xReach = reachOf(id), yReach = reachOf(iw);                     // how far along each they stand
+  const crossing = spansMeet(xs, yReach) * spansMeet(ys, xReach);
+  const divPlan = removable
+    ? railArea(built.divX, iw, id, wall, c.divT, c.divClr) + railArea(built.divY, id, iw, wall, c.divT, c.divClr) - crossing
+    : spansLength(xs) * 2 * id + spansLength(ys) * 2 * iw - crossing;
+  let dividers = divPlan * hFull;
+
+  const scoopR = holesOn ? 0 : scoopBuilt(c, id, H, floorZ), segs = Math.max(4, n);
+  const arc = [];
+  for (let k = 0; k <= segs; k++) {
+    const a = (k / segs) * Math.PI / 2;
+    arc.push([scoopR - scoopR * Math.sin(a), scoopR - scoopR * Math.cos(a)]);
+  }
+  arc.reverse();                                         // from the wall out
+  const scoopTop = (s) => {                              // over the floor, s from the front wall
+    if (!scoopR || s < 0 || s >= scoopR) return 0;
+    for (let k = 1; k < arc.length; k++)
+      if (s <= arc[k][0]) return arc[k - 1][1] + (arc[k][1] - arc[k - 1][1]) * (s - arc[k - 1][0]) / (arc[k][0] - arc[k - 1][0]);
+    return 0;
+  };
+  const shelfD = sh ? sh.depth : 0, shelfFront = id - shelfD, t = c.labelT;
+  /* What stands on the floor at y, from the slab's top: the scoop, the shelf, and both.
+     The shelf is a term of its own (parts.shelf), and shelfCol(y) its section, from its
+     45 degree underside to its top: the block of holes, which runs on under it to the
+     back wall, takes off what it shares with shelfCol (blockOver, below). */
+  const scoopCol = (y) => Math.max(0, floorZ + scoopTop(y + id) - slabTop);
+  const shelfCol = (y) => (!shelfD || y < shelfFront ? [0, 0]
+    : [Math.max(slabTop, sh.top - t - (y - shelfFront)), sh.top]);
+  const bothCol = (y) => {
+    const s = scoopCol(y), [lo, hi] = shelfCol(y);
+    return s + Math.max(0, hi - lo) - Math.max(0, Math.min(slabTop + s, hi) - lo);
+  };
+  // how wide the cavity is at y, in its rounded corners too, and how much of that is free
+  const gap = (d) => (d >= rI ? 0 : rI - Math.sqrt(Math.max(0, rI * rI - (rI - d) * (rI - d))));
+  const width = (y) => 2 * (iw - gap(id - Math.abs(y)));
+  const taken = (y) => spansLength(mergedSpans([
+    ...(inSpans(xReach, y) ? xs : []),
+    ...(inSpans(ys, y) ? yReach : [])]));
+  // how much of the shelf's section at y is inside the block of holes, which stands on the floor
+  const blockTop = holesOn ? hb.top : slabTop;
+  const blockCol = (y) => { const [lo, hi] = shelfCol(y); return Math.max(0, Math.min(hi, blockTop) - Math.max(lo, slabTop)); };
+  const stops = [-id, id, -id + scoopR, shelfFront, shelfD ? shelfFront + sh.top - t - slabTop : -id,
+                 shelfD && holesOn ? shelfFront + sh.top - t - blockTop : -id,
+                 -id + rI, id - rI, ...arc.map(([s]) => -id + s), ...xReach.flat(), ...ys.flat()]
+    .filter((y) => y >= -id && y <= id).sort((a, b) => a - b);
+  let scoop = 0, both = 0, blockOver = 0;
+  for (let i = 0; i + 1 < stops.length; i++) {
+    const a = stops[i], b = stops[i + 1];
+    // only where there is a scoop or a shelf to count
+    if (b - a < 1e-9 || !((scoopR && a < -id + scoopR) || (shelfD && b > shelfFront))) continue;
+    const used = taken((a + b) / 2);
+    const free = (y) => Math.max(0, width(y) - used);
+    scoop += gaussOf((y) => scoopCol(y) * free(y), a, b);
+    both += gaussOf((y) => bothCol(y) * free(y), a, b);
+    if (holesOn) blockOver += gaussOf((y) => blockCol(y) * free(y), a, b);
+  }
+  /* The lip's chamfer comes down over the back wall and the side walls, and a shelf whose
+     top is at H, or within the chamfer's drop of it, stands in it there: counted in the
+     lip, it is taken off the shelf. */
+  let underLip = 0, lipShelf = 0;                   // lipShelf: what underLip takes a millimetre of wall
+  if (shelfD && lipDrop > 0) {
+    const z1 = Math.min(H, sh.top) - (H - lipDrop);
+    if (z1 > 0) lipShelf = (base - wall) / lipDrop * z1 * z1 / 2;
+    underLip = lipShelf * (2 * iw + 2 * Math.min(shelfD, id));
+  }
+  /* A removable bin's plates go in past its lip and its label shelf, through a notch in
+     each at every slot (plateLayout says where): the shelf's, between its pieces in
+     buildBin, the slot and half a BLOAT more each side, at each plate across. What of the
+     shelf was counted across that is taken off it, which is the shelf's section all the
+     way across beyond the rails' reach of the back wall, and within it the slot alone:
+     the rails beside it were counted there instead of the shelf. The lip's notches are
+     taken off the lip below. */
+  const fit = removable ? plateLayout(c, built) : null;
+  let shelfCut = 0;
+  if (fit && fit.printed && shelfD && fit.pX.length) {
+    const yk = Math.min(id, shelfFront + Math.max(0, sh.top - t - slabTop));   // the underside meets the slab
+    const lo = (y) => Math.max(slabTop, sh.top - t - (y - shelfFront));
+    const sec = (a, b) => {                // the shelf's section from y = a to b, its height being linear
+      let v = 0;
+      for (const [p, q] of [[a, Math.min(b, yk)], [Math.max(a, yk), b]])
+        if (q > p) v += ((sh.top - lo(p)) + (sh.top - lo(q))) / 2 * (q - p);
+      return v;
+    };
+    const reach = deep >= id - BLOAT / 2 ? shelfFront : Math.max(shelfFront, id - deep);
+    shelfCut = fit.pX.length * (2 * fit.slot * sec(shelfFront, id) + BLOAT * sec(shelfFront, reach));
+  }
+  /* A divider's ends, and the ribs of a removable one's rails, stand in the lip's chamfer
+     where they meet a wall: counted in the lip, they are taken off the dividers. The
+     chamfer's section is base - wall out from the wall at H, coming in to the wall over
+     lipDrop below it; a rib stands in the part of it within its reach of the wall, a
+     fixed divider in all of it. Where the label shelf stands against a wall, underLip
+     took the chamfer below the shelf's top off the shelf along the whole wall, dividers'
+     ends and all, so there only what is above the shelf's top comes off here. */
+  if (lipDrop > 0 && (xs.length || ys.length)) {
+    const A = base - wall, L = lipDrop;
+    const upTo = (z, d) => {                // the section within d of the wall, z up its drop
+      const zd = d * L / A;
+      return z <= zd ? A * z * z / (2 * L) : A * zd * zd / (2 * L) + d * (z - zd);
+    };
+    const over = (z0, d) => upTo(L, d) - upTo(Math.min(L, Math.max(0, z0)), d);
+    const dX = Math.min(A, !removable || deep >= id - BLOAT / 2 ? A : deep);
+    const dY = Math.min(A, !removable || deep >= iw - BLOAT / 2 ? A : deep);
+    const z0 = shelfD ? Math.min(H, sh.top) - (H - L) : 0;
+    const yShelf = shelfD ? spansLength(spansClip(ys, shelfFront, id)) : 0;
+    dividers -= spansLength(xs) * (over(0, dX) + over(z0, dX)) +
+                2 * ((spansLength(ys) - yShelf) * over(0, dY) + yShelf * over(z0, dY));
+    /* ...but not where a notch in the lip takes the chamfer away: each notch is the slot
+       and a BLOAT more each side, so a BLOAT of each rail beside it stands in no chamfer
+       there. The plates along stand in front of the shelf, slots, rails, notches and all
+       (railedLimit). */
+    if (fit && fit.lip)
+      dividers += 2 * BLOAT * (fit.pX.length * (over(0, dX) + over(z0, dX)) + 2 * fit.pY.length * over(0, dY));
+  }
+  /* The lip's notches (notchedLip): at each end of each plate, a band straight across the
+     lip as wide as the slot and a BLOAT more each side, through the front and back for the
+     plates across and through the sides for the plates along. In it goes all the lip
+     above H and the chamfer under it, which is the lip's ring between the outline and its
+     inner surface at each height, and between the wall and the chamfer below H, cut to
+     the band: along a straight, so much of its width, and where an end notch reaches a
+     corner, the arcs' share of the band. railedLimit keeps every band inside the lip's
+     socket floor, so no level's ring ends inside one. Where the label shelf stands
+     against the back wall, underLip took the chamfer it stands in off the shelf there, so
+     that is given back across a notch at the back, where neither is now. */
+  if (fit && fit.lip) {
+    const r = SPEC.r;
+    const Fq = (R, u) => (u * Math.sqrt(Math.max(0, R * R - u * u)) + R * R * Math.asin(Math.min(1, u / R))) / 2;
+    // the ring t in from the outline, along a side h out from the middle and 2w long: its
+    // distance out at each point of the side, summed from the middle to u
+    const Y = (t, u, h, w) => {
+      const a = Math.abs(u), cx = w - r;
+      return Math.sign(u) * ((h - t) * Math.min(a, cx) + (a > cx ? (h - r) * (a - cx) + Fq(r - t, a - cx) : 0));
+    };
+    const band = (t1, t2, a, b, h, w) => Y(t1, b, h, w) - Y(t1, a, h, w) - Y(t2, b, h, w) + Y(t2, a, h, w);
+    const steps = LIP.concat([[lipH, c.lipMin]]);
+    const notch = (p, h, w) => {
+      const a = p - fit.slot - BLOAT, b = p + fit.slot + BLOAT;
+      let v = simpsonOf((z) => band(wall, wall + (base - wall) * z / lipDrop, a, b, h, w), 0, lipDrop, 4);
+      for (let q = 0; q + 1 < steps.length; q++) {
+        const [dz0, t0] = steps[q], [dz1, t1] = steps[q + 1];
+        v += simpsonOf((z) => band(0, t0 + (t1 - t0) * (z - dz0) / (dz1 - dz0), a, b, h, w), dz0, dz1, 2);
+      }
+      return 2 * v;                                       // both sides
+    };
+    for (const p of fit.pX) lip -= notch(p, hdO, hwO);
+    for (const p of fit.pY) lip -= notch(p, hwO, hdO);
+    shelfCut -= lipShelf * fit.pX.length * 2 * (fit.slot + BLOAT);
+  }
+  const shelf = Math.max(0, both - scoop - underLip - shelfCut);
+  /* Where a divider, or a removable one's rails, meets a wall. It stands BLOAT into the
+     wall along a straight (buildBin's reach), and behind the cavity's arc as well in a
+     rounded corner; a box buildBin cuts to the cavity's outline grown a little stands out
+     to that instead. Up to the wall's top all of it is in the wall, which is counted: so a
+     fixed divider, counted out to a square corner, has the part of the square behind the
+     arc taken off there, while a rail, counted only in front of the arc (railArea), has
+     nothing to take off. Over a wall that is lowered or open it stands free, from the
+     wall's top, or the slab's, up to H: along a straight, the wall's top at the same
+     fraction of the outer straight (edgeHeights, ramps and all), and in a corner the
+     corner's, the taller of its two walls. There what stands past what is counted is
+     added: BLOAT along a straight, and in a corner all of a rail behind the arc, or what
+     a fixed divider has past the square corner, which on a cut box is less than nothing.
+     Against true arcs, as railArea's are; in the chamfer under a lip a corner is left to
+     the sum above, as a straight wall. */
+  if (xs.length || ys.length) {
+    const S = (r, u) => Math.sqrt(Math.max(0, r * r - u * u));
+    const F = (r, u) => (u * S(r, u) + r * r * Math.asin(Math.min(1, u / r))) / 2;   // S's integral from 0
+    const zAt = (f) => floorZ + f * (H - floorZ);
+    // H less the higher of the slab's top and z, along a piece w long with z linear z0 to z1
+    const free = (z0, z1, w) => {
+      if (Math.min(z0, z1) >= slabTop) return w * (H - (z0 + z1) / 2);
+      if (Math.max(z0, z1) <= slabTop) return w * hFull;
+      const x = w * (slabTop - z0) / (z1 - z0), [lo, hi] = z0 < z1 ? [x, w - x] : [w - x, x];
+      return lo * hFull + hi * (H - (slabTop + Math.max(z0, z1)) / 2);
+    };
+    for (const [k, spans, along, across, ka, kb, grow] of [
+      ['f', xs, iw, id, 'l', 'r', 0.8 * BLOAT], ['b', xs, iw, id, 'l', 'r', 0.8 * BLOAT],
+      ['l', ys, id, iw, 'f', 'b', 0.6 * BLOAT], ['r', ys, id, iw, 'f', 'b', 0.6 * BLOAT]]) {
+      const self = frac(k), alongX = k === 'f' || k === 'b';
+      const so = (alongX ? hwO : hdO) - SPEC.r, sIn = along - rI, len = rampLen(2 * so);
+      const ramp = (nbr, dist) => (nbr <= self + 1e-9 || len <= 1e-6 || dist >= len ? self
+        : self + (nbr - self) * (1 - dist / len));
+      const top = (s) => { const x = sIn > 0 ? s * so / sIn : 0;
+        return zAt(Math.max(self, ramp(frac(ka), x + so), ramp(frac(kb), so - x))); };
+      const bends = [(len - so) * sIn / so, (so - len) * sIn / so];
+      const whole = !removable || deep >= across - BLOAT / 2, reach = whole ? Infinity : deep;
+      const [p0, p1] = whole ? [-across - BLOAT, across + BLOAT]
+        : k === 'f' || k === 'l' ? [-across - BLOAT, -across + deep] : [across - deep, across + BLOAT];
+      const Rg = rI + grow;
+      const arc = (a, b) => rI * (b - a) - F(rI, b) + F(rI, a);            // the square past the arc
+      // from u0 to u1 into a corner, what stands past what is counted, summed
+      const past = (u0, u1, cut) => {
+        const out = (a, b) => (cut ? F(Rg, b) - F(Rg, a) - rI * (b - a) : BLOAT * (b - a));
+        if (!removable) return out(u0, u1);
+        const uR = reach < rI ? Math.sqrt(rI * rI - (rI - reach) ** 2) : rI;   // where the arc is a rail deep
+        const uG = cut && reach < rI ? Math.sqrt(Rg * Rg - (rI - reach) ** 2) : Infinity;
+        const m = Math.min(u1, uR), g = Math.max(u0, uR), h = Math.min(u1, uG);
+        return (m > u0 ? out(u0, m) + arc(u0, m) : 0) + (h > g ? out(g, h) + reach * (h - g) : 0);
+      };
+      const corner = (u0, u1, cut, nb) => {
+        const z = zAt(Math.max(self, frac(nb)));
+        return past(u0, u1, cut) * (H - Math.max(slabTop, z)) -
+          (removable ? 0 : arc(u0, u1) * Math.max(0, Math.min(z, H - lipDrop) - slabTop));
+      };
+      for (const [a, b] of spans) {
+        const box = alongX ? [[a, p0], [b, p0], [b, p1], [a, p1]] : [[p0, a], [p1, a], [p1, b], [p0, b]];
+        const cut = (!alongX && !removable && sh && Math.abs(a - shelfFront) < 10 * WELD) ||
+                    box.some(([x, y]) => outsideArc(hwO, hdO, x, y, n));
+        const lo = Math.max(a, -sIn), hi = Math.min(b, sIn);
+        if (hi > lo && self < 1) {
+          const at = [lo, ...bends.filter((s) => s > lo && s < hi), hi];
+          for (let i = 0; i + 1 < at.length; i++)
+            dividers += (cut ? grow : BLOAT) * free(top(at[i]), top(at[i + 1]), at[i + 1] - at[i]);
+        }
+        if (b > sIn) dividers += corner(Math.max(a, sIn) - sIn, b - sIn, cut, kb);
+        if (a < -sIn) dividers += corner(-Math.min(b, -sIn) - sIn, -a - sIn, cut, ka);
+      }
+    }
+  }
+  /* The block of holes across the floor (holeLayout): the cavity's outline, less the
+     holes, from the slab's top to the block's top, which is half a millimetre under the
+     rim or under the label shelf's front edge. Its tiles run a BLOAT into the walls and
+     into one another, all inside what is counted already. Under the shelf it runs on to
+     the back wall, through the wedge the shelf's underside fills (blockOver, the shelf's
+     plastic, counted there); and where the lip's chamfer comes down over the walls, a
+     block whose top is within the chamfer's drop of H stands in it, along the walls in
+     front of the shelf: counted in the lip, it is taken off the block. A thick part like
+     the base, so for the filament a shell round its outside and every hole, a skin over
+     its top, and infill inside that; the webs between holes are thinner than two shells,
+     so most of a dense grid comes out solid, which the min() keeps. */
+  let block = 0, blockFil = 0;
+  if (holesOn) {
+    const deepB = hb.top - slabTop, topA = Math.max(0, areaRR(iw, id, rI) - hb.n * hb.shape.area);
+    let inLip = 0;
+    if (lipDrop > 0) {
+      const z1 = hb.top - (H - lipDrop);
+      const along = shelfD ? 2 * iw + 2 * (shelfFront + id) : perimRR(iw, id, rI);
+      if (z1 > 0) inLip = (base - wall) / lipDrop * z1 * z1 / 2 * along;
+    }
+    block = Math.max(0, topA * deepB - blockOver - inLip);
+    const shell = (perimRR(iw, id, rI) + hb.n * hb.shape.perim) * SHELL_T * deepB + topA * SKIN_T;
+    blockFil = Math.min(block, shell + fill * Math.max(0, block - shell));
+  }
+  /* How much of each the slicer lays down solid: what lies within its shells of the
+     surfaces it shows, the scoop's curve, and the shelf's top, front and underside. */
+  const solidPart = (area, edge) => (area > 0 ? Math.min(1, edge * SHELL_T / area) : 1);
+  const sSolid = solidPart(scoopR * scoopR * (1 - segs / 2 * Math.sin(Math.PI / (2 * segs))),
+                           2 * segs * scoopR * Math.sin(Math.PI / (4 * segs)));
+  const lSolid = solidPart(shelfD * (t + shelfD / 2), shelfD + t + shelfD * Math.SQRT2);
+  const infilled = (v, solid) => v * (solid + fill * (1 - solid));
+
+  const thin = walls + lip + dividers;
+  const parts = { base: baseRaw, walls, lip, dividers, scoop, shelf, block, holes };
+  return { raw: baseRaw + thin + scoop + shelf + block,
+           filament: baseFil + thin + infilled(scoop, sSolid) + infilled(shelf, lSolid) + blockFil, parts };
+}
+
 /* ---------- layout packing -------------------------------------------------
  * Bins travel in the URL hash, so the encoding has to be compact. It also has to
  * survive the values it carries: the original separator was '.', and wall
@@ -10503,7 +11194,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, dividerPart, dividerPlates, plateLayout, railedMost, railedLimit, dividersBuilt, binDividers, dividersWhy, lipNotched, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, binVolume, dividerPart, dividerPlates, plateLayout, railedMost, railedLimit, dividersBuilt, binDividers, dividersWhy, lipNotched, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, binHeights, unitsForInside, unitsForTop, REQUIRED_CORE,
     FOOT_HOLES, SCREW_FLOOR, holeSites, holePlan, builtFloorT, feetBits, feetFrom,
     isHalfSize, binFeet, feetHolesOff,
@@ -11183,10 +11874,19 @@ function geomFor(b) {
   const k = geoKey(b);
   let r = geoCache.get(k);
   if (!r) { r = buildBin(G, binCfg(b)); geoCache.set(k, r); }
-  /* Read fresh every time rather than cached with the mesh: it moves with the infill
-     setting, which the key deliberately leaves out, and it is arithmetic, not a build. */
-  const vv = volumeMm3(b);
-  r.vol = vv.filament; r.rawVol = vv.raw;
+  /* Weighed once a part, and again when the infill moves: the key names what binVolume
+     reads but the infill, which it leaves out so that a new infill rebuilds nothing, so
+     the weight is kept with the build, and goes when pruneGeometry drops it. On a bin
+     built without dividers the key leaves out whether they would be removable, and their
+     plate and clearance, as the build does, and binVolume reads none of them either: it
+     weighs the bin as the one asking for none, as it is built, to the bit. Weighed afresh
+     on every call, a drawer of 1,600 bins of 700 parts asked binVolume 3,700 times a
+     refresh, about 200 ms of it. */
+  const infill = state.infill === undefined ? 15 : state.infill;
+  if (r.volInfill !== infill) {
+    const vv = volumeMm3(b);
+    r.vol = vv.filament; r.rawVol = vv.raw; r.volInfill = infill;
+  }
   return r;
 }
 /* Forget builds no bin uses any more, and hand their buffers back to the GPU. Clearing
@@ -11202,198 +11902,18 @@ function pruneGeometry() {
     geoCache.delete(k);
   }
 }
-function areaRR(hw, hd, r) { return 4 * hw * hd - (4 - Math.PI) * r * r; }
-function perimRR(hw, hd, r) { return 4 * hw + 4 * hd - 8 * r + 2 * Math.PI * r; }
-
-/* Material estimate.
- *
- * Raw mesh volume is NOT what a printer uses. Thin features (walls, floor,
- * dividers, lip) come out solid because they are only a few perimeters wide, but
- * the feet are thick blocks that the slicer shells and then infills — and on a
- * shallow bin the feet dominate. So thin parts are counted at full density and
- * the base block is counted as shell + infill x core.
- *
- * Assumes 2 perimeters (0.8 mm) and 4 solid top/bottom layers (0.8 mm), which is
- * a common default. Geometry is unaffected either way.
- */
-const SHELL_T = 0.8, SKIN_T = 0.8;
-
-function footProfileHalf(z) {
-  let h = SPEC.prof[SPEC.prof.length - 1][1];
-  for (let q = 0; q < SPEC.prof.length - 1; q++) {
-    const [z0, h0] = SPEC.prof[q], [z1, h1] = SPEC.prof[q + 1];
-    if (z >= z0 && z <= z1) { h = h0 + (h1 - h0) * (z1 > z0 ? (z - z0) / (z1 - z0) : 0); break; }
-  }
-  return h;
-}
-
-/* The plan area of the rails `n` removable dividers stand in along one direction: each a
-   slot between two ribs RAIL_T thick, standing out from each of the two facing walls its
-   plate slides between, from the floor to the rim, as deep as buildBin's reach() builds
-   them: a rail's depth and the clearance, or the whole way across a cavity too shallow
-   for two. `along` is half the length of those walls inside the cavity, hwI for the
-   dividers that stand at a fixed x (divX), hdI for the others, as buildBin's spans() and
-   reach() take them, and `across` half the distance between them. The plate and the
-   clearance are the ones buildBin is given for the bin (binCfg), so the two cannot drift.
-   Where the rails stand in the lip's chamfer, the scoop or the label shelf they are
-   counted in full all the same, as if those were not there, so such a bin comes out a
-   little heavy: about 0.2 g on a 1x1x3 or a 2x1x6 with two or three dividers each way, an
-   8 mm scoop and a 10 mm shelf, of which the chamfer is 0.03 g. It grows with the count
-   and with the scoop and the shelf, to 1.9 g on a 2x1x6 with 23 across and 10 along
-   under a 20 mm scoop and a 20 mm shelf, measured off the bin as built.
-   Placed, sorted and merged where two meet exactly as spans() does it, so dividers packed
-   close enough for one's rail to run into the next count the plastic they share once.
-   A rail beside an end wall can stand in the cavity's rounded corner, where buildBin
-   either leaves it buried in the wall or, if it would stand out through the bin, cuts it
-   to the cavity's outline. Either way the part behind the arc is wall, already counted,
-   so only the part in front of it is counted here: the rail's depth left in front of
-   the arc, summed along it, against a true arc of the cavity's radius rather than the
-   chords it is built from (under a rail 1.2 mm wide the two differ by a few hundredths
-   of a square millimetre at the coarsest smoothness). A rail on a straight run is
-   counted whole, so at any count that keeps the rails out of the corners the sum is
-   exactly the rails' own area. */
-function railArea(n, along, across, wall, divT, divClr) {
-  if (!(n > 0) || !(along > 0)) return 0;
-  const slot = divT / 2 + divClr, rail = slot + RAIL_T;
-  const deep = RAIL_D + divClr >= across - BLOAT / 2 ? across : RAIL_D + divClr;
-  const spans = [];
-  for (let k = 1; k <= n; k++) {
-    const p = -along + (2 * along) * k / (n + 1);
-    spans.push([p - rail, p - slot], [p + slot, p + rail]);
-  }
-  spans.sort((a, b) => a[0] - b[0]);
-  const merged = [];
-  for (const [lo, hi] of spans) {
-    const last = merged[merged.length - 1];
-    if (last && lo <= last[1] + BLOAT) last[1] = Math.max(last[1], hi);
-    else merged.push([lo, hi]);
-  }
-  /* t into a corner, the arc stands rI - sqrt(rI² - t²) in front of the wall's straight
-     line, and takes the whole of a rail's depth at tEnd (or never quite, where the
-     radius is no deeper than the rail). `under` is the depth left in front of it, summed
-     from the corner's start to t; `upTo` the same from the middle of the wall to x, both
-     ways, so a span's area is upTo(hi) - upTo(lo). Past the end wall it adds nothing. */
-  const rI = Math.max(0.4, SPEC.r - wall), straight = Math.max(0, along - rI);
-  const tEnd = deep >= rI ? rI : Math.sqrt(rI * rI - (rI - deep) * (rI - deep));
-  const under = (t) => {
-    t = Math.min(Math.max(t, 0), tEnd);
-    return (deep - rI) * t + (t * Math.sqrt(rI * rI - t * t) + rI * rI * Math.asin(t / rI)) / 2;
-  };
-  const upTo = (x) => Math.sign(x) * (deep * Math.min(Math.abs(x), straight) + under(Math.abs(x) - straight));
-  return 2 * merged.reduce((a, [lo, hi]) => a + upTo(hi) - upTo(lo), 0);  // both walls
-}
-
-/* What the notches take out of a removable bin's lip: one through it at each end of each
-   plate (notchedLip), the lip's own profile across, as lipLevels gives it, and as wide
-   as the slot and a BLOAT either side along it. Exactly what they take where they stand
-   on the lip's straight runs, which is all of them but the end ones of a bin packed into
-   its corners, and there within a fraction of a percent. None without a notched lip. */
-function lipNotchVolume(b) {
-  if (!b.divRemovable || isCarved(b)) return 0;
-  const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
-  const L = plateLayout(cfg, binDividers(cfg));
-  if (!L.lip) return 0;
-  const { ts, zs, lipH } = lipLevels(L.c, L.H);
-  const prof = [[0, zs[0]]].concat(ts.map((t, i) => [t, zs[i]]), [[0, L.H + lipH]]);
-  const area = Math.abs(prof.reduce((a, p, i) => {
-    const q = prof[(i + 1) % prof.length];
-    return a + p[0] * q[1] - q[0] * p[1];
-  }, 0)) / 2;
-  return area * 2 * (L.slot + BLOAT) * 2 * (L.pX.length + L.pY.length);
-}
-
-// { raw, filament } in mm3
-function volumeMm3(c) {
-  const C = SPEC.centre;
-  const hwO = (c.u - 1) * SPEC.pitch / 2 + SPEC.half;
-  const hdO = (c.v - 1) * SPEC.pitch / 2 + SPEC.half;
-  // the floor as built: screw holes raise a thin one
-  const floorT = builtFloorT(c);
-  const H = c.hUnits * SPEC.unitH, floorZ = SPEC.footH + floorT;
-  const infill = Math.max(0, Math.min(1, (state.infill === undefined ? 15 : state.infill) / 100));
-
-  /* base block: the feet plus the solid floor slab above them.
-     The feet are the ones the engine builds, added up foot by foot (binFeet): a carved
-     bin has fewer than its bounding box implies, and a half-size bin stands on quarter
-     feet, 10.5 mm in on every side — counted a whole foot per cell, a 1.5 x 1 had two
-     whole feet where it has six quarter ones. Feet of one size are summed together, so a
-     whole bin's figures come out exactly as they did. */
-  const sizes = new Map();                       // how far in from a whole foot -> how many
-  for (const f of binFeet(c)) sizes.set(f.inset, (sizes.get(f.inset) || 0) + 1);
-  let footV = 0, footLat = 0, botA = 0;
-  const N = 60, h0 = SPEC.prof[0][1];
-  for (const [inset, count] of sizes) {
-    let v = 0, lat = 0;
-    for (let i = 0; i < N; i++) {
-      const h = footProfileHalf(SPEC.footH * (i + 0.5) / N);
-      v += areaRR(h - inset, h - inset, h - C) * (SPEC.footH / N);
-      lat += perimRR(h - inset, h - inset, h - C) * (SPEC.footH / N);
-    }
-    footV += v * count; footLat += lat * count;
-    botA += count * areaRR(h0 - inset, h0 - inset, h0 - C);
-  }
-  const slabH = (c.solid || floorZ >= H - 0.2) ? (H - SPEC.footH) : floorT;
-  const baseRaw = footV + areaRR(hwO, hdO, SPEC.r) * slabH;
-  const baseLat = footLat + perimRR(hwO, hdO, SPEC.r) * slabH;
-  const baseShell = baseLat * SHELL_T + (botA + areaRR(hwO, hdO, SPEC.r)) * SKIN_T;
-  const baseFil = Math.min(baseRaw, baseShell + infill * Math.max(0, baseRaw - baseShell));
-
-  if (c.solid || floorZ >= H - 0.2) return { raw: baseRaw, filament: baseFil };
-
-  /* thin parts — solid whatever the infill setting */
-  const e = (k) => (c.edges && c.edges[k] !== undefined ? Math.max(0, Math.min(1, c.edges[k])) : 1);
-  const wall = Math.max(WALL_MIN, c.wall);        // as built: buildBin holds it there too
-  const hwI = hwO - wall, hdI = hdO - wall;
-  const wallsFull = (areaRR(hwO, hdO, SPEC.r) - areaRR(hwI, hdI, Math.max(0.4, SPEC.r - wall)))
-                    * (H - floorZ);
-  const perim = 4 * hwO + 4 * hdO;
-  const wallFrac = (e('f') * 2 * hwO + e('b') * 2 * hwO + e('l') * 2 * hdO + e('r') * 2 * hdO) / perim;
-  /* Dividers. A fixed one is a wall across the cavity, a wall thick, and is counted as
-     one. A removable one is not built into the bin at all: the bin gets the rails its
-     plate slides down (railArea), and the plate is a part of its own, which the plan
-     weighs beside the bin (computePlan). Counted as a wall each, the rails went uncounted
-     and each plate was weighed twice, once here and once as itself: a 2x1x6 with three
-     removable dividers across and two along was 41 g of bin where it is 27 g, and with
-     its 20 g of plates the job was 60 g where it is 47 g. A carved bin gets no rails
-     (buildBin leaves dividers off a carved shape, as dividerParts does its plates), so a
-     removable one counts none. A bin with holes across its floor has no dividers at all
-     (builtDivs), and its holes are counted below. */
-  /* As many as it is built with: a bin asking for more removable ones than fit has the
-     rails of as many as fit (builtDivs), and weighed as asked, two bins of one type could
-     weigh 72 g or 37 g by which came first. Fixed ones are built as asked. */
-  const holes = holesIn(c);
-  const built = builtDivs(c), bc = binCfg(c);
-  const divs = !c.divRemovable
-    ? (built.divX * wall * 2 * hdI + built.divY * wall * 2 * hwI) * (H - floorZ)
-    : isCarved(c) ? 0 : (railArea(built.divX, hwI, hdI, wall, bc.divT, bc.divClr) +
-                         railArea(built.divY, hdI, hwI, wall, bc.divT, bc.divClr)) * (H - floorZ);
-  // less what a removable bin's notches take out of it
-  const lipV = allFullEdges(c) ? areaRR(hwO, hdO, SPEC.r) * 0.35 * LIP_H / 1.9 - lipNotchVolume(c) : 0;
-  const thin = wallsFull * wallFrac + divs + lipV;
-  /* The block the holes are in fills the cavity to their depth, less the holes: a thick
-     part like the base, so a shell round its outside and every hole, a top skin, and the
-     infill inside that. The webs between holes are thinner than two shells, so most of a
-     dense grid comes out solid, which the min() keeps. */
-  let blockRaw = 0, blockFil = 0;
-  if (holes) {
-    const rI = Math.max(0.4, SPEC.r - wall);
-    const top = Math.max(0, areaRR(hwI, hdI, rI) - holes.n * holes.shape.area);
-    blockRaw = top * holes.depth;
-    /* Under a label shelf the block runs on to the back wall, through the wedge the
-       shelf's 45 degree underside already fills, from its foot up to the block's top: a
-       triangle in section, as wide as the shelf. That plastic is the shelf's, so the
-       block does not add it again; counted, a 1x1x3 with AAA holes and a 12 mm shelf
-       weighed 26% more block than it has. */
-    const sh = holes.shelf;
-    if (sh) {
-      const foot = sh.top - (c.labelT || BIN_DEFAULTS.labelT) - sh.depth;
-      const lo = Math.max(holes.floor, foot), hi = holes.top;
-      if (hi > lo) blockRaw = Math.max(0, blockRaw - ((hi - foot) ** 2 - (lo - foot) ** 2) / 2 * 2 * hwI);
-    }
-    const shell = (perimRR(hwI, hdI, rI) + holes.n * holes.shape.perim) * SHELL_T * holes.depth + top * SKIN_T;
-    blockFil = Math.min(blockRaw, shell + infill * Math.max(0, blockRaw - shell));
-  }
-  return { raw: baseRaw + thin + blockRaw, filament: baseFil + thin + blockFil };
+/* Material estimate: { raw, filament, parts } in mm3, from binVolume in bin.js, which
+   weighs what buildBin builds by the numbers buildBin builds it from: the feet, the
+   slab, the walls and the lip of the shape as built, the scoop, the label shelf, fixed
+   dividers or a removable one's rails, the block of holes across the floor, and less
+   the holes in the feet and the notches a removable bin's lip and shelf have for its
+   plates. A removable divider's plate is a part of its own, which the plan weighs
+   beside the bin by its own outline (dividerParts, computePlan), so it is not in its
+   bin. Raw is what the solid holds; filament is what a slicer lays down for it at the
+   infill set here. The bin is the one the page builds (binCfg), so a note held to plain
+   (holdNotes), or holes held off (holdHoles), is weighed as it is built. */
+function volumeMm3(b) {
+  return binVolume(binCfg(b), (state.infill === undefined ? 15 : state.infill) / 100);
 }
 
 /* The volume a closed mesh encloses: the signed volume of the tetrahedron each triangle
@@ -13554,16 +14074,21 @@ function binIssues(b, k, claims) {
      before the fields held them there can ask for 31 on a 1x1, where 10 fit at the usual
      plate and clearance. Its link keeps asking, so a thinner plate or a tighter clearance
      builds more without it being edited. A whole drawer of such bins says it once
-     (warnings), once for each reason. Not of a bin with holes across its floor: it is
-     built with no dividers at all, not as many as fit, and insertIssues says that its
-     dividers are left off; nor are its plates' notes below, as it has none (builtDivs). */
+     (warnings), once for each reason.
+     Not of a bin built as one block, solid or with a floor that fills it, nor of a carved
+     one: those have no rails at all (dividersBuilt), for want of a cavity rather than of
+     room for slots. A 1x1x1 with a 3 mm floor asking for two was said to be built with
+     none "as none leave every slot room", which was not why. Nor of a bin with holes
+     across its floor: it is built with no dividers at all, not as many as fit, and
+     insertIssues says that its dividers are left off; nor are its plates' notes below, as
+     it has none (builtDivs). */
   const d = builtDivs(b);
+  const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
   const short = [['divX', 'across', 'x'], ['divY', 'along', 'y']].filter(([k]) => d[k] < (b[k] || 0));
-  if (b.divRemovable && !b.solid && !isCarved(b) && !holesIn(b) && short.length) {
+  if (b.divRemovable && !builtSolid(cfg) && !isCarved(b) && !holesIn(b) && short.length) {
     /* What brought each direction's count down (dividersWhy). The rails' own rules are
        said together as one note; what stands over a slot, the lip and the shelf, and what
        the plates keep where they cross or stand on the scoop, each in a note of its own. */
-    const cfg = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
     const why = dividersWhy(cfg);
     /* The rails' own rules, said together as one note (railedLimit): the slots, the
        corners, and two more. 'lone': room for one divider's slot and a rail either side,
