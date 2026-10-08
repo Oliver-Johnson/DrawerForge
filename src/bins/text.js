@@ -46,9 +46,10 @@ const NOTE_CAP_U = 21, NOTE_TOP_U = -12, NOTE_BASE_U = 9;
 /* How far the plastic reaches past a stroke's centre line: to a corner of the disc at
    each point (noteShells), half the stroke and 0.05 over the inscribed radius. */
 const NOTE_INK = (NOTE_SPEC.stroke / 2 + 0.05) / Math.cos(Math.PI / NOTE_SPEC.sides);
-/* How far apart the corners of any two of a note's shells are kept, in x or in y: twice
-   a 0.01 mm grid such as a slicer welds a mesh on, so no grid that fine joins two
-   (noteShells). */
+/* How far apart noteShells keeps the corners of any two of a note's shells, in x or in
+   y, wherever a move it may make allows it: twice a 0.01 mm grid such as some tools that
+   repair a mesh weld it on. Where none does, as far apart as the best of them leaves
+   them, which nothing holds to a figure (noteShells). */
 const NOTE_APART = 0.02;
 
 /* ---------- characters ---------------------------------------------------- */
@@ -301,27 +302,42 @@ function noteFit(text, outer) {
  *     edge: each shell starts a different depth into the shelf, 0.003 mm apart, so their
  *     upright edges never match.
  *
- * That keeps them apart to the last digit, and a slicer, or a tool that repairs a mesh,
- * works to less: it welds every vertex within a few microns of another into one, by
- * putting them on a grid, and two shells with a corner each in one cell of it share
- * whatever edge leaves that cell. Laid out only as above, every note had two shells'
- * corners closer than 0.02 mm, and welded on a grid of 0.01 mm, at one offset of it or
- * another, nearly half the notes in the audit's sweep had an edge used four times. At a
- * bend a little gentler than 28 degrees the outer corners of the two rectangles all but
- * meet, and 0.004 and 0.003 mm are both less than a cell. "Fuses 5A, 10A" on a 2x1x2 did
- * it with two discs 0.37 mm apart, corners 8 µm apart, on a grid moved 5 µm.
+ * That keeps them apart to the last digit, and some tools that repair a mesh work to
+ * less: they weld it on a grid, 0.01 mm across, say, every vertex put on the grid and
+ * the ones in one cell of it made one, and two shells with a corner each in one cell
+ * share whatever edge leaves that cell. Laid out only as above, every note had two
+ * shells' corners closer than 0.02 mm, and welded on a grid of 0.01 mm, at one offset of
+ * it or another, nearly half the notes in the audit's sweep had an edge used four times.
+ * At a bend a little gentler than 28 degrees the outer corners of the two rectangles all
+ * but meet, and 0.004 and 0.003 mm are both less than a cell. "Fuses 5A, 10A" on a 2x1x2
+ * did it with two discs 0.37 mm apart, corners 8 µm apart, on a grid moved 5 µm.
  *
- * So every shell is laid clear of the corners of every one before it, NOTE_APART in x or
- * in y, which no grid of 0.01 mm can join at any offset, and one that would not be moves
- * the least that clears it (stop, below). A rectangle's end moves 0.01 mm at a time, up
- * to 0.08: at a disc into it or back towards its point, to 0.18 from the point at most,
- * where its corners are 0.44 from it and still inside the disc's 0.45; at a mitred bend
- * nearer the point or further past it, never so near that the outer edges no longer
- * cross and never more than 0.18 past. A disc turns 2.5 degrees at a time, to any of the
- * 18 ways an octagon can face. Turned, it could meet another flat to flat, but never
- * with their corners together, which is what made the shared edge. Where the letters'
- * outline moves at all, it is by under 0.04 mm: a disc's corners stand 0.037 out from
- * its flats, and a mitre's outer tip stands out under 0.04.
+ * So each shell is laid clear of the corners of every one before it, NOTE_APART in x or
+ * in y, and one that would not be moves the least that clears it (stop, below). A
+ * rectangle's end moves 0.01 mm at a time, up to 0.08: at a disc into it or back towards
+ * its point, to 0.18 from the point at most, where its corners are 0.44 from it and still
+ * inside the disc's 0.45; at a mitred bend nearer the point or further past it, never so
+ * near that the outer edges no longer cross and never more than 0.18 past. Where none of
+ * those clears it, half steps between and on to 0.16, within the same bounds, and where
+ * none of those does either, the one that leaves the most room. A disc turns 2.5 degrees
+ * at a time, to any of the 18 ways an octagon can face, or where none clears it, the way
+ * that leaves the most room. Turned, it could meet another flat to flat, but never with
+ * their corners together, which is what made the shared edge. Where the letters' outline
+ * moves at all, it is by under 0.04 mm: a disc's corners stand 0.037 out from its flats,
+ * and a mitre's outer tip stands out under 0.04.
+ *
+ * What that keeps is NOTE_APART wherever any of those moves gives it, and otherwise the
+ * most any of them leaves, which nothing here holds to a figure. In 79,625 random notes
+ * of any of the font's characters, 22 had a shell with no move that gave it: in 21 a
+ * stroke's end at a mitred bend, 13 of them near 27 degrees, where it may stop only
+ * within 0.08 mm, and in one a disc. The nearest two shells' corners came was 18.2 µm.
+ * Keeping the stop it started with, as it did before, left 31 of the first 39,811 under
+ * 0.02 mm, two under 1 µm. The audit holds a sweep of such notes to 15 µm: over 10 µm,
+ * two corners are never in one cell of a 10 µm grid, at any offset, and over 14.2 µm,
+ * nor turned any way. A coarser weld still joins them. Cura melds vertices within
+ * 0.03 mm, and under that most notes still have two shells sharing an edge, as they did
+ * before any of this: 667 of the audit's 720, against all 720. That is no worse, and
+ * Cura copes with such an edge on its own.
  *
  * One segment too short to leave any rectangle between its stops is covered by the
  * discs at its ends: each reaches 0.45 mm from its point, and the farthest corner of the
@@ -342,6 +358,14 @@ function noteShells(G, segs, z0, z1) {
         if (Math.abs(x - qx) < NOTE_APART && Math.abs(y - qy) < NOTE_APART) return false;
     return true;
   });
+  // how far the ring's corners are from the nearest laid one, the more of x and y, up to NOTE_APART
+  const room = (ring) => {
+    let m = NOTE_APART;
+    for (const [x, y] of ring) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++)
+      for (const [qx, qy] of laid.get((cell(x) + i) + ',' + (cell(y) + j)) || [])
+        m = Math.min(m, Math.max(Math.abs(x - qx), Math.abs(y - qy)));
+    return m;
+  };
   const shell = (ring) => {
     for (const p of ring) {
       const k = cell(p[0]) + ',' + cell(p[1]);
@@ -354,13 +378,24 @@ function noteShells(G, segs, z0, z1) {
      that leaves the end's two corners (`ends(t)` for a stop t) clear of every shell laid
      so far, 0.01 mm at a time up to 0.08 either way. At a disc the stop stays within 0.18
      of the point; at a mitre the end runs at least `need` past it and at most 0.18. `most`
-     keeps the rectangle 0.02 long. When nothing clears them, `s`. */
+     keeps the rectangle 0.02 long. When none of those clears them, the half steps between
+     and on to 0.16, within the same bounds, the least move first; and when none of those
+     does either, whichever of them, or `s`, leaves the corners the most room. It kept `s`
+     there, which could leave two shells' corners under 1 µm apart (above). */
   const stop = (s, round, need, most, ends) => {
+    const out = (t) => t > most || t < -0.18 || (round ? t > 0.18 : t > -need);
     for (let k = 0; k <= 8; k++) for (const t of k ? [s + k * 0.01, s - k * 0.01] : [s]) {
-      if (k && (t > most || t < -0.18 || (round ? t > 0.18 : t > -need))) continue;
+      if (k && out(t)) continue;
       if (clear(ends(t))) return t;
     }
-    return s;
+    let best = s, wide = room(ends(s));
+    for (let k = 1; k <= 16; k++) for (const t of [s + (k - 0.5) * 0.01, s - (k - 0.5) * 0.01, s + k * 0.01, s - k * 0.01]) {
+      if (out(t)) continue;
+      const r = room(ends(t));
+      if (r >= NOTE_APART) return t;
+      if (r > wide) { wide = r; best = t; }
+    }
+    return best;
   };
   /* Which lane a segment runs in: how many strokes its line is from the origin, odd or
      even, measured across it. Two parallel segments a stroke apart are in neighbouring
@@ -406,7 +441,8 @@ function noteShells(G, segs, z0, z1) {
     }
   }
   for (const p of discs.values()) {
-    // turned as above, else the least further, 2.5 degrees at a time: the 18 ways it can face
+    /* turned as above, else the least further, 2.5 degrees at a time: the 18 ways it can
+       face; and when none clears, the way that leaves the most room */
     const tries = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8, -8, 9].map((k) => {
       const ring = [];
       for (let j = 0; j < n; j++) {
@@ -415,7 +451,7 @@ function noteShells(G, segs, z0, z1) {
       }
       return ring;
     });
-    shell(tries.find(clear) || tries[0]);
+    shell(tries.find(clear) || tries.reduce((a, b) => (room(b) > room(a) ? b : a)));
   }
   return polys;
 }

@@ -1303,7 +1303,8 @@ console.log('\nfixed dividers that come to the label shelf\'s front');
   if (!exact || fails.length) bad++;
 }
 /* Edges used other than twice once every vertex within `step` of another is one with it,
-   as a slicer may weld them: on a grid `step` across, moved `off` along each axis. */
+   as some tools that repair a mesh weld them: on a grid `step` across, moved `off` along
+   each axis. */
 const weldBad = (polys, step, off = 0) => {
   const key = (v) => v.map((x) => Math.round((x - off) / step)).join(',');
   const edges = new Map();
@@ -2489,19 +2490,41 @@ console.log('\nnotes raised on the label shelf');
     : `${ALL_GLYPHS.length} glyphs, ${shells} shells, each watertight, oriented, every cap n - 2 triangles`));
   if (fails.length) bad++;
 
-  /* ...and still so once a slicer or a repair tool has welded them: every vertex put on a
-     grid, and the ones in one cell of it made one. Each shell is closed on its own, so an
-     edge used other than twice after that is two shells with corners in one cell. On a
-     grid 10 µm across, moved 5 µm, "Fuses 5A, 10A" on a 2x1x2 with a 10 mm shelf did it
+  /* ...and still so once welded on a grid 10 µm across, as some tools that repair a mesh
+     do: every vertex put on the grid, and the ones in one cell of it made one. Each shell
+     is closed on its own, so an edge used other than twice after that is two shells with
+     corners in one cell. Moved 5 µm, "Fuses 5A, 10A" on a 2x1x2 with a 10 mm shelf did it
      with two discs whose corners were 8 µm apart, and the 0.004 mm a stroke's end moved
      a lane and the 0.003 mm a shell's bottom did were no defence. In the sweep below 321
      of the 720 notes did it at one of the four offsets or another, and all 720 had two
      shells with corners under 20 µm apart. So each note of a sweep over notes, shelves,
      walls and widths is welded on a 10 µm grid at four offsets, and every edge has to be
-     used twice; and, which is what makes that hold at any offset and not only these four,
-     no two shells may have corners closer than 20 µm in x and in y both. Every shell's
-     top is at one height, so x and y are all that keep two apart. The bin it was found
-     on is welded whole as well. */
+     used twice; and no two shells may have corners closer than 20 µm in x and in y both,
+     the NOTE_APART noteShells keeps wherever a move allows it, as it does for all of
+     these. Every shell's top is at one height, so x and y are all that keep two apart,
+     and two corners 10 µm apart in either are never in one cell of a 10 µm grid, at any
+     offset. A coarser weld is another matter: Cura melds vertices within 30 µm, and
+     there 667 of these notes still have two shells sharing an edge (main: all 720), which
+     Cura copes with on its own. The bin it was found on is welded whole as well. */
+  // the nearest two corners of different shells, the more of x and y, by squares 0.02 across
+  const nearestApart = (rings) => {
+    const grid = new Map(), A = 0.02;
+    let close = Infinity;
+    rings.forEach((ring, i) => {
+      for (const [x, y] of ring) {
+        const cx = Math.floor(x / A), cy = Math.floor(y / A);
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++)
+          for (const [j, qx, qy] of grid.get(`${cx + dx},${cy + dy}`) || [])
+            if (j !== i) close = Math.min(close, Math.max(Math.abs(x - qx), Math.abs(y - qy)));
+      }
+      for (const [x, y] of ring) {
+        const k = `${Math.floor(x / A)},${Math.floor(y / A)}`;
+        if (!grid.has(k)) grid.set(k, []);
+        grid.get(k).push([i, x, y]);
+      }
+    });
+    return close;
+  };
   {
     const APART = 0.02, offs = [0, 0.0025, 0.005, 0.0075];
     const notes = ['M3 screws', 'Fuses 5A, 10A', 'Drill bits 1-6 mm', 'Assorted M3 M4 nuts, washers',
@@ -2523,22 +2546,7 @@ console.log('\nnotes raised on the label shelf');
         const polys = NOTE_TEXT.noteShells(rec, s.fit.segs, s.top - 0.05, hUnits * SPEC.unitH - NOTE_CLEAR);
         const counts = offs.map((o) => weldBad(polys, 0.01, o));
         if (counts.some(Boolean)) welded.push(`${name}: ${counts.join('/')}`);
-        // the nearest two corners of different shells, x and y each, by squares APART across
-        const grid = new Map();
-        let close = Infinity;
-        rings.forEach((ring, i) => {
-          for (const [x, y] of ring) {
-            const cx = Math.floor(x / APART), cy = Math.floor(y / APART);
-            for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++)
-              for (const [j, qx, qy] of grid.get(`${cx + dx},${cy + dy}`) || [])
-                if (j !== i) close = Math.min(close, Math.max(Math.abs(x - qx), Math.abs(y - qy)));
-          }
-          for (const [x, y] of ring) {
-            const k = `${Math.floor(x / APART)},${Math.floor(y / APART)}`;
-            if (!grid.has(k)) grid.set(k, []);
-            grid.get(k).push([i, x, y]);
-          }
-        });
+        const close = nearestApart(rings);
         nearest = Math.min(nearest, close);
         if (close < APART) near.push(`${name}: ${(close * 1000).toFixed(1)} µm`);
       }
@@ -2552,6 +2560,49 @@ console.log('\nnotes raised on the label shelf');
       : `${printed} of ${tried} notes print, each clean at 0, 2.5, 5 and 7.5 µm, and the 2x1x2 it was found on ` +
         `whole; no two shells' corners nearer than ${(nearest * 1000).toFixed(1)} µm`));
     if (fault || printed < tried / 2) bad++;
+  }
+
+  /* ...and notes nobody picked, the same ones every run (a fixed seed): any of the
+     font's characters, up to 28 of them, on shelves 6 to 26 mm deep, walls 0.4 to 2 mm
+     and bins of every width. Now and then no move a stroke's end may make clears the
+     corners laid before it, and noteShells then keeps the one with the most room, which
+     nothing holds to NOTE_APART. Kept where it started instead, it left 4 of these with
+     two shells' corners under 15 µm apart, two of them 3.5 µm. They are held to 15 µm,
+     the figure noteShells gives: more than the 10 µm that keeps a 10 µm grid from joining
+     two at any offset, and than the 14.2 µm a 10 µm cell spans turned any way. */
+  {
+    const HELD = 0.015, DRAWN = 6000;
+    let seed = 62;
+    const rnd = () => {                        // mulberry32
+      seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const pick = (list) => list[Math.floor(rnd() * list.length)];
+    const near = [];
+    let printed = 0, short = 0, nearest = Infinity;
+    for (let i = 0; i < DRAWN; i++) {
+      let note = '';
+      for (let k = 1 + Math.floor(rnd() * 28); k > 0; k--) note += rnd() < 0.12 ? ' ' : pick(ALL_GLYPHS);
+      const cfg = { u: pick([1, 1.5, 2, 3, 4, 5]), v: pick([0.5, 1, 1.5, 2]), hUnits: pick([2, 3, 4, 6]),
+                    wall: pick([0.4, 0.8, 1.2, 2]), label: Math.round((6 + rnd() * 20) * 10) / 10, labelMode: 1, note };
+      const s = shelfNote(cfg);
+      if (!s.fit) continue;
+      printed++;
+      const rings = [];
+      NOTE_TEXT.noteShells(Object.assign({}, G, { extrudePoly: (pts) => { rings.push(pts); return []; } }),
+                           s.fit.segs, 0, 1);
+      const close = nearestApart(rings);
+      nearest = Math.min(nearest, close);
+      if (close < 0.02) short++;
+      if (close < HELD) near.push(`${(close * 1000).toFixed(2)} µm, ${JSON.stringify(cfg)}`);
+    }
+    console.log(`  ${'random notes'.padEnd(22)} ` + (near.length || printed < DRAWN / 2
+      ? `FAILED: ${near.length} of ${printed} have two shells' corners under 15 µm apart, among them ${near.slice(0, 3).join('; ')}`
+      : `${printed} of ${DRAWN} print (seed 62), no two shells' corners nearer than ${(nearest * 1000).toFixed(1)} µm; ` +
+        `${short} with no move that keeps them 20 µm apart`));
+    if (near.length || printed < DRAWN / 2) bad++;
   }
 
   /* The font's data goes into the page inside a script tag, where a less-than sign and a
