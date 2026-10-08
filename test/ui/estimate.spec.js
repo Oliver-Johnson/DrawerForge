@@ -533,7 +533,9 @@ const divBin = (x, y, [u, v, h, divX, divY], removable) =>
    left out of every bin: a 2x2x3 with both came to 0.890. And the stacking lip was
    weighed by the bin's area, not round its edge, so the smaller the bin the less of its
    lip there was: a 0.5x0.5x3 came to 0.927. They now come within 1.5%, the most the
-   weight leaves out (the raised note's letters, a few corners: bin.js, binVolume). And a
+   weight leaves out (the raised note's letters, a few corners: bin.js, binVolume), and
+   the carved L within 0.3%, as the bin audit holds a carved shape: its corners are
+   weighed as carvedBody builds them, and its walls are the most of it. And a
    bin with holes across its floor, whose block runs on under the label shelf through the
    wedge the shelf fills, is weighed with that wedge once. */
 const BUILT = [
@@ -561,7 +563,7 @@ test.describe('the weight', () => {
       const mesh = enclosedVolume(buildBin(G, cfg).polys);
       // each one on its own, so a failure says which of them are off and by how much
       expect.soft(Math.abs(est / mesh - 1), `${BUILT[i][0]}: ${est.toFixed(0)} of ${mesh.toFixed(0)} mm³`)
-        .toBeLessThan(0.015);
+        .toBeLessThan((cfg.cells || []).length ? 0.003 : 0.015);
     }
   });
 

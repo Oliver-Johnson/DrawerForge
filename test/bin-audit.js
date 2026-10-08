@@ -2672,6 +2672,14 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
        other. Counted as those, these were 1.017 and 1.010. */
     ['carved plus, 10 mm walls, 15 units', { u: 3, v: 3, hUnits: 15, wall: 10, cells: PLUS }],
     ['carved plus, 6.5 mm walls, 15 units', { u: 3, v: 3, hUnits: 15, wall: 6.5, cells: PLUS }],
+    /* ...and up the lip and its chamfer, where they are as thick as the lip is there, not
+       as the wall: on a bin 15 units tall the lip is too little of it to show a corner
+       counted wrong, so these are a unit tall. With every corner taken at the wall's
+       thickness the whole way up, these were 0.9935 and 0.9929, and with only the lip's
+       upright part so (its 1.9 mm stretch), 0.9970, inside 0.3%, and 0.9967, the second
+       having no floor over its feet. */
+    ['carved plus, 10 mm walls, 1 unit', { u: 3, v: 3, hUnits: 1, wall: 10, cells: PLUS }],
+    ['carved plus, 10 mm, 1 unit, floor 0',{ u: 3, v: 3, hUnits: 1, wall: 10, floorT: 0, cells: PLUS }],
   ];
   const off = [];
   for (const [name, cfg] of CASES) {
