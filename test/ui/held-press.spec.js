@@ -23,24 +23,54 @@ const H = require('./helpers.js');
 // a 2 x 2 at [3, 3] and a 1 x 1 at [0, 6], as packBin writes them
 const BINS_LINK = 'bl=3-3-2-2-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15_0-6-1-1-3-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15';
 
-/* The page at a link, through about:blank, with a layout of yours saved before it, so
-   the link sets yours aside and says so above the map. The blank page's favicon line is
-   the hop's, and the helpers' listener lets it go. */
-async function arriveOverYours(page, open, yours, url) {
-  // a case made again starts with nothing kept from the last try
-  await page.evaluate(() => { try { localStorage.clear(); } catch (err) { /* about:blank */ } });
-  page.__errors = await open(page);
+/* Over HTTP (H.serveRoot). From file:// a page's local save now and then went missing on
+   the next load, and the case then arrived over nothing of yours. The header links the
+   cases at the foot follow point at directories, which file:// does not resolve, and a
+   request the service worker answers never reaches page.route, so the worker is kept
+   out. */
+test.use({ serviceWorkers: 'block' });
+let site;
+test.beforeAll(async () => { site = await H.serveRoot(); });
+test.afterAll(() => site.close());
+const BINS_AT = () => site.base + 'bins/';
+const PLATES_AT = () => site.base;
+
+/* The page (`at`, one of the two above) at a link `hash`, through about:blank, with a
+   layout of yours saved before it, so the link sets yours aside and says so above the
+   map. */
+async function arriveOverYours(page, at, yours, hash) {
+  page.__errors = await (at === BINS_AT ? H.openBins : H.openPlates)(page, at());
   await yours();
   await page.waitForTimeout(600);                        // past the save's 400 ms
+  page.on('console', (m) => { if (hopFavicon(m)) page.__hop.push(m.text()); });
   await page.goto('about:blank');
-  await page.goto(url);
+  await page.goto(at() + '#' + hash);
   await page.waitForFunction(() => typeof THREE !== 'undefined');
   await page.waitForTimeout(600);                        // and past the boot's own, no change
   await expect(page.locator('#setAside')).toBeVisible();
   await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
 }
+/* The hop through about:blank now and then has the blank page ask for the favicon of the
+   page it replaced. Served over HTTP, from origin null, the browser refuses it and logs
+   two errors: the CORS refusal, from about:blank, and the failed load, from the favicon's
+   own address. Neither is the page's, so the errors each case checks leave those two
+   out, matched by where they came from as well as by what they say. */
+function hopFavicon(m) {
+  const from = (m.location() || {}).url || '';
+  return m.type() === 'error' &&
+    (from === 'about:blank' && /^Access to resource at '[^']*\/favicon\.svg' from origin 'null' has been blocked by CORS/.test(m.text()) ||
+     /\/favicon\.svg$/.test(from) && m.text() === 'Failed to load resource: net::ERR_FAILED');
+}
+test.beforeEach(({ page }) => { page.__hop = []; });
 test.afterEach(async ({ page }) => {
-  expect(page.__errors, 'the page threw while being driven').toEqual([]);
+  const hop = [...page.__hop];
+  const errors = page.__errors && page.__errors.filter((t) => {
+    const i = hop.indexOf(t);
+    if (i < 0) return true;
+    hop.splice(i, 1);
+    return false;
+  });
+  expect(errors, 'the page threw while being driven').toEqual([]);
 });
 
 /* What the page was like at each press from now, read in the page as it happens, so that
@@ -65,63 +95,65 @@ const watch = (page, map) => page.evaluate((map) => {
   });
   addEventListener('pointerup', () => { if (log.length) log[log.length - 1].upAt = performance.now(); }, true);
 }, map);
-/* Pressed at `from`, moved to `to` and held there past the save, then let go a pixel or
-   two away. Gives every press watch() saw, and where the map was at the end of the hold. */
-async function holdAndLet(page, map, from, to) {
+const binsNow = (page) => page.evaluate(() => B().map((b) => [b.x, b.y, b.u, b.v]));
+
+/* Pressed at `from` and moved to `to` with the page's save kept (keepSave, below), then
+   that save let come due while the press is still held, and the press let go a pixel or
+   two away. Gives every press watch() saw, where the map was once the save had come, and
+   whether there was a save waiting to come. The save comes when the test says rather than
+   400 ms on: timed, the drag had to change the design inside 400 ms of the press or the
+   click before it, and every step of getting there is a round trip to a browser that a
+   busy machine slows, so under load three goes in a row could all miss. */
+async function holdOverSave(page, from, to) {
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   await page.mouse.move(to.x, to.y, { steps: 6 });
-  await page.waitForTimeout(700);                        // held past the save's 400 ms
-  const held = await page.evaluate((map) => document.getElementById(map).getBoundingClientRect().top, map);
+  const due = await saveDue(page);
+  const held = await page.evaluate(() => document.getElementById('fillmap').getBoundingClientRect().top);
   await page.mouse.move(to.x + 2, to.y + 1);
   await page.mouse.up();
-  await page.waitForTimeout(150);
-  return { held, presses: await page.evaluate(() => window.__presses) };
+  return { due, held, presses: await page.evaluate(() => window.__presses) };
+}
+/* and the line goes once the bin is let go: the release sets the save going again, and
+   that one finds the layout changed */
+async function lineGoes(page) {
+  await page.waitForFunction(() => window.__save !== null);
+  await saveDue(page);
+  await expect(page.locator('#setAside')).toBeHidden();
 }
 
-const binsNow = (page) => page.evaluate(() => B().map((b) => [b.x, b.y, b.u, b.v]));
-
 /* The press grabs the bin, which sets the save going, and the drag has moved it before
-   the save comes, so the save finds the design changed. Made again should the drag have
-   been slow to move it, which is not the case this is about. */
+   the save comes, so the save finds the design changed. */
 test('a bin dragged and held on a link that set yours aside lands where it was let go', async ({ page }) => {
-  for (let tries = 1; ; tries++) {
-    await arriveOverYours(page, H.openBins, () => H.clickCell(page, 0, 0), H.BINS_URL + '#' + BINS_LINK);
-    const from = await H.cellPoint(page, 3, 3), to = await H.cellPoint(page, 4, 3);
-    await watch(page, 'fillmap');
-    const { held, presses: [p] } = await holdAndLet(page, 'fillmap', from, to);
-    if (p.lineUp && p.changedAt !== null && p.changedAt - p.at < 380) {
-      expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
-      expect(await binsNow(page), 'one cell right').toEqual([[4, 3, 2, 2], [0, 6, 1, 1]]);
-      // and the line goes once the bin is let go: the layout is a changed one now
-      await expect(page.locator('#setAside')).toBeHidden();
-      break;
-    }
-    expect(tries, 'the drag moved the bin while the press\'s save still waited').toBeLessThan(3);
-  }
+  await arriveOverYours(page, BINS_AT, () => H.clickCell(page, 0, 0), BINS_LINK);
+  const from = await H.cellPoint(page, 3, 3), to = await H.cellPoint(page, 4, 3);
+  await keepSave(page);
+  await watch(page, 'fillmap');
+  const { due, held, presses: [p] } = await holdOverSave(page, from, to);
+  expect(due, 'the press set a save going').toBe(true);
+  expect(p.lineUp && p.changedAt !== null, 'the drag changed the design with the line up').toBe(true);
+  expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
+  expect(await binsNow(page), 'one cell right').toEqual([[4, 3, 2, 2], [0, 6, 1, 1]]);
+  await lineGoes(page);
 });
 
 /* A grip is pressed a moment after the click that selected the bin, and has pulled the
-   bin out inside the 400 ms that click set the save going for, so the save finds it
-   resized. Made again should the save have come first all the same, which is the
-   ordinary order and not the one this is about. */
+   bin out before the save that click set going comes, so the save finds it resized. */
 test('a grip pulled and held a moment after selecting the bin makes the size it was let go at', async ({ page }) => {
-  for (let tries = 1; ; tries++) {
-    await arriveOverYours(page, H.openBins, () => H.clickCell(page, 0, 0), H.BINS_URL + '#' + BINS_LINK);
-    const to = await H.cellPoint(page, 5, 5), bin = await H.cellPoint(page, 3, 3);
-    await watch(page, 'fillmap');
-    await page.mouse.click(bin.x, bin.y);
-    const box = await page.locator('#fillmap .grip[data-handle="rb"]').boundingBox();
-    const grip = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-    const { held, presses: [click, p] } = await holdAndLet(page, 'fillmap', grip, to);
-    if (p.lineUp && p.changedAt !== null && p.changedAt - click.upAt < 380) {
-      expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
-      expect(await binsNow(page), 'one cell out each way').toEqual([[3, 3, 3, 3], [0, 6, 1, 1]]);
-      await expect(page.locator('#setAside')).toBeHidden();
-      break;
-    }
-    expect(tries, 'the grip resized the bin while the click\'s save still waited').toBeLessThan(3);
-  }
+  await arriveOverYours(page, BINS_AT, () => H.clickCell(page, 0, 0), BINS_LINK);
+  const to = await H.cellPoint(page, 5, 5), bin = await H.cellPoint(page, 3, 3);
+  await keepSave(page);
+  await watch(page, 'fillmap');
+  await page.mouse.click(bin.x, bin.y);
+  await page.waitForFunction(() => window.__save !== null);
+  const box = await page.locator('#fillmap .grip[data-handle="rb"]').boundingBox();
+  const grip = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const { due, held, presses: [, p] } = await holdOverSave(page, grip, to);
+  expect(due, 'the click set a save going').toBe(true);
+  expect(p.lineUp && p.changedAt !== null, 'the grip changed the design with the line up').toBe(true);
+  expect.soft(held, 'the map stayed where it was pressed').toBe(p.top);
+  expect(await binsNow(page), 'one cell out each way').toEqual([[3, 3, 3, 3], [0, 6, 1, 1]]);
+  await lineGoes(page);
 });
 
 /* A point on a cut-map grid line the browser agrees is on it, as plates-undo.spec.js
@@ -165,8 +197,7 @@ const saveDue = (page) => page.evaluate(() => {
    found before the first click: the build that click sets going holds the page up. */
 test('a cut-map line pressed and held on a link that set yours aside still takes the click', async ({ page }) => {
   const rows = () => page.evaluate(() => state.splitMode === 'manual' ? state.rowCuts.slice() : null);
-  await arriveOverYours(page, H.openPlates, () => H.setField(page, 'drawerW', '420'),
-    H.PLATES_URL + '#w=300&d=300');
+  await arriveOverYours(page, PLATES_AT, () => H.setField(page, 'drawerW', '420'), 'w=300&d=300');
   // the pieces built, so that the build is not holding the page up when the clicks come
   await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
     null, { timeout: 20000 });
@@ -210,7 +241,7 @@ async function letGoElsewhere(page, at) {
 }
 
 test('a bin dragged and let go outside the page does not keep the saves waiting', async ({ page }) => {
-  await arriveOverYours(page, H.openBins, () => H.clickCell(page, 0, 0), H.BINS_URL + '#' + BINS_LINK);
+  await arriveOverYours(page, BINS_AT, () => H.clickCell(page, 0, 0), BINS_LINK);
   const from = await H.cellPoint(page, 3, 3), to = await H.cellPoint(page, 4, 3);
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
@@ -228,8 +259,7 @@ test('a bin dragged and let go outside the page does not keep the saves waiting'
 });
 
 test('a cut-map press let go outside the page does not keep the saves waiting', async ({ page }) => {
-  await arriveOverYours(page, H.openPlates, () => H.setField(page, 'drawerW', '420'),
-    H.PLATES_URL + '#w=300&d=300');
+  await arriveOverYours(page, PLATES_AT, () => H.setField(page, 'drawerW', '420'), 'w=300&d=300');
   await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
     null, { timeout: 20000 });
   await page.evaluate(() => document.getElementById('cutmap').scrollIntoView({ block: 'center' }));
@@ -243,3 +273,180 @@ test('a cut-map press let go outside the page does not keep the saves waiting', 
   expect(await page.evaluate(() => location.hash), 'the typed width saved').toMatch(/[#&]w=520(&|$)/);
   await expect(page.locator('#setAside')).toBeHidden();
 });
+
+/* ---------- leaving with a press still held ----------------------------------------
+   Each page's header links to the other tool and the guide save the design and hand it
+   to the next page (leave), and can be followed while the mouse still holds a press on
+   the map: from the keyboard, or with a finger on a touch screen. The press stayed on.
+   On the bins page the bin or grip went on following the pointer while the next page
+   loaded, and letting go set a save going; on the baseplates page a cut-map line let go
+   on made its click, which is a cut, and saved. Either way that save put another layout
+   in the address, the local save and the saved drawer after the hand-over, and Back came
+   to a layout the next page was never given. Each case saves its design as a drawer
+   first, and holds the next page back until the press has been let go and the save it
+   would set going is due. */
+test.describe('leaving with a press still held', () => {
+  // BINS_LINK's 2 x 2 two cells right, and one cell bigger each way, as packBin writes them
+  const MOVED = [BINS_LINK.slice(3).replace(/^3-3-2-2-/, '5-3-2-2-')];
+  const GROWN = [BINS_LINK.slice(3).replace(/^3-3-2-2-/, '3-3-3-3-')];
+  const CUTS = ['sp', 'rc', 'cc'];
+  const LINE = '#cutmap .hitline[data-row="1"]';
+  // the settings `keys` of a design string, or of the address one is in
+  const settings = (h, keys) => {
+    const q = Object.fromEntries((h || '').replace(/^[^#]*#/, '').split('&')
+      .map((kv) => kv.split('=').map(decodeURIComponent)));
+    return keys.map((k) => q[k]);
+  };
+  const design = (page) => page.evaluate(() =>
+    typeof descString === 'function' ? descString() : encodeDesc(descriptor()));
+  const binsReady = (page) => page.waitForFunction(() =>
+    typeof THREE !== 'undefined' && typeof drawers !== 'undefined');
+  const platesReady = (page) => page.waitForFunction(() => typeof drawers !== 'undefined' &&
+    /ready/.test(document.getElementById('pieceTail').textContent), null, { timeout: 30000 });
+
+  /* The page (`at`) at `hash`, saved as a drawer, which every save from then on goes into
+     as well. */
+  async function open(page, at, hash, ready) {
+    const errors = page.__errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    await page.goto(at() + '#' + hash);
+    await ready(page);
+    await page.waitForTimeout(600);                      // past the boot's save
+    await page.click('#drawersBtn');
+    await page.fill('#drawersNewName', 'Kitchen');
+    await page.press('#drawersNewName', 'Enter');
+    await expect(page.locator('#drawersMsg')).toContainText('Saved as “Kitchen”');
+    await page.click('#drawersClose');
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+  }
+  // `key` pressed until the element `id` has focus, and said if it never does
+  async function tabTo(page, id, key) {
+    for (let i = 0; i < 100; i++) {
+      if (await page.evaluate((id) => document.activeElement.id === id, id)) break;
+      await page.keyboard.press(key);
+    }
+    expect(await page.evaluate(() => document.activeElement.id), 'focus reached the link').toBe(id);
+  }
+  /* `hold` puts the mouse down on the map and drags with it, `reach` takes focus to the
+     link, `away` gives where the pointer goes on to and is let go, found once the link is
+     reached (focus going there scrolls the page), and `follow` follows the link. The page
+     that asks for (`to`) is held back until the save the release would set going is due. */
+  async function leaveHeld(page, to, { hold, reach = async () => {}, away, follow }) {
+    let letThrough;
+    const gate = new Promise((r) => { letThrough = r; });
+    await page.route(to, async (route) => { await gate; await route.continue(); });
+    await hold();
+    await reach();
+    const there = await away();
+    /* The next page asked for is the link followed, so leave() has run. Nothing is read
+       out of the page until the next one arrives: the browser answers no evaluate while
+       a navigation waits, and the press or tap that started it may wait for it too. */
+    const asked = page.waitForRequest((r) => to(new URL(r.url())));
+    const going = follow();
+    await asked;
+    await page.mouse.move(there.x, there.y, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(1000);                     // past the save's 400 ms
+    letThrough();
+    await going;
+    await page.waitForURL(to);
+  }
+  /* What the next page was handed, what the page left saved on this device (`saveKey`)
+     and into the drawer, and the design Back comes to: `keys` of each as they were when
+     the link was followed (`want`). */
+  async function keptEverywhere(page, saveKey, keys, want, ready) {
+    expect(settings(page.url(), keys), 'handed over').toEqual(want);
+    const [local, drawer] = await page.evaluate((k) => [localStorage.getItem(k),
+      JSON.parse(localStorage.getItem('drawerforge:drawers:v1')).drawers
+        .find((d) => d.name === 'Kitchen').hash], saveKey);
+    expect(settings(local, keys), 'the page\'s own save').toEqual(want);
+    expect(settings(drawer, keys), 'the drawer').toEqual(want);
+    await page.goBack();
+    await ready(page);
+    expect(settings(await design(page), keys), 'Back').toEqual(want);
+  }
+
+  async function dragBin(page, from, to, held) {
+    const a = await H.cellPoint(page, ...from), b = await H.cellPoint(page, ...to);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 6 });
+    expect(await binsNow(page), 'held').toEqual(held);
+  }
+  // the 2 x 2 selected, and its back right grip pulled out to the cell `to`
+  async function pullGrip(page, to, held) {
+    await H.clickCell(page, 3, 3);
+    const t = await H.cellPoint(page, ...to);
+    const box = await page.locator('#fillmap .grip[data-handle="rb"]').boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(t.x, t.y, { steps: 6 });
+    expect(await binsNow(page), 'held').toEqual(held);
+  }
+
+  test('the Baseplates link followed from the keyboard with a bin held keeps the layout it handed over',
+    async ({ page }) => {
+      await open(page, BINS_AT, BINS_LINK, binsReady);
+      await leaveHeld(page, (u) => u.pathname === '/', {
+        hold: () => dragBin(page, [3, 3], [5, 3], [[5, 3, 2, 2], [0, 6, 1, 1]]),
+        // on from where the press was, as far as the link
+        reach: () => tabTo(page, 'navPlates', 'Tab'),
+        away: () => H.cellPoint(page, 1, 6),
+        follow: () => page.keyboard.press('Enter'),
+      });
+      await keptEverywhere(page, 'drawerforge:bins:v1', ['bl'], MOVED, binsReady);
+    });
+
+  test('the Baseplates link followed from the keyboard with a grip held keeps the size it handed over',
+    async ({ page }) => {
+      await open(page, BINS_AT, BINS_LINK, binsReady);
+      await leaveHeld(page, (u) => u.pathname === '/', {
+        hold: () => pullGrip(page, [5, 5], [[3, 3, 3, 3], [0, 6, 1, 1]]),
+        reach: () => tabTo(page, 'navPlates', 'Tab'),
+        away: () => H.cellPoint(page, 6, 7),
+        follow: () => page.keyboard.press('Enter'),
+      });
+      await keptEverywhere(page, 'drawerforge:bins:v1', ['bl'], GROWN, binsReady);
+    });
+
+  test('the Bins link followed from the keyboard with a cut-map line held keeps the layout it handed over',
+    async ({ page }) => {
+      await open(page, PLATES_AT, 'w=300&d=300', platesReady);
+      const want = settings(await design(page), CUTS);
+      // the line pressed is let go on, wherever focus going to the link has scrolled it
+      const onLine = async () => {
+        await page.evaluate(() => document.getElementById('cutmap').scrollIntoView({ block: 'center' }));
+        return linePoint(page, LINE);
+      };
+      await leaveHeld(page, (u) => u.pathname === '/bins/', {
+        hold: async () => {
+          const at = await onLine();
+          await page.mouse.move(at.x, at.y);
+          await page.mouse.down();
+        },
+        reach: () => tabTo(page, 'navBins', 'Shift+Tab'),
+        away: onLine,
+        follow: () => page.keyboard.press('Enter'),
+      });
+      await keptEverywhere(page, 'drawerforge:plates:v1', CUTS, want, platesReady);
+    });
+
+  test.describe('on a touch screen', () => {
+    test.use({ hasTouch: true });
+    test('the Guide link tapped with a bin held by the mouse keeps the layout it handed over',
+      async ({ page }) => {
+        await open(page, BINS_AT, BINS_LINK, binsReady);
+        await leaveHeld(page, (u) => u.pathname === '/guide/', {
+          hold: () => dragBin(page, [3, 3], [5, 3], [[5, 3, 2, 2], [0, 6, 1, 1]]),
+          away: () => H.cellPoint(page, 1, 6),
+          follow: async () => {
+            const box = await page.locator('#navGuide').boundingBox();
+            await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+          },
+        });
+        await keptEverywhere(page, 'drawerforge:bins:v1', ['bl'], MOVED, binsReady);
+      });
+  });
+});
+
