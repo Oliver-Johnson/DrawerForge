@@ -166,6 +166,34 @@ test('a change made just before going to the other tool is still there after Bac
     expect(errors).toEqual([]);
   });
 
+/* The bins page reads a typed field 180 ms after the typing stops. A link to the other
+   tool followed inside that handed over the size from before it, and the page left
+   saved the new one after: the baseplates page arrived at the old width, and Back came
+   to the new one. */
+test('a size typed just before going to the other tool is the one handed over',
+  async ({ page }) => {
+    const errors = await openPlates(page);
+    await saveAs(page, 'Kitchen');
+    await toBins(page);
+    await settle(page);
+    expect(await page.inputValue('#drawerW')).not.toBe('420');
+    // the typing and the click in one go, so the field's pass cannot run between them
+    await Promise.all([page.waitForURL((u) => !/\/bins\//.test(u.pathname)), page.evaluate(() => {
+      const f = document.getElementById('drawerW');
+      f.value = '420';
+      f.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('navPlates').click();
+    })]);
+    await platesReady(page);
+    expect(await page.inputValue('#drawerW'), 'handed over').toBe('420');
+    await settle(page);
+    expect((await stored(page)).Kitchen.w, 'the drawer').toBe('420');
+    await page.goBack();
+    await binsReady(page);
+    expect(await page.inputValue('#drawerW'), 'and the bins page, after Back').toBe('420');
+    expect(errors).toEqual([]);
+  });
+
 /* A link copied from the page is the design as it was then. Opened after a later change
    has been saved, it is an older design than the drawer's, and opening it as the drawer
    would save it over that change. */
