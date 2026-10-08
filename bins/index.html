@@ -8879,10 +8879,10 @@ function cornerMargin(shape, rc, side, edge) {
    the slot is still built over them, or else keeps them where they are with it. The plates
    along are not kept in front of it then: railedLimit asks the back wall first, on its own
    (fingerWall). */
-function shelfFor(c, iw, id, H) {
+function shelfFor(c, iw, id, H, divs) {
   const plain = shelfDepth(c, id, H);
   if (!plain) return null;
-  const raised = noteOnShelf(c, iw, id, H, shelfFoot(c));
+  const raised = noteOnShelf(c, iw, id, H, shelfFoot(c), divs);
   return raised.fit ? { top: raised.top, depth: raised.depth, raised } : { top: H, depth: plain, raised: null };
 }
 // how low the shelf's slope may reach: the top of the feet, or of the screws in them
@@ -8897,12 +8897,13 @@ const shelfFoot = (c) => {
    needs to know whether there are holes. Asked for holes, a bin is worked out without its
    dividers, and if the holes come out built that is the bin. If they do not (too short,
    or none fit), the dividers are built after all and the shelf is worked out with them,
-   as on any bin without holes, which is every bin not asked for them. */
-function floorPlan(c, iw, id, H) {
-  if (!insertOf(c)) return { shelf: shelfFor(c, iw, id, H), holes: { why: 'off' } };
+   as on any bin without holes, which is every bin not asked for them. Those are `divs`
+   where given, as noteOnShelf takes them (fingerSlots). */
+function floorPlan(c, iw, id, H, divs) {
+  if (!insertOf(c)) return { shelf: shelfFor(c, iw, id, H, divs), holes: { why: 'off' } };
   const bare = c.divX || c.divY ? Object.assign({}, c, { divX: 0, divY: 0 }) : c;
   const shelf = shelfFor(bare, iw, id, H), holes = holeLayout(c, iw, id, H, shelf);
-  return holes.n ? { shelf, holes } : { shelf: bare === c ? shelf : shelfFor(c, iw, id, H), holes };
+  return holes.n ? { shelf, holes } : { shelf: bare === c ? shelf : shelfFor(c, iw, id, H, divs), holes };
 }
 /* Where the holes go in a bin settled as buildBin settles it, and how deep they are, or
    why there are none. `why` is 'off' (none asked for), 'carved', 'solid', 'short' (under
@@ -9179,8 +9180,11 @@ function fingerZ(s, x) {
  *   splits    the extra points for each straight of the wall rings, in roundRect's
  *             order (back, left, front, right), as fractions of its length
  * With `only` ('f' or 'b'), that wall alone, between the dividers across as built and
- * with no holes across the floor (fingerWall). */
-function fingerSlots(c, only) {
+ * with no holes across the floor (fingerWall). With `divs`, between those dividers rather
+ * than the ones built, and the note on the shelf fitted between them too: dividersBuilt
+ * asks so whether a slot is built between the plates it counts with no lip to notch, as
+ * fingerWall asks with the plates across that plateLayout lays out. */
+function fingerSlots(c, only, divs) {
   const blank = () => ({ n: 0, built: '', sides: {}, floor: null, shelfOff: false, holesGaveWay: false,
                          scoop: null, scoopWas: 0, scoopNow: 0, area: 0, splits: [[], [], [], []] });
   const asked = FINGER_SIDES.filter((k) => c.fingerSlots && c.fingerSlots[k] && (!only || k === only));
@@ -9343,19 +9347,19 @@ function fingerSlots(c, only) {
      dividersBuilt has them, are all that meet it; and holes across the floor leave no
      dividers to count. */
   if (only) return settle({ shelf: null, holes: { why: 'off' } }, null,
-                          { divX: Math.min(c.divX || 0, c.divRemovable ? railedMost(c, 'x') : Infinity), divY: 0 });
-  const asIs = floorPlan(c, iw, id, H);
+                          divs || { divX: Math.min(c.divX || 0, c.divRemovable ? railedMost(c, 'x') : Infinity), divY: 0 });
+  const asIs = floorPlan(c, iw, id, H, divs);
   if (c.fingerSlots.b && asIs.shelf && insertOf(c)) {
-    const kept = settle(asIs, asIs.shelf);
-    const without = floorPlan(Object.assign({}, c, { label: 0 }), iw, id, H);
-    const bare = settle(without, asIs.shelf);
+    const kept = settle(asIs, asIs.shelf, divs);
+    const without = floorPlan(Object.assign({}, c, { label: 0 }), iw, id, H, divs);
+    const bare = settle(without, asIs.shelf, divs);
     const fewer = (without.holes.n || 0) < (asIs.holes.n || 0);
     const lost = asked.filter((k) => (k === 'b' || kept.sides[k].slots.length) && !bare.sides[k].slots.length).join('');
     if (!fewer && !lost) return bare;
     if (kept.shelfOff) kept.holesGaveWay = { why: fewer ? 'many' : 'high', walls: fewer ? '' : lost, without: without.holes };
     return kept;
   }
-  return settle(asIs, asIs.shelf);
+  return settle(asIs, asIs.shelf, divs);
 }
 /* The rings' split lists with the slots' points added, each straight its own list now:
    the slots on the front need not be where the ones at the back are. Both rings still
@@ -9381,25 +9385,28 @@ function fingerDip(plan, outline, zTop, hw, hd, r) {
 }
 /* fingerSlots for any bin, worked out without building it, for the page: what it says
    in Checks, the lip and the heights it quotes, and the scoop and the shelf it names and
-   keys the bin by, which are buildBin's and binVolume's (scoopBuilt). */
-function fingerSlotPlan(cfg) {
+   keys the bin by, which are buildBin's and binVolume's (scoopBuilt). With `divs`, between
+   those dividers instead of the ones built (fingerSlots). */
+function fingerSlotPlan(cfg, divs) {
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg || {})));
   c.floorT = builtFloorT(c);
   if (isHalfSize(c)) c.cells = null;
-  return fingerSlots(c);
+  return fingerSlots(c, null, divs);
 }
 /* A bin's finger slots in its front wall or its back one (`k`), or null where it asks for
    none there: settled from the dividers across alone, which are what meet those walls, so
    that the dividers along can be counted with them. A front slot holds the scoop the
    plates stand on (plateLayout), and a back one takes away the label shelf they would
    keep in front of (railedLimit). Settled so, they are the slots buildBin builds there:
-   with holes across the floor it builds no dividers to count, and no scoop. */
-function fingerWall(cfg, k) {
+   with holes across the floor it builds no dividers to count, and no scoop. `divX` is the
+   count of dividers across where the caller has it, plateLayout's plates across, which
+   with no lip to notch can be more than the lip allows (dividersBuilt). */
+function fingerWall(cfg, k, divX) {
   if (!(cfg.fingerSlots && cfg.fingerSlots[k])) return null;
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
   c.floorT = builtFloorT(c);
   if (isHalfSize(c)) c.cells = null;
-  return fingerSlots(c, k);
+  return fingerSlots(c, k, divX === undefined ? undefined : { divX, divY: 0 });
 }
 
 /* ---------- the bin ------------------------------------------------------- */
@@ -9490,10 +9497,12 @@ function shelfDepth(c, id, H) {
  * would. With a stacking lip, each slot is a notch through the lip (notchedLip), cut
  * straight across it; the notch nearest a corner has to cross the lip's socket floor,
  * 2.70 mm in, before that turns the corner, or the cut misses it and the notch cannot
- * be made. And a label shelf stands over the back of the cavity: a plate along the
- * depth, parallel to it, would have to be slid in under it, which a plate dropped into
- * rails cannot be, so the last one stays in front of the shelf, slot and all. The plates
- * across pass through notches in the shelf instead, so the shelf limits only these.
+ * be made. A finger slot takes the lip away, and a bin built with one is counted
+ * without this (dividersBuilt). And a label shelf stands over the back of the cavity: a
+ * plate along the depth, parallel to it, would have to be slid in under it, which a
+ * plate dropped into rails cannot be, so the last one stays in front of the shelf, slot
+ * and all. The plates across pass through notches in the shelf instead, so the shelf
+ * limits only these.
  * With a note raised on it the shelf is a millimetre lower, and on a short bin up to a
  * millimetre shallower (shelfFor), and the plates along come up to that one: as many
  * more as stand in front of it with the note still printing, where the dividers as built
@@ -9542,8 +9551,9 @@ function railedLimit(cfg, axis) {
     while (most > 0 && last(most) + slot + 2 * BLOAT > inner + c.wall - LIP[0][1]) most--;
   const lip = most;
   /* A finger slot in the back wall takes the shelf away (fingerSlots), so there is none to
-     keep in front of. The lip is counted with all the same: whether a bin has finger slots
-     at all is settled between the dividers this counts. */
+     keep in front of. The lip is counted with all the same here: whether a bin has finger
+     slots at all is settled between the dividers this counts, so dividersBuilt asks this
+     of the bin without its lip as well, and keeps that count where a slot is built. */
   const back = axis === 'y' && full ? fingerWall(c, 'b') : null;
   const H = c.hUnits * SPEC.unitH, shelf = axis === 'y' && full && !(back && back.n) ? shelfDepth(c, hd, H) : 0;
   // the most in front of a shelf `d` deep
@@ -9579,6 +9589,27 @@ function dividersBuilt(cfg) {
   const shape = halfSized(Object.assign({}, c));
   if (isHalfSize(shape)) shape.cells = null;
   if (!isFullRect(shape) || builtSolid(shape)) return { divX: 0, divY: 0 };
+  const out = dividersCounted(c);
+  /* A finger slot takes the lip away, as a lowered wall does (buildBin), and the notches
+     with it, which railedLimit and plateLayout keep clear of the lip's corners. So a bin
+     asking for slots is counted without that rule as well, and built with that count
+     where a slot is still built between the plates it gives, which can be narrower or
+     stand elsewhere: settled between those plates (fingerSlotPlan), as buildBin then
+     settles them. Where none would be, the bin keeps its lip and the count the lip
+     allows. Counted with the lip's rule, a 1x1x3 with a 0.4 mm wall and a slot in the
+     front was built with 10 plates along where 11 fit, and Checks put it down to a lip it
+     does not have. */
+  if (c.divRemovable && c.lip && slotsAsked(c)) {
+    const free = dividersCounted(Object.assign({}, c, { lip: false }));
+    if ((free.divX !== out.divX || free.divY !== out.divY) && fingerSlotPlan(c, free).n) return free;
+  }
+  return out;
+}
+const slotsAsked = (c) => !!c.fingerSlots && FINGER_SIDES.some((k) => c.fingerSlots[k]);
+/* As many dividers as a rectangle asks for, bar removable ones past the most that fit
+   (dividersBuilt, which asks it with the bin's lip and, where a slot takes that away,
+   without). */
+function dividersCounted(c) {
   const n = (key, axis) => Math.min(c[key] || 0, c.divRemovable ? railedMost(c, axis) : Infinity);
   const out = { divX: n('divX', 'x'), divY: n('divY', 'y') };
   /* Removable plates along the depth have to keep enough plate where they stand: over the
@@ -9591,6 +9622,14 @@ function dividersBuilt(cfg) {
   if (c.divRemovable)
     for (let L = plateLayout(c, out); out.divY > 0 && !(L.fitsY && L.corners); L = plateLayout(c, out)) out.divY--;
   return out;
+}
+/* The bin its removable dividers are counted by: itself, or where a finger slot is built
+   in it, which leaves it no lip, the same bin without one (dividersBuilt). What Checks
+   says stopped the count (dividersWhy) and how many the fields let a bin ask for go by
+   it, so neither says or stops at the lip of a bin that has none. */
+function countedAs(cfg) {
+  const c = Object.assign({}, BIN_DEFAULTS, cfg);
+  return c.divRemovable && c.lip && slotsAsked(c) && fingerSlotPlan(c).n ? Object.assign(c, { lip: false }) : c;
 }
 /* The dividers a bin is built with, all told: none on a bin built with holes across its
    floor, which are what divide it (floorPlan), and dividersBuilt's on any other. The
@@ -9609,16 +9648,21 @@ function binDividers(cfg) {
    or cross, 'lipCorners' when the notches would leave the lip too little of its corners,
    and 'crossCorners' when both would. It was asked of as many as the rails allow, and
    named the plates' keep wherever both went wrong there, whichever stopped one more.
-   Null where it is built with all it asks for. */
+   A bin with a finger slot built in it has no lip, and is said by the rules it is counted
+   by without one (countedAs), never the lip's; 'slot' where it is built with the count
+   its lip would allow all the same, because between more plates no slot would be built,
+   and it would have its lip. Null where it is built with all it asks for. */
 function dividersWhy(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg), built = dividersBuilt(c), out = { divX: null, divY: null };
   if (!c.divRemovable) return out;
+  const by = countedAs(c), free = by.lip === c.lip ? null : dividersCounted(by);
   for (const [key, axis] of [['divX', 'x'], ['divY', 'y']]) {
     const asked = c[key] || 0;
     if (built[key] >= asked) continue;
-    const L = railedLimit(c, axis);
+    const L = railedLimit(by, axis);
     if (built[key] >= Math.min(asked, L.most)) { out[key] = L.by; continue; }
-    const P = plateLayout(c, Object.assign({}, built, { [key]: built[key] + 1 }));
+    if (free && built[key] < free[key]) { out[key] = 'slot'; continue; }
+    const P = plateLayout(by, Object.assign({}, built, { [key]: built[key] + 1 }));
     out[key] = !P.fitsY && !P.corners ? 'crossCorners' : !P.fitsY ? 'cross' : 'lipCorners';
   }
   return out;
@@ -9688,8 +9732,9 @@ function plateLayout(cfg, counts) {
   /* Under a finger slot in the front wall the scoop is held lower (fingerSlots), as buildBin
      builds it: the plates across are cut to that one, the plates along stand on it, and as
      many are counted as fit on it. Of the two caps, the slot's and the plates' own below,
-     the smaller holds. */
-  const front = railed ? fingerWall(c, 'f') : null;
+     the smaller holds. The slot is settled between these plates across, which are the
+     ones built when these are dividersBuilt's. */
+  const front = railed ? fingerWall(c, 'f', pX.length) : null;
   if (front && front.scoop !== null) c.scoop = front.scoop;
   const r = railed ? scoopRadius(c, H, floorZ, id, pX.length && printed ? ztop - PLATE_END - clr - floorZ : undefined) : 0;
   // and the scoop it would be with no plates across to keep their ends in their rails
@@ -11315,7 +11360,7 @@ const unpackLayers = (s) => (s || '').split(SEP.layer)
   .map((ls) => ({ bins: ls.split(SEP.bin).filter(Boolean).map(unpackBin) }));
 
 if (typeof module !== 'undefined') {
-  module.exports = { buildBin, binVolume, scoopBuilt, dividerPart, dividerPlates, plateLayout, railedMost, railedLimit, dividersBuilt, binDividers, dividersWhy, lipNotched, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
+  module.exports = { buildBin, binVolume, scoopBuilt, dividerPart, dividerPlates, plateLayout, railedMost, railedLimit, dividersBuilt, dividersCounted, countedAs, binDividers, dividersWhy, lipNotched, lidPart, lidSideBits, lidSidesFrom, roundRect, outlineAt, wallSplits, RAMP_RUN, SPEC, BIN_DEFAULTS, LIP_TABLE: LIP,
     lipHeight, binHeights, unitsForInside, unitsForTop, REQUIRED_CORE,
     FOOT_HOLES, SCREW_FLOOR, holeSites, holePlan, builtFloorT, feetBits, feetFrom,
     isHalfSize, binFeet, feetHolesOff,
@@ -12614,13 +12659,17 @@ function setBinLimits(u, v, hUnits) {
    the plate and the clearance, and as go in past the lip and the shelf (railedMost). The
    ones along also as many as keep enough plate where they cross the ones across, or stand
    on the scoop, and leave the lip its corners (dividersBuilt), so `cfg` carries the count
-   across when this is asked for the count along. */
+   across when this is asked for the count along. A bin with a finger slot built in it has
+   no lip, and is counted without it (countedAs), up to as many as still leave a slot
+   built: more plates would leave it none, and its lip back. */
 function setDividerLimit(id, cfg) {
   const axis = id === 'divX' ? 'x' : 'y';
   let most = mostDividers(axis === 'x' ? cfg.u : cfg.v, cfg.wall);
   if (cfg.divRemovable) {
-    most = Math.min(most, railedMost(cfg, axis));
-    if (axis === 'y') most = dividersBuilt(Object.assign({}, cfg, { divY: most })).divY;
+    const by = countedAs(cfg);
+    most = Math.min(most, railedMost(by, axis));
+    if (axis === 'y' || by.lip !== Object.assign({}, BIN_DEFAULTS, cfg).lip)
+      most = dividersBuilt(Object.assign({}, cfg, { [id]: most }))[id];
   }
   $(id).max = most;
 }
@@ -14389,6 +14438,11 @@ function binIssues(b, k, claims) {
       // both, where one more would go wrong both ways (dividersWhy)
       crossCorners: (any) => `${any ? 'no more' : 'none'} keep ${PLATE_END} mm of plate where they ${stand}, ` +
         `and ${any ? 'more' : 'any'} would notch the stacking lip too close to its corners`,
+      /* A bin with a finger slot has no lip, and is counted without it, but for this: with
+         more plates it would have no slot, and so its lip, which they would notch too close
+         to its corners (dividersWhy). */
+      slot: (any) => `${any ? 'more' : 'any'} would leave no room for its finger slots, and it would have the ` +
+        `stacking lip back, which ${any ? 'no more' : 'none'} can have a notch through clear of its corners`,
     };
     const MANY = {
       lip: 'no more can have a notch through the stacking lip clear of its corners',
@@ -14397,6 +14451,8 @@ function binIssues(b, k, claims) {
       lipCorners: 'more along would notch the stacking lip too close to its corners',
       crossCorners: `no more along keep ${PLATE_END} mm of plate where they cross the ones across, or stand on the ` +
         'scoop, and more would notch the stacking lip too close to its corners',
+      slot: 'more would leave no room for their finger slots, and they would have the stacking lip back, which ' +
+        'no more can have a notch through clear of its corners',
     };
     for (const r of Object.keys(REASON)) {
       const these = short.filter(([k]) => why[k] === r);
