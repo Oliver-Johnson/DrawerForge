@@ -157,6 +157,14 @@ function grid() {
      said 9. */
   return { nx, ny, avail, maxUnits: Math.max(1, unitsUnder(avail)) };
 }
+/* Whether the drawer leaves no room above the baseplate. A link can hand this page a
+   baseplate as tall as the drawer or taller, and Checks, the panel and the README gave
+   the room all the same: "only -4.3 mm is available above the baseplate". They say so in
+   words instead, whyNoRoom's, from the two heights (`also` is the panel's inches). Under
+   0.05 mm shows as 0.0, or -0.0, so that is none too. */
+const noRoomAbove = (g) => !(g.avail >= 0.05);
+const whyNoRoom = (also = () => '') => `the baseplate alone is ${+state.plateH.toFixed(2)} mm${also(state.plateH)} ` +
+  `tall and the drawer's usable height is ${+state.drawerH.toFixed(2)} mm${also(state.drawerH)}`;
 const EDGES = ['f', 'b', 'l', 'r'];
 const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                          floorT: b.floorT, divX: b.divX, divY: b.divY,
@@ -2837,7 +2845,8 @@ function binIssues(b, k, claims) {
      is told what fits on top of the bins under it, not what would fit on the baseplate. */
   if (!loose && st.z + b.hUnits * SPEC.unitH + LIP_H > g.avail + 0.001) {
     const fit = unitsUnder(g.avail - st.z);
-    out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, past the ${g.avail.toFixed(1)} mm available — ` +
+    out.push(`reaches ${(st.z + b.hUnits * SPEC.unitH + LIP_H).toFixed(1)} mm, ` + (noRoomAbove(g)
+      ? 'and the baseplate takes the drawer\'s whole height — ' : `past the ${g.avail.toFixed(1)} mm available — `) +
       (fit < 1 ? 'there is no room for a bin at all where it stands'
                : `${plural(fit, 'unit')} is the tallest that fits ${st.z > 0 ? 'on the bins under it' : 'here'}`));
   }
@@ -3065,10 +3074,11 @@ function insertIssues(b, z) {
         `At ${plural(h.units, 'unit')} they stay below the rim` });
   }
   if (z !== null) {
-    const reach = z + h.floor + p.len, avail = grid().avail;
+    const g = grid(), reach = z + h.floor + p.len, avail = g.avail;
     if (reach > avail + 0.001)
-      out.push(`has ${p.items} reaching ${mm(reach)} mm above the baseplate, past the ${mm(avail)} mm ` +
-        'available, so the drawer would not shut over them');
+      out.push(`has ${p.items} reaching ${mm(reach)} mm above the baseplate, ` + (noRoomAbove(g)
+        ? 'and the baseplate takes the drawer\'s whole height' : `past the ${mm(avail)} mm available`) +
+        ', so the drawer would not shut over them');
   }
   return out;
 }
@@ -3156,9 +3166,11 @@ function warnings() {
   const fitText = fit < 1 ? 'There is no room above the baseplate for even a 1-unit bin.'
     : `The tallest that fits is ${plural(fit, 'unit')} (${fit * SPEC.unitH} mm + lip), in one bin or a stack.`;
   if (tot > g.avail + 0.001)
-    out.push({ err: true, t: `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate. ${fitText}` });
+    out.push({ err: true, t: noRoomAbove(g) ? `The tallest stack is ${tot.toFixed(1)} mm, but ${whyNoRoom()}. ${fitText}`
+      : `The tallest stack is ${tot.toFixed(1)} mm but only ${g.avail.toFixed(1)} mm is available above the baseplate. ${fitText}` });
   else if (tot > 0)
-    out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${(g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip). ${fitText}` });
+    // a stack within the 0.001 above of the room has a hair under none spare: not -0.0
+    out.push({ t: `Tallest stack ${tot.toFixed(1)} mm of ${g.avail.toFixed(1)} mm available — ${Math.max(0, g.avail - tot).toFixed(1)} mm spare (includes the ${LIP_H.toFixed(2)} mm top lip). ${fitText}` });
 
   const claims = layers.map((_, k) => layerClaims(k));
   const where = (b, k) => `Layer ${k + 1}, the ${b.u}×${b.v} bin at column ${b.x + 1} row ${b.y + 1}`;
@@ -3486,8 +3498,13 @@ function refresh() {
   $('gridSummary').textContent =
     `Grid: ${g.nx} × ${g.ny} cells` +
     (inch ? ` (${gw} × ${gd} mm, ${FIELDS.inchText(gw)} × ${FIELDS.inchText(gd)} in)` : '') +
-    ` · ${g.avail.toFixed(1)} mm${also(g.avail)} above the baseplate · ` +
-    `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`;
+    /* With no room there is no tallest bin either, nor with room under a 1-unit bin and
+       its lip: capUnits is never under 1, and it said "tallest single bin 1 units" there
+       while Checks said no 1-unit bin fits. */
+    (noRoomAbove(g) ? ` · no room above the baseplate, as ${whyNoRoom(also)}` :
+    ` · ${g.avail.toFixed(1)} mm${also(g.avail)} above the baseplate · ` + (unitsUnder(g.avail) < 1
+      ? `too little for even a 1-unit bin (${SPEC.unitH} mm${also(SPEC.unitH)} + lip)`
+      : `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`));
   // and the half cell under the size fields, which said 21 mm whatever the drawer was in
   $('halfCellLen').textContent = `${SPEC.pitch / 2} mm${also(SPEC.pitch / 2)}`;
   const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
@@ -4409,7 +4426,8 @@ function layoutReadme() {
   L.push('https://drawerforge.co.uk');
   L.push('');
   L.push(`Drawer: ${state.drawerW} x ${state.drawerD} mm | Grid: ${g.nx} x ${g.ny} cells @ ${SPEC.pitch} mm`);
-  L.push(`Height above the baseplate: ${g.avail.toFixed(1)} mm | tallest stack here: ${stackHeight().toFixed(1)} mm`);
+  L.push(`Height above the baseplate: ${noRoomAbove(g) ? `none, as ${whyNoRoom()}` : `${g.avail.toFixed(1)} mm`}` +
+    ` | tallest stack here: ${stackHeight().toFixed(1)} mm`);
   L.push(`Layers: ${layers.length}`);
   L.push('');
   L.push('BINS TO PRINT:');
