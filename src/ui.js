@@ -2306,11 +2306,16 @@ const drawers = DRAWERS.create({
 });
 // Hand the drawer across to the bins tool. Only the shared keys travel; the bins
 // tool re-emits anything it doesn't recognise, so a round trip is lossless.
+/* The plate height is worked out from the settings, as buildPiece works it out
+   (plateHeightMm), and not read off the first piece built. The pieces are rebuilt 260 ms
+   after a change, behind the debounce, so a link followed in that time carried the plate
+   from before it: tick Magnets and go, and Bins was told 4.25 mm about a 7.05 mm plate.
+   With nothing built, as when the checks stop the build, it was 4.25 mm with no floor
+   under it. Once a piece has built the two are the same number.
+   test/ui/bins-plate-grid.spec.js follows both links before the rebuild lands. */
 function binsHref() {
-  const built = layout && layout.pieces.length && builds[layout.pieces[0].id];
-  const H = built ? built.meta.H : state.plateHeight;
   // full baseplate state plus the plate height bins needs; extras ride along
-  return 'bins/#' + encodeDesc(Object.assign(descriptor(), { ph: (+H).toFixed(2) }));
+  return 'bins/#' + encodeDesc(Object.assign(descriptor(), { ph: plateHeightMm().toFixed(2) }));
 }
 /* Each hand-over leaves one note in this tab for the page at the other end to read once
    (handoff in drawers.js, which also tells the saved drawer, if this is one, so that page
