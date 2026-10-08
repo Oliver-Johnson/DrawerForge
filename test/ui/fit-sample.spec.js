@@ -335,3 +335,50 @@ for (const [name, hash] of [['a seam in y', VERTICAL], ['a seam in x', HORIZONTA
     expect(errors, 'the page threw while being driven').toEqual([]);
   });
 }
+
+/* The coupon waits on nothing: the export dialog offers it while the plate is still
+   building, and the page rebuilds 260 ms after every change. Its height came off the
+   first piece built, so a coupon taken in that time was cut for the plate before the
+   change. Pick the puzzle joint on a dovetail plate and download at once, and the
+   coupon came out 4.25 mm tall with its cavity cut against no floor, for a 6.85 mm
+   plate on a 2.6 mm one. So the coupon taken at once is the coupon taken once the
+   plate has built, to the byte. */
+test('a coupon taken before a change has built is the coupon it builds', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  await page.goto(H.PLATES_URL + VERTICAL);
+  await page.waitForFunction(
+    'printPlan && layout && Object.keys(builds).length === layout.pieces.length',
+    null, { timeout: 40000 });
+  // the change and the coupon in one go, so the rebuild cannot land between them; `was`
+  // is the height of the plate built when the coupon is taken
+  const coupon = (cn) => page.evaluate((cn) => {
+    if (cn) {
+      const s = document.getElementById('connector');
+      s.value = cn;
+      s.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    const built = builds[layout.pieces[0].id];
+    const was = built ? built.meta.H : null;
+    const polys = fitSample().polys;
+    let top = 0;
+    for (const p of polys) for (const v of p.verts) top = Math.max(top, v[2]);
+    const b = new Uint8Array(stlBinary(polys, 'fit-sample'));
+    let h = 2166136261;
+    for (let i = 0; i < b.length; i++) h = Math.imul(h ^ b[i], 16777619);
+    return { was, file: { top: Math.round(top * 1000) / 1000, bytes: b.length, fnv: h >>> 0 } };
+  }, cn);
+  const early = await coupon('puzzle');
+  /* Built now, with no rebuild left waiting: settle() schedules one more, and a coupon
+     slower than its 260 ms could be taken while that rebuild has emptied builds. */
+  await page.evaluate(async () => { clearTimeout(buildTimer); await runBuild(); });
+  const late = await coupon(null);
+  expect(early.was, 'fixture: taken with the dovetail plate still built').not.toBeNull();
+  expect(late.was, 'fixture: the puzzle plate is built').not.toBeNull();
+  expect(early.was, 'fixture: the puzzle plate is a different height').not.toBe(late.was);
+  expect(early.file, 'the coupon taken at once').toEqual(late.file);
+  expect(late.file.top, 'the coupon is as tall as the plate built').toBe(late.was);
+  expect(errors, 'the page threw while being driven').toEqual([]);
+});
