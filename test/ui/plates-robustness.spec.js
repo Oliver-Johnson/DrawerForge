@@ -90,6 +90,11 @@ test.describe('ranges on the geometry fields', () => {
     ['#mg=1&md=20', 'errMagnet', /Magnet Ø must be 13\.6 mm or less at a 42 mm pitch/],
     ['#mg=1&ms=top&md=10', 'errMagnet', /Magnet Ø must be 8 mm or less at a 42 mm pitch/],
     ['#mg=1&pi=30', 'errMagnet', /Magnet Ø must be 1\.8 mm or less at a 30 mm pitch/],
+    // past about 50 mm it is the hole beside a pocket that stops it: a 1-inch magnet met it
+    ['#pi=55&w=110&d=110&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=400&bd=400&mg=1&md=25.4', 'errMagnet',
+      /Magnet Ø must be 24\.3 mm or less at a 55 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a cell's four holes have to stay clear of each other/],
+    ['#pi=60&w=120&d=120&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=400&bd=400&sc=1&sd=26', 'errScrew',
+      /Screw head Ø must be 25 mm or less at a 60 mm pitch — .* a cell's four holes have to stay clear of each other/],
     ['#mg=1&bm=bosses&mh=3', 'errMagnet', /Magnet depth must be 2\.4 mm or less with corner pockets/],
     ['#sc=1&sh=20', 'errScrew', /Screw hole Ø must be 8\.3 mm or less/],
     ['#sc=1&sd=30', 'errScrew', /Screw head Ø must be 14 mm or less/],

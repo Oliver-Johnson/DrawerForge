@@ -1958,6 +1958,40 @@ console.log('\nthe other limits, built at their ends:');
     console.log(`  ${nm.padEnd(28)} ${leakText(r)}`);
     if (r.bad) bad++;
   }
+  /* A cell's four sites are 2 × holeOffset apart, so past a pitch of about 50 mm it is the
+     site beside a pocket, not the cell edge or the socket floor, that stops it. A 1-inch
+     magnet from beneath at 55 mm met the pocket beside it and left 52 edges open, with
+     Download on. The rule, worked out here rather than read from the engine: a cut keeps
+     half of a 1 mm MOUNT_WALL to the one beside it, so its corners stop at holeOffset less
+     0.5. A magnet pocket's corners are at the larger of 0.1 over the magnet's radius and
+     the radius over cos(π/14) (its flats on the magnet); a screw's bores have their corners
+     on its size. At 55 and 60 mm, each way in: the widest the page takes has to build
+     watertight, and the first tenth past the rule has to be refused. */
+  const reach = G.DEFAULTS.holeOffset - 0.5;
+  const corner = { magnetD: (d) => Math.max(d / 2 + 0.1, d / 2 / Math.cos(Math.PI / 14)),
+                   screwHoleD: (d) => d / 2, screwHeadD: (d) => d / 2 };
+  const firstPast = (f) => { let d = 1; while (corner[f](d) <= reach + 1e-9) d = Math.round(d * 10 + 1) / 10; return d; };
+  const WIDE = [
+    ['magnet from below', { magnets: true }, 'magnetD'],
+    ['magnet from above', { magnets: true, magnetSide: 'top' }, 'magnetD'],
+    ['screw head', { screws: true, screwHoleD: 3 }, 'screwHeadD'],
+    ['screw shank', { screws: true }, 'screwHoleD'],
+  ];
+  // the shank as wide as the head, so there is no head pocket and the shank is the cut
+  const sized = (o, f, d) => ({ ...o, [f]: d, ...(f === 'screwHoleD' ? { screwHeadD: d } : {}) });
+  for (const p of [55, 60])
+    for (const [nm, o, f] of WIDE) {
+      const at = { pitch: p, drawerW: 2 * p, drawerD: 2 * p, ...o };
+      const lims = G.mountLimits(designCfg(at)), lim = lims[f];
+      const takes = (d) => d <= lim + 1e-9 && (f !== 'screwHoleD' || d <= lims.screwHeadD + 1e-9);
+      const widest = buildAll(sized(at, f, lim));
+      const past = firstPast(f);
+      const over = takes(past) ? buildAll(sized(at, f, past)) : null;
+      console.log(`  ${`${nm} at ${p} mm`.padEnd(28)} widest ${lim} mm ${leakText(widest)}; ${past} mm ` +
+                  (over ? `TAKEN, and ${leakText(over)}` : 'refused'));
+      if (widest.bad) bad++;
+      if (over) bad++;
+    }
   /* The clearance one step past its end, which leaked, and that was why the end is where
      it is. It no longer does: the joint's cut taken again when it comes out open
      (cutAgain in core.js) closes it, as it closes the steps past the ceilings below. The

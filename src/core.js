@@ -2317,15 +2317,24 @@ function mountLimits(cfg) {
   const bosses = cfg.baseMode === 'bosses';
   const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
   const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // the fields step in tenths
-  const room = cfg.magnetSide === 'top' ? top : under;
+  /* A cell's four sites are 2 × holeOffset apart, 26 mm, so past a pitch of about 50 mm
+     the room above lets a cut reach the one beside it before it reaches anything else:
+     two 1-inch magnet pockets met at a 55 mm pitch and left 52 open edges. Each cut keeps
+     half a MOUNT_WALL to the one beside it, which stops a pocket's corners at 12.5 mm. */
+  const beside = off - MOUNT_WALL / 2;
+  const fit = (r) => Math.min(r, beside);
+  const room = fit(cfg.magnetSide === 'top' ? top : under);
   return {
     // a magnet pocket's corners are 0.1 mm over the magnet's radius, or out to where its
     // flats stand on that radius if that is further (fastenerCutter)
     magnetD: r10(2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14))),
-    screwHoleD: r10(2 * top),
-    screwHeadD: r10(2 * under),
+    // a screw's bores have their corners on its size
+    screwHoleD: r10(2 * fit(top)),
+    screwHeadD: r10(2 * fit(under)),
     // in the solid floor the pad grows to suit, so only a boss caps the depth
     depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
+    // which of the sizes the cut beside it stops, rather than the floor, cell or boss
+    beside: { magnetD: room === beside, screwHoleD: top >= beside, screwHeadD: under >= beside },
   };
 }
 
