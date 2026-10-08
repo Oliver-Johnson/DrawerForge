@@ -512,6 +512,10 @@ test('the bins README and download dialog say their time leaves out a bin too bi
  * came out, with its plates, 10% over what their meshes enclose and a 2x1x6 with three
  * across and two along 21% over, where a bin with none, or with fixed ones, comes out a few
  * percent under. A bin with fixed dividers is held to exactly what it weighed.
+ *
+ * And the plates go in: the lip has a notch at each end of each plate, which the bin's
+ * estimate takes off its lip, and plates both ways halve where they cross, so each is
+ * weighed by its own outline, slots and all, rather than as the rectangle round it.
  */
 const RAILED = [[1, 1, 3, 2, 2], [2, 1, 6, 3, 2]];       // u, v, units, across, along
 // one bin as a link writes it, with dividers both ways, removable or fixed
@@ -525,12 +529,16 @@ test.describe('the weight', () => {
       const bin = (more) => Object.assign({}, state, { x: 0, y: 0, u, v, hUnits, cells: null,
         edges: null, solid: false, scoop: 0, label: 0, divX: 0, divY: 0, divRemovable: false }, more);
       const plain = bin({}), railed = bin({ divX, divY, divRemovable: true });
-      const built = (b) => buildBin(G, binCfg(b));
-      const plates = [['y', divX], ['x', divY]]
-        .reduce((a, [axis, n]) => a + n * meshVolume(dividerPart(G, binCfg(railed), axis).polys), 0);
+      const built = (b, more) => buildBin(G, Object.assign(binCfg(b), more));
+      // every plate the bin takes, halving slots and all
+      const plates = dividerPlates(G, binCfg(railed)).reduce((a, p) => a + p.qty * meshVolume(p.polys), 0);
       const m = built(railed).meta, deep = m.H - m.floorZ;
-      return { est: volumeMm3(railed).raw, estPlain: volumeMm3(plain).raw, plates,
-               mesh: meshVolume(built(railed).polys), meshPlain: meshVolume(built(plain).polys),
+      /* With the lip off, what the dividers add is the rails alone; with it on, the lip
+         loses a notch at each end of each plate as well. */
+      const noLip = (b) => meshVolume(built(b, { lip: false }).polys);
+      const mesh = meshVolume(built(railed).polys), meshPlain = meshVolume(built(plain).polys);
+      return { est: volumeMm3(railed).raw, estPlain: volumeMm3(plain).raw, plates, mesh, meshPlain,
+               rails: noLip(railed) - noLip(plain), notches: (meshPlain - noLip(plain)) - (mesh - noLip(railed)),
                /* The rails as the mesh has them reach a BLOAT into the wall and a BLOAT into
                   the floor, which meshVolume, adding up shells that overlap, counts twice
                   where the plastic is there once. They stand a rail's depth and the
@@ -542,8 +550,10 @@ test.describe('the weight', () => {
       const what = `${RAILED[i]}`;
       // the bin and its plates, within a few percent of what their meshes enclose
       expect(Math.abs((x.est + x.plates) / (x.mesh + x.plates) - 1), what).toBeLessThan(0.06);
-      // and what the dividers add to the bin is the rails buildBin adds to it, exactly
-      expect((x.est - x.estPlain) / ((x.mesh - x.meshPlain) * x.trim), what).toBeCloseTo(1, 4);
+      // and what the dividers add to the bin is the rails buildBin adds to it, exactly,
+      // less the notches it cuts in the lip for the plates to go in past
+      expect(x.notches, `${what}: fixture, the lip is notched`).toBeGreaterThan(0);
+      expect((x.est - x.estPlain) / (x.rails * x.trim - x.notches), what).toBeCloseTo(1, 4);
     }
   });
 
@@ -560,7 +570,8 @@ test.describe('the weight', () => {
     await page.waitForTimeout(600);
     const f = await page.evaluate(() => {
       const bins = types().reduce((a, t) => a + volumeMm3(t.b).filament * t.qty, 0);
-      const plates = dividerParts().reduce((a, d) => a + d.meta.span * d.meta.tall * d.meta.t * d.qty, 0);
+      // each plate as its mesh encloses it, halving slots and all
+      const plates = dividerParts().reduce((a, d) => a + meshVolume(d.polys) * d.qty, 0);
       return { want: gramsOf(bins + plates), job: jobEstimate().grams,
                plan: jobEstimate().plates.reduce((a, e) => a + e.grams, 0),
                loose: looseParts(), plateCount: printPlan.plates.length,
@@ -576,9 +587,12 @@ test.describe('the weight', () => {
     expect(f.fixed[0]).toBeCloseTo(15799.3449, 3);
     expect(f.fixed[1]).toBeCloseTo(42850.1545, 3);
 
-    // and every total says so: 116 g, where it was 133
+    /* and every total says so: 115 g, where it was 133. 116 until the plates halved where
+       they cross, a slot each, and the lips took a notch at each end of each plate; the
+       deeper rails, a rail's depth and the clearance out from the wall, keep it at 115
+       rather than 114. */
     const g = f.want.toFixed(0);
-    expect(g).toBe('116');
+    expect(g).toBe('115');
     const t = await binsFigures(page);
     expect(t.totals).toContain(`≈ ${g} g PLA at 15% infill, 9 dividers included`);
     expect(t.plates).toEqual([expect.stringContaining(`4 bins + 9 dividers${g} g`)]);
