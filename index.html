@@ -4232,15 +4232,25 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * a double holds, over about 46 mm square, which no band between two cells comes near,
    * keys its corners as text instead; either way two corners are the same key exactly
    * when their thousandths are. `each` is handed every edge in the band, lower key first,
-   * and stops the pass by returning true. */
+   * and stops the pass by returning true. `edges`, when there are some, are the shell's
+   * edges to look through instead of all of them (sideEdges, below). */
   const jointCells = [];
-  const bandEdges = (polys, b, each) => {
+  const bandEdges = (polys, b, each, edges) => {
     const X0 = Math.round(b[0] * 1000), Y0 = Math.round(b[1] * 1000), NY = Math.round(b[3] * 1000) - Y0 + 1;
     const k = (Math.round(b[2] * 1000) - X0 + 1) * NY < 2 ** 31
       ? (v) => ((Math.round(v[0] * 1000) - X0) * NY + Math.round(v[1] * 1000) - Y0) * 2 ** 22 +
                Math.round(v[2] * 1000) + 2 ** 21
       : (v) => Math.round(v[0] * 1000) + ',' + Math.round(v[1] * 1000) + ',' + Math.round(v[2] * 1000);
     const inBand = (v) => v[0] >= b[0] && v[0] <= b[2] && v[1] >= b[1] && v[1] <= b[3];
+    if (edges) {
+      for (let i = 0; i < edges.length; i += 2) {
+        const a = edges[i], c = edges[i + 1];
+        if (!inBand(a) || !inBand(c)) continue;
+        const ka = k(a), kc = k(c);
+        if (ka < kc ? each(ka, kc) : each(kc, ka)) return;
+      }
+      return;
+    }
     for (const p of polys) {
       const vs = p.verts;
       for (let i = 2; i < vs.length; i++) {
@@ -4255,26 +4265,107 @@ function buildPiece(cfg, layout, piece, onStatus) {
     }
   };
   // does this shell share an edge with built shell c, inside the band where the two overlap?
-  const touchesBuilt = (polys, own, c) => {
+  // (`sides`, when given, hands bandEdges each shell's edges by its sides: sideEdges)
+  const touchesBuilt = (polys, own, c, sides) => {
     const b = [Math.max(own[0], c.box[0]) - 1e-3, Math.max(own[1], c.box[1]) - 1e-3,
                Math.min(own[2], c.box[2]) + 1e-3, Math.min(own[3], c.box[3]) + 1e-3];
     const theirs = new Map();   // lower corner -> the higher corners it has an edge to
-    bandEdges(c.polys || shells[c.i], b, (lo, hi) => {
+    const them = c.polys || shells[c.i];
+    bandEdges(them, b, (lo, hi) => {
       const l = theirs.get(lo);
       if (l) l.push(hi); else theirs.set(lo, [hi]);
-    });
+    }, sides && sides(them, c.box));
     if (!theirs.size) return false;
     let shared = false;
     bandEdges(polys, b, (lo, hi) => {
       const l = theirs.get(lo);
       return (shared = !!l && l.includes(hi));
-    });
+    }, sides && sides(polys, own));
     return shared;
   };
   const TOUCH_TRIES = [(solid, cut) => oneByOne(solid, cut),
                        (solid, cut) => csgSubtract(solid, cut.slice().reverse()),
                        (solid, cut) => csgSubtract(solid.slice().reverse(), cut),
                        (solid, cut) => oneByOne(solid, cut, true)];
+  // a cut that ends more open, or with more turned over, than the one it would replace
+  const worse = (a, b) => (a.open || 0) > (b.open || 0) || (a.turned || 0) > (b.turned || 0);
+  /* The same touch, from the mounting pockets. A pocket's walls, carried across the cell as
+   * planes by the BSP, split the region's sides where they cross them, and those sides
+   * stand on the same planes as the neighbours' sides, a BLOAT either way of the line
+   * between the cells. Where a split lands on a corner of a neighbour's region, to a
+   * thousandth, the two shells share that corner's edge: used four times, all the way up.
+   * A 21.7 mm magnet from beneath at a 55 mm pitch did it: a flat of the pocket in the
+   * cell at the back left, on the magnet's radius, crosses that cell's front side 0.03
+   * microns from the corner of the cell at the back right. A 22.2 mm screw shank at 56.5
+   * mm did it twice over, from the cell at the back right as well, on main too. Each shell
+   * is closed on its own, so the pockets' own retries never see it, and it comes and goes
+   * with the size and the pitch.
+   *
+   * So with mounting pockets on the piece, every shell the cells and margins make is
+   * checked against those built before it beside it, as jointed cells are above. One that
+   * shares an edge has its pockets cut again with the cutters moved 1.7 microns along the
+   * diagonal one way, then the other, then turned a 28th of a turn (pocketTries, in the
+   * cell), which takes every pocket plane off the corner, and a try that leaves it
+   * touching fewer shells is kept. A corner of its own on another's split does not move
+   * that way, so each shell it still touches then has its pockets cut again instead,
+   * kept if it shares no edge with this one or anything else beside it. Either way a try
+   * that ends more open or with more turned over is passed over, and a shell that touches
+   * nothing, which is nearly every one, is built as before. `alt` and `pocket` are the
+   * cuts a cell was last taken with, so a cell cut again for one reason keeps what it was
+   * cut again for the other. */
+  const POCKET_TRIES = 3;
+  const mountCells = [];
+  const builtBeside = (box) => mountCells.filter((c) => c.box[0] < box[2] && box[0] < c.box[2] &&
+                                                        c.box[1] < box[3] && box[1] < c.box[3]);
+  /* Every shell is checked against up to four beside it, and each of those against the
+     next ones built: a pass over all of a shell's edges each time took 4 to 6 percent of
+     a 42 mm plate's build with magnets. A band two shells share lies inside both, along
+     one side, no deeper than the two BLOATs the regions overlap by. So each shell's edges
+     by its sides, both ends that close to one of them, are picked out once and kept with
+     the shell, and bandEdges takes the band's from those: 1 to 3 percent. */
+  const bySides = new WeakMap();
+  const sideEdges = (polys, box) => {
+    let out = bySides.get(polys);
+    if (out) return out;
+    const w = 2 * BLOAT + 2e-3;
+    const by = (v) => v[0] <= box[0] + w || v[0] >= box[2] - w || v[1] <= box[1] + w || v[1] >= box[3] - w;
+    out = [];
+    for (const p of polys) {
+      const vs = p.verts;
+      for (let i = 2; i < vs.length; i++) {
+        const t = [vs[0], vs[i - 1], vs[i]];
+        for (let e = 0; e < 3; e++) if (by(t[e]) && by(t[(e + 1) % 3])) out.push(t[e], t[(e + 1) % 3]);
+      }
+    }
+    bySides.set(polys, out);
+    return out;
+  };
+  const touches = (polys, own, c) => touchesBuilt(polys, own, c, sideEdges);
+  const settle = (cell, polys) => {
+    const beside = builtBeside(cell.box);
+    const touched = (p) => beside.filter((c) => touches(p, cell.box, c));
+    let touching = touched(polys);
+    for (let k = 0; touching.length && cell.recut && k < POCKET_TRIES; k++) {
+      let again;
+      try { again = cell.recut(cell.alt, k); } catch (e) { continue; }
+      if (!again || worse(again, polys)) continue;
+      const left = touched(again);
+      if (left.length < touching.length) { polys = again; cell.pocket = k; touching = left; }
+    }
+    const mine = { box: cell.box, polys };
+    for (const c of touching) {
+      if (!c.recut) continue;   // a margin or a half cell: no pockets to cut again
+      const others = builtBeside(c.box).filter((d) => d !== c);
+      for (let k = 0; k < POCKET_TRIES; k++) {
+        let again;
+        try { again = c.recut(c.alt, k); } catch (e) { continue; }
+        if (again && !worse(again, shells[c.i]) && !touches(again, c.box, mine) &&
+            !others.some((d) => touches(again, c.box, d))) { shells[c.i] = again; c.pocket = k; break; }
+      }
+    }
+    mountCells.push(cell);
+    return polys;
+  };
   let done = 0;
   for (let ix = 0; ix < xs.length-1; ix++) {
     for (let iy = 0; iy < ys.length-1; iy++) {
@@ -4302,7 +4393,8 @@ function buildPiece(cfg, layout, piece, onStatus) {
       const ci = ix - cellXi, cj = iy - cellYi;
       const isCell = ci >= 0 && ci < piece.nx + hxR && cj >= 0 && cj < piece.ny + hyB;
       if (!isCell) {                                 // margin / corner: plain extrusion
-        shells.push(extrudePoly(clipped, 0, H));
+        const slab = extrudePoly(clipped, 0, H);
+        shells.push(cellFastener ? settle({ box: [x0, y0, x1, y1], i: shells.length }, slab) : slab);
         continue;
       }
       // in the half column, the half row, or both (the quarter cell at the back right)
@@ -4500,22 +4592,26 @@ function buildPiece(cfg, layout, piece, onStatus) {
          open or has a face turned over fails the whole try (see touchesBuilt). The mounting
          pockets come last and are cut again when they come out open, as on the first cut,
          so a try can still end open there; one that ends more open or with more turned over
-         than the cut it would replace is not taken (`worse`). */
+         than the cut it would replace is not taken (`worse`). `pocket` cuts the pockets
+         one of the ways a shell that touches another's edge takes them (settle). */
       const base = region;
-      const cutCell = (alt) => {
+      const pocketTries = [(r, cut) => csgSubtract(r, movePolys(cut, NUDGE, NUDGE)),
+                           (r, cut) => csgSubtract(r, movePolys(cut, -NUDGE, -NUDGE)),
+                           (r) => csgSubtract(r, fasteners(turnedFastener()))];
+      const cutCell = (alt, pocket) => {
         let r = base;
         for (const [kind, cut] of Object.entries(cuts)) {
           if (!cut.length) continue;
-          if (kind === 'fastener') r = fastenerCut(r, cut);
+          if (kind === 'fastener') r = pocket === undefined ? fastenerCut(r, cut) : pocketTries[pocket](r, cut);
           else if (!alt) r = cutAgain(r, cut, csgSubtract(r, cut));   // see cutAgain
           else if (!(r = alt(r, cut)) || r.open || r.turned) return null;
         }
         return r;
       };
-      const worse = (a, b) => (a.open || 0) > (b.open || 0) || (a.turned || 0) > (b.turned || 0);
+      const own = [x0, y0, x1, y1];
+      const cell = { box: own, i: shells.length, recut: cuts.fastener.length ? cutCell : null, alt: null };
       region = cutCell(null);
       if (cuts.notch.length || cuts.key.length || cuts.puzzle.length) {
-        const own = [x0, y0, x1, y1];
         const beside = jointCells.filter((c) => c.box[0] < x1 && x0 < c.box[2] &&
                                                 c.box[1] < y1 && y0 < c.box[3]);
         let touching = beside.filter((c) => touchesBuilt(region, own, c));
@@ -4523,7 +4619,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
           let again;
           try { again = cutCell(alt); } catch (e) { continue; }
           if (again && !worse(again, region) && !beside.some((c) => touchesBuilt(again, own, c))) {
-            region = again; touching = []; break;
+            region = again; cell.alt = alt; touching = []; break;
           }
         }
         // or the cell it touches, cut again instead, if that touches nothing else
@@ -4533,13 +4629,15 @@ function buildPiece(cfg, layout, piece, onStatus) {
                                                   d.box[1] < c.box[3] && c.box[1] < d.box[3]);
           for (const alt of TOUCH_TRIES) {
             let again;
-            try { again = c.recut(alt); } catch (e) { continue; }
+            try { again = c.joint(alt, c.pocket); } catch (e) { continue; }
             if (again && !worse(again, shells[c.i]) && !touchesBuilt(again, c.box, mine) &&
-                !others.some((d) => touchesBuilt(again, c.box, d))) { shells[c.i] = again; break; }
+                !others.some((d) => touchesBuilt(again, c.box, d))) { shells[c.i] = again; c.alt = alt; break; }
           }
         }
-        jointCells.push({ box: own, i: shells.length, recut: cutCell });
+        cell.joint = cutCell;
+        jointCells.push(cell);
       }
+      if (cellFastener) region = settle(cell, region);
       shells.push(region);
       done++;
       if (onStatus && done % 8 === 0) onStatus(`cells ${done}`);
