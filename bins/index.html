@@ -13759,16 +13759,22 @@ function dividerParts() {
      still read alike, made for different slots of one bin: on a 1x1.5x4 with a 40 mm
      scoop, one across and two along, the plate across meets the scoop beside the front
      crossing, so the front plate along has its slot from the bottom 0.14 mm taller than
-     the back one's. Those say their slots as well, as one on the scoop does. */
+     the back one's. Those say their slots as well, as one on the scoop does. They are
+     found by name and bin type, not by their words: where plates go in more than one
+     type of bin the words end in each plate's bins, and the same 1x1.5x4 beside one with
+     no scoop has its back plate along shared with that bin and its front one not, so the
+     two read differently and still neither said which slot it was for. */
   for (const d of out) d.how = plateHow(d);
   const alike = new Map();
   for (const d of out) {
     if (!d.meta.outline || d.axis !== 'x' || d.meta.stands) continue;
-    const k = `${d.base} ${d.how}`;
-    if (!alike.has(k)) alike.set(k, []);
-    alike.get(k).push(d);
+    for (const u of d.uses) {
+      const k = `${d.base} ${u.t.key}`;
+      if (!alike.has(k)) alike.set(k, new Set());
+      alike.get(k).add(d);
+    }
   }
-  for (const g of alike.values()) if (g.length > 1) for (const d of g) { d.bySlot = true; d.how = undefined; d.how = plateHow(d); }
+  for (const g of alike.values()) if (g.size > 1) for (const d of g) { d.bySlot = true; d.how = undefined; d.how = plateHow(d); }
   return out;
 }
 const dividerName = (d) => d.name;
