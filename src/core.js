@@ -3075,7 +3075,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
         return next;
       };
       /* The cell's cuts in turn. `alt` takes the joint's another way, and a result that is
-         open or has a face turned over fails the whole try (see touchesBuilt). */
+         open or has a face turned over fails the whole try (see touchesBuilt). The mounting
+         pockets come last and are cut again when they come out open, as on the first cut,
+         so a try can still end open there; one that ends more open or with more turned over
+         than the cut it would replace is not taken (`worse`). */
       const base = region;
       const cutCell = (alt) => {
         let r = base;
@@ -3087,6 +3090,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
         }
         return r;
       };
+      const worse = (a, b) => (a.open || 0) > (b.open || 0) || (a.turned || 0) > (b.turned || 0);
       region = cutCell(null);
       if (cuts.notch.length || cuts.key.length || cuts.puzzle.length) {
         const own = [x0, y0, x1, y1];
@@ -3096,7 +3100,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
         for (const alt of touching.length ? TOUCH_TRIES : []) {
           let again;
           try { again = cutCell(alt); } catch (e) { continue; }
-          if (again && !beside.some((c) => touchesBuilt(again, own, c))) { region = again; touching = []; break; }
+          if (again && !worse(again, region) && !beside.some((c) => touchesBuilt(again, own, c))) {
+            region = again; touching = []; break;
+          }
         }
         // or the cell it touches, cut again instead, if that touches nothing else
         const mine = { box: own, polys: region };
@@ -3106,7 +3112,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
           for (const alt of TOUCH_TRIES) {
             let again;
             try { again = c.recut(alt); } catch (e) { continue; }
-            if (again && !touchesBuilt(again, c.box, mine) &&
+            if (again && !worse(again, shells[c.i]) && !touchesBuilt(again, c.box, mine) &&
                 !others.some((d) => touchesBuilt(again, c.box, d))) { shells[c.i] = again; break; }
           }
         }
