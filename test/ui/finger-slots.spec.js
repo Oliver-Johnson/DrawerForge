@@ -396,6 +396,38 @@ test('past the most holes one bin is built with, they keep clear of the shelf’
                                       '9x8.5x3-w1.2-f1.2-L10-i4w6.35d8.333-slot-b']);
 });
 
+/* The reviewer's link (#58-SF1): two such bins asking for a 20 mm shelf, which on 3 units is
+   laid out 15 deep, and 14 for the second, which asks for a note raised on it that the slot
+   keeps from printing. Their holes keep clear of shelves a millimetre apart, so they are two
+   parts, keyed by the depth each is laid out to. Keyed by the 20 mm both asked for, they were
+   one, "x2", and both printed from the first one's STL. As two parts they are 3822 holes, past
+   the 2000 a layout builds, so the second is built without its holes, and Checks says so. */
+test('holes kept clear of shelves laid out to different depths are different parts', async ({ page }) => {
+  await page.goto('about:blank');
+  await page.goto(H.BINS_URL + '#v=2&w=800&d=400&dh=84&ph=4.25&bw=400&bd=400&bh=256&if=15&bgap=3&pr=custom' +
+    '&bl=0-0-9-8.5-3-1.2-1.2-0-0-0-1-1-1-1-0-20-0-0-0-0-15-16-0-4-0_9-0-9-8.5-3-1.2-1.2-0-0-0-1-1-1-1-0-20-0-0-0-0-15-16-1-4-0' +
+    '&bseg=12&bdt=1.6&bdc=0.25&bhc=-0.3&bnotes=%5B%5B%22%22%2C%22AA%22%5D%5D');
+  await page.waitForFunction(() => !!document.getElementById('fillmap'));
+  await page.waitForTimeout(1500);
+  const r = await page.evaluate(async () => {
+    // each bin as it is on its own, the layout's count of holes aside
+    const alone = B().map((b) => Object.assign({}, b));
+    const sha = async (b) => [...new Uint8Array(await crypto.subtle.digest('SHA-1',
+      new Uint8Array(stlBinary(buildBin(G, binCfg(b)).polys, 'b'))))].join();
+    return { alone: alone.map((b) => { const h = holesIn(b); return [typeKey(b), h.n, h.shelf.depth, +h.ys[h.ys.length - 1].toFixed(3)]; }),
+             stls: new Set(await Promise.all(alone.map(sha))).size, note: B()[1].note,
+             types: types().map((t) => [t.key, t.qty]) };
+  });
+  expect(r.note, 'fixture: the second asks for a note').toBe('AA');
+  expect(r.alone).toEqual([['9x8.5x3-w1.2-f1.2-L15-i4w6.35d8.333-slot-b', 1911, 15, 157.584],
+                           ['9x8.5x3-w1.2-f1.2-L14-i4w6.35d8.333-slot-b', 1911, 14, 158.584]]);
+  expect(r.stls).toBe(2);
+  expect(r.types, 'two parts, the second without its holes').toEqual([['9x8.5x3-w1.2-f1.2-L15-i4w6.35d8.333-slot-b', 1],
+                                                                      ['9x8.5x3-w1.2-f1.2-slot-b', 1]]);
+  await expect(checks(page)).toContainText('3822 holes are set across the floors of different bins, more than the 2000 ' +
+    'one layout builds, so the bins of the 1 kind after the first 1911 holes are built without them.');
+});
+
 test('bins built alike are one part, whatever shelf or scoop their slots took away', async ({ page }) => {
   // as many parts as different STLs, and as many files
   const parts = () => page.evaluate(() => {
