@@ -7791,10 +7791,10 @@ function connectorPart() {
  * The kinds and their order match buildPiece's: a top-inserted snap takes the clip
  * whatever its housing says, so it is tested first.
  *
- * `pad` is read back off the height the plate is built to (builtH, which platePad works
- * out for buildPiece too) rather than worked out again from bottomPad and the joint's
- * own minimum — the puzzle cavity is cut relative to it, and the coupon has no other
- * way to know.
+ * `pad` is the floor under the sockets as buildPiece builds it: builtH less the plate's
+ * own height, where builtH is platePad's sum, the one buildPiece cuts to. It is not
+ * worked out again here from bottomPad and the joint's own minimum — the puzzle cavity
+ * is cut relative to it, and the coupon has no other way to know.
  *
  * `clrMax` is the joint's clearance with the field at its ceiling, so the coupon offers
  * no pair looser than the field will take: the same ceiling the field is held to
