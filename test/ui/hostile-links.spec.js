@@ -955,3 +955,41 @@ for (const [tool, key] of [['plates', PLATES], ['bins', BINS]]) {
     expect(errors).toEqual([]);
   });
 }
+
+/* And only that save. A layout aside for any other reason can be older than the page Back
+   brings: someone's link kept as a drawer of yours, a second link over it, then Back to the
+   first. That offered "the later one", and Put back brought the layout from before the
+   first link, with the second gone from Forward. */
+for (const tool of ['plates', 'bins']) {
+  test(`Back to a link kept as a drawer on ${tool}, over a second link, offers nothing older`,
+    async ({ page }) => {
+      const errors = watch(page);
+      const url = tool === 'bins' ? binsUrl() : platesUrl();
+      await arrive(page, url);
+      await H.setField(page, 'drawerW', '400');
+      await saved(page);
+      const paste = async (h) => {
+        await Promise.all([page.waitForEvent('load'), page.evaluate((x) => { location.hash = x; }, h)]);
+        await ready(page);
+      };
+      await paste('#w=333&d=444&v=2');
+      await page.click('#drawersBtn');
+      await page.fill('#drawersNewName', 'Kit');
+      await page.press('#drawersNewName', 'Enter');
+      await expect(page.locator('#drawersMsg')).toContainText('Saved as “Kit”');
+      await page.click('#drawersClose');
+      await saved(page);
+      await paste('#w=355&d=466&v=2');
+      await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
+
+      await page.goBack();
+      await ready(page);
+      expect(await page.inputValue('#drawerW')).toBe('333');
+      await expect(page.locator('#drawerName')).toHaveText('Kit');
+      await expect(page.locator('#setAside'), 'nothing is offered').toBeHidden();
+      await page.goForward();
+      await ready(page);
+      expect(await page.inputValue('#drawerW'), 'and the second link is still Forward').toBe('355');
+      expect(errors).toEqual([]);
+    });
+}

@@ -5491,6 +5491,10 @@ function saveNow() {
       catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
                        worth an exception that stops the rest of the page working */ }
       ownHash = location.hash;
+    } else {
+      try { sessionStorage.setItem(PASTED_KEY, JSON.stringify({ save: DRAWERS.fingerprint(h),
+        at: DRAWERS.fingerprint(ownHash) })); }
+      catch (err) { /* not kept, Back offers nothing: no worse than before */ }
     }
   }
 }
@@ -5504,6 +5508,17 @@ function saveNow() {
 let ownHash = null;
 const pastedOver = () => ownHash !== null && location.hash !== ownHash &&
   isLayoutHash((location.hash || '').replace(/^#/, ''));
+/* That save, and the address it left as it was, by fingerprint, for this tab: the layout
+   the link sets aside is the save, and it is later than the address, which never had the
+   change. Back to the address offers it, and only it (see `later` below). */
+const PASTED_KEY = SAVE_KEY + ':pasted';
+const pastedFrom = (prev) => {
+  try {
+    const r = JSON.parse(sessionStorage.getItem(PASTED_KEY) || 'null');
+    return !!r && !!prev && r.save === DRAWERS.fingerprint(prev) &&
+      r.at === DRAWERS.fingerprint(location.hash);
+  } catch (err) { return false; }
+};
 /* A reload takes the address as it stands when it starts, and the page runs on until the
    new one arrives. A save still waiting would land in that gap and record in the saved
    drawer a design the reloaded page did not arrive with, and the page came back unsaved.
@@ -5930,8 +5945,10 @@ let arrivedWith = '';    // the design string this page was opened with
   /* Back to your own earlier page over a link's layout, untouched, sets nothing aside: what
      the link replaced is aside already. That can be later than the page Back brings: a change
      whose save came due as the link was pasted is aside, and in no earlier address (see
-     pastedOver). So a layout aside that is not this one is offered. */
-  const later = back && savedLinked ? readKey(PREV_KEY) : '';
+     pastedOver). So that layout is offered, if it is the one aside and this is the address it
+     came from, and no other: one aside for any other reason can be older than this page, and
+     Put back went further back, not on. */
+  const later = back && savedLinked && pastedFrom(readKey(PREV_KEY)) ? readKey(PREV_KEY) : '';
   const canPutBack = (replaces && !kept && (keptAside || (savedLinked && !!readKey(PREV_KEY)))) ||
     (back && (keptAside || (!!later && !sameDesign(later, src))));
   if (stalled) {
