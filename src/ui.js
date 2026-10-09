@@ -103,7 +103,10 @@ const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'n
    that would reach the tab in one, a pocket any wider coming too near the notch's edge,
    or any other hole breaking into the cut. The hint about keys put in from above is not
    given with corner pockets: there is no solid floor under them, and such a key's cup
-   stands into a boss's pocket (#75). */
+   stands into a boss's pocket (#75). Nor where the bosses are buried in the floor a
+   joint needs (cornerBosses): a key put in from above, in the walls, needs none, so
+   taking the hint would stand them up again, and the cup in their pockets. Only a floor
+   asked for (bottomPad) keeps them buried whatever the joint. */
 const mountWhy = (opens, field) => {
   const joint = mount().joint[field];
   const cuts = cutsNamed();
@@ -119,7 +122,8 @@ const mountWhy = (opens, field) => {
       : cornerBosses(state) ? 'a pocket has to stay inside its corner boss'
       : opens ? 'a cut open to the socket has to stay on the socket floor'
       : 'a pocket under the floor has to stay inside its cell') +
-    (joint && KEYED.includes(state.connector) && !keyFromTop() && !cornerBosses(state)
+    (joint && KEYED.includes(state.connector) && !keyFromTop() &&
+     !(state.baseMode === 'bosses' && !(state.bottomPad > 0))
       ? `; keys ${keyInWall() ? '' : 'housed inside the walls and '}put in from above ` +
         'keep out of the solid floor under these pockets' : '');
 };

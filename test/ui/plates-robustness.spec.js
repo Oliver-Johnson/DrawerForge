@@ -197,6 +197,27 @@ test.describe('ranges on the geometry fields', () => {
     expect(await exportOff(page)).toBe(true);
     expect(errors).toEqual([]);
   });
+  /* #79's review: a refused pocket over a floored key went on to say that keys inside the
+     walls, put in from above, keep out of the solid floor under it. With corner pockets
+     that is the way back to #75: such a key needs no floor, so the bosses stand again
+     and its cup stands in their pockets. An extra floor keeps them buried, and there the
+     hint holds, as it does for a solid base. */
+  test('corner pockets over a floored key are not pointed at keys put in from above', async ({ page }) => {
+    const at = '#pi=37.98&w=151.92&d=75.96&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=91.96&bd=400&cn=bowtie&km=floor' +
+               '&ki=bottom&bm=bosses&mg=1&md=5.81';
+    const errors = await openAt(page, at);
+    const refusal = /Magnet Ø must be 3\.8 mm or less at a 37\.98 mm pitch — .* the recesses the bowtie keys fit into/;
+    const hint = /put in from above keep out of the solid floor/;
+    expect(await text(page, 'errMagnet')).toMatch(refusal);
+    expect(await text(page, 'errMagnet')).not.toMatch(hint);
+    expect(await text(page, 'warnings')).not.toMatch(hint);
+    expect(await exportOff(page)).toBe(true);
+    await page.goto('about:blank');
+    await openAt(page, at.replace('&bm=bosses', '&bm=bosses&bp=1'));
+    expect(await text(page, 'errMagnet')).toMatch(refusal);
+    expect(await text(page, 'errMagnet')).toMatch(hint);
+    expect(errors).toEqual([]);
+  });
   test('corner pockets under an extra floor are cut into it, and Checks says so', async ({ page }) => {
     const errors = await openAt(page, '#cn=none&bm=bosses&sc=1&bp=1');
     expect(await text(page, 'warnings')).toMatch(
