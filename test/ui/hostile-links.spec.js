@@ -993,3 +993,68 @@ for (const tool of ['plates', 'bins']) {
       expect(errors).toEqual([]);
     });
 }
+
+/* ---------- Start fresh ----------------------------------------------------- */
+
+/* Start fresh clears this browser's save and loads the bare page, and the page runs on
+   until that one arrives. A change that landed in between was saved after the clearing,
+   and the bare page came back with it, saying it had been restored. Here the bare page is
+   slow to come, and the change lands 50 ms after the press: on Baseplates a field's
+   change, on Bins its input, which Bins reads in 180 ms on. Both pages are covered. */
+for (const tool of ['plates', 'bins']) {
+  test(`Start fresh on ${tool} is not undone by a change that lands as the page goes`, async ({ page }) => {
+    const errors = watch(page);
+    const url = tool === 'bins' ? binsUrl() : platesUrl();
+    await arrive(page, url + '#w=333&d=444&v=2');
+    await page.route((u) => u.href === url, async (route) => {
+      await new Promise((r) => setTimeout(r, 1500));
+      await route.continue();
+    });
+    await Promise.all([page.waitForEvent('load'), page.evaluate((ev) => {
+      document.getElementById('startFresh').click();
+      setTimeout(() => {
+        const e = document.getElementById('drawerW');
+        e.value = '345';
+        e.dispatchEvent(new Event(ev, { bubbles: true }));
+      }, 50);
+    }, tool === 'bins' ? 'input' : 'change')]);
+    await ready(page);
+    expect(await page.inputValue('#drawerW')).not.toBe('345');
+    await expect(page.locator('#restored')).toBeHidden();
+    expect(await stored(page, tool === 'bins' ? BINS : PLATES)).not.toMatch(/(^|&)w=345(&|$)/);
+    expect(errors).toEqual([]);
+  });
+}
+
+/* And the button is wired before the boot reads a link, so a link that throws partway
+   through the boot does not take it away: Start fresh still clears the save and loads the
+   bare page with the defaults, though the page never got as far as letting saves start.
+   The links that used to throw no longer do, so the page is made to throw here, after it
+   has read a link carrying `boom`. The note the button sits in is shown later in the
+   boot, so it is pressed from script. */
+for (const tool of ['plates', 'bins']) {
+  test(`Start fresh on ${tool} still clears the save when a link throws in the boot`, async ({ page }) => {
+    const url = tool === 'bins' ? binsUrl() : platesUrl();
+    await arrive(page, url);
+    await H.setField(page, 'drawerW', '451');
+    await saved(page);
+    await page.route((u) => u.href === url, async (route) => {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, body: (await res.text()).replace('loadFromHash(src);',
+        "loadFromHash(src); if (/(^|&)boom=/.test(src)) throw new Error('boom');") });
+    });
+    const thrown = [];
+    page.on('pageerror', (e) => thrown.push(String(e)));
+    await arrive(page, url + '#w=345&d=444&boom=1&v=2');
+    expect(thrown.join(), 'the boot threw').toContain('boom');
+    await Promise.all([page.waitForEvent('load'),
+      page.evaluate(() => document.getElementById('startFresh').click())]);
+    await ready(page);
+    expect(await page.evaluate(() => new URL(performance.getEntriesByType('navigation')[0].name).hash),
+      'the bare page').toBe('');
+    expect(await page.inputValue('#drawerW')).not.toBe('451');
+    expect(await page.inputValue('#drawerW')).not.toBe('345');
+    await expect(page.locator('#restored')).toBeHidden();
+    expect(thrown.filter((e) => !/boom/.test(e))).toEqual([]);
+  });
+}

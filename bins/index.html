@@ -17738,10 +17738,14 @@ const readLocal = () => { try { return localStorage.getItem(SAVE_KEY) || ''; } c
 const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
-  location.href = location.origin + location.pathname;   // drop the hash and reload clean
+  /* Left as Put back leaves, by leaveFor: the page runs on until the bare one arrives, and
+     a change that landed in between was saved after the clearing, and came back with the
+     note that it had been restored. */
+  leaveFor(location.origin + location.pathname);   // drop the hash and reload clean
 }
 /* Wired here, before the boot below reads any link: a link that throws there must not
-   also take away the button that gets you out of it, or stop the next link working. */
+   also take away the button that gets you out of it, or stop the next link working. What
+   leaveFor stops, hashReady and hashSaveT, is declared above, so it works from here too. */
 $('startFresh').addEventListener('click', startFresh);
 /* A hash this page did not write means someone navigated to a link — pasted a share URL
    into the address bar, or picked a bookmark — and changing only the fragment is a
