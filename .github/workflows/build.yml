@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       # Fails if index.html is out of date with src/, if either script block has a
       # syntax error, if ui.js references an id the template lacks, or if a
       # display:none element is never un-hidden.
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -95,7 +95,7 @@ jobs:
           fetch-depth: 0        # the diff is against the push's own base, not HEAD^
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Submit the pages this push changed
         env:
           BEFORE: ${{ github.event.before }}
