@@ -785,11 +785,12 @@ currently installed):
   refused sizes below the largest, between the pocket that stops 0.01 mm short and the one
   that breaks in; the page says so at the field. Past the weld's reach there is still the
   lottery the room cannot see, about one design in a thousand, single sizes with clean
-  ones on either side, and it needs the pocket and the cut together: a 14.1 mm counterbore 2.4 to 3 mm deep, 0.09 mm short of a dovetail's notch
-  at 43.17 mm, loose, folds an edge at the notch's corner, byte for byte as main does, and
-  is clean at 2.35 mm deep, at 14.075 and 14.125 mm across, at every size from there into
-  the notch, and with no counterbore. A guard out that far would refuse sizes that build
-  clean on both sides of it and still miss the next, 0.1 mm off.
+  ones on either side, and it needs the pocket and the cut together: a 14.1 mm
+  counterbore 2.4 to 3 mm deep, 0.09 mm short of a dovetail's notch at 43.17 mm, loose,
+  folds an edge at the notch's corner, byte for byte as main does, and is clean at 2.35 mm
+  deep, at 14.075 and 14.125 mm across, at every size from there into the notch, and with
+  no counterbore. A guard out that far would refuse sizes that build clean on both sides
+  of it and still miss the next, 0.1 mm off.
 - **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
   straight walls run only 2.5 mm either side of a cell's middle at 13.5 mm, so every
   housing, notch and clip pocket crosses its corner arcs and cones, at points that move
