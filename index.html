@@ -1791,9 +1791,20 @@ function healCsgSeams(polys, again) {
      in, and the ends of the edges it put them in, that lie within two VTOL of each other
      become one; every vertex of the input that collapsed onto one of them goes with it;
      and the repair runs once more from the start. Only here: a soup that settles inside
-     the passes, which every one did across 1,100 random plates of every joint and mount,
-     never comes this way and is repaired exactly as before. A second run that still does
-     not settle throws, and so does one with nothing close enough to merge. */
+     the passes never comes this way and is repaired exactly as before. That is nearly
+     every soup, but not every one. None of 1,100 random plates of every joint and mount
+     ran out; the turned cutters of a cell cut again do on a few engine-only cells (see
+     the fastener cut in buildPiece), and so does a jigsaw plate at 41.24 mm with magnets
+     from above and a 3.126 mm counterbore, on the first cut of both its pieces.
+
+     The second run is kept only if it comes out closed, and that jigsaw plate is why.
+     The merge lets its repair settle, but open, and returned that was 55 bad edges on
+     each piece with Download on, where before the same pieces failed to build and the
+     page said so; with a 2.264 mm magnet the cut was open by four edges and the piece
+     came out closed but folded. So a second run that does not settle throws, as does one
+     that settles open, or one with nothing close enough to merge. Faces it turned over
+     are no reason to throw: #76 with an 8.3 mm head turns six and builds watertight,
+     every shell facing outwards. */
   if (pass === PASSES) {
     if (!again) {
       const ids = [...new Set(put)], up = new Map(ids.map((i) => [i, i]));
@@ -1812,9 +1823,11 @@ function healCsgSeams(polys, again) {
         const r = find(i);
         if (up.has(r) && size.get(top(r)) > 1 && top(r) !== i) onto.set(i, verts[top(r)]);
       }
-      if (onto.size)
-        return healCsgSeams(polys.map((p) => ({ verts: p.verts.map((v) => onto.get(idOf(v)) || v),
-                                                plane: p.plane })), true);
+      if (onto.size) {
+        const res = healCsgSeams(polys.map((p) => ({ verts: p.verts.map((v) => onto.get(idOf(v)) || v),
+                                                     plane: p.plane })), true);
+        if (!res.open) return res;   // open, it fails as it did before the merge
+      }
     }
     throw new Error('healCsgSeams: T-junctions still appearing after ' + PASSES + ' passes');
   }
@@ -4988,9 +5001,14 @@ function buildPiece(cfg, layout, piece, onStatus) {
            screw head to sit against; a nudge moves every plane off the crossing that lost
            the sliver. The first closed result is
            kept; a cell that comes out closed first time, which is nearly every one, is
-           built exactly as before. A try that throws (healCsgSeams' T-junction pass limit,
-           which the turned cutters reach on a few engine-only cells) is passed over and
-           the first cut stands, open as it was rather than a failed build.
+           built exactly as before. A try that throws is passed over and the first cut
+           stands, open as it was rather than a failed build. The turned cutters reach
+           healCsgSeams' T-junction pass limit on a few engine-only cells, and they threw
+           there until #76; now the repair makes one point of the few it was still
+           putting into edges and runs once more, so such a try can come back closed and
+           be kept where the nudged one after it used to be (the audit's "a retry that
+           throws": every piece's bytes change, and every piece is still watertight). One
+           whose second run comes out open still throws, and is passed over.
 
            Only a cell open by a sliver or a few is cut again, at most 24 edges: six at
            each of its four pockets. Cells cut again have been open by anything from 1 to
@@ -8043,12 +8061,15 @@ function warningsList() {
      the Download button's tooltip said so, but the checks, which are where a design is read
      for what is wrong with it, said nothing: #76's B1 left Download off with no reason
      under the cut map. Drawn as an error but not flagged `err`, which would stop the next
-     build as well, and the next build, on any change, is what clears it. */
+     build as well, and the next build, on any change, is what clears it. It says Download
+     is off, not that nothing can be downloaded: the pieces built before it keep their own
+     STL buttons in the piece table. And it promises no size that gets past it: the 41.24 mm
+     jigsaw plate in plate-audit.js fails with a 7.504 mm head and builds with holes at
+     7.502 mm, on main as well. */
   if (buildFailed)
     out.push({ failed: true, t: `Piece ${buildFailed} could not be built, so the build stopped ` +
-      'there and the plates cannot be downloaded. That is a fault in this tool rather than in ' +
-      'the design: a cut moved through the piece, another joint, or a size changed by a ' +
-      'hundredth of a millimetre usually gets past it.' });
+      'there and Download is off. That is a fault in this tool, not in the design; moving a cut ' +
+      'through the piece or picking another joint may get past it.' });
   if (layout.nx * layout.ny > MAX_CELLS)
     out.push({ err: true, stop: true, t: `A ${layout.nx} × ${layout.ny} grid is ` +
       `${layout.nx * layout.ny} cells, past the ${MAX_CELLS} this tool will build in one ` +
