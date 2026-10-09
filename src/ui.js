@@ -518,6 +518,16 @@ function warningsList() {
   // nothing below can — every check after this one is reasoning about the clamped value
   for (const msg of fieldErrors.values()) out.push({ err: true, stop: true, t: msg });
   for (const msg of noRoom.values()) out.push({ err: true, stop: true, t: msg });
+  /* A piece the engine threw on. runBuild stops there, and the piece table, the preview and
+     the Download button's tooltip said so, but the checks, which are where a design is read
+     for what is wrong with it, said nothing: #76's B1 left Download off with no reason
+     under the cut map. Drawn as an error but not flagged `err`, which would stop the next
+     build as well, and the next build, on any change, is what clears it. */
+  if (buildFailed)
+    out.push({ failed: true, t: `Piece ${buildFailed} could not be built, so the build stopped ` +
+      'there and the plates cannot be downloaded. That is a fault in this tool rather than in ' +
+      'the design: a cut moved through the piece, another joint, or a size changed by a ' +
+      'hundredth of a millimetre usually gets past it.' });
   if (layout.nx * layout.ny > MAX_CELLS)
     out.push({ err: true, stop: true, t: `A ${layout.nx} × ${layout.ny} grid is ` +
       `${layout.nx * layout.ny} cells, past the ${MAX_CELLS} this tool will build in one ` +
@@ -669,7 +679,7 @@ function warningsList() {
 const hasErrors = () => warningsList().some(w => w.err);
 function drawWarnings() {
   const ws = warningsList();
-  $('warnings').innerHTML = ws.map(w => `<div class="w${w.err ? ' err' : ''}">${w.t}</div>`).join('');
+  $('warnings').innerHTML = ws.map(w => `<div class="w${w.err || w.failed ? ' err' : ''}">${w.t}</div>`).join('');
   /* The Download button stops being the primary action when there is nothing behind it.
      It was enabled through all of this: type -50 into the drawer width and the page
      said "resolve the errors above to generate" and offered you the download in the
