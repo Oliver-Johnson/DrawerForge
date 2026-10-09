@@ -9509,7 +9509,14 @@ function fingerSlotPlan(cfg, divs) {
    without them, the whole plan at once, and the wall is the one built over the holes:
    held lower, or none. Settled as if there were no holes, a slot the holes leave no room
    for still took the shelf rule off the plates along, which the field for them is held
-   by, on bins built with no plates at all. */
+   by, on bins built with no plates at all. The holes are the ones built, laid out with
+   the lip as asked: a bin counted without its lip's rule keeps it for them (lipNotched).
+   But for a few bins: with a back slot over a shelf and a slot in a lowered front wall,
+   whether the holes take the shelf's room can turn on the dividers they would leave
+   (fingerSlots' `lost`), which a plan settled without any does not have. It can then
+   find the shelf kept and no holes where the bin is built with them, and the wall is
+   settled as with none, as it was before; that only moves the along field's max, on a
+   bin built with no plates. */
 function fingerWall(cfg, k, divX) {
   if (!(cfg.fingerSlots && cfg.fingerSlots[k])) return null;
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
@@ -9532,8 +9539,16 @@ const NO_DIVS = { divX: 0, divY: 0 };
 const wallEdge = (c, k) => (c.edges && c.edges[k] !== undefined ? c.edges[k] : 1);
 /* Whether a bin's stacking lip is the one notched at its slots, for removable dividers:
    a lip, over a wall thinner than its base (lipLevels). Over a wall as thick as the
-   base the lip stands on the wall and nowhere over the cavity, so a plate clears it. */
-const lipNotched = (c) => !!c.lip && !c.solid && ['f', 'b', 'l', 'r'].every((k) => wallEdge(c, k) >= 1) &&
+   base the lip stands on the wall and nowhere over the cavity, so a plate clears it.
+   None on a bin counted as one whose finger slot takes its lip away (`lipTaken`,
+   dividersBuilt and countedAs), which keeps its lip as asked for everything else: its
+   holes across the floor are laid out clear of the lip (holeLayout) before the slots
+   are settled over them, and so built. Counted with `lip` false, they were laid out
+   with room the bin does not give them: a 1x0.5x2 with a 0.4 mm wall asking for AAA
+   cells, none of which fit, was counted as if a row of 3 did, which leaves its back
+   wall no room for the slot it is built with, and so as if it had the label shelf that
+   slot takes away: it was built with 1 plate along, not 2. */
+const lipNotched = (c) => !!c.lip && !c.lipTaken && !c.solid && ['f', 'b', 'l', 'r'].every((k) => wallEdge(c, k) >= 1) &&
   LIP[0][1] - c.wall >= BLOAT;
 /* The scoop's radius as buildBin builds it, 0 for none: no taller than the front wall it
    fills the corner of (see scoopBuilt), and with plates across a removable bin no taller
@@ -9709,15 +9724,16 @@ function dividersBuilt(cfg) {
   const out = dividersCounted(c);
   /* A finger slot takes the lip away, as a lowered wall does (buildBin), and the notches
      with it, which railedLimit and plateLayout keep clear of the lip's corners. So a bin
-     asking for slots is counted without that rule as well, and built with that count
-     where a slot is still built between the plates it gives, which can be narrower or
-     stand elsewhere: settled between those plates (fingerSlotPlan), as buildBin then
-     settles them. Where none would be, the bin keeps its lip and the count the lip
-     allows. Counted with the lip's rule, a 1x1x3 with a 0.4 mm wall and a slot in the
-     front was built with 10 plates along where 11 fit, and Checks put it down to a lip it
-     does not have. */
+     asking for slots is counted without that rule as well (`lipTaken`, which only the
+     rule reads: its holes are laid out clear of its lip all the same, as they are built,
+     lipNotched), and built with that count where a slot is still built between the
+     plates it gives, which can be narrower or stand elsewhere: settled between those
+     plates (fingerSlotPlan), as buildBin then settles them. Where none would be, the bin
+     keeps its lip and the count the lip allows. Counted with the lip's rule, a 1x1x3 with
+     a 0.4 mm wall and a slot in the front was built with 10 plates along where 11 fit,
+     and Checks put it down to a lip it does not have. */
   if (c.divRemovable && c.lip && slotsAsked(c)) {
-    const free = dividersCounted(Object.assign({}, c, { lip: false }));
+    const free = dividersCounted(Object.assign({}, c, { lipTaken: true }));
     if ((free.divX !== out.divX || free.divY !== out.divY) && fingerSlotPlan(c, free).n) return free;
   }
   return out;
@@ -9741,12 +9757,13 @@ function dividersCounted(c) {
   return out;
 }
 /* The bin its removable dividers are counted by: itself, or where a finger slot is built
-   in it, which leaves it no lip, the same bin without one (dividersBuilt). What Checks
-   says stopped the count (dividersWhy) and how many the fields let a bin ask for go by
-   it, so neither says or stops at the lip of a bin that has none. */
+   in it, which leaves it no lip, the same bin counted without one (`lipTaken`,
+   dividersBuilt). What Checks says stopped the count (dividersWhy) and how many the
+   fields let a bin ask for go by it, so neither says or stops at the lip of a bin that
+   has none. */
 function countedAs(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg);
-  return c.divRemovable && c.lip && slotsAsked(c) && fingerSlotPlan(c).n ? Object.assign(c, { lip: false }) : c;
+  return c.divRemovable && c.lip && slotsAsked(c) && fingerSlotPlan(c).n ? Object.assign(c, { lipTaken: true }) : c;
 }
 /* The dividers a bin is built with, all told: none on a bin built with holes across its
    floor, which are what divide it (floorPlan), and dividersBuilt's on any other. The
@@ -9779,7 +9796,7 @@ function binDividers(cfg) {
 function dividersWhy(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg), built = dividersBuilt(c), out = { divX: null, divY: null };
   if (!c.divRemovable || !plateLayout(c, built).railed || (insertOf(c) && insertPlan(c).n)) return out;
-  const by = countedAs(c), free = by.lip === c.lip ? null : dividersCounted(by);
+  const by = countedAs(c), free = by.lipTaken ? dividersCounted(by) : null;
   for (const [key, axis] of [['divX', 'x'], ['divY', 'y']]) {
     const asked = c[key] || 0;
     if (built[key] >= asked) continue;
@@ -12802,7 +12819,7 @@ function setDividerLimit(id, cfg) {
   if (cfg.divRemovable) {
     const by = countedAs(cfg);
     most = Math.min(most, railedMost(by, axis));
-    if (axis === 'y' || by.lip !== Object.assign({}, BIN_DEFAULTS, cfg).lip)
+    if (axis === 'y' || by.lipTaken)
       most = dividersBuilt(Object.assign({}, cfg, { [id]: most }))[id];
   }
   $(id).max = most;
