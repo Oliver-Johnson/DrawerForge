@@ -3593,9 +3593,14 @@ console.log('\nfinger slots');
     if (shelved >= built.divY) faults.push(`fixture: ${shelved} plates along in front of the shelf, no fewer`);
     /* No lip, so counted as the bin with none, and Checks puts the count down to something
        it has: never to the lip's notches. With its lip, the same bin is counted by their
-       rule. Asked for holes, a bin asked for no lip lays them out with more room, so it is
-       another bin: there it is this one counted without the lip's rule (lipTaken). */
-    const lipless = dividersBuilt(Object.assign({}, cs, cs.insert ? { lipTaken: true } : { lip: false }));
+       rule. The rows asking for holes build none, as their holes give way to the back slot,
+       so each is the bin with no lip and no holes as well. Counted as asking for holes with
+       no lip, as before #58-SF-C was fixed, such a bin laid them out with more room than it
+       gives them: a row fitted, held the back wall too low for a slot and kept a plate in
+       front of a shelf that is not built. Held to itself counted without the lip's rule
+       (lipTaken), these two rows were held to what dividersBuilt asks of itself, and could
+       not fail. */
+    const lipless = dividersBuilt(Object.assign({}, cs, { lip: false, insert: 0 }));
     if (built.divX !== lipless.divX || built.divY !== lipless.divY)
       faults.push(`${built.divX} across and ${built.divY} along, where ${lipless.divX} and ${lipless.divY} fit with no lip`);
     const why = dividersWhy(cs);
