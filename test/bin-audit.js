@@ -9,7 +9,8 @@ const G = require('../src/core.js');
 const { buildBin, binVolume, binHeights, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
         unpackBin, binFeet, dividersBuilt, binDividers, dividerPlates, plateLayout, shelfNote, floorPlan, NOTE_CLEAR,
-        insertPlan, dividersWhy, railedLimit, HOLES_MAX, fingerSlotPlan } = require('../src/bins/bin.js');
+        insertPlan, dividersWhy, railedLimit, HOLES_MAX, fingerSlotPlan, dividersCounted,
+        countedAs } = require('../src/bins/bin.js');
 // the label shelf as built, { top, depth, raised }, depth 0 for none: floorPlan's, which buildBin builds
 const shelfAs = (c, iw, id, H) => floorPlan(c, iw, id, H).shelf || { top: H, depth: 0, raised: null };
 const NOTE_TEXT = require('../src/bins/text.js');
@@ -2706,8 +2707,9 @@ console.log('\nnotes raised on the label shelf');
      corners laid before it, and noteShells then keeps the one with the most room, which
      nothing holds to NOTE_APART. Kept where it started instead, it left 4 of these with
      two shells' corners under 15 µm apart, two of them 3.5 µm. They are held to 15 µm,
-     the figure noteShells gives: more than the 10 µm that keeps a 10 µm grid from joining
-     two at any offset, and than the 14.2 µm a 10 µm cell spans turned any way. */
+     a figure of this audit's own, as noteShells holds that fallback to none: more than
+     the 10 µm that keeps a 10 µm grid from joining two at any offset, and than the
+     14.2 µm a 10 µm cell spans turned any way. */
   {
     const HELD = 0.015, DRAWN = 6000;
     let seed = 62;
@@ -3321,8 +3323,9 @@ function weldOpen(polys, tol) {
      The removable dividers' row is as the table of links from before the feet holes has
      it: 857e407d on main, 7b838b80 once its rails reached the clearance further (#50),
      and 576daddc since its lip is notched where its plates go in. The 1x1x3's note was
-     e43cbc54 until its letters' shells were laid with no two corners closer than a
-     slicer's weld joins (noteShells), and d3caaa09 since: some of its strokes stop up to
+     e43cbc54 until its letters' shells were laid with each one's corners 0.02 mm clear,
+     in x or in y, of the corners of those before it wherever a move allows that
+     (noteShells, NOTE_APART), and d3caaa09 since: some of its strokes stop up to
      a few hundredths of a millimetre elsewhere, and nothing else in it changed. The 2x1x2
      over screws prints no note (its shelf is too shallow), so it is the same bytes. */
   const crypto = require('crypto');
@@ -3593,9 +3596,14 @@ console.log('\nfinger slots');
     if (shelved >= built.divY) faults.push(`fixture: ${shelved} plates along in front of the shelf, no fewer`);
     /* No lip, so counted as the bin with none, and Checks puts the count down to something
        it has: never to the lip's notches. With its lip, the same bin is counted by their
-       rule. Asked for holes, a bin asked for no lip lays them out with more room, so it is
-       another bin: there it is this one counted without the lip's rule (lipTaken). */
-    const lipless = dividersBuilt(Object.assign({}, cs, cs.insert ? { lipTaken: true } : { lip: false }));
+       rule. The rows asking for holes build none, as their holes give way to the back slot,
+       so each is the bin with no lip and no holes as well. Counted as asking for holes with
+       no lip, as before #58-SF-C was fixed, such a bin laid them out with more room than it
+       gives them: a row fitted, held the back wall too low for a slot and kept a plate in
+       front of a shelf that is not built. Held to itself counted without the lip's rule
+       (lipTaken), these two rows were held to what dividersBuilt asks of itself, and could
+       not fail. */
+    const lipless = dividersBuilt(Object.assign({}, cs, { lip: false, insert: 0 }));
     if (built.divX !== lipless.divX || built.divY !== lipless.divY)
       faults.push(`${built.divX} across and ${built.divY} along, where ${lipless.divX} and ${lipless.divY} fit with no lip`);
     const why = dividersWhy(cs);
@@ -3613,6 +3621,47 @@ console.log('\nfinger slots');
         `${standing ? `${standing} along standing on it, ` : ''}${halved ? `${halved} crossing${halved > 1 ? 's' : ''} halved, ` : ''}no lip${c.label ? `, no shelf and ${built.divY} along (${shelved} with it)` : ''}` +
         `${byLip ? `, so ${byLip}` : ''}`));
     if (faults.length) bad++;
+  }
+
+  /* A bin counted without its lip, as one with a slot built in it is (countedAs), is built
+     with that count, never the one its lip would allow: the lip only stops plates standing
+     a few millimetres apart, where the walls they meet have no room for a slot either way,
+     so a slot built between the plates the lip allows is built between the ones without
+     it, and dividersBuilt builds those. Checks had a reason of its own for a bin that broke
+     this, 'slot', which no bin reached, and which is gone; were one to break it, Checks
+     would put its plates down to the lip it does not have, and so this asks that too. Thin
+     walls and thin plates, where the lip binds, both counts at what fits without it and
+     one of them at less, slots on one wall, two and all four, plain and with a scoop and a
+     note raised on a shelf; and a hundred or more where the lip would hold the plates, or
+     the grid has stopped aiming at it. */
+  {
+    let n = 0, marked = 0, bound = 0;
+    const off = [];
+    for (const u of [0.5, 1, 2]) for (const v of [0.5, 1, 2]) for (const wall of [0.4, 0.8, 1.2])
+      for (const [divT, divClr] of [[0.8, 0], [0.8, 0.25], [1.2, 0.1]]) for (const s of ['f', 'l', 'fl', 'fblr'])
+        for (const extra of [{}, { scoop: 20, label: 8, labelMode: 1, note: '1' }]) {
+          const base = Object.assign({ u, v, hUnits: 3, wall, divT, divClr, divRemovable: true,
+                                       fingerSlots: Object.fromEntries([...s].map((k) => [k, true])) }, extra);
+          const fit = (axis) => railedLimit(Object.assign({ lipTaken: true }, base), axis).most;
+          const fx = fit('x'), fy = fit('y');
+          for (const [divX, divY] of [[fx, fy], [fx, 1], [1, fy], [fx, 0], [0, fy]]) {
+            const cfg = Object.assign({}, base, { divX, divY }), by = countedAs(cfg);
+            n++;
+            if (!by.lipTaken) continue;
+            marked++;
+            const lipped = dividersCounted(Object.assign({}, by, { lipTaken: false })), want = dividersCounted(by);
+            if (lipped.divX !== want.divX || lipped.divY !== want.divY) bound++;
+            const built = dividersBuilt(cfg), why = dividersWhy(cfg);
+            if (built.divX !== want.divX || built.divY !== want.divY)
+              off.push(`${JSON.stringify(cfg)} built with ${built.divX} and ${built.divY}, not ${want.divX} and ${want.divY}`);
+            else if (Object.values(why).some((w) => /lip|Corners/.test(w || '')))
+              off.push(`${JSON.stringify(cfg)}: Checks gives ${JSON.stringify(why)}`);
+          }
+        }
+    console.log(`  ${'counted with no lip'.padEnd(22)} ` + (off.length ? `WRONG in ${off.length}: ` + off.slice(0, 3).join('; ')
+      : `${marked} of ${n} bins counted without their lip, ${bound} where the lip would hold their plates: ` +
+        'each built with that count, and none put down to the lip'));
+    if (off.length || bound < 100) bad++;
   }
 
   /* Opt-in, and only where one can be built: every other bin is built to the byte as it

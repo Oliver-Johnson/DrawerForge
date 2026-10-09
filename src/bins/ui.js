@@ -194,11 +194,38 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
    bin with holes across its floor, which the holes divide, as buildBin builds it
    (binDividers, which asks the holes as holesIn does), with the new-bin settings at a
    1x1 as these are. A bin with finger slots ticked asks the holes of its kept plan
-   (insertPlanOf), as binDividers would ask them of the slots all over again. */
+   (insertPlanOf), as binDividers would ask them of the slots all over again.
+   Kept by the settings that asked, as fingerPlan is: a refresh asks this of each bin ten
+   times over, for its key, its name, Checks and its compartments, and 63 bins with
+   removable plates spent 60 to 150 ms of an 85 to 180 ms refresh in dividersBuilt with
+   finger slots ticked, about three quarters of it, and 20 to 45 of 35 to 85 without;
+   kept, the whole refresh takes 12 to 50. Everything it goes by is binCfg's, and whether
+   the bin has a size of its own, so nothing here changes an answer under its key. */
+const keptDivs = new Map();
 const builtDivs = (b) => {
   const c = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
-  if (!(b.u && b.v && fingerPlan(b))) return binDividers(c);
-  return +c.insert > 0 && insertPlanOf(b).n ? { divX: 0, divY: 0 } : dividersBuilt(c);
+  const key = (b.u && b.v ? '' : '1x1 ') + JSON.stringify(c);
+  let d = keptDivs.get(key);
+  if (!d) {
+    if (keptDivs.size >= 500) keptDivs.clear();
+    keptDivs.set(key, (d = !(b.u && b.v && fingerPlan(b)) ? binDividers(c)
+      : +c.insert > 0 && insertPlanOf(b).n ? { divX: 0, divY: 0 } : dividersBuilt(c)));
+  }
+  return { divX: d.divX, divY: d.divY };
+};
+/* And why a removable bin is built with fewer than it asks for (dividersWhy), kept the
+   same way for `cfg`, the bin's binCfg at its size: Checks asks it of every such bin each
+   refresh, at 0.3 to 1 ms a bin, and with all 63 asking for more plates than fit it took
+   30 to 50 ms of an 80 to 100 ms refresh once their dividers were kept. */
+const keptWhys = new Map();
+const divsWhy = (cfg) => {
+  const key = JSON.stringify(cfg);
+  let w = keptWhys.get(key);
+  if (!w) {
+    if (keptWhys.size >= 500) keptWhys.clear();
+    keptWhys.set(key, (w = dividersWhy(cfg)));
+  }
+  return { divX: w.divX, divY: w.divY };
 };
 // and how many compartments they make, or 0 for a bin with none
 const compartments = (b) => {
@@ -2217,7 +2244,7 @@ function drawMap() {
     // what makes it safe for the labels to shorten or drop a line in a small bin
     const tip = document.createElementNS(SVGNS, 'title');
     tip.textContent = (b.note ? b.note + ' — ' : '') +
-      `${b.u}×${b.v}, ${b.hUnits} units (${b.hUnits * SPEC.unitH} mm)`;
+      `${b.u}×${b.v}, ${plural(b.hUnits, 'unit')} (${b.hUnits * SPEC.unitH} mm)`;
     r.appendChild(tip);
     if (issues.length) {
       const warn = el('text', { class: 'bwarn', x: b.x * S + 13, y: sy(b.y, b.v) + 20 });
@@ -3041,7 +3068,7 @@ function binIssues(b, k, claims) {
     /* What brought each direction's count down (dividersWhy). The rails' own rules are
        said together as one note; what stands over a slot, the lip and the shelf, and what
        the plates keep where they cross or stand on the scoop, each in a note of its own. */
-    const why = dividersWhy(cfg);
+    const why = divsWhy(cfg);
     /* The rails' own rules, said together as one note (railedLimit): the slots, the
        corners, and two more. 'lone': room for one divider's slot and a rail either side,
        but not for the rails the other way beside it, which are kept room for whether or
@@ -3083,11 +3110,6 @@ function binIssues(b, k, claims) {
       // both, where one more would go wrong both ways (dividersWhy)
       crossCorners: (any) => `${any ? 'no more' : 'none'} keep ${PLATE_END} mm of plate where they ${stand}, ` +
         `and ${any ? 'more' : 'any'} would notch the stacking lip too close to its corners`,
-      /* A bin with a finger slot has no lip, and is counted without it, but for this: with
-         more plates it would have no slot, and so its lip, which they would notch too close
-         to its corners (dividersWhy). A fallback: no bin swept has reached it. */
-      slot: (any) => `${any ? 'more' : 'any'} would leave no room for its finger slots, and it would have the ` +
-        `stacking lip back, which ${any ? 'no more' : 'none'} can have a notch through clear of its corners`,
     };
     const MANY = {
       lip: 'no more can have a notch through the stacking lip clear of its corners',
@@ -3096,8 +3118,6 @@ function binIssues(b, k, claims) {
       lipCorners: 'more along would notch the stacking lip too close to its corners',
       crossCorners: `no more along keep ${PLATE_END} mm of plate where they cross the ones across, or stand on the ` +
         'scoop, and more would notch the stacking lip too close to its corners',
-      slot: 'more would leave no room for their finger slots, and they would have the stacking lip back, which ' +
-        'no more can have a notch through clear of its corners',
     };
     for (const r of Object.keys(REASON)) {
       const these = short.filter(([k]) => why[k] === r);
@@ -3761,11 +3781,12 @@ function refresh() {
     (inch ? ` (${gw} × ${gd} mm, ${FIELDS.inchText(gw)} × ${FIELDS.inchText(gd)} in)` : '') +
     /* With no room there is no tallest bin either, nor with room under a 1-unit bin and
        its lip: capUnits is never under 1, and it said "tallest single bin 1 units" there
-       while Checks said no 1-unit bin fits. */
+       while Checks said no 1-unit bin fits. Where one unit is the tallest, it is "1 unit",
+       as Checks says it: it said "1 units" there too. */
     (noRoomAbove(g) ? ` · no room above the baseplate, as ${whyNoRoom(also)}` :
     ` · ${g.avail.toFixed(1)} mm${also(g.avail)} above the baseplate · ` + (unitsUnder(g.avail) < 1
       ? `too little for even a 1-unit bin (${SPEC.unitH} mm${also(SPEC.unitH)} + lip)`
-      : `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`));
+      : `tallest single bin ${plural(capUnits, 'unit')} (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`));
   // and the half cell under the size fields, which said 21 mm whatever the drawer was in
   $('halfCellLen').textContent = `${SPEC.pitch / 2} mm${also(SPEC.pitch / 2)}`;
   const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
@@ -4429,7 +4450,7 @@ function drawScene() {
 function sceneLabel(empty, shell, g) {
   if (fBin()) {
     const b = fBin();
-    return `3D preview: one ${b.u} by ${b.v} bin, ${b.hUnits} units tall, ` +
+    return `3D preview: one ${b.u} by ${b.v} bin, ${plural(b.hUnits, 'unit')} tall, ` +
            'on a baseplate of its own size.';
   }
   if (empty && !shell)
@@ -4513,7 +4534,7 @@ function render() {
 function showTip(e, b, k) {
   const el = $('tip');
   el.textContent = (b.note ? b.note + ' — ' : '') +
-    `${b.u}×${b.v}, ${b.hUnits} units (${b.hUnits * SPEC.unitH} mm)` +
+    `${b.u}×${b.v}, ${plural(b.hUnits, 'unit')} (${b.hUnits * SPEC.unitH} mm)` +
     (k !== undefined && layers.length > 1 ? ` · layer ${k + 1}` : '');
   el.style.display = 'block';
   const pad = 14;
