@@ -493,8 +493,10 @@ test.describe('the clearance ceiling is the joint\'s and the pitch\'s', () => {
 
 /* The checks name the piece as well (#76). The table, the preview and Download's tooltip
    said so already, but the list under the cut map, where a design is read for what is
-   wrong with it, was empty, so Download was off with no reason given there. No design is
-   known to throw now (the one in #76 builds, below), so the failure is forced. */
+   wrong with it, was empty, so Download was off with no reason given there. The failure is
+   forced rather than taken from a design that fails, which would tie this test to an engine
+   bug a later fix should remove: #76's plate builds now (below), and the 41.24 mm jigsaw
+   plate in plate-audit.js still fails in the seam repair, as it does on main. */
 test('a failed build says so in the checks, the table and the dialog, and Download goes off',
   async ({ page }) => {
     const pageErrors = [];
@@ -525,6 +527,8 @@ test('a failed build says so in the checks, the table and the dialog, and Downlo
     expect(s.tail).toMatch(new RegExp(`build failed at piece ${s.failed}`));
     expect(s.checks.join(' '), 'the checks name the piece that failed')
       .toMatch(new RegExp(`Piece ${s.failed} could not be built`));
+    // Download, not every file: the pieces built before it keep their own STL buttons
+    expect(s.checks.join(' ')).toMatch(/Download is off/);
     expect(s.rows).toMatch(/failed/);
     expect(s.fit).toMatch(new RegExp(`Piece ${s.failed} could not be built`));
     expect(s.zipOff).toBe(true);
