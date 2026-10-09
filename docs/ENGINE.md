@@ -322,7 +322,9 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   plate across a front one.
   The lip's rule only binds on plates packed a few millimetres apart, with no room for a
   slot between them, so the walls their ends meet have no slot either way, and the slots
-  in the others stay where they were, as do the rails beside them.
+  in the others stay where they were, as do the rails beside them. So a bin with a slot
+  between the plates its lip allows has one between the plates without its lip as well,
+  and is built with those: Checks never has a slot to blame for fewer plates.
   `fingerSlots` hands its answer to `buildBin` and `insertPlan` (`floor`), so the page
   counts the holes that are built, and to `binVolume`, which weighs the bin from it: no
   lip, the dips (`area`, the mean of the wall's two faces, times the wall) off the walls,

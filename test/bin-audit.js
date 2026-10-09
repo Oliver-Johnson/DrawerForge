@@ -9,7 +9,8 @@ const G = require('../src/core.js');
 const { buildBin, binVolume, binHeights, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
         unpackBin, binFeet, dividersBuilt, binDividers, dividerPlates, plateLayout, shelfNote, floorPlan, NOTE_CLEAR,
-        insertPlan, dividersWhy, railedLimit, HOLES_MAX, fingerSlotPlan } = require('../src/bins/bin.js');
+        insertPlan, dividersWhy, railedLimit, HOLES_MAX, fingerSlotPlan, dividersCounted,
+        countedAs } = require('../src/bins/bin.js');
 // the label shelf as built, { top, depth, raised }, depth 0 for none: floorPlan's, which buildBin builds
 const shelfAs = (c, iw, id, H) => floorPlan(c, iw, id, H).shelf || { top: H, depth: 0, raised: null };
 const NOTE_TEXT = require('../src/bins/text.js');
@@ -3622,6 +3623,47 @@ console.log('\nfinger slots');
 
   /* Opt-in, and only where one can be built: every other bin is built to the byte as it
      was, whatever its slot settings say, and its plates are counted as they were. Each row
+  /* A bin counted without its lip, as one with a slot built in it is (countedAs), is built
+     with that count, never the one its lip would allow: the lip only stops plates standing
+     a few millimetres apart, where the walls they meet have no room for a slot either way,
+     so a slot built between the plates the lip allows is built between the ones without
+     it, and dividersBuilt builds those. Checks had a reason of its own for a bin that broke
+     this, 'slot', which no bin reached, and which is gone; were one to break it, Checks
+     would put its plates down to the lip it does not have, and so this asks that too. Thin
+     walls and thin plates, where the lip binds, both counts at what fits without it and
+     one of them at less, slots on one wall, two and all four, plain and with a scoop and a
+     note raised on a shelf; and a hundred or more where the lip would hold the plates, or
+     the grid has stopped aiming at it. */
+  {
+    let n = 0, marked = 0, bound = 0;
+    const off = [];
+    for (const u of [0.5, 1, 2]) for (const v of [0.5, 1, 2]) for (const wall of [0.4, 0.8, 1.2])
+      for (const [divT, divClr] of [[0.8, 0], [0.8, 0.25], [1.2, 0.1]]) for (const s of ['f', 'l', 'fl', 'fblr'])
+        for (const extra of [{}, { scoop: 20, label: 8, labelMode: 1, note: '1' }]) {
+          const base = Object.assign({ u, v, hUnits: 3, wall, divT, divClr, divRemovable: true,
+                                       fingerSlots: Object.fromEntries([...s].map((k) => [k, true])) }, extra);
+          const fit = (axis) => railedLimit(Object.assign({ lipTaken: true }, base), axis).most;
+          const fx = fit('x'), fy = fit('y');
+          for (const [divX, divY] of [[fx, fy], [fx, 1], [1, fy], [fx, 0], [0, fy]]) {
+            const cfg = Object.assign({}, base, { divX, divY }), by = countedAs(cfg);
+            n++;
+            if (!by.lipTaken) continue;
+            marked++;
+            const lipped = dividersCounted(Object.assign({}, by, { lipTaken: false })), want = dividersCounted(by);
+            if (lipped.divX !== want.divX || lipped.divY !== want.divY) bound++;
+            const built = dividersBuilt(cfg), why = dividersWhy(cfg);
+            if (built.divX !== want.divX || built.divY !== want.divY)
+              off.push(`${JSON.stringify(cfg)} built with ${built.divX} and ${built.divY}, not ${want.divX} and ${want.divY}`);
+            else if (Object.values(why).some((w) => /lip|Corners/.test(w || '')))
+              off.push(`${JSON.stringify(cfg)}: Checks gives ${JSON.stringify(why)}`);
+          }
+        }
+    console.log(`  ${'counted with no lip'.padEnd(22)} ` + (off.length ? `WRONG in ${off.length}: ` + off.slice(0, 3).join('; ')
+      : `${marked} of ${n} bins counted without their lip, ${bound} where the lip would hold their plates: ` +
+        'each built with that count, and none put down to the lip'));
+    if (off.length || bound < 100) bad++;
+  }
+
      is a bin that has to come out the same as without them, and the reason fingerSlotPlan
      gives the page for building none. */
   const stl = (cfg) => Buffer.from(G.stlBinary(buildBin(G, cfg).polys, 'b')).toString('base64');

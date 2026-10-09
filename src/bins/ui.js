@@ -3083,11 +3083,6 @@ function binIssues(b, k, claims) {
       // both, where one more would go wrong both ways (dividersWhy)
       crossCorners: (any) => `${any ? 'no more' : 'none'} keep ${PLATE_END} mm of plate where they ${stand}, ` +
         `and ${any ? 'more' : 'any'} would notch the stacking lip too close to its corners`,
-      /* A bin with a finger slot has no lip, and is counted without it, but for this: with
-         more plates it would have no slot, and so its lip, which they would notch too close
-         to its corners (dividersWhy). A fallback: no bin swept has reached it. */
-      slot: (any) => `${any ? 'more' : 'any'} would leave no room for its finger slots, and it would have the ` +
-        `stacking lip back, which ${any ? 'no more' : 'none'} can have a notch through clear of its corners`,
     };
     const MANY = {
       lip: 'no more can have a notch through the stacking lip clear of its corners',
@@ -3096,8 +3091,6 @@ function binIssues(b, k, claims) {
       lipCorners: 'more along would notch the stacking lip too close to its corners',
       crossCorners: `no more along keep ${PLATE_END} mm of plate where they cross the ones across, or stand on the ` +
         'scoop, and more would notch the stacking lip too close to its corners',
-      slot: 'more would leave no room for their finger slots, and they would have the stacking lip back, which ' +
-        'no more can have a notch through clear of its corners',
     };
     for (const r of Object.keys(REASON)) {
       const these = short.filter(([k]) => why[k] === r);

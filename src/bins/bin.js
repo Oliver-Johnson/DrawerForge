@@ -2622,11 +2622,21 @@ function binDividers(cfg) {
    and 'crossCorners' when both would. It was asked of as many as the rails allow, and
    named the plates' keep wherever both went wrong there, whichever stopped one more.
    A bin with a finger slot built in it has no lip, and is said by the rules it is counted
-   by without one (countedAs), never the lip's; 'slot' where it is built with the count
-   its lip would allow all the same, because between more plates no slot would be built,
-   and it would have its lip. That is a fallback no bin swept has reached: the lip's rule
-   binds only on plates packed too close for a slot between them, so more of them move no
-   slot (dividersBuilt).
+   by without one (countedAs), never the lip's, and it is always built with that count.
+   The lip stops only plates that would stand under 6 mm apart, so the ones it keeps
+   stand under 9: its rule and its corners bind where the last plate stands within half
+   a plate, its clearance and 3.4 mm of the cavity's wall, and the rails let plates stand
+   that close only where half a plate and its clearance are under 2.2 mm. A finger slot
+   needs 15 mm between two plates' rails, or a rail and the wall's corner, so the walls
+   those plates meet have no slot with the lip's count or without it. And all else a
+   slot is settled by is the same with either: the plates the other way, unless the lip
+   stopped those as well, which leaves no wall a slot; the scoop; and the shelf, as no
+   note prints between plates that close. So where a slot is built between
+   the plates the lip allows, one is built between the plates without it, and the bin is
+   built with those (dividersBuilt). This had 'slot' for a bin built with the lip's count
+   all the same, as between more plates no slot would be built, and none of 900,000
+   random bins nor of a million aimed at the lip reached it; the audit holds bins to
+   that ("counted with no lip").
    Null where it is built with all it asks for, and where it has no rails at all: a
    carved shape, a solid block or a floor that fills the bin (plateLayout's railed), or
    holes across its floor (binDividers). Those are built with none whatever they ask for,
@@ -2635,13 +2645,12 @@ function binDividers(cfg) {
 function dividersWhy(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg), built = dividersBuilt(c), out = { divX: null, divY: null };
   if (!c.divRemovable || !plateLayout(c, built).railed || (insertOf(c) && insertPlan(c).n)) return out;
-  const by = countedAs(c), free = by.lipTaken ? dividersCounted(by) : null;
+  const by = countedAs(c);
   for (const [key, axis] of [['divX', 'x'], ['divY', 'y']]) {
     const asked = c[key] || 0;
     if (built[key] >= asked) continue;
     const L = railedLimit(by, axis);
     if (built[key] >= Math.min(asked, L.most)) { out[key] = L.by; continue; }
-    if (free && built[key] < free[key]) { out[key] = 'slot'; continue; }
     const P = plateLayout(by, Object.assign({}, built, { [key]: built[key] + 1 }));
     out[key] = !P.fitsY && !P.corners ? 'crossCorners' : !P.fitsY ? 'cross' : 'lipCorners';
   }
