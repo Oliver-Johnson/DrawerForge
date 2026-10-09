@@ -825,8 +825,25 @@ currently installed):
     3 mm thick, is taken: its pocket is 0.04 to 0.09 mm into the notch and the magnet
     0.24 mm clear of the tab. 2.4 mm thick it is level, built 96 bad edges, and is refused.
   - **A pocket from above** meets any of them unless its floor stands a layer over the
-    cut's ceiling. The housings a key is dropped into from above start 1.3 mm over the
-    socket floor and nothing reaches them.
+    cut's ceiling.
+  - **The housing a key is put into from above is built, not cut** (`keySiteOps`' cup
+    and snap slot): a floor 0.6 mm thick under the key, its underside 1.4 mm over the
+    socket floor (1.3 for a snap clip), and walls from there up, at a corner where four
+    cells meet. Over a solid floor nothing reaches it. A corner boss's pockets do, and the
+    housing is built after them, so it stood in them with Download on (#75): a wall bowtie
+    at 36.13 mm left 1.3 mm³ in the four 6 mm magnet pockets beside the seam, in the top
+    0.6 mm of each. `mountLimits` counts it as a cut from its underside up (`housing`),
+    as wide as all it cuts or builds: a pocket from beneath clears it by stopping
+    `MOUNT_LEVEL` under that, and a pocket from above or a shank, which go in through it,
+    meets any it reaches. Of 17,820 designs (every joint, both floors, magnets from both
+    sides and screws, three layouts, 54 pitches from 30 to 52.2 mm) that changes the
+    limits of 1,280, every one with corner bosses and a key put in from above: wall keys
+    up to 40 mm, the H-clip up to 38.5 and a snap clip in the wall up to 35. Of the
+    1,771 caps it lowers, 1,573 stop a tenth or two short of the first size that meets
+    the housing, and no size taken meets one. Where an H-clip's or a snap clip's housing reaches a pocket, it does
+    so inside the socket rim's corner, which stands in that pocket already with no joint
+    at all (a boss's pocket may run under the rim), so those pockets come out as open
+    with the joint as without it; the cap is held off the housing all the same.
   - **A pocket in a corner boss counts the same way**, since the joint is cut from the
     boss too (#70), and from above its floor is measured from the boss's top: wall keys
     and the dovetail reach a boss's pocket up to about 39 mm, the H-clip up to about 34.5,

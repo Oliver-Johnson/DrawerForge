@@ -101,12 +101,13 @@ const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'n
 /* Why `field` stops where it does. A joint's cut stops it in one of the ways mountLimits'
    `joint` names: a pocket from beneath as deep as a dovetail's notch, a magnet or screw
    that would reach the tab in one, a pocket any wider coming too near the notch's edge,
-   or any other hole breaking into the cut. The hint about keys put in from above is not
-   given with corner pockets: there is no solid floor under them, and such a key's cup
-   stands into a boss's pocket (#75). Nor where the bosses are buried in the floor a
-   joint needs (cornerBosses): a key put in from above, in the walls, needs none, so
-   taking the hint would stand them up again, and the cup in their pockets. Only a floor
-   asked for (bottomPad) keeps them buried whatever the joint. */
+   a hole that would meet the housing a key is put into from above, or any other hole
+   breaking into the cut. The hint about keys put in from above is not given with corner
+   pockets: there is no solid floor under them, and such a key's cup stands among the
+   bosses, where it can reach their pockets (#75). Nor where the bosses are buried in the
+   floor a joint needs (cornerBosses): a key put in from above, in the walls, needs none,
+   so taking the hint would stand them up again, and the cup among their pockets. Only a
+   floor asked for (bottomPad) keeps them buried whatever the joint. */
 const mountWhy = (opens, field) => {
   const joint = mount().joint[field];
   const cuts = cutsNamed();
@@ -117,6 +118,8 @@ const mountWhy = (opens, field) => {
       : joint === 'part' ? `${{ magnetD: 'a magnet', screwHeadD: 'a screw head', screwHoleD: 'a screw' }[field]} ` +
         `has to stay clear of the ${CONNECTOR_NAMES[state.connector]} in the notches beside it`
       : joint === 'near' ? `a pocket any wider would come too near the edge of the ${cuts} to cut cleanly`
+      : joint === 'housing' ? `a hole has to stay out of the housings the ${CONNECTOR_NAMES[state.connector]} ` +
+        'drop into from above'
       : joint ? `a hole has to stay out of the ${cuts}`
       : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
       : cornerBosses(state) ? 'a pocket has to stay inside its corner boss'

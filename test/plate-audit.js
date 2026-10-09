@@ -2394,6 +2394,70 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
                 `${folds ? `, ${folds} FOLDS` : ''}${good ? '' : '   FAIL'}`);
     if (!good) bad++;
   }
+  /* And a key put in from above (#75). Its housing is a cup the plate builds, a floor
+     0.6 mm thick under the key 1.4 mm over the bed, with its walls from there up, at the
+     corner where four cells meet, as a boss is; and it is built after the bosses' pockets
+     are cut, so it stood in any it reached. A wall bowtie at 36.13 mm took a 6 mm magnet
+     from beneath with 1.3 mm³ of the cup in the four pockets beside the seam, in the top
+     0.6 mm of each, with Download on. mountLimits counts the cup now ('housing'): each of
+     these is asked at the size that met it, which has to be refused for the housing, and
+     built at the size the field takes, where every pocket has to be as open as in the
+     same plate with no joint, read on vertical lines 0.1 mm apart every 0.05 mm up its
+     depth. With no joint, not the pocket's whole volume: at these pitches the socket's
+     rim stands in part of a 6 mm pocket already, joint or not. And a pocket the cup does
+     not reach, at 42 mm, has to be taken as before. */
+  {
+    const h = 0.1, dz = 0.05;
+    // the open room in each pocket of a design, in mm³, mouth to floor
+    const room = (r) => {
+      const cfg = r.cfg, out = [];
+      const top = Math.min(2.6, Math.max(cfg.magnets ? cfg.magnetH + 0.8 : 0, cfg.screws ? cfg.screwHeadDepth + 1 : 0));
+      const spans = [];
+      if (cfg.magnets) spans.push(cfg.magnetSide === 'top'
+        ? [cfg.magnetD / 2, top - cfg.magnetH, top] : [cfg.magnetD / 2, 0, cfg.magnetH]);
+      if (cfg.screws) spans.push([cfg.screwHeadD / 2, 0, cfg.screwHeadDepth], [cfg.screwHoleD / 2, 0, top]);
+      r.pieces.forEach((polys, pi) => {
+        const pc = r.L.pieces[pi], A = columns(polys);
+        for (let i = 0; i < pc.nx; i++) for (let k = 0; k < pc.ny; k++)
+          for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+            const px = pc.mL + (i + 0.5) * cfg.pitch + sx * cfg.holeOffset;
+            const py = pc.mF + (k + 0.5) * cfg.pitch + sy * cfg.holeOffset;
+            let v = 0;
+            for (const [rad, z0, z1] of spans)
+              for (let x = -rad; x <= rad; x += h) for (let y = -rad; y <= rad; y += h) {
+                if (Math.hypot(x, y) > rad - 0.02) continue;
+                const col = A(px + x + 0.000731, py + y + 0.000419);
+                for (let z = z0 + dz / 2; z < z1; z += dz) if (col(z) < 1) v += h * h * dz;
+              }
+            out.push(v);
+          }
+      });
+      return out;
+    };
+    const P = (p) => ({ pitch: p, drawerW: 4 * p, drawerD: 2 * p, bedW: 2 * p + 16, bedD: 400, baseMode: 'bosses',
+                        connector: 'bowtie', keyMount: 'wall', keyInsert: 'top' });
+    for (const [name, over, f, d, why] of [
+      ['wall bowtie at 36.13 mm, 6 mm magnet', { ...P(36.13), magnets: true }, 'magnetD', 6, 'housing'],
+      ['wall bowtie at 36.13 mm, magnet above', { ...P(36.13), magnets: true, magnetSide: 'top' }, 'magnetD', 6, 'housing'],
+      ['wall bowtie at 36.13 mm, 6 mm head', { ...P(36.13), screws: true }, 'screwHeadD', 6, 'housing'],
+      ['wall puzzle key at 36.13 mm, magnet', { ...P(36.13), connector: 'puzzlekey', magnets: true }, 'magnetD', 6, 'housing'],
+      ['wall bowtie at 39.46 mm, 9.3 magnet', { ...P(39.46), magnets: true }, 'magnetD', 9.3, 'housing'],
+      ['wall bowtie at 42 mm, 6 mm magnet', { ...P(42), magnets: true }, 'magnetD', 6, false]]) {
+      const asked = designCfg({ ...over, [f]: d });
+      const lims = G.mountLimits(asked, G.computeLayout(asked));
+      const refused = d > lims[f] + 1e-9 && lims.joint[f];
+      const size = Math.min(d, lims[f]);
+      const r = buildAll({ ...over, [f]: size });
+      const got = room(r), plain = room(buildAll({ ...over, [f]: size, connector: 'none' }));
+      const short = got.map((v, k) => plain[k] - v).filter((v) => v > 0.005);
+      const good = refused === why && !short.length && !r.open;
+      console.log(`  ${name.padEnd(38)} ${refused ? `refused (${refused}), built at ${size}` : 'taken'}; ` +
+                  (short.length ? `${short.length} of ${got.length} pockets SHORT of their room with no joint, ` +
+                    `${short.reduce((s, v) => s + v, 0).toFixed(2)} mm³` : `${got.length} pockets as open as with no joint`) +
+                  `; ${leakText(r)}${good ? '' : `   FAIL${refused === why ? '' : why ? `: has to be refused for the ${why}` : ': has to be taken'}`}`);
+      if (!good) bad++;
+    }
+  }
 }
 
 /* The fit clearance at its ceiling, for every joint and every pitch band.

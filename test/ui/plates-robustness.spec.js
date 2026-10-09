@@ -136,6 +136,13 @@ test.describe('ranges on the geometry fields', () => {
     ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie&km=wall&ki=bottom' +
       '&bm=bosses&mg=1&md=7.9', 'errMagnet',
       /Magnet Ø must be 6\.1 mm or less at a 36\.13 mm pitch — .* the recesses the bowtie keys fit into/],
+    /* #75: the same keys put in from above stand in a cup of their own, and with corner
+       bosses there is no floor between that cup and the bosses' pockets. With the
+       default 6 mm magnet the cup's floor stood in the pocket beside each key, watertight
+       and with Download on, where the magnet could not seat. */
+    ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie&km=wall&ki=top' +
+      '&bm=bosses&mg=1', 'errMagnet',
+      /Magnet Ø must be 5 mm or less at a 36\.13 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a hole has to stay out of the housings the bowtie keys drop into from above\./],
   ];
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {
@@ -176,6 +183,32 @@ test.describe('ranges on the geometry fields', () => {
       expect(await exportOff(page)).toBe(false);
       expect(errors).toEqual([]);
     });
+
+  /* #75: and the field's range stops where the cup starts. At 5 mm the plate builds with
+     Download on, 5.1 is refused and names the keys, and the same keys put in from
+     beneath take their recess's 6.1 again. */
+  test('a corner boss\'s pocket is held out of the cup a key drops into from above', async ({ page }) => {
+    const at = '#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie' +
+               '&km=wall&ki=top&bm=bosses&mg=1';
+    const errors = await openAt(page, `${at}&md=5`);
+    const max = () => page.evaluate(() => document.getElementById('magnetD').max);
+    expect(await max()).toBe('5');
+    expect(await shown(page, 'errMagnet')).toBe(false);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    await H.setField(page, 'magnetD', '5.1');
+    expect(await text(page, 'errMagnet'))
+      .toMatch(/Magnet Ø must be 5 mm or less .* the housings the bowtie keys drop into from above\./);
+    expect(await text(page, 'pieceTail')).toMatch(/not building/);
+    expect(await exportOff(page)).toBe(true);
+    await page.selectOption('#keyInsert', 'bottom');
+    await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
+                               null, { timeout: 30000 });
+    expect(await max()).toBe('6.1');
+    expect(await shown(page, 'errMagnet')).toBe(false);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
 
   /* #70: corner pockets over a floor. A bowtie housed in the floor stood its 2.8 mm floor
      round the 2.6 mm bosses and sealed their pockets in it, with Download on, and an extra
