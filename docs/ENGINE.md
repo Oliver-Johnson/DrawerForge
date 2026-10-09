@@ -702,7 +702,12 @@ currently installed):
   which the field already sizes with room round it. `MOUNT_BORE` says each bore's sides
   and corner radius, and the largest size whose corners fit a room; `fastenerCutter` cuts
   what it says, and `mountLimits`, which measures every room to the corners, reads its
-  sizes back from it, so the shape is decided in one place.
+  sizes back from it, so the shape is decided in one place. A counterbore is cut only over
+  a shank it clears, its flats outside the shank's corners: the hole over cos(π/12), and
+  0.01 mm more. Narrower, the 14 flats cross the 12 corners and the two cuts' walls weave
+  round the hole, and here and there a cell leaked by the hundred (#73: 2.03 mm over 2
+  with the corners on the sizes, 2.046 over 2 and 1.034 over 1 with the flats). Such a
+  head is cut as none, as one no wider than the hole always was.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the

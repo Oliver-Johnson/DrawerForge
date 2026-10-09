@@ -2003,6 +2003,42 @@ console.log('\nthe other limits, built at their ends:');
     console.log(`  ${nm.padEnd(28)} ${leakText(r)}`);
     if (r.bad) bad++;
   }
+  /* A screw head only a hair wider than its shank (#73). The counterbore's 14 flats
+     crossed the shank's 12 corners, and here and there a cell leaked by the hundred: on
+     main, 2.03 mm over 2 left 196 edges a piece at 37.67 mm; with the flats on the sizes,
+     2.046 over 2 left 310 on these four cells and 1.034 over 1 at 42 mm 828. A head is cut
+     as a counterbore only once its flats clear the shank's corners, the hole over
+     cos(π/12) and 0.01 mm more (MOUNT_BORE in core.js), worked out here rather than read
+     from it. Under that it is cut as none: the plate has to be the very one a head no
+     wider than the hole builds, to the byte, a thousandth under the line too. The
+     narrowest head cut, a thousandth past it, has to build watertight and not be that
+     plate. */
+  {
+    const crypto = require('crypto');
+    const digest = (r) => {
+      const h = crypto.createHash('sha256');
+      for (const polys of r.pieces) h.update(Buffer.from(G.stlBinary(polys, 'p')));
+      return h.digest('hex');
+    };
+    const line = (d) => d / Math.cos(Math.PI / 12) + 0.01;
+    const none = new Map();
+    for (const [nm, p, d, h, cut] of [
+      ['2.03 mm head over 2, 37.67', 37.67, 2, 2.03, false],
+      ['2.046 mm head over 2, 37.67', 37.67, 2, 2.046, false],
+      ['1.034 mm head over 1, 42', 42, 1, 1.034, false],
+      ['just under the line, over 2', 37.67, 2, Math.floor(line(2) * 1000) / 1000, false],
+      ['narrowest head over 2', 37.67, 2, Math.ceil(line(2) * 1000) / 1000, true],
+    ]) {
+      const at = { pitch: p, drawerW: 2 * p, drawerD: 2 * p, connector: 'none', screws: true, screwHoleD: d };
+      if (!none.has(`${p} ${d}`)) none.set(`${p} ${d}`, digest(buildAll({ ...at, screwHeadD: d })));
+      const r = buildAll({ ...at, screwHeadD: h });
+      const same = digest(r) === none.get(`${p} ${d}`);
+      console.log(`  ${nm.padEnd(28)} ${h} mm: ${leakText(r)}, ` + (same
+        ? (cut ? 'NO COUNTERBORE CUT' : 'cut as no counterbore')
+        : (cut ? 'a counterbore' : 'A COUNTERBORE CUT')));
+      if (r.bad || same === cut) bad++;
+    }
+  }
   /* A pocket against a joint's cut in the floor (#64). A bowtie housed in the floor at
      42 mm, with magnets from beneath, built 12 bad edges at 7.9 mm and 19 at 10 with
      Download on: the pocket reached the key's recess, and with both ceilings 2 mm up the

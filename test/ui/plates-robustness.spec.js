@@ -473,6 +473,33 @@ test.describe('the clearance ceiling is the joint\'s and the pitch\'s', () => {
     });
 });
 
+/* ---- #73: a screw head only a hair wider than its shank ---------------------------- */
+/* Its counterbore's 14 flats crossed the shank's 12 corners, and the plate leaked by the
+   hundred with nothing said and Download on: on main, a 2.03 mm head over a 2 mm shank
+   left 196 edges in each of two pieces at 37.67 mm. A head that does not clear the shank's
+   corners is cut as none now, as one no wider than the hole always was (MOUNT_BORE in
+   core.js): within 3.5% of the hole it is no seat for a screw head. So the link builds
+   with Download on and nothing in Checks, and the README says there is no counterbore
+   and from what size there would be one. 2.1 mm clears a 2 mm hole and is cut. */
+test.describe('a screw head that does not clear its shank is cut as none', () => {
+  const AT = '#pi=37.67&w=150.68&d=75.34&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=91.34&bd=400' +
+    '&sc=1&sh=2&cn=none';
+  for (const [sd, says] of [
+    ['2.03', 'Screws: 2 mm holes, no counterbore (a head clears a 2 mm hole from 2.09 mm)'],
+    ['2.1', 'Screws: 2 mm holes, 2.1 mm counterbore'],
+  ])
+    test(`a ${sd} mm head over a 2 mm shank builds, and the README says what was cut`,
+      async ({ page }) => {
+        const errors = await openAt(page, `${AT}&sd=${sd}`);
+        expect(await text(page, 'pieceTail')).toMatch(/ready/);
+        expect(await shown(page, 'errScrew')).toBe(false);
+        expect(await exportOff(page)).toBe(false);
+        const readme = (await page.evaluate(() => readmeText())).split('\n');
+        expect(readme).toContain(says);
+        expect(errors).toEqual([]);
+      });
+});
+
 test('a failed build says so in the table and the dialog, and Download goes off',
   async ({ page }) => {
     const pageErrors = [];

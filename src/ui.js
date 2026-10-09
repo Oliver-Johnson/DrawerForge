@@ -1764,7 +1764,15 @@ function readmeText() {
   lines.push(`Split: ${splitName()} | Pieces: ${layout.pieces.length} in ${plural(rows, 'row band')}`);
   lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
   if (state.magnets) lines.push(`Magnets: ${state.magnetD} x ${state.magnetH} mm, from ${state.magnetSide}`);
-  if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ${state.screwHeadD} mm counterbore`);
+  /* A head that does not clear the hole's corners is cut as none (MOUNT_BORE in core.js),
+     and one no wider than the hole always was; the README says so, and for a head that
+     was meant as a counterbore, the size that would be one. */
+  const { head } = MOUNT_BORE;
+  if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ` +
+    (head.cuts(state.screwHeadD, state.screwHoleD) ? `${state.screwHeadD} mm counterbore`
+      : 'no counterbore' + (state.screwHeadD <= state.screwHoleD ? ''
+        : ` (a head clears a ${state.screwHoleD} mm hole from ` +
+          `${Math.ceil(head.over(state.screwHoleD) * 100 - 1e-9) / 100} mm)`)));
   /* The figure the dialog quotes, said the way it says it, with the price it was worked
      out at: the README is read away from the page. The ZIP is only made once every piece
      exists, so there is always a total to give. */

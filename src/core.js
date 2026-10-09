@@ -833,12 +833,28 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  *     default 6 mm head and 2.90 for the 3 mm hole. Now their corners go out the same
  *     way, and no further: the magnet's 0.1 is a press fit, and a screw head is not
  *     pressed in. It drops into its counterbore, which the field already sizes with room
- *     round it (6 mm for an M3's 5.5 mm head), and the shank is a clearance hole. */
+ *     round it (6 mm for an M3's 5.5 mm head), and the shank is a clearance hole.
+ *
+ * A counterbore is cut only over a shank it clears (head.cuts): its flats stand outside
+ * the shank's corners, the head the hole over cos(π/12), and 0.01 mm more (head.over).
+ * Narrower, the 14 flats cross the 12 corners, the two cuts' walls weave round the hole
+ * instead of one standing inside the other, and here and there a cell leaks by the
+ * hundred: 1.034 mm over 1, 2.063 over 2 (#73, where with the corners on the sizes it was
+ * 2.03 over 2). Measured on one-cell plates at eight pitches from 34.76 to 60 mm, shanks
+ * from 1 to 20 mm, every 0.001 mm from a hundredth under the corner circle to two past
+ * it and every 0.01 from the shank up to a tenth past: the last to leak by the circle
+ * was 0.003 mm past it (20.709 over 20), and from 0.004 nothing did but one head at one
+ * pitch, 3.59 over 3.4 at 60, open in the underside, the sliver class that comes and
+ * goes with a size. A head under the line is cut as none, as one no wider than the hole
+ * always was: within 3.5% of the hole it is no seat for a screw head, and all it would
+ * add is slivers between the shank's corners. */
 const MOUNT_BORE = {
   magnet: { sides: 14, r: (d) => Math.max(d/2 + 0.1, d/2 / Math.cos(Math.PI/14)),
             fits: (room) => 2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14)) },
   head: { sides: 14, r: (d) => d/2 / Math.cos(Math.PI/14),
-          fits: (room) => 2 * room * Math.cos(Math.PI / 14) },
+          fits: (room) => 2 * room * Math.cos(Math.PI / 14),
+          over: (hole) => 2 * MOUNT_BORE.hole.r(hole) + 0.01,
+          cuts: (d, hole) => d >= MOUNT_BORE.head.over(hole) },
   hole: { sides: 12, r: (d) => d/2 / Math.cos(Math.PI/12),
           fits: (room) => 2 * room * Math.cos(Math.PI / 12) },
 };
@@ -872,7 +888,7 @@ function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
       ? cylinder(0, 0, magnetR, magZ0, magZ1, magnet.sides)
       : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, magnet.sides));
   if (cfg.screws) {
-    if (cfg.screwHeadD > cfg.screwHoleD)
+    if (head.cuts(cfg.screwHeadD, cfg.screwHoleD))
       add(cylinder(0, 0, head.r(cfg.screwHeadD), -0.5, cfg.screwHeadDepth, head.sides));
     add(cylinder(0, 0, hole.r(cfg.screwHoleD), -0.5, shankTop, hole.sides));
   }
@@ -895,7 +911,7 @@ function movePolys(polys, dx, dy) {
 function screwCutter(cx, cy, holeD, headD, z0, z1, headDepth, fromTop) {
   const { head, hole } = MOUNT_BORE;
   let polys = cylinder(cx, cy, hole.r(holeD), z0 - 0.5, z1 + 0.5, hole.sides);
-  if (headD > holeD) {
+  if (head.cuts(headD, holeD)) {
     const rec = fromTop
       ? cylinder(cx, cy, head.r(headD), z1 - headDepth, z1 + 0.5, head.sides)
       : cylinder(cx, cy, head.r(headD), z0 - 0.5, z0 + headDepth, head.sides);
@@ -2361,7 +2377,7 @@ function platePad(cfg) {
   if ((cfg.magnets || cfg.screws) && cfg.baseMode !== 'bosses') {
     pad = Math.max(pad, cfg.magnetBase || 2.8);
     if (cfg.magnets) pad = Math.max(pad, under(cfg.magnetH));
-    if (cfg.screws && cfg.screwHeadD > cfg.screwHoleD)
+    if (cfg.screws && MOUNT_BORE.head.cuts(cfg.screwHeadD, cfg.screwHoleD))
       pad = Math.max(pad, under(cfg.screwHeadDepth));
   }
   const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
