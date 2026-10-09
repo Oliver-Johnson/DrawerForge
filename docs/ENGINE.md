@@ -302,23 +302,24 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   takes away, notches and all. With holes across the floor there are no dividers, so the
   whole plan is settled at once, over the holes as built, and the wall is the one built
   over them, or none; `floorPlan` works out a bin without its dividers with none given,
-  so that does not ask itself. Not quite always: with a back slot over a shelf and a
-  slot in a lowered front wall, whether the holes take the shelf's room can turn on the
-  dividers they would leave, which a plan settled without any does not have, so on a few
-  such bins it finds the shelf kept and no holes where the bin is built with them. That
-  only moves the field for plates along, on a bin built with none. Whether a bin has any
-  slot at all is settled between the dividers it counts, and a slotted bin builds no
-  lip, so no notches: `dividersBuilt` counts the plates with the lip's rule and without
-  it, and takes the count without it where a slot is still built between those plates
-  (settled with them, `fingerSlotPlan` given the count), and otherwise keeps the lip and
-  its count. Counted so, the bin is marked `lipTaken`, which only the lip's rule reads
-  (`lipNotched`): it keeps its lip as asked for all else, and above all for its holes,
-  which are laid out clear of the lip before the slots are settled over them. Asked as a
-  bin with `lip` false, its holes had room it does not give them, and a row that is not
-  built held its back wall too low for a slot. Checks and the fields go by the bin
-  counted without its lip then (`countedAs`), so neither names a lip it does not have,
-  and each field is held with the count the other asks for, as a plate along can close a
-  side slot and a plate across a front one.
+  so that does not ask itself. Not quite always: with a back slot over a shelf, whether
+  the holes take the shelf's room can turn on whether the dividers they would leave
+  allow a slot in another wall, mostly a lowered front, which a plan settled without any
+  does not know, so on a few such bins it finds the shelf kept and no holes where the
+  bin is built with them. That only moves the field for plates along, on a bin built
+  with none, and as it was before. Whether a bin has any slot at all is settled between
+  the dividers it counts, and a slotted bin builds no lip, so no notches:
+  `dividersBuilt` counts the plates with the lip's rule and without it, and takes the
+  count without it where a slot is still built between those plates (settled with them,
+  `fingerSlotPlan` given the count), and otherwise keeps the lip and its count. Counted
+  so, the bin is marked `lipTaken`, which only the lip's rule reads (`lipNotched`): it
+  keeps its lip as asked for all else, and above all for its holes, which are laid out
+  clear of the lip before the slots are settled over them. Asked as a bin with `lip`
+  false, its holes had room it does not give them, and a row that is not built held its
+  back wall too low for a slot. Checks and the fields go by the bin counted without its
+  lip then (`countedAs`), so neither names a lip it does not have, and each field is
+  held with the count the other asks for, as a plate along can close a side slot and a
+  plate across a front one.
   The lip's rule only binds on plates packed a few millimetres apart, with no room for a
   slot between them, so the walls their ends meet have no slot either way, and the slots
   in the others stay where they were, as do the rails beside them.
