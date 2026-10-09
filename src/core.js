@@ -2406,6 +2406,10 @@ const MOUNT_WALL = 1.0;
    level, and how near its walls may come to any joint's cut without breaking into it.
    See mountLimits. */
 const MOUNT_LEVEL = 0.05, MOUNT_SEAM = 0.01;
+/* How far a cut is moved, 1.7 microns along each axis, when it is taken again for coming
+   out open or with a face turned over (cutAgain, in buildPiece). A corner boss's cut from
+   beneath is moved two of them along each axis, off where the cell's stands. */
+const NUDGE = 0.0017;
 /* How far a mounting bore about (x, y) can grow before it meets any of `segs`, as the
    radius of the circle through its corners: the polygon cylinder() cuts, `sides` flats
    with a corner at every 2πk/sides from +x. A point is in that polygon when it stands no
@@ -2654,6 +2658,17 @@ function mountLimits(cfg, layout, known) {
   const own = { magnetD: fit(cfg.magnetSide === 'top' ? top : under), screwHoleD: fit(top), screwHeadD: fit(under) };
   // a dovetail's notch takes a pocket from beneath that breaks into it; every other cut does not
   const notch = cfg.connector === 'dovetail';
+  /* The cuts are measured where they stand in the cells, and a corner boss's stands two
+     NUDGEs along each axis off that (buildPiece), up to 2·NUDGE·√2 (4.8 microns) nearer a
+     pocket: one MOUNT_SEAM short of the cell's cut was 0.0051 to 0.0055 mm short of an
+     H-clip's recess in the boss, and 0.0057 to 0.0070 of a key's in the walls. So in a
+     boss a pocket stops that much further off, MOUNT_SEAM short of the boss's cut as
+     well. Counting a design's magnet, screw hole and screw head apart, at every 0.01 mm
+     of pitch from 30 to 60 with the five joints that reach the bosses, it lowers 2,676
+     of the 33,430 caps a joint sets (8%), all by a tenth but 6 of a dovetail's by a
+     hundredth, and starts a dovetail's refused sizes (`near`) a hundredth lower in 5,392
+     of its 24,008. Without corner bosses nothing moves. */
+  const seam = MOUNT_SEAM + (bosses ? 2 * NUDGE * Math.SQRT2 : 0);
   /* What the joint's cuts leave one size, as { cap, why, near }: the largest size, and what
      stops it: 'cut', a pocket that would break into a key's recess or a puzzle tab's notch;
      'floor', one from above that leaves no layer of floor over a cut; 'level', one from
@@ -2679,7 +2694,7 @@ function mountLimits(cfg, layout, known) {
       const level = Math.round(Math.abs(ceiling - c.top) * 1e6) / 1e6 < MOUNT_LEVEL;
       const stop = above ? 'floor' : !notch ? 'cut' : level ? 'level' : 'part';
       for (const s of c.sites) {
-        const short = fits(s.bore[sides] - MOUNT_SEAM);
+        const short = fits(s.bore[sides] - seam);
         const size = stop === 'part' ? 2 * s.body : short;
         if (size < cap) { cap = size; why = stop; }
         if (stop === 'part') near.push([short, fits(s.bore[sides])]);
@@ -3184,13 +3199,12 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * So the cut is taken again as the pockets' is, as other trees over the same solids:
    * the cutters in the other order, the solid's faces in the other order, the faces
    * started a third and two thirds of the way round (which puts another of its planes at
-   * the root), the cutters moved 1.7 microns, the jitter the notch cutters already
+   * the root), the cutters moved 1.7 microns (NUDGE), the jitter the notch cutters already
    * carry, two ways, and last each cutter on its own, one after another, since two in
    * one cut split each other's faces and lose a sliver the same way. The first result
    * that is closed and has nothing turned over is kept; a cut that comes out right first
    * time, which is nearly every one, is built exactly as before. A try that throws is
    * passed over. */
-  const NUDGE = 0.0017;
   // the cutters in a cut, each solid on its own (polygons that share a corner go together)
   const apart = (cut) => {
     const up = cut.map((_, i) => i), at = new Map();

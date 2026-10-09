@@ -833,7 +833,14 @@ currently installed):
   that breaks in, about 0.02 mm wide and rounded out to the hundredth either side, as the
   field takes them: at 36 mm on the page's design 5.59, 5.6, 5.73 and 5.74 mm are refused,
   and 5.58, 5.61, 5.72 and 5.75 are taken. The page says so at the field and names the
-  sizes taken either side. Past the weld's reach there is still the
+  sizes taken either side. A corner boss's cut stands two `NUDGE`s along each axis off the
+  cell's, up to 4.8 microns nearer a pocket (one 0.01 mm short of the cell's was 0.0051 to
+  0.0070 mm short of the boss's), so in a boss a pocket stops that much further off.
+  Counting a design's magnet, screw hole and screw head apart, at every 0.01 mm of pitch
+  from 30 to 60 with the five joints that reach the bosses, that lowers 2,676 of the
+  33,430 caps a joint sets (8%), all by a tenth but 6 of a dovetail's by a hundredth, and
+  starts a dovetail's refused sizes a hundredth lower in 5,392 of its 24,008; nothing
+  without corner bosses moves. Past the weld's reach there is still the
   lottery the room cannot see, about one design in a thousand, single sizes with clean
   ones on either side, and it needs the pocket and the cut together: a 14.1 mm
   counterbore 2.4 to 3 mm deep, 0.09 mm short of a dovetail's notch at 43.17 mm, loose,
