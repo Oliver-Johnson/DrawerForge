@@ -2957,6 +2957,30 @@ function puzzleShape(edge, e, s, pz, grow, inward) {
     return [s + lt, e + g * dp];
   });
 }
+/* The notch a tab fits into, cut up into the floor of the piece across the seam from it
+   (pieceConnectors' `notches` or `pnotches`), as one closed solid. buildPiece cuts it, and
+   mountLimits keeps the mounting sites out of it; one shape, so the two cannot drift. */
+function tabNotch(cfg, nb, pad) {
+  if (cfg.connector === 'puzzle')
+    return extrudePoly(puzzleShape(nb.edge, nb.e, nb.s, cfg.puzzle, cfg.puzzle.clr, true),
+                       -0.5, pad - 0.4);
+  const t = cfg.tab, H = pad + cfg.plateHeight;
+  const nWr = t.wr + 2*t.clr, nWt = t.wt + 2*t.clr, nDp = t.dp + t.clr;
+  // 4-pt taper: no vertex sits exactly on the region side plane; jitter breaks
+  // residual coincidences with ring geometry
+  const J = 0.0017, BK = 1.0, e = nb.e, s = nb.s + J;
+  let pts;
+  if (nb.edge === '+x' || nb.edge === '-x') {
+    const g = nb.edge === '-x' ? 1 : -1;   // cut extends INTO the piece
+    pts = [[e - g*BK, s - nWr/2], [e + g*nDp, s - nWt/2],
+           [e + g*nDp, s + nWt/2], [e - g*BK, s + nWr/2]];
+  } else {
+    const g = nb.edge === '-y' ? 1 : -1;
+    pts = [[s - nWr/2, e - g*BK], [s - nWt/2, e + g*nDp],
+           [s + nWt/2, e + g*nDp], [s + nWr/2, e - g*BK]];
+  }
+  return extrudePoly(pts, -0.503, Math.min(t.h + 0.2, H - 0.8));
+}
 // generic underside key halves (recess cut into one piece's edge region)
 function keyHalf(type, edge, e, s, prm, grow) {
   // returns polygon extending prm depth into the piece, 0.5 past the seam
@@ -3918,11 +3942,15 @@ const MOUNT_WALL = 1.0;
  *   - in a corner boss: it must stay in the boss, which is shorter than the solid floor
  *     and does not grow with the pocket, so it also caps the depth.
  *
+ * And whichever way it opens, it must stay out of a joint's cut in the floor beside it:
+ * a key's recess, or the notch a tab fits into. That one needs `layout`, which says
+ * where the seams are; without it no joint is counted.
+ *
  * These are measurements, not field ranges, and can come out below the field's minimum
  * or negative — a screw shank at a 34 mm pitch has −0.1 mm. That means no cut of any size
  * fits there; the page turns it into a check on the design rather than a range for the
  * field (src/ui.js readNumber), since no number typed into the field could fix it. */
-function mountLimits(cfg) {
+function mountLimits(cfg, layout) {
   const half = cfg.pitch / 2, off = cfg.holeOffset;
   const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
   // distance from a point at (s, s) to the edge of a rounded square of half-size h,
@@ -3948,18 +3976,129 @@ function mountLimits(cfg) {
      stop at 12.5 mm and the wall between two pockets is at least MOUNT_WALL, 1 mm. */
   const beside = off - MOUNT_WALL / 2;
   const fit = (r) => Math.min(r, beside);
-  const room = fit(cfg.magnetSide === 'top' ? top : under);
+  /* A joint cut up into the solid floor beside the sites: the recess a key or an H-clip
+     is put into from beneath (keyPlan's 'recess', in the floor or in the wall), or the
+     notch a dovetail or puzzle tab fits into (tabNotch). Each starts under the plate, as
+     a magnet pocket from beneath, a counterbore and a shank do, so any of those that
+     reaches one in plan has broken into it. A magnet from above meets it unless the
+     pocket's floor stands at least MOUNT_SKIN over the cut's ceiling. The housings a key
+     is dropped into from above (keySiteOps' 'cup' and 'snaptop') start 1.3 mm or more
+     over the socket floor: a pocket from above stops under them, and a shank, which
+     stays on the socket floor, is in the socket's open air up there.
+
+     Measured off the solids buildPiece cuts, at the sites it cuts pockets at: whole cells
+     only, so a housing beside a half cell or a margin is measured from the whole cell on
+     the other side of it, which is the only one with pockets. A corner boss is left out:
+     its pocket is cut in the boss, a shell of its own that no joint is cut from.
+
+     Issue #64: a bowtie in the floor at 42 mm, with magnets from beneath, built 12 bad
+     edges at 7.9 mm and 19 at 10, with Download on; puzzle tabs at 36 to 40 mm built 26
+     to 86 with the spec's 6.5 × 2.4 magnet. The pocket had run into the cut with its
+     ceiling level with the cut's: a 2 mm magnet or the default counterbore with a key's
+     2 mm recess, a 2.4 mm magnet with a tab's notch. The two ceilings then share a face
+     that two subtractions split their own ways. Of 768 pockets 0.1 to 1.25 mm into a
+     key's recess, the 96 level with it went bad 74 times and the 672 at seven other
+     depths never, as near as 0.01 mm either side. So it is the pocket breaking in that
+     is refused here, not the depth that shows it: the magnet and the key, or the shank
+     and the other piece's tab, would want the same place.
+
+     No wall is left between them, where MOUNT_WALL leaves 1 mm everywhere else, and that
+     was measured too: of 10,882 designs across seven keyed joints, 71 pitches and five
+     cuts, none of the 7,823 that stopped short of the cut built a bad edge, and the first
+     went bad 0.035 mm into it. A wall of 1 mm would refuse the 6 mm magnet from beneath
+     with a bowtie at 42 mm, which has 0.84 mm to spare and always built clean. */
+  const jointCuts = [];   // { room, top }: the nearest a site comes to one cut, its ceiling
+  /* Room past the most the cell or the floor leaves cannot stop a size, so nothing
+     further off than that is measured, and nothing at all where neither leaves any. A
+     plate the page will build has at most 900 cells; at 30 × 30 with puzzle tabs this
+     is a few milliseconds, on every redraw. */
+  const reach = Math.max(fit(top), fit(under));
+  if (layout && !bosses && cfg.connector !== 'none' && reach > 0) {
+    const plan = keyPlan(cfg), pad = platePad(cfg), H = pad + cfg.plateHeight;
+    /* A cut's footprint, as the segments its walls stand on, its extent and its ceiling,
+       for each seam it can be cut from. Every cut from one seam is the same solid moved
+       along it (keyHalf, puzzleShape, tabNotch), so it is worked out at the origin once
+       and each site is moved the other way instead. */
+    const shapes = {};
+    const shapeOf = (edge) => {
+      if (shapes[edge]) return shapes[edge];
+      const at = { edge, e: 0, s: 0 };
+      const solid = plan.kind === 'recess'
+        ? keySiteOps(plan.kind, plan.shape, plan.prm, plan.clr, edge, 0, 0, H).cut
+        : tabNotch(cfg, at, pad);
+      const segs = [], bb = [Infinity, Infinity, -Infinity, -Infinity];
+      let ceiling = -Infinity;
+      for (const p of solid) {
+        for (const v of p.verts) {
+          ceiling = Math.max(ceiling, v[2]);
+          bb[0] = Math.min(bb[0], v[0]); bb[1] = Math.min(bb[1], v[1]);
+          bb[2] = Math.max(bb[2], v[0]); bb[3] = Math.max(bb[3], v[1]);
+        }
+        if (Math.abs(p.plane.n[2]) > 1e-9) continue;
+        const a = p.verts[0], b = p.verts.find((v) => Math.hypot(v[0] - a[0], v[1] - a[1]) > 1e-9);
+        if (b) segs.push([a, b]);
+      }
+      return (shapes[edge] = { segs, bb, ceiling });
+    };
+    // how far a point is from the footprint, less than none inside it
+    const from = (segs, x, y) => {
+      let d = Infinity, inside = false;
+      for (const [a, b] of segs) {
+        const dx = b[0] - a[0], dy = b[1] - a[1];
+        const t = Math.max(0, Math.min(1, ((x - a[0])*dx + (y - a[1])*dy) / (dx*dx + dy*dy)));
+        d = Math.min(d, Math.hypot(a[0] + t*dx - x, a[1] + t*dy - y));
+        if ((a[1] > y) !== (b[1] > y) && x < a[0] + (y - a[1]) * dx / dy) inside = !inside;
+      }
+      return inside ? -d : d;
+    };
+    for (const piece of layout.pieces) {
+      const conn = pieceConnectors(cfg, layout, piece);
+      // the cuts buildPiece makes in this piece: notches for tabs, recesses for keys
+      const cuts = [...conn.notches, ...conn.pnotches, ...(plan.kind !== 'recess' ? []
+        : conn.keyed.filter((bo) => !(plan.junction && offJunction(bo, cfg.pitch, piece))))];
+      for (const bo of cuts) {
+        const { segs, bb, ceiling } = shapeOf(bo.edge);
+        const across = bo.edge === '+x' || bo.edge === '-x';
+        const ox = across ? bo.e : bo.s, oy = across ? bo.s : bo.e;
+        // the whole cells with a site in reach of it (a half cell has none; see buildPiece)
+        const cells = (lo, hi, m, n) => [Math.max(0, Math.floor((lo - reach - off - half - m) / cfg.pitch)),
+                                          Math.min(n - 1, Math.ceil((hi + reach + off - half - m) / cfg.pitch))];
+        const [i0, i1] = cells(bb[0] + ox, bb[2] + ox, piece.mL, piece.nx);
+        const [j0, j1] = cells(bb[1] + oy, bb[3] + oy, piece.mF, piece.ny);
+        let room = Infinity;
+        for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++)
+          for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+            const x = piece.mL + i*cfg.pitch + half + sx*off - ox;
+            const y = piece.mF + j*cfg.pitch + half + sy*off - oy;
+            if (x < bb[0] - reach || x > bb[2] + reach || y < bb[1] - reach || y > bb[3] + reach) continue;
+            room = Math.min(room, from(segs, x, y));
+          }
+        jointCuts.push({ room, top: ceiling });
+      }
+    }
+  }
+  // the nearest the cuts come that a pocket with its floor at z meets
+  const jointRoom = (z) => jointCuts.reduce((m, c) =>
+    c.top + MOUNT_SKIN > z + 1e-6 ? Math.min(m, c.room) : m, Infinity);
+  const below = jointRoom(-Infinity);   // a magnet from beneath, a counterbore, a shank
+  const magnetJoint = cfg.magnetSide === 'top' && jointCuts.length
+    ? jointRoom(platePad(cfg) - cfg.magnetH) : below;
+  const own = fit(cfg.magnetSide === 'top' ? top : under);
+  const room = Math.min(own, magnetJoint);
   return {
     // a magnet pocket's corners are 0.1 mm over the magnet's radius, or out to where its
     // flats stand on that radius if that is further (fastenerCutter)
     magnetD: r10(2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14))),
     // a screw's bores have their corners on its size
-    screwHoleD: r10(2 * fit(top)),
-    screwHeadD: r10(2 * fit(under)),
+    screwHoleD: r10(2 * Math.min(fit(top), below)),
+    screwHeadD: r10(2 * Math.min(fit(under), below)),
     // in the solid floor the pad grows to suit, so only a boss caps the depth
     depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
     // which of the sizes the cut beside it stops, rather than the floor, cell or boss
-    beside: { magnetD: room === beside, screwHoleD: top >= beside, screwHeadD: under >= beside },
+    beside: { magnetD: room === beside, screwHoleD: top >= beside && below >= beside,
+              screwHeadD: under >= beside && below >= beside },
+    // and which a joint's cut stops, before any of those
+    joint: { magnetD: magnetJoint < own, screwHoleD: below < fit(top), screwHeadD: below < fit(under) },
   };
 }
 
@@ -4177,7 +4316,38 @@ function buildPiece(cfg, layout, piece, onStatus) {
     }
     return out;
   };
-  const fastenerFoot = wallsAt(0), fastenerTop = pad > 0.01 ? wallsAt(pad) : [];
+  /* The same, its corners only. Where the walls of two bores were unioned (a counterbore,
+     its screw's shank), the BSP split each wall along the other's planes, and wallsAt
+     hands back those split points as well: two on every flat of the shank, 24 points on
+     the socket floor that are no corner of anything. A 2.4 mm shank under a 4.8 mm head
+     at 44.08 mm, with loose tolerance, had a spoke within FAN_CLEAR of one of them from
+     every point fanCentre tries, so the socket floor's fan never moved and the cell
+     shipped with six open edges. A corner is where two walls that are not in line meet;
+     a split point is where one wall was cut in two. From the corners alone the fan moves
+     0.2 mm and the floor closes. Only the socket floor's list, which only an open cell's
+     refan reads (buildPiece), so every cell that came out closed is built as before. */
+  const cornersAt = (z) => {
+    const ends = new Map();   // a wall end, to the directions of the walls that end there
+    for (const p of cellFastener || []) {
+      const zs = p.verts.map((v) => v[2]);
+      if (!(Math.min(...zs) < z && Math.max(...zs) > z) || Math.abs(p.plane.n[2]) > 1e-9) continue;
+      const d = [-p.plane.n[1], p.plane.n[0]];   // along the wall
+      let lo = null, hi = null;
+      for (const v of p.verts) {
+        const t = v[0]*d[0] + v[1]*d[1];
+        if (!lo || t < lo[0]) lo = [t, v];
+        if (!hi || t > hi[0]) hi = [t, v];
+      }
+      for (const [, v] of [lo, hi]) {
+        const k = `${v[0].toFixed(6)} ${v[1].toFixed(6)}`;
+        if (!ends.has(k)) ends.set(k, { at: [v[0], v[1]], dirs: [] });
+        ends.get(k).dirs.push(d);
+      }
+    }
+    return [...ends.values()].filter(({ dirs }) =>
+      dirs.some((a) => dirs.some((b) => Math.abs(a[0]*b[1] - a[1]*b[0]) > 1e-6))).map((e) => e.at);
+  };
+  const fastenerFoot = wallsAt(0), fastenerTop = pad > 0.01 ? cornersAt(pad) : [];
 
   // ---- connectors ----
   const conn = pieceConnectors(cfg, layout, piece);
@@ -4571,7 +4741,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * And once every cell is built, the shells settle cut again are checked as a whole, with
    * those beside them: if they have more bad edges (checkManifold) than they had before,
    * or more open or turned over (healCsgSeams), every one goes back to its first cut. So
-   * settle never leaves a piece worse than it found it, whatever order the cells come in.
+   * settle never leaves those shells worse than it found them, whatever order the cells
+   * come in. What is made after the check is not judged by it: the dovetail and puzzle
+   * tabs, and what the top-insert pass cuts again (see the check below).
    * `alt` and `pocket` are the cuts a cell was last taken with, so a cell cut again for
    * one reason keeps what it was cut again for the other. */
   const POCKET_TRIES = 7;
@@ -4744,22 +4916,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
              (nb.edge === '+x' ? Math.abs(x1 - W) : Math.abs(x0)) < nDp + 0.2)
           : (nb.s > x0 - nWt && nb.s < x1 + nWt &&
              (nb.edge === '+y' ? Math.abs(y1 - D) : Math.abs(y0)) < nDp + 0.2);
-        if (near) {
-          // 4-pt taper: no vertex sits exactly on the region side plane; jitter breaks
-          // residual coincidences with ring geometry
-          const J = 0.0017, BK = 1.0, e = nb.e, s = nb.s + J;
-          let pts;
-          if (nb.edge === '+x' || nb.edge === '-x') {
-            const g = nb.edge === '-x' ? 1 : -1;   // cut extends INTO the piece
-            pts = [[e - g*BK, s - nWr/2], [e + g*nDp, s - nWt/2],
-                   [e + g*nDp, s + nWt/2], [e - g*BK, s + nWr/2]];
-          } else {
-            const g = nb.edge === '-y' ? 1 : -1;
-            pts = [[s - nWr/2, e - g*BK], [s - nWt/2, e + g*nDp],
-                   [s + nWt/2, e + g*nDp], [s + nWr/2, e - g*BK]];
-          }
-          cuts.notch.push(...extrudePoly(pts, -0.503, Math.min(t.h + 0.2, H - 0.8)));
-        }
+        if (near) cuts.notch.push(...tabNotch(cfg, nb, pad));
       }
       for (const bo of keyed) {
         if (plan.junction && offJunction(bo, pitch, piece))
@@ -4789,9 +4946,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
              (pn.edge === '+x' ? Math.abs(x1 - W) : Math.abs(x0)) < reach)
           : (pn.s > x0 - cfg.puzzle.lobeR*2 && pn.s < x1 + cfg.puzzle.lobeR*2 &&
              (pn.edge === '+y' ? Math.abs(y1 - D) : Math.abs(y0)) < reach);
-        if (near) cuts.puzzle.push(
-          ...extrudePoly(puzzleShape(pn.edge, pn.e, pn.s, cfg.puzzle, cfg.puzzle.clr, true),
-                         -0.5, pad - 0.4));
+        if (near) cuts.puzzle.push(...tabNotch(cfg, pn, pad));
       }
       /* None in a half cell. A half-size bin's quarter feet carry no holes (feetHolesOff
          in bins/bin.js), and where a half socket's would go is not settled: a whole
@@ -4915,8 +5070,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
          Only here, not on every cell: a 6 mm magnet from above at 42 mm has a spoke 2.3
          microns from a corner in every cell and comes out closed, as most do. And only
          where the fan moves and the cell is open at the floor's height: a cell open
-         somewhere else, as a pocket that meets a joint's housing is, or one whose spokes
-         are already clear, would be cut again for the same result. A bowtie plate at
+         somewhere else, as a pocket that meets a joint's housing is, would be cut again
+         for the same result, and so would one whose fan stays where it was, either because
+         its spokes are already clear or because fanCentre finds no point clear of every
+         corner and keeps the centre. A bowtie plate at
          45.57 mm with screws, open in every piece on main as well, took twice as long
          with every open cell cut again. */
       if (region.open && floorAvoid.length && openAt(region, pad)) {
