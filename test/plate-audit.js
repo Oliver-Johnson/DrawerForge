@@ -1037,6 +1037,14 @@ console.log('\nloose parts and samples, watertight and oriented:');
     drawerW: G.DEFAULTS.pitch, drawerD: G.DEFAULTS.pitch,
     marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0 });
   report('test tile', G.buildTestTile(tileCfg).polys);
+  /* The tile with magnets and screws, the page's own sizes. Once a screw's bores stood
+     their flats on the sizes, the 6 mm counterbore's walls stood 0.022 mm inside the 6 mm
+     magnet pocket's from beneath, and the tile left 6 edges open in its underside; a
+     counterbore the magnet pocket holds whole is not cut now (fastenerCutter). A magnet
+     from above is cut from the other face, and that tile is built too. */
+  for (const side of ['bottom', 'top'])
+    report(`tile, magnets ${side === 'top' ? 'above' : 'below'}, screws`,
+      G.buildTestTile({ ...tileCfg, magnets: true, magnetSide: side, screws: true }).polys);
 
   for (const conn of CONNECTORS)
     for (const keyInsert of ['bottom', 'top']) {
@@ -2518,9 +2526,11 @@ console.log('\nplates without half cells build the same bytes:');
     // fanCentre moved four of its nine cells' bottom caps off a spoke a few thousandths from
     // a cutter's corner: the same bottom face fanned from another point, its area and the
     // volume unchanged. Then the screw's bores went out until their flats stood on the
-    // sizes asked, the counterbore and the shank wider by design
+    // sizes asked, the counterbore and the shank wider by design; then the counterbore the
+    // magnet pocket from beneath holds whole was left out of the cut, the same pocket with
+    // its faces no longer split by the head's walls (54138.661 mm³ to 54138.679)
     ['126 x 126, magnets and screws', { drawerW: 126, drawerD: 126, marginMode: 'custom',
-      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, '7eaec017027d5a46'],
+      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, 'e964beefa8b378bf'],
     ['140 x 140, corner pockets', { drawerW: 140, drawerD: 140, marginMode: 'auto',
       magnets: true, baseMode: 'bosses' }, '7088f24def428095'],
     ['168 x 180, skeleton', { drawerW: 168, drawerD: 180, marginMode: 'auto',

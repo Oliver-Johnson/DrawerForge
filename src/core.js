@@ -888,7 +888,14 @@ function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
       ? cylinder(0, 0, magnetR, magZ0, magZ1, magnet.sides)
       : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, magnet.sides));
   if (cfg.screws) {
-    if (head.cuts(cfg.screwHeadD, cfg.screwHoleD))
+    /* A counterbore the magnet pocket from beneath holds whole is that pocket already: both
+       14 sides, corners on the same rays, no deeper. Since the bores stand their flats on
+       the sizes, the default 6 mm head's walls stand 0.022 mm inside the 6 mm magnet's,
+       and unioned, the test tile at 42 mm with magnets and screws left 6 edges open in
+       its underside. Left out, the pocket is the same solid, and closed. */
+    const inMagnet = cfg.magnets && cfg.magnetSide !== 'top' &&
+      head.r(cfg.screwHeadD) <= magnetR && cfg.screwHeadDepth <= cfg.magnetH;
+    if (head.cuts(cfg.screwHeadD, cfg.screwHoleD) && !inMagnet)
       add(cylinder(0, 0, head.r(cfg.screwHeadD), -0.5, cfg.screwHeadDepth, head.sides));
     add(cylinder(0, 0, hole.r(cfg.screwHoleD), -0.5, shankTop, hole.sides));
   }
