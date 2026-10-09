@@ -771,8 +771,9 @@ currently installed):
   counterbore, and `mountLimits` refuses a wider one, which the field says
   (`throughMagnet`): the pocket's flats cross the shank's corners, the walls weave, and
   no turn kept them closed (5 mm under a 5.1 mm magnet and a 5.4 head at 42 mm left 47
-  edges turned for the magnet's corners). Turned, no corner of either comes within
-  0.0039 mm of a flat, and a shank no corner came near is cut as before. The page reads
+  edges turned for the magnet's corners). On every shank taken, turned, no corner of
+  either comes within 0.003 mm of a flat, and none within 0.0039 but under a magnet on a
+  shank under 1.2 mm; a shank no corner came near is cut as before. The page reads
   the shank again after the head and the magnet, since its turn and that cap go by both.
   `MOUNT_BORE.screw` says whether a design's counterbore is cut and how far its shank is
   turned, for the cutter and for `mountLimits`, which measures that shank turned.

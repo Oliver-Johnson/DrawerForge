@@ -937,24 +937,30 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * floor whatever the head, and 4.9911 under 7.246 with a 6 mm one left 44 at 49.02 mm. A
  * shank the magnet pocket does not clear as it would a counterbore is refused
  * (mountLimits): the two walls weave, and no turn kept them closed. On every shank taken,
- * no corner of either then comes within 0.0039 mm of a flat, whichever called the turn
- * (magnets of 3 to 13 mm, shanks of 1 to 6.5, heads up to 2.4 times the shank, every
- * 0.001 mm round the sizes that put a corner on a flat). Half a facet, π/12, clears the
- * corners as well, but it squares two flats to the cell's edges, and at 37.67 mm those
- * folded the socket floor beside the pocket. Measured on 3,846 one-cell plates with a
- * magnet from above, 37.67 to 55 mm, shanks 1 to 5 mm and heads up to 1.15 times them,
- * every 0.001 mm round these sizes: 546 open before, and 1 now, a size the turn leaves
- * alone; none came out worse. On 1,800 random designs a counterbore's corner turns, every
- * kind of mount: 85 open before, 10 now. It closed 80 and opened 5: 3 at 42 mm with a
- * magnet from beneath under a deeper counterbore, where one size in nine leaks unturned
- * too, by the same slivers at the magnet pocket's corners in the underside; 1 in a corner
- * boss, at that one size alone; and 1 at 42 mm under a magnet from above, open for a few
- * thousandths round 2.114 under 2.253. The magnet's corners change the turn of none of
- * the 1,800. On 1,500 random page designs that only a magnet's corner turns (34 to 56
- * mm; one cell, 2 x 2, and two pieces joined by dovetails or jigsaws; magnets of 3 to
- * 12.7 mm either way up; a fifth on corner bosses): 41 open or folded before, 6 now. It
- * closed 40 and opened 5, each for a size or two (2 patches 0.002 mm wide, 2 single
- * sizes, and 1 whose neighbours fold unturned too); the sixth folds the same unturned. */
+ * whichever called the turn, no corner of either then comes within 0.003 mm of a flat,
+ * and none within 0.0039 but under a magnet on a shank under 1.2 mm (magnets of 3 to 13
+ * mm, shanks of 1 to 6.5, heads up to 2.4 times the shank, every 0.001 mm round the sizes
+ * that put a corner on a flat, and 6.7 million sizes drawn at random round them). The
+ * nearest, 0.0032 mm at 1.0197 under 1.0748 with a 3.72 mm magnet, and nine more under
+ * 0.0038 build closed at 42 and 49.02 mm, the magnet either way up. Half a facet, π/12,
+ * clears the corners as well, but it squares two flats to the cell's edges, and at 37.67
+ * mm those folded the socket floor beside the pocket. Measured on 3,846 one-cell plates
+ * with a magnet from above, 37.67 to 55 mm, shanks 1 to 5 mm and heads up to 1.15 times
+ * them, every 0.001 mm round these sizes: 546 open before, and 1 now, a size the turn
+ * leaves alone; none came out worse. On 1,800 random designs a counterbore's corner
+ * turns, every kind of mount: 75 open or folded before, 15 now. It closed 72 and opened
+ * 12: 11 with a 6 x 2 magnet from beneath under a 3 mm counterbore, all at 42 mm but one,
+ * where about one size in ten leaks unturned too, by the same slivers at the magnet
+ * pocket's corners in the underside; and 1 at 55 mm under an 8 x 3 magnet from above,
+ * 1.723 under 1.89, among sizes that leak turned or not (of 26 turned round it, 6 leak
+ * turned and 4 unturned). The magnet's corners change the turn of none of the 1,800. On
+ * 1,500 random page designs that only a magnet's corner turns (34 to 56 mm; one cell,
+ * 2 x 2, and two pieces joined by dovetails or jigsaws; magnets of 3 to 12.7 mm either
+ * way up; 115 on corner bosses): 47 open or folded before, 5 now. It closed 43 and opened
+ * 1, two pieces with a jigsaw at 44.46 mm and a 4 mm magnet from above: 3 open edges a
+ * piece 2.8 mm up and 2.2 mm off the site, for every shank from 2.487 under a 2.895 head,
+ * which builds closed unturned (the counterbore's corners turn it, and open it, from
+ * 2.508); the other 4 fold the same unturned. */
 const MOUNT_BORE = {
   magnet: { sides: 14, r: (d) => Math.max(d/2 + 0.1, d/2 / Math.cos(Math.PI/14)),
             fits: (room) => 2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14)) },
