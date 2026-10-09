@@ -413,13 +413,21 @@ function readControls() {
   $('screwRow').style.display = state.screws ? '' : 'none';
   /* A head wider than the hole that does not clear its corners is cut as none (#73); the
      README said so, and nothing at the field did. Not while either size is refused: the
-     red line under the fields says what to do first. */
+     red line under the fields says what to do first. And the size one is cut from only
+     where the field takes it, past any sizes it refuses: a bowtie in the floor at 42 mm
+     holds the head to 7.6 mm, and over a 7.5 mm hole one is cut only from 7.78. */
   const noBore = state.screws && headCutAsNone() &&
     !['screwHoleD', 'screwHeadD'].some((id) => fieldErrors.has(id) || noRoom.has(id));
   $('screwHeadHint').hidden = !noBore;
-  if (noBore) $('screwHeadHint').textContent = `A ${state.screwHeadD} mm head does not clear ` +
-    `the corners of a ${state.screwHoleD} mm hole, so no counterbore is cut. One is from ` +
-    `${headClearsFrom(state.screwHoleD)} mm.`;
+  if (noBore) {
+    const from = headClearsFrom(state.screwHoleD), m = mount();
+    let at = from;
+    for (const [a, b] of m.gaps.screwHeadD) if (at >= a - 1e-9 && at <= b + 1e-9) at = Math.round(b * 100 + 1) / 100;
+    $('screwHeadHint').textContent = `A ${state.screwHeadD} mm head does not clear ` +
+      `the corners of a ${state.screwHoleD} mm hole, so no counterbore is cut. ` +
+      (at <= m.screwHeadD + 1e-9 ? `One is from ${at} mm.`
+        : `None fits here: one is from ${from} mm, and the head stops at ${m.screwHeadD} mm.`);
+  }
   $('connHintDove').style.display = state.connector === 'dovetail' ? '' : 'none';
   $('connHintPuzzle').style.display = state.connector === 'puzzle' ? '' : 'none';
   // Bowtie and puzzle key shared one hint, so picking between them meant reading the

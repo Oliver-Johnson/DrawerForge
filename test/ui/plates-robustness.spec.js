@@ -615,6 +615,19 @@ test.describe('a screw head that does not clear its shank is cut as none', () =>
         if (hint) expect(await text(page, 'screwHeadHint')).toBe(hint);
         expect(errors).toEqual([]);
       });
+  /* The line names a size the field takes, or says none fits: a bowtie in the floor at
+     42 mm holds the head to 7.6 mm, and over a 7.5 mm hole a counterbore is cut only
+     from 7.78. It is read with the field. */
+  test('where no counterbore fits, the line says so rather than naming one the field refuses',
+    async ({ page }) => {
+      const errors = await openAt(page, '#cn=bowtie&sc=1&sh=7.5&sd=7.55');
+      expect(await shown(page, 'errScrew')).toBe(false);
+      expect(await text(page, 'screwHeadHint')).toBe('A 7.55 mm head does not clear the corners of ' +
+        'a 7.5 mm hole, so no counterbore is cut. None fits here: one is from 7.78 mm, and the ' +
+        'head stops at 7.6 mm.');
+      expect(await page.getAttribute('#screwHeadD', 'aria-describedby')).toContain('screwHeadHint');
+      expect(errors).toEqual([]);
+    });
 });
 
 /* The checks name the piece as well (#76). The table, the preview and Download's tooltip
