@@ -135,23 +135,24 @@ const LIMITS = {
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
   // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
   connClr: { min: RANGES.connClr.min, max: () => connClrCeiling(state).max, label: 'Fit clearance',
-    when: () => state.connector !== 'none', why: () => clrWhy(connClrCeiling(state).by) },
+    when: () => state.connector !== 'none', why: () => clrWhy(connClrCeiling(state)) },
 };
 /* What sets the clearance's ceiling, in words: core.js connClrCeiling decides it and says
    which reason applies. A ceiling that moves with the pitch names the pitch, as the mount
-   sizes do, because that is the number to change; 'slip' is the plain 1 mm and keeps the
-   millimetres advice. The puzzle and the puzzle key said they opened holes in the plate,
-   as they did until a joint's cut was taken again when it came out open (cutAgain in
-   core.js); past each ceiling now two cells' shells share an edge at some pitches, which
-   is not watertight either but is no hole. The dovetail said its pocket broke through
-   into the socket beside it, which it does from 0.25, under its ceiling. */
+   sizes do, because that is the number to change, and the pitch its band runs up to,
+   which for the puzzle is its own; 'slip' is the plain 1 mm and keeps the millimetres
+   advice. The puzzle and the puzzle key said they opened holes in the plate, as they did
+   until a joint's cut was taken again when it came out open (cutAgain in core.js); past
+   each ceiling now two cells' shells share an edge at some pitches, which is not
+   watertight either but is no hole. The dovetail said its pocket broke through into the
+   socket beside it, which it does from 0.25, under its ceiling. */
 const CLR_JOINT = { puzzle: 'puzzle tab', puzzlekey: 'puzzle key' };
-const clrWhy = (by) => ({
+const clrWhy = ({ by, below }) => ({
   dovetail: '— any looser and a dovetail pocket leaves the plate not watertight at some ' +
     'pitches',
   snaptop: '— any looser and the housing of a snap clip dropped in from above runs up to ' +
     'the seam and on into the next piece',
-  pitch: `${atPitch()} — on cells under ${RANGES.connClr.smallPitch} mm a ` +
+  pitch: `${atPitch()} — on cells under ${below} mm a ` +
     `looser ${CLR_JOINT[state.connector]} leaves the plate not watertight`,
   joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess leaves the plate not ` +
     'watertight at some pitches',

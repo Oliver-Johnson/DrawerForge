@@ -2242,18 +2242,26 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
      dovetail's step is open still, and is built with the other ends, above. Three more
      have a leak within two steps, two cells' shells sharing an edge in the band they
      overlap in, and the first is their row: it has to leak still, or that ceiling can go
-     up. The bowtie in the floor below 20 mm leaked nowhere up to 1.05 and takes the plain
-     1 mm; `spare` marks its step to spare, which has to build closed, or cutAgain has lost
-     ground. Each has to be refused by the field. */
+     up. The puzzle's leak runs on past 20 mm as a line, and its band with it to 20.7.
+     The line's first leak past 20 is a row, with the step under it, which has to build
+     closed so the row stays on the line; so is the field's own 1 mm on the line, which
+     the band has to reach past. The bowtie in the floor below 20 mm leaked nowhere up to
+     1.05 and takes the plain 1 mm; its step to spare has to build closed, or cutAgain
+     has lost ground. A row that has to build closed says why. Each has to be refused by
+     the field. */
   const PAST = [
     ['snap from above, 0.35 at 42', { connector: 'snap', keyInsert: 'top', pitch: 42, clr: 0.35 }, '2x2 pieces'],
     ['puzzle, 0.3 at 13.5', { connector: 'puzzle', pitch: 13.5, clr: 0.3 }, '1-cell pieces'],
     ['puzzle, 0.38 at 18.54', { connector: 'puzzle', pitch: 18.54, clr: 0.38 }, '1-cell pieces'],
+    ['puzzle, 0.85 at 20.05', { connector: 'puzzle', pitch: 20.05, clr: 0.85 }, '1-cell pieces'],
+    ['puzzle, 0.8 at 20.05', { connector: 'puzzle', pitch: 20.05, clr: 0.8 }, '1-cell pieces',
+      'the step under the line'],
+    ['puzzle, 1 at 20.53', { connector: 'puzzle', pitch: 20.53, clr: 1 }, '1-cell pieces'],
     ['puzzle key, 0.37 at 18.07', { connector: 'puzzlekey', pitch: 18.07, clr: 0.37 }, '1-cell pieces'],
     ['puzzle key, 0.85 at 29.74', { connector: 'puzzlekey', pitch: 29.74, clr: 0.85 }, '1-cell pieces'],
-    ['bowtie, 1.05 at 18', { connector: 'bowtie', pitch: 18, clr: 1.05 }, '2x2 pieces', 'spare'],
+    ['bowtie, 1.05 at 18', { connector: 'bowtie', pitch: 18, clr: 1.05 }, '2x2 pieces', 'a step to spare'],
   ];
-  for (const [what, o, ln, spare] of PAST) {
+  for (const [what, o, ln, closed] of PAST) {
     const r = buildAll({ ...PIECE_LAYOUTS[ln](o.pitch), ...o });
     /* A snap from above earns its ceiling in the seam face, before anything crosses the
        seam: one step past, its slot's wall is nearer the face than a BLOAT. */
@@ -2270,10 +2278,9 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
       : inFace ? `its slot ${(Math.round(face.near * 1e4) / 1e4 + 0).toFixed(3)} mm off the seam face`
       : leakText(r)}` +
                 (!refused ? `   THE FIELD TAKES IT: the ceiling went up to ${most}`
-                  : spare ? (still ? '   OPEN AGAIN — cutAgain no longer closes it'
-                                   : ' — closed, a step to spare')
+                  : closed ? (still ? `   OPEN — no longer ${closed}` : ` — closed, ${closed}`)
                   : still ? ' — the ceiling is earned' : '   NOW CLEAN — that ceiling can go up'));
-    if (!refused || (spare ? still : !still)) bad++;
+    if (!refused || (closed ? still : !still)) bad++;
   }
 
   /* activeJoint in src/ui.js, with the field at the ceiling — a fixture, as in the coupon

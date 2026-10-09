@@ -424,23 +424,25 @@ test.describe('limits no tighter than the geometry', () => {
    clip dropped in from above is housed in a slot whose seam-side wall stands 0.3 mm less
    the clearance from the seam, so at 0.35 on the field the wall lies in the seam face and
    past it in the next piece — the field stops at 0.3, a BLOAT short of the face;
-   and under 20 mm the puzzle and the puzzle key leave plates that are not watertight at
-   clearances that build closed at 42. Each case is refused at the field, clamped to the
-   ceiling in the state a link loads into, and says which joint and which pitch — the
-   pitch is the number to change. A joint that builds closed at a small pitch is not held
-   to the others' reason: the bowtie in the floor was, until a sweep built it closed from
-   13.5 to 20 mm at every clearance to 1. */
+   and under 20 mm (20.7 for the puzzle) the puzzle and the puzzle key leave plates that
+   are not watertight at clearances that build closed at 42. Each case is refused at the
+   field, clamped to the ceiling in the state a link loads into, and says which joint and
+   which pitch — the pitch is the number to change. A joint that builds closed at a small
+   pitch is not held to the others' reason: the bowtie in the floor was, until a sweep
+   built it closed from 13.5 to 20 mm at every clearance to 1. */
 test.describe('the clearance ceiling is the joint\'s and the pitch\'s', () => {
   const SEAM = '#w=168&d=84&sp=manual&rc=&cc=2';
   for (const [hash, ceiling, msg] of [
     [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.35`, 0.3,
      /Fit clearance must be 0\.3 mm or less — any looser and the housing of a snap clip dropped in from above runs up to the seam and on into the next piece\./],
     ['#pi=18&cn=puzzle&cl=1', 0.3,
-     /Fit clearance must be 0\.3 mm or less at an 18 mm pitch — on cells under 20 mm a looser puzzle tab leaves the plate not watertight\./],
+     /Fit clearance must be 0\.3 mm or less at an 18 mm pitch — on cells under 20\.7 mm a looser puzzle tab leaves the plate not watertight\./],
     ['#pi=14&cn=puzzlekey&cl=0.5', 0.3,
      /Fit clearance must be 0\.3 mm or less at a 14 mm pitch — on cells under 20 mm a looser puzzle key leaves the plate not watertight\./],
     ['#pi=13.5&cn=puzzle&cl=0.3', 0.25,
-     /Fit clearance must be 0\.25 mm or less at a 13\.5 mm pitch — on cells under 20 mm a looser puzzle tab leaves the plate not watertight\./],
+     /Fit clearance must be 0\.25 mm or less at a 13\.5 mm pitch — on cells under 20\.7 mm a looser puzzle tab leaves the plate not watertight\./],
+    ['#pi=20.3&cn=puzzle&cl=0.9', 0.3,
+     /Fit clearance must be 0\.3 mm or less at a 20\.3 mm pitch — on cells under 20\.7 mm a looser puzzle tab leaves the plate not watertight\./],
     ['#cn=puzzlekey&cl=0.85', 0.8,
      /Fit clearance must be 0\.8 mm or less — any looser and a puzzle key's recess leaves the plate not watertight at some pitches\./],
   ])
