@@ -489,7 +489,7 @@ const CASES = [
      all, a row of AAA cells and one of hex bits fitted in front of the shelf, held the back
      wall too low for a slot, and kept 1 plate in front of a shelf that is not built. */
   { name: '1x0.5x2-slot-b-aaa-L8-note-plates', u: 1, v: 0.5, hUnits: 2, wall: 0.4, insert: 2, label: 8, labelMode: 1,
-    note: 'AA cells', divY: 2, divRemovable: true, fingerSlots: { b: true }, slots: { b: 1 }, gave: 'high:b' },
+    note: 'AA cells', divY: 2, divRemovable: true, fingerSlots: { b: true }, slots: { b: 1 }, gave: 'high:b', noNote: 'slot' },
   { name: '2.5x0.5x2-slot-fbr-hex-L14-plates', u: 2.5, v: 0.5, hUnits: 2, scoop: 20, insert: 4, holeClr: 1, label: 14,
     divY: 8, divRemovable: true, fingerSlots: { f: true, b: true, r: true }, slots: { f: 1, b: 1 }, gave: 'high:fb' },
 ];
@@ -1936,8 +1936,11 @@ console.log('\nremovable dividers: every plate goes into its slot');
     /* The bin with no dividers, and no lip, scoop or shelf either, which stand over a
        slot only where it is notched or its plate cut: its walls and floor alone. The rows
        that share one come together, so only the last few are kept: kept for every row,
-       they held gigabytes. */
-    const bareKey = JSON.stringify(Object.assign({}, cfg, { divX: 0, divY: 0, divRemovable: false, lip: false, scoop: 0, label: 0 }));
+       they held gigabytes. Nor holes: a bin with plates is built with none, and asked for
+       them with no lip either, it can have a block across its floor that this one has
+       not. */
+    const bareKey = JSON.stringify(Object.assign({}, cfg, { divX: 0, divY: 0, divRemovable: false, lip: false, scoop: 0, label: 0,
+      insert: 0 }));
     if (!bare.has(bareKey)) {
       if (bare.size >= 8) bare.delete(bare.keys().next().value);
       bare.set(bareKey, trisOf(buildBin(G, JSON.parse(bareKey)).polys));
