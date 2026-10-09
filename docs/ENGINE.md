@@ -712,13 +712,74 @@ currently installed):
   `healCsgSeams`' tolerance, and the same sliver goes. So `healCsgSeams` says when its
   result is still open (`.open` on what it returns), and `buildPiece` cuts that cell's
   pockets again: the cutters in the other order, the cell's faces in the other order,
-  both, and then the cutters turned a 28th of a turn. A cell that closes first time,
+  the cutters turned a 28th of a turn, moved 1.7 microns along the diagonal one way and
+  then the other, and last one site at a time. A cell that closes first time,
   nearly every one, is built exactly as before. Over 3,893 random mount designs (magnets,
   screws or both, from below or above, 42 or 50 mm, one to three cells each way, random
   margins and corners) none is left open, where main leaves 30; 8 cells were cut again,
-  each open by 3 or 6 edges, for a second in 25 minutes of building. Only a cell open by
-  at most 24 edges is cut again (six at each of four pockets): over 935 engine-only
-  designs with the sites moved in at small pitches, no cell open by more than 19 ever
-  closed, and the ones open by more than 24 had been running half of all the tries. A try
-  that throws (the turned cutters there reach `healCsgSeams`' T-junction pass limit) is
-  passed over and the first cut stands, where it used to fail the whole build.
+  for a second in 25 minutes of building. Only a cell open by at most 24 edges is cut
+  again (six at each of four pockets). Cells cut again have been open by 1 to 24 edges,
+  and cells open by 21 and 24 have closed; none open by more than 24 has. Over a broader
+  2,163 random mount designs, 99 cells were cut again (open by 1 to 23) and 51 closed,
+  and none of 2,733 cells open by more than 24 closed on any try. Of those tries only
+  the turned cutters closed cells nothing else did (26 of the 51). Both orders reversed
+  at once, once a fourth try, closed none that one of the first two had not, and is no
+  longer taken. The nudges and the one site at a time came later: of 687 random page
+  designs with a solid floor, the first three tries left 6 open and all of them leave
+  4, none worse. A try that throws (the turned cutters there reach `healCsgSeams`'
+  T-junction pass limit) is passed over and the first cut stands, where it used to fail
+  the whole build. The socket floor is a fan too, from the cell's centre, and a pocket
+  from above or a screw's shank stands on it: an 11.1 mm magnet from above at 48.55 mm has
+  a pocket corner 4.7 microns from one of its spokes, by `fanCentre`'s measure, and loses
+  the sliver there, six open edges in every cell that no try closed. How near is not what
+  decides it: main's pocket for that magnet has a corner 1.0 micron from the same spoke
+  and is closed. A cell still open after its tries, with an open edge at the floor's
+  height, has that floor fanned again by `fanCentre`, clear of those corners, and where
+  the fan moves, every cut is taken again on it. Only then: a 6 mm magnet from above at
+  42 mm has a spoke 2.3 microns from a corner in every cell and is closed, and a cell open
+  somewhere else (a pocket meeting a joint's housing) gains nothing from a new floor.
+- **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
+  straight walls run only 2.5 mm either side of a cell's middle at 13.5 mm, so every
+  housing, notch and clip pocket crosses its corner arcs and cones, at points that move
+  with the pitch. Two planes crossing a face a couple of thousandths apart lose a sliver
+  (open edges) or leave it turned over (a fold: two triangles back to back across an edge,
+  which an edge count cannot see). From 13.5 to 16 mm every 0.01, at the clearances as
+  they come, main took 14,194 plates of the smallest-pitch audit's joints and layouts and
+  45 had open edges, 115 folds; the H-clip put in from above was open at a field of 0.74
+  at every pitch. `healCsgSeams` now also counts the faces it leaves turned over
+  (`.turned`), and `cutAgain` in `buildPiece` takes a joint's cut again while the result is
+  open or turned: the cutters reversed, the faces reversed, the faces started a third and
+  two thirds of the way round, the cutters moved 1.7 microns two ways, and each cutter on
+  its own. A cut that is right first time, nearly every one, is built as before. One
+  sliver no order of the cut kept: a bottom-cap spoke 8.1 microns from the corner of a
+  puzzle notch's lobe (columns beside rows, 14.71 mm, field 0.3). `fanCentre` keeps the
+  spokes clear of the joint cutters' corners now as well as the mounting cutters', with
+  `FAN_JOINT` more room; a plate with no joint fans where it did.
+- **Two cells can share an edge without either being open.** Cells overlap by `BLOAT`, and
+  a cutter on the line between two is cut out of both. The BSP splits one cutter's faces
+  along another's planes the same way in both cells, so a split inside the band they share
+  is the same edge in two shells, used four times (229 of those 14,194 plates on main).
+  `touchesBuilt` compares the two shells' edges inside the band, and a jointed cell that
+  shares one with a jointed cell built before it is cut again (`TOUCH_TRIES`: each cutter
+  on its own, the cutters reversed, the faces reversed, the cutters one at a time from the
+  last), or else the earlier cell is; the top-insert pass does the same. Mounting pockets
+  do it with no joint at all: a pocket's wall, carried across its cell as a plane, splits
+  the cell's side where it crosses it, and that side stands on the same plane as the
+  neighbour's, so a split that lands on a corner of the neighbour's region is that
+  corner's edge in both shells (a 21.7 mm magnet from beneath at 55 mm, 0.03 microns off;
+  a 22.2 mm screw shank at 56.5 mm, on main too). With pockets on the piece, every cell
+  and margin is checked against the shells built beside it (`settle`), and the pockets of
+  one or the other are cut again moved 1.7 microns, turned a 28th of a turn, or both. The
+  cut kept is the one that shares the fewest edges with every shell beside it: keeping one
+  that touched fewer shells, as `settle` first did, left a cell built later sharing an edge
+  nothing cleared (10.1 to 11.1 mm magnets at 47.91 to 50.05 mm, clean on main). And once
+  the cells are built, if the shells `settle` cut again have more bad edges with those
+  beside them than they started with, or more open or turned over, they all go back to
+  their first cut. Two cups put in
+  from above from each side of a piece one cell deep meet face to face at 14.44 mm (twice a
+  cup's reach), and there they are built as one solid with `csgUnion`.
+- **A face that is nothing but a straight line has no middle.** A weld that closes a
+  T-junction can leave three corners on one line. Fanned from its average, the spokes land
+  a fraction of a micron from a corner and read, to `checkManifold`'s thousandths, as the
+  face's own edges a second time (a puzzle key in the wall from beneath with magnets from
+  above at 42 mm: four edges used four times). Such a face goes out as it is.
