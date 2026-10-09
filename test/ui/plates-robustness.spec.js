@@ -353,7 +353,7 @@ test.describe('limits no tighter than the geometry', () => {
                                           // whose slot stands a BLOAT off the seam face
                                           [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.3`, 0.25, 0.25],
                                           [`${SEAM}&cn=puzzlekey&cl=0.8`, 0.75, 0.75],
-                                          [`${seamAt(18)}&cn=bowtie&cl=0.3`, 0.25, 0.25],
+                                          [`${seamAt(18)}&cn=puzzlekey&cl=0.3`, 0.25, 0.25],
                                           [`${seamAt(13.5)}&cn=puzzle&cl=0.25`, 0.25, 0.25]])
     test(`the fit sample stays inside the range: ${hash}`, async ({ page }) => {
       const errors = await openAt(page, hash);
@@ -424,24 +424,25 @@ test.describe('limits no tighter than the geometry', () => {
    clip dropped in from above is housed in a slot whose seam-side wall stands 0.3 mm less
    the clearance from the seam, so at 0.35 on the field the wall lies in the seam face and
    past it in the next piece — the field stops at 0.3, a BLOAT short of the face;
-   and under 20 mm the puzzle, the bowtie and the puzzle key leave holes in the plate at
+   and under 20 mm the puzzle and the puzzle key leave plates that are not watertight at
    clearances that build closed at 42. Each case is refused at the field, clamped to the
    ceiling in the state a link loads into, and says which joint and which pitch — the
    pitch is the number to change. A joint that builds closed at a small pitch is not held
-   to the others' reason. */
+   to the others' reason: the bowtie in the floor was, until a sweep built it closed from
+   13.5 to 20 mm at every clearance to 1. */
 test.describe('the clearance ceiling is the joint\'s and the pitch\'s', () => {
   const SEAM = '#w=168&d=84&sp=manual&rc=&cc=2';
   for (const [hash, ceiling, msg] of [
     [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.35`, 0.3,
      /Fit clearance must be 0\.3 mm or less — any looser and the housing of a snap clip dropped in from above runs up to the seam and on into the next piece\./],
-    ['#pi=18&cn=bowtie&cl=1', 0.3,
-     /Fit clearance must be 0\.3 mm or less at an 18 mm pitch — on cells under 20 mm a looser bowtie key opens holes in the plate\./],
+    ['#pi=18&cn=puzzle&cl=1', 0.3,
+     /Fit clearance must be 0\.3 mm or less at an 18 mm pitch — on cells under 20 mm a looser puzzle tab leaves the plate not watertight\./],
     ['#pi=14&cn=puzzlekey&cl=0.5', 0.3,
-     /Fit clearance must be 0\.3 mm or less at a 14 mm pitch — on cells under 20 mm a looser puzzle key opens holes in the plate\./],
+     /Fit clearance must be 0\.3 mm or less at a 14 mm pitch — on cells under 20 mm a looser puzzle key leaves the plate not watertight\./],
     ['#pi=13.5&cn=puzzle&cl=0.3', 0.25,
-     /Fit clearance must be 0\.25 mm or less at a 13\.5 mm pitch — on cells under 20 mm a looser puzzle tab opens holes in the plate\./],
+     /Fit clearance must be 0\.25 mm or less at a 13\.5 mm pitch — on cells under 20 mm a looser puzzle tab leaves the plate not watertight\./],
     ['#cn=puzzlekey&cl=0.85', 0.8,
-     /Fit clearance must be 0\.8 mm or less — any looser and a puzzle key's recess opens holes in the plate\./],
+     /Fit clearance must be 0\.8 mm or less — any looser and a puzzle key's recess leaves the plate not watertight at some pitches\./],
   ])
     test(`${hash} is held to ${ceiling}, and says why`, async ({ page }) => {
       const errors = await openAt(page, hash);
@@ -457,9 +458,10 @@ test.describe('the clearance ceiling is the joint\'s and the pitch\'s', () => {
       expect(errors).toEqual([]);
     });
 
-  // the snap and the H-clip built closed at every clearance and pitch measured
+  // the snap, the H-clip and the bowtie built closed at every clearance and pitch measured
   for (const hash of ['#pi=16&w=64&d=32&sp=manual&rc=&cc=2&cn=hclip&cl=1',
-                      '#pi=16&w=64&d=32&sp=manual&rc=&cc=2&cn=snap&cl=1'])
+                      '#pi=16&w=64&d=32&sp=manual&rc=&cc=2&cn=snap&cl=1',
+                      '#pi=16&w=64&d=32&sp=manual&rc=&cc=2&cn=bowtie&cl=1'])
     test(`${hash} builds — the small-pitch hold is not every joint's`, async ({ page }) => {
       const errors = await openAt(page, hash);
       expect(await shown(page, 'errConnClr')).toBe(false);

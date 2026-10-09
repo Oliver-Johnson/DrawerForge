@@ -824,6 +824,22 @@ currently installed):
   is judged by it. Two cups put in from above from each side of a piece one cell deep
   meet face to face at 14.44 mm (twice a cup's reach), and there they are built as one
   solid with `csgUnion`.
+- **None of the fit clearance's ceilings that waited on a sweep can go up but the
+  bowtie's.** `connClrCeiling` caps the field for each joint, and five of its ceilings
+  were set by open edges one step past them that `cutAgain` closes. Swept again on 2 × 2
+  and 1-cell pieces, every 0.01 mm of pitch over each ceiling's band, every 0.05 of the
+  field past it and every 0.01 near a leak: the dovetail's step past its 0.3 is open
+  still at one pitch (0.35 at 42.35 mm), and the puzzle key in the floor's past its 0.8
+  leaks at another (0.85 at 29.74). The puzzle and the puzzle key under 20 mm leak within
+  two steps of their 0.3 (0.38 at 18.54 mm, 0.37 at 18.07). The puzzle key's and the
+  puzzle's are no longer holes: the joint's cut lands on the edge of the `BLOAT` band two
+  cells overlap in, along a line that climbs with the field, and the two shells share
+  that edge, as the dovetail's do from 0.39. A ceiling goes up a step only where the
+  field builds clean to the step after it, so all four stay. The bowtie in the floor
+  under 20 mm leaked nowhere up to 1.05, at every 0.01 mm from 13.5 to 20 and loose and
+  tight at every 0.1, and takes the plain 1 mm. `test/plate-audit.js` builds each leak,
+  which has to stay one and be refused, and the bowtie's step to spare, which has to
+  build closed.
 - **A face that is nothing but a straight line has no middle.** A weld that closes a
   T-junction can leave three corners on one line. Fanned from its average, the spokes land
   a fraction of a micron from a corner and read, to `checkManifold`'s thousandths, as the

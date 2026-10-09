@@ -140,15 +140,21 @@ const LIMITS = {
 /* What sets the clearance's ceiling, in words: core.js connClrCeiling decides it and says
    which reason applies. A ceiling that moves with the pitch names the pitch, as the mount
    sizes do, because that is the number to change; 'slip' is the plain 1 mm and keeps the
-   millimetres advice. */
-const CLR_JOINT = { puzzle: 'puzzle tab', bowtie: 'bowtie key', puzzlekey: 'puzzle key' };
+   millimetres advice. The puzzle and the puzzle key said they opened holes in the plate,
+   as they did until a joint's cut was taken again when it came out open (cutAgain in
+   core.js); past each ceiling now two cells' shells share an edge at some pitches, which
+   is not watertight either but is no hole. The dovetail said its pocket broke through
+   into the socket beside it, which it does from 0.25, under its ceiling. */
+const CLR_JOINT = { puzzle: 'puzzle tab', puzzlekey: 'puzzle key' };
 const clrWhy = (by) => ({
-  dovetail: '— any looser and a dovetail pocket breaks through into the socket beside it',
+  dovetail: '— any looser and a dovetail pocket leaves the plate not watertight at some ' +
+    'pitches',
   snaptop: '— any looser and the housing of a snap clip dropped in from above runs up to ' +
     'the seam and on into the next piece',
   pitch: `${atPitch()} — on cells under ${RANGES.connClr.smallPitch} mm a ` +
-    `looser ${CLR_JOINT[state.connector]} opens holes in the plate`,
-  joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess opens holes in the plate`,
+    `looser ${CLR_JOINT[state.connector]} leaves the plate not watertight`,
+  joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess leaves the plate not ` +
+    'watertight at some pitches',
 })[by] || '';
 /* id -> the message that goes under it. Rebuilt from scratch on every read, so a field
    that has come good stops complaining without anything having to remember it once did. */

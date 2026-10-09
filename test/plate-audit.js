@@ -2061,17 +2061,16 @@ console.log('\nthe other limits, built at their ends:');
     if (r.bad) bad++;
   }
   /* The clearance one step past its end, which leaked, and that was why the end is where
-     it is. It no longer does: the joint's cut taken again when it comes out open
-     (cutAgain in core.js) closes it, as it closes the steps past the ceilings below. So it
-     has to stay closed, and the field has to go on refusing it: the cap stays where it is
-     until a sweep says how far it can go, the dovetail every 0.01 mm of pitch and every
-     0.05 of the field past 0.3, on both piece layouts, clean up to the new cap. */
-  const past = buildAll({ ...split, connector: 'dovetail', clr: 0.35 });
+     it is. The joint's cut taken again when it comes out open (cutAgain in core.js)
+     closed it at 42 mm, so it waited on a sweep; the sweep connClrCeiling describes found
+     0.35 open still at 42.35 mm, on two of the four pieces, so the cap is earned. It has
+     to leak still, or the cap can go up, and the field has to go on refusing it. */
+  const past = buildAll({ pitch: 42.35, ...PIECE_LAYOUTS['2x2 pieces'](42.35), connector: 'dovetail', clr: 0.35 });
   const capped = 0.35 > G.connClrCeiling({ ...G.DEFAULTS, connector: 'dovetail' }).max + 1e-9;
-  console.log(`  ${'dovetail at 0.35 clearance'.padEnd(28)} ${leakText(past)}` +
-              (!capped ? '   THE FIELD TAKES IT' : past.bad ? '   OPEN AGAIN — cutAgain no longer closes it'
-                : ' — closed, and the cap waits on a sweep'));
-  if (!capped || past.bad) bad++;
+  console.log(`  ${'dovetail, 0.35 at 42.35 mm'.padEnd(28)} ${leakText(past)}` +
+              (!capped ? '   THE FIELD TAKES IT' : !past.bad ? '   NOW CLEAN — the cap can go up'
+                : ' — the cap is earned'));
+  if (!capped || !past.bad) bad++;
 
   /* A corner boss is 2.6 mm tall and does not grow, so the pocket in it is capped — at
      what leaves a layer over it, which takes the spec's 6.5 × 2.4 magnet. Built at every
@@ -2115,12 +2114,12 @@ console.log('\nthe other limits, built at their ends:');
  * pitches between. Each has to come back closed and inside its own width: nothing past
  * its footprint but the tabs and lobes buildPiece declares.
  *
- * Then the step past each ceiling that set it, which has to be open or across the seam
- * still: if the engine closes one, this says that ceiling can go up (four are closed, and
- * wait on a sweep to say how far; see PAST below). It has to be past the
- * ceiling as well, refused by the field. A puzzle key in the floor loosened to 0.9 built
- * clean at 20, 30 and 42 and its step past, 0.82, leaked as before, so a ceiling moved
- * over the very number that earned it passed; now the field taking that number fails.
+ * Then the step that earns each ceiling, which has to be open, touching or across the
+ * seam still: if the engine closes one, this says that ceiling can go up (see PAST
+ * below). It has to be past the ceiling as well, refused by the field. A puzzle key in
+ * the floor loosened to 0.9 built clean at 20, 30 and 42 and its step past, 0.82, leaked
+ * as before, so a ceiling moved over the very number that earned it passed; now the
+ * field taking that number fails.
  * And the fit coupon at each ceiling, which is the same joint at four clearances up to
  * it — its pairs have to stay at or under the ceiling, and a housing must not reach into
  * the gap between a pair's two tiles, where it meets the other tile's.
@@ -2234,25 +2233,27 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
     ? `HELD TO IT: ${held.join(', ')}` : `every other joint but the snap from above, at its own ${C.snapTop}`));
   if (held.length) bad++;
 
-  /* The puzzle key in the floor's step is 0.82, the first clearance that leaked at every
-     pitch measured from 20 to 60; a ceiling at or over it lets the field take it.
-
-     The last four were earned by open edges alone, and the joint's cut taken again when
-     it comes out open (cutAgain in core.js) closes all four. Those ceilings stay where
-     they are until a sweep as fine as the one that found the small-pitch leaks says how
-     far each can go: the joint every 0.01 mm over its pitch band and every 0.05 of the
-     field past its ceiling, on both piece layouts, clean up to the new one. `waits` marks
-     such a step: it has to stay closed, or cutAgain has lost ground, and the field still
-     has to refuse it. */
+  /* The snap from above and the puzzle's lobe are earned by their geometry, above. The
+     rest were earned by open edges — a puzzle at 19 and a bowtie at 15 at 0.35, a puzzle
+     key at 14 at 0.4 and at 42 at 0.82, the dovetail from 0.34 — and the joint's cut taken
+     again when it comes out open (cutAgain in core.js) closes every one. So each was swept
+     as connClrCeiling says: every 0.01 mm of pitch over its band and every 0.05 of the
+     field past it, on both piece layouts, and every 0.01 near anything that leaked. The
+     dovetail's step is open still, and is built with the other ends, above. Three more
+     have a leak within two steps, two cells' shells sharing an edge in the band they
+     overlap in, and the first is their row: it has to leak still, or that ceiling can go
+     up. The bowtie in the floor below 20 mm leaked nowhere up to 1.05 and takes the plain
+     1 mm; `spare` marks its step to spare, which has to build closed, or cutAgain has lost
+     ground. Each has to be refused by the field. */
   const PAST = [
     ['snap from above, 0.35 at 42', { connector: 'snap', keyInsert: 'top', pitch: 42, clr: 0.35 }, '2x2 pieces'],
     ['puzzle, 0.3 at 13.5', { connector: 'puzzle', pitch: 13.5, clr: 0.3 }, '1-cell pieces'],
-    ['puzzle, 0.35 at 19', { connector: 'puzzle', pitch: 19, clr: 0.35 }, '2x2 pieces', 'waits'],
-    ['bowtie, 0.35 at 15', { connector: 'bowtie', pitch: 15, clr: 0.35 }, '2x2 pieces', 'waits'],
-    ['puzzle key, 0.4 at 14', { connector: 'puzzlekey', pitch: 14, clr: 0.4 }, '2x2 pieces', 'waits'],
-    ['puzzle key, 0.82 at 42', { connector: 'puzzlekey', pitch: 42, clr: 0.82 }, '2x2 pieces', 'waits'],
+    ['puzzle, 0.38 at 18.54', { connector: 'puzzle', pitch: 18.54, clr: 0.38 }, '1-cell pieces'],
+    ['puzzle key, 0.37 at 18.07', { connector: 'puzzlekey', pitch: 18.07, clr: 0.37 }, '1-cell pieces'],
+    ['puzzle key, 0.85 at 29.74', { connector: 'puzzlekey', pitch: 29.74, clr: 0.85 }, '1-cell pieces'],
+    ['bowtie, 1.05 at 18', { connector: 'bowtie', pitch: 18, clr: 1.05 }, '2x2 pieces', 'spare'],
   ];
-  for (const [what, o, ln, waits] of PAST) {
+  for (const [what, o, ln, spare] of PAST) {
     const r = buildAll({ ...PIECE_LAYOUTS[ln](o.pitch), ...o });
     /* A snap from above earns its ceiling in the seam face, before anything crosses the
        seam: one step past, its slot's wall is nearer the face than a BLOAT. */
@@ -2263,16 +2264,16 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
         r.L.pieces[i]).keyed.map((st) => ({ ...st, clr: r.cfg.key.clr })), H));
     }
     const inFace = face.sites > 0 && face.near < BLOAT - 1e-6;
-    const still = r.open > 0 || r.beyond > OVER || inFace;
+    const still = r.bad > 0 || r.beyond > OVER || inFace;
     const most = G.connClrCeiling(r.cfg).max, refused = o.clr > most + 1e-9;
     console.log(`  ${what.padEnd(28)} ${r.beyond > OVER ? `${r.beyond} mm into the next piece`
       : inFace ? `its slot ${(Math.round(face.near * 1e4) / 1e4 + 0).toFixed(3)} mm off the seam face`
       : leakText(r)}` +
                 (!refused ? `   THE FIELD TAKES IT: the ceiling went up to ${most}`
-                  : waits ? (still ? '   OPEN AGAIN — cutAgain no longer closes it'
-                                   : ' — closed, and the ceiling waits on a sweep')
+                  : spare ? (still ? '   OPEN AGAIN — cutAgain no longer closes it'
+                                   : ' — closed, a step to spare')
                   : still ? ' — the ceiling is earned' : '   NOW CLEAN — that ceiling can go up'));
-    if (!refused || (waits ? still : !still)) bad++;
+    if (!refused || (spare ? still : !still)) bad++;
   }
 
   /* activeJoint in src/ui.js, with the field at the ceiling — a fixture, as in the coupon

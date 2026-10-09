@@ -1021,13 +1021,23 @@ function fitClearances(field) {
  * for everything but the dovetail let a snap clip's housing into the next piece and let
  * small pitches leak.
  *
- * Measured on 2 × 2 and 1-cell pieces from 13.5 to 60 mm, every 0.5 mm of pitch — at
- * every 0.05 of clearance for the puzzle, the bowtie and the puzzle key, at six for the
- * rest — and at every 0.01 of clearance at 20, 25, 30, 35, 42 and 60:
+ * Measured first on 2 × 2 and 1-cell pieces from 13.5 to 60 mm, every 0.5 mm of pitch —
+ * at every 0.05 of clearance for the puzzle, the bowtie and the puzzle key, at six for
+ * the rest — and at every 0.01 of clearance at 20, 25, 30, 35, 42 and 60. What leaked
+ * there was the sliver class, and buildPiece now cuts a joint again when its cut comes
+ * out open (cutAgain), so each ceiling was swept again on both layouts: every 0.01 mm of
+ * pitch over the band it governs (13.5 to 60 mm for the dovetail), every 0.05 of the
+ * field past it, and every 0.01 near anything that leaked. A ceiling goes up a step only
+ * where the field builds clean to the step after that one, which is then its step to
+ * spare; anything that leaks within two steps of a ceiling earns it.
  *
- *   dovetail  0.3. Past it the pocket, cut 1.9 mm + this into the piece, breaks through
- *             the 2.15 mm socket wall and crosses the chamfer cone; it leaked from 0.34.
- *             The hint's own advice stops at 0.25.
+ *   dovetail  0.3, earned. The pocket, cut 1.9 mm + this into the piece, breaks through
+ *             the 2.15 mm socket wall from 0.25 and crosses the chamfer cone. It leaked
+ *             from 0.34, and cutAgain closes most of that, but one step past, 0.35 still
+ *             leaves edges open at 42.35 mm on both layouts. Past that two cells' shells
+ *             share an edge from 0.39, where the notch's wide end stands on the edge of
+ *             the band they share (22.64 mm, and 22.65 at 0.4), and more leak or fold at
+ *             0.55, 0.75 and 0.8. The hint's own advice stops at 0.25.
  *   snaptop   0.3, in either housing. The clip's slot puts its seam-side wall
  *             0.3 − (the key's clearance) from the seam, so past a field of 0.35 that
  *             wall stands in the next piece — by 0.65 mm at 1 — and two pieces that print
@@ -1038,15 +1048,23 @@ function fitClearances(field) {
  *             pair did the same for any field from 0.3 up. 0.3 holds the wall one BLOAT,
  *             0.05, inside the piece, the overlap the cell regions keep; the coupon's
  *             slackest pair is this ceiling cut the key's way, so it stops there too.
- *   pitch     0.3 below 20 mm, for the three housings the field cuts that leaked there:
- *             the puzzle, and the bowtie and puzzle key in the floor. Past 0.3 they left
- *             holes from 13.5 to 19 mm — a puzzle key at 14 from 0.4, a bowtie at 18 at
- *             1, a puzzle at 19 from 0.35 — and from the default 0.2 to 0.3 none did. The
- *             puzzle's lobe also needs room in its cell: it opens the plate once its
- *             clearance passes half the pitch less 6.475 mm, so it stops at half the pitch
- *             less 6.5 — 0.25 at 13.5, and 0.3 from 13.6.
- *   joint     0.8 for a puzzle key in the floor from 20 mm up: between 0.82 and 0.96 its
- *             recess leaked at every pitch measured, 20 to 60.
+ *   pitch     0.3 below 20 mm for the puzzle and a puzzle key in the floor, earned. Past
+ *             it they left holes from 13.5 to 19 mm — a puzzle key at 14 from 0.4, a
+ *             puzzle at 19 from 0.35 — which cutAgain closes, and 0.35 builds clean at
+ *             every pitch; but on 1-cell pieces a line across the pitch that climbs with
+ *             the field puts the cut on the edge of the band two cells share, and the
+ *             shells share it: a puzzle key from 0.37 (at 18.07 mm), a puzzle tab from
+ *             0.38 (at 18.54). The puzzle's lobe also needs room in its cell: it opens the
+ *             plate once its clearance passes half the pitch less 6.475 mm, so it stops at
+ *             half the pitch less 6.5 — 0.25 at 13.5, and 0.3 from 13.6. A bowtie in the
+ *             floor was held here too, for holes at 18 mm at 1. It builds clean at every
+ *             0.01 mm from 13.5 to 20 and every 0.05 up to 1.05, on both layouts, and
+ *             loose and tight at every 0.1 mm, so it takes the plain 1 mm.
+ *   joint     0.8 for a puzzle key in the floor from 20 mm up, earned. Its recess leaked
+ *             between 0.82 and 0.96 at every pitch measured, 20 to 60, until cutAgain;
+ *             at 0.85 it now stands on the edge of the band two cells share at 29.74 mm
+ *             on 1-cell pieces, and at 0.86 at 29.79, though nowhere else from 20 to
+ *             51.7 at 0.85 or 0.9.
  *   slip      1 for the rest. A key in the walls is cut to keySlim's own clearance, which
  *             the field does not move. The snap and the H-clip did not leak above 0.3 at
  *             any pitch measured but in one band — an H-clip dropped in from above leaks
@@ -1055,19 +1073,21 @@ function fitClearances(field) {
  *             0.39–0.4 at 21 and 32.5–35 mm and here and there from 0.52 to 0.87. That is
  *             the sliver class again, not a ceiling — no limit short of 0.38 misses them,
  *             and the same class turns up under the default too: a snap at 20 mm at 0.29,
- *             a bowtie at 17 mm at 0.15 and under.
+ *             a bowtie at 17 mm at 0.15 and under. One is not isolated: on 2 × 2 pieces
+ *             a puzzle at 0.35 exactly, and not 0.34 or 0.36, has two shells sharing an
+ *             edge at every pitch from 31.6 to 52.2 mm, where a corner of a notch's lobe,
+ *             centred on the line between two cells, stands on the edge of the band they
+ *             share. That wants mending in the cut; no ceiling misses a single value.
  *
- * The leaks that set the pitch and joint ceilings, and the dovetail's at 0.34, were that
- * class as well: buildPiece now cuts a joint again when its cut comes out open
- * (cutAgain), and the step past each that test/plate-audit.js builds is closed, as is the
- * H-clip from above at 0.74. The ceilings stay where they are until a sweep as fine as
- * the one that found the small-pitch leaks says how far each can go. */
+ * test/plate-audit.js builds the step that earns each ceiling, which has to leak or cross
+ * the seam and be refused, and the bowtie's step to spare, which has to build closed and
+ * be refused. */
 function connClrCeiling(cfg) {
   const R = PLATE_RANGES.connClr;
   const kind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
   if (kind === 'dovetail') return { max: R.dovetail, by: 'dovetail' };
   if (kind === 'snaptop') return { max: R.snapTop, by: 'snaptop' };
-  const floorKey = ['bowtie', 'puzzlekey'].includes(cfg.connector) && cfg.keyMount !== 'wall';
+  const floorKey = cfg.connector === 'puzzlekey' && cfg.keyMount !== 'wall';
   if (cfg.connector !== 'puzzle' && !floorKey) return { max: R.max, by: 'slip' };
   if (cfg.pitch < R.smallPitch) {
     const room = cfg.connector === 'puzzle'
