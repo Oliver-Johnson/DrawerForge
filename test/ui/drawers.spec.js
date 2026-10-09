@@ -450,9 +450,22 @@ for (const tool of ['bins', 'plates']) {
     await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
     if (tool === 'bins') await toPlates(page); else await toBins(page);
     expect(await page.inputValue('#drawerW'), 'on the other page').toBe('410');
+    // reloaded there, and shown again from the back-forward cache: the drawer has not moved on
+    await page.reload();
+    await (tool === 'bins' ? platesReady : binsReady)(page);
+    expect(await page.inputValue('#drawerW'), 'reloaded').toBe('410');
+    const stayed = await page.evaluate(() => {
+      dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+      return !!(history.state && history.state.drawerforge);   // catching up clears it to reload
+    });
+    expect(stayed, 'shown again from the cache, it stays').toBe(true);
     if (tool === 'bins') await toBins(page); else await toPlates(page);
     expect(await page.inputValue('#drawerW'), 'and back').toBe('410');
     await expect(page.locator('#setAside')).toBeHidden();
+    // and Back to the other page, a page of its own come back
+    await page.goBack();
+    await (tool === 'bins' ? platesReady : binsReady)(page);
+    expect(await page.inputValue('#drawerW'), 'Back on the other page').toBe('410');
     expect(errors).toEqual([]);
   });
 }
@@ -486,7 +499,7 @@ test('with storage full, a layout set aside is not given the record of the one b
     const kept = await page.evaluate((k) => [localStorage.getItem(k + ':prev'),
       localStorage.getItem(k + ':prev:linked')], KEY);
     expect(kept[0], 'the changed link set aside').toBe(edited);
-    expect(kept[1], 'and not with the record before it').not.toBe('v=2&w=300');
+    expect(kept[1], 'and not with the record before it').toBeNull();
     expect(errors).toEqual([]);
   });
 

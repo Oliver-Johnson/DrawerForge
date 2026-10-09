@@ -5927,8 +5927,13 @@ let arrivedWith = '';    // the design string this page was opened with
        page. One still carrying someone's link is that link, and your layout is kept. */
     if (!keptAside) unkept = !handOver || handOver.link.length > 0 || drawers.onlyMine(saved, src);
   }
+  /* Back to your own earlier page over a link's layout, untouched, sets nothing aside: what
+     the link replaced is aside already. That can be later than the page Back brings: a change
+     whose save came due as the link was pasted is aside, and in no earlier address (see
+     pastedOver). So a layout aside that is not this one is offered. */
+  const later = back && savedLinked ? readKey(PREV_KEY) : '';
   const canPutBack = (replaces && !kept && (keptAside || (savedLinked && !!readKey(PREV_KEY)))) ||
-    (back && keptAside);
+    (back && (keptAside || (!!later && !sameDesign(later, src))));
   if (stalled) {
     showSetAside('This layout did not finish loading last time, so the page has started ' +
       'from its defaults rather than try it again.', canPutBack, true);

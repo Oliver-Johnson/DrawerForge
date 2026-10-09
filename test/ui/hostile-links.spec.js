@@ -926,8 +926,14 @@ for (const [tool, key] of [['plates', PLATES], ['bins', BINS]]) {
   test(`a link pasted over ${tool} as an edit's save comes due is the link`, async ({ page }) => {
     const errors = watch(page);
     await arrive(page, tool === 'bins' ? binsUrl() : platesUrl());
-    await H.setField(page, 'drawerW', '412');           // its save waiting
+    const before = await page.inputValue('#drawerW');
+    // the edit, its save still waiting when the paste lands, all in one task
     await Promise.all([page.waitForEvent('load'), page.evaluate(() => {
+      const e = document.getElementById('drawerW');
+      e.value = '412';
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+      e.dispatchEvent(new Event('change', { bubbles: true }));
+      if (typeof landEdit === 'function') landEdit();  // the edit read in, as a save does
       location.hash = '#w=333&d=444&v=2';
       saveNow();
     })]);
@@ -936,6 +942,14 @@ for (const [tool, key] of [['plates', PLATES], ['bins', BINS]]) {
     await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
     // the edit was saved, and is what the link set aside
     expect(await stored(page, key + ':prev')).toMatch(/(^|&)w=412(&|$)/);
+
+    /* Back goes to the address before the paste, which never had the edit: it is aside, and
+       in no earlier address, so it is offered there too. */
+    await page.goBack();
+    await ready(page);
+    expect(await page.inputValue('#drawerW')).toBe(before);
+    await expect(page.locator('#setAsideMsg'))
+      .toHaveText('This page went back to an earlier layout of yours. The later one is set aside.');
     await clickAndLoad(page, '#putBack');
     expect(await page.inputValue('#drawerW')).toBe('412');
     expect(errors).toEqual([]);

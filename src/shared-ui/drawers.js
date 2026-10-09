@@ -446,6 +446,12 @@ const DRAWERS = (function () {
     }
     // the marks for a note: this tool's `mine`, and the other's as this page has it
     const marksFor = (mine) => ({ [o.tool]: mine, [otherTool]: theirs });
+    /* Whether nothing has saved into drawer `d` since a page that had this tool's mark
+       `mine` and the other tool's `their`: the drawer has both halves as that page last
+       knew them. A size the page has that the drawer does not is then the page's own,
+       one the drawer could not take with the storage full, not the drawer moved on. */
+    const unmoved = (d, mine, their) => typeof their === 'string' &&
+      d.marks[otherTool] === their && d.marks[o.tool] === mine;
     /* Whether the drawer has saved this tool's half since the page's copy `h`, which was
        current with this tool's mark `was`: it holds neither that design nor that save. */
     const movedOn = (d, h, was) => d.marks[o.tool] !== fingerprint(h) && d.marks[o.tool] !== was;
@@ -850,7 +856,7 @@ const DRAWERS = (function () {
       if (!d) return;
       const h = o.design();
       if (movedOn(d, h, ours)) reopen(d);   // a later page saved into it
-      else catchUp(h, d);
+      else if (!unmoved(d, ours, theirs)) catchUp(h, d);   // nor as this page left it (attach)
     });
 
     return {
@@ -984,13 +990,12 @@ const DRAWERS = (function () {
                link's, and this tool's half was saved into the drawer with them. */
             if (noted && next.open !== true && typeof d.marks[o.tool] === 'string' &&
                 restore(arrivedWith, d, next.link, str(came[o.tool]))) return;
-            /* Not a hand-over from a page whose saves into the drawer were refused, the
-               storage full: the drawer has both halves as that page last saved them (the
-               note's marks), so a size that differs is one changed there since, which the
-               drawer could not take. Caught up, the drawer's older size came back over it,
-               as though another tab had moved the drawer on. */
-            const asLeft = noted && typeof came[otherTool] === 'string' &&
-              d.marks[otherTool] === came[otherTool] && d.marks[o.tool] === came[o.tool];
+            /* Not when the drawer is as the page this design comes from left it (unmoved, by
+               the marks it came with): a hand-over from a page whose saves into the drawer
+               were refused, or this page reloaded or gone Back to after its own were. Caught
+               up, the drawer's older size came back over the one changed since, as though
+               another tab had moved the drawer on. */
+            const asLeft = unmoved(d, came[o.tool], came[otherTool]);
             if (!(noted && next.caughtUp) && !asLeft && catchUp(arrivedWith, d)) return;
             /* A hand-over is written down now rather than at the page's first save, which
                is 400 ms off: a reload before it found no record of this tool in the
