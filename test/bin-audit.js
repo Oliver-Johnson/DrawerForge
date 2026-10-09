@@ -9,7 +9,7 @@ const G = require('../src/core.js');
 const { buildBin, binVolume, binHeights, SPEC, REQUIRED_CORE, BIN_DEFAULTS, outlineAt, wallSplits, dividerPart,
         lidPart: lidPartOf, lipHeight: lipHeightOf, LIP_TABLE, holeSites, feetHolesOff,
         unpackBin, binFeet, dividersBuilt, binDividers, dividerPlates, plateLayout, shelfNote, floorPlan, NOTE_CLEAR,
-        insertPlan, dividersWhy, railedLimit } = require('../src/bins/bin.js');
+        insertPlan, dividersWhy, railedLimit, HOLES_MAX, fingerSlotPlan } = require('../src/bins/bin.js');
 // the label shelf as built, { top, depth, raised }, depth 0 for none: floorPlan's, which buildBin builds
 const shelfAs = (c, iw, id, H) => floorPlan(c, iw, id, H).shelf || { top: H, depth: 0, raised: null };
 const NOTE_TEXT = require('../src/bins/text.js');
@@ -379,6 +379,119 @@ const CASES = [
      hole came 0.72 from the rounded corner. */
   { name: '2x4x6-hex-wall0.4-low', u: 2, v: 4, hUnits: 6, wall: 0.4, insert: 4,
     edges: { f: 0, b: 1, l: 0, r: 0.5 }, holes: 180 },
+  /* Finger slots, a U-shaped dip in the top of a wall, one per compartment. At three
+     heights and the tallest, on each wall, between dividers and rails, beside a scoop, a
+     label shelf and a raised note, at both ends of the wall's range, on half-size bins,
+     over holes in the feet and across the floor, and on a lowered and an open wall.
+     `slots` is how many each wall should get, worked out here from the spec and not read
+     from the engine; the section on finger slots further down measures every one. */
+  { name: '1x1x2-slot-f', u: 1, v: 1, hUnits: 2, fingerSlots: { f: true }, slots: { f: 1 } },
+  { name: '1x1x3-slot-f', u: 1, v: 1, hUnits: 3, fingerSlots: { f: true }, slots: { f: 1 } },
+  { name: '1x1x6-slot-f', u: 1, v: 1, hUnits: 6, fingerSlots: { f: true }, slots: { f: 1 } },
+  // half way down is past where the two sides meet: it stops there
+  { name: '1x1x10-slot-f', u: 1, v: 1, hUnits: 10, fingerSlots: { f: true }, slots: { f: 1 } },
+  { name: '2x1x3-slot-fb', u: 2, v: 1, hUnits: 3, fingerSlots: { f: true, b: true }, slots: { f: 1, b: 1 } },
+  { name: '2x1x3-slot-lr', u: 2, v: 1, hUnits: 3, fingerSlots: { l: true, r: true }, slots: { l: 1, r: 1 } },
+  // the back slot takes the shelf, so nothing keeps the side ones off it
+  { name: '3x2x4-slot-all', u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12,
+    fingerSlots: { f: true, b: true, l: true, r: true }, slots: { f: 3, b: 3, l: 2, r: 2 } },
+  { name: '3x2x4-slot-lr-label', u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12,
+    fingerSlots: { l: true, r: true }, slots: { l: 2, r: 2 } },
+  { name: '3x2x4-slot-b-note', u: 3, v: 2, hUnits: 4, label: 12, labelMode: 1, note: 'M3 screws',
+    fingerSlots: { b: true }, slots: { b: 1 }, noNote: 'slot' },
+  { name: '3x2x5-slot-railed', u: 3, v: 2, hUnits: 5, divX: 2, divY: 1, divRemovable: true,
+    fingerSlots: { f: true, b: true, l: true, r: true }, slots: { f: 3, b: 3, l: 2, r: 2 } },
+  /* Compartments between the dividers as built: two removable ones asked for, but at a
+     10 mm wall a half cell deep the plate would have no length (railedLimit's 'length'),
+     so none is built and each wall has one compartment, and one slot. Fixed ones there
+     would leave three, each too narrow for one. */
+  { name: '1x0.5x4-slot-no-rails', u: 1, v: 0.5, hUnits: 4, wall: 10, divX: 2, divRemovable: true,
+    fingerSlots: { f: true, b: true }, slots: { f: 1, b: 1 } },
+  // a 12 mm scoop stands 6 mm over a 3-unit slot's bottom: the slot holds it under
+  { name: '2x1x3-slot-scoop', u: 2, v: 1, hUnits: 3, scoop: 12, fingerSlots: { f: true }, slots: { f: 1 } },
+  { name: '1x1x6-slot-scoop', u: 1, v: 1, hUnits: 6, scoop: 20, label: 12,
+    fingerSlots: { f: true, l: true, r: true }, slots: { f: 1, l: 1, r: 1 } },
+  { name: '2x1x3-slot-wall3', u: 2, v: 1, hUnits: 3, wall: 3, fingerSlots: { f: true, l: true },
+    slots: { f: 1, l: 1 } },
+  { name: '2x1x3-slot-wall0.4', u: 2, v: 1, hUnits: 3, wall: 0.4,
+    fingerSlots: { f: true, b: true, l: true, r: true }, slots: { f: 1, b: 1, l: 1, r: 1 } },
+  // a side half a cell long has a 13 mm straight: too short for one
+  { name: '0.5x1x3-slot-all', u: 0.5, v: 1, hUnits: 3,
+    fingerSlots: { f: true, b: true, l: true, r: true }, slots: { l: 1, r: 1 } },
+  { name: '1.5x1x3-slot-all', u: 1.5, v: 1, hUnits: 3, scoop: 8, label: 10,
+    fingerSlots: { f: true, b: true, l: true, r: true }, slots: { f: 1, b: 1, l: 1, r: 1 } },
+  { name: '2x2x3-slot-mag-scr', u: 2, v: 2, hUnits: 3, ...BOTH, fingerSlots: { f: true, r: true },
+    slots: { f: 1, r: 1 } },
+  // a slot stops half a millimetre over the block the holes are in
+  { name: '2x1x4-slot-hex', u: 2, v: 1, hUnits: 4, insert: 4, holes: 40, fingerSlots: { f: true, l: true },
+    slots: { f: 1, l: 1 } },
+  { name: '2x1x5-slot-aa-label', u: 2, v: 1, hUnits: 5, insert: 1, label: 12, holes: 4,
+    fingerSlots: { f: true, l: true }, slots: { f: 1, l: 1 } },
+  /* A back slot takes the label shelf, and the holes spread into its room: 4 AA cells,
+     where keeping in front of a shelf that is not there left room for 2. */
+  { name: '1x1x4-slot-b-aa-L12', u: 1, v: 1, hUnits: 4, insert: 1, label: 12, holes: 4,
+    fingerSlots: { b: true }, slots: { b: 1 } },
+  /* Spread into its room, the AAA cells' block stands 0.5 under the rim, too high for the
+     slot, so they keep in front of where the shelf would be, which leaves room for none,
+     and the page is told they gave way (holesGaveWay) rather than that the shelf took it,
+     and why: too high for the slot in the back wall. */
+  { name: '1x0.5x3-slot-b-aaa-L8', u: 1, v: 0.5, hUnits: 3, insert: 2, label: 8,
+    fingerSlots: { b: true }, slots: { b: 1 }, gave: 'high:b' },
+  /* Spread into its room, 2 AA cells would fit, but their block would stand too high for
+     the slot in the lowered front wall. The holes take the shelf's room only where that
+     costs no slot the shelf's layout builds: they keep in front of where the shelf would be,
+     which leaves room for none, and both are built. */
+  { name: '1x0.5x3-slot-fb-aa-L8', u: 1, v: 0.5, hUnits: 3, insert: 1, insertDepth: 8, label: 8,
+    edges: { f: 0.5 }, fingerSlots: { f: true, b: true }, slots: { f: 1, b: 1 }, gave: 'high:f' },
+  /* Spread into its room, the hex bits would come to 2009 holes, past the 2000 one bin is
+     built with, which builds none: they keep in front of where the shelf would be, 1960 of
+     them, and the slot builds over them. */
+  { name: '9x8.5x3-slot-b-hex-L8', u: 9, v: 8.5, hUnits: 3, insert: 4, holeClr: -0.3, label: 8, holes: 1960,
+    fingerSlots: { b: true }, slots: { b: 1 }, gave: 'many' },
+  // on a thick wall the outer face is the wider: the inner one, where a finger goes, is to spec
+  { name: '2x1x3-slot-wall5', u: 2, v: 1, hUnits: 3, wall: 5, fingerSlots: { f: true, l: true },
+    slots: { f: 1, l: 1 } },
+  // from the lowered wall's own top, off its ramps
+  { name: '2x1x3-slot-low', u: 2, v: 1, hUnits: 3, edges: { f: 0.5 }, fingerSlots: { f: true, l: true },
+    slots: { f: 1, l: 1 } },
+  { name: '1x1x4-slot-low', u: 1, v: 1, hUnits: 4, edges: { f: 0.5, l: 0.75 },
+    fingerSlots: { f: true, l: true, b: true }, slots: { f: 1, l: 1, b: 1 } },
+  { name: '2x1x3-slot-open', u: 2, v: 1, hUnits: 3, edges: { f: 0 }, fingerSlots: { f: true, l: true },
+    slots: { l: 1 } },
+  /* On bins with removable plates that fit: the plates across cut to the scoop, which a
+     front slot holds lower than they need it (a 2-unit bin, where they hold it lower than
+     its height does: 3.62 under the slot, 6.60 for the plates, 7.25 for the height); plates
+     both ways, which halve, with slots on the walls either way; plates along standing on
+     the scoop under the slot (on 8 units a 20 mm slot's sides meet above half way, and
+     the scoop it holds reaches the first plate along); and a back slot over the shelf
+     the plates across are notched through, which the plates along no longer keep in front
+     of: 6 of them, where 5 stand in front of a 12 mm shelf. The section on finger slots on
+     removable bins measures each. */
+  { name: '2x1x2-slot-f-plates', u: 2, v: 1, hUnits: 2, divX: 2, divRemovable: true, scoop: 10,
+    fingerSlots: { f: true }, slots: { f: 3 } },
+  { name: '3x2x4-slot-flr-plates', u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, divRemovable: true, scoop: 20,
+    fingerSlots: { f: true, l: true, r: true }, slots: { f: 3, l: 2, r: 2 } },
+  { name: '2x2x8-slot-flr-stand', u: 2, v: 2, hUnits: 8, divX: 1, divY: 3, divRemovable: true, scoop: 30,
+    fingerSlots: { f: true, l: true, r: true }, slots: { f: 2, l: 4, r: 4 } },
+  { name: '3x2x4-slot-b-plates-L12', u: 3, v: 2, hUnits: 4, divX: 2, divY: 6, divRemovable: true, scoop: 8, label: 12,
+    fingerSlots: { b: true }, slots: { b: 3 } },
+  /* The slot takes the lip, so the plates along are as many as fit with no notch to keep
+     clear of its corners: 11, where the lip's rule allows 10 (#58-SF-A); and with a plate
+     across as well, whose rails the two slots keep off. */
+  { name: '1x1x3-slot-f-plates-32', u: 1, v: 1, hUnits: 3, wall: 0.4, divY: 32, divRemovable: true,
+    fingerSlots: { f: true }, slots: { f: 1 } },
+  { name: '2x1x3-slot-f-plates-1x32', u: 2, v: 1, hUnits: 3, wall: 0.4, divX: 1, divY: 32, divRemovable: true,
+    fingerSlots: { f: true }, slots: { f: 2 } },
+  /* Counted without the lip's rule, the bin keeps its lip for the holes, which are laid
+     out clear of it (#58-SF-C). None fit in front of the shelf, and spread into its room
+     they would stand too high for the back slot, so the slot is built, the shelf goes, and
+     the plates along are as many as fit with none: 2 and 4. Counted as a bin with no lip at
+     all, a row of AAA cells and one of hex bits fitted in front of the shelf, held the back
+     wall too low for a slot, and kept 1 plate in front of a shelf that is not built. */
+  { name: '1x0.5x2-slot-b-aaa-L8-note-plates', u: 1, v: 0.5, hUnits: 2, wall: 0.4, insert: 2, label: 8, labelMode: 1,
+    note: 'AA cells', divY: 2, divRemovable: true, fingerSlots: { b: true }, slots: { b: 1 }, gave: 'high:b', noNote: 'slot' },
+  { name: '2.5x0.5x2-slot-fbr-hex-L14-plates', u: 2.5, v: 0.5, hUnits: 2, scoop: 20, insert: 4, holeClr: 1, label: 14,
+    divY: 8, divRemovable: true, fingerSlots: { f: true, b: true, r: true }, slots: { f: 1, b: 1 }, gave: 'high:fb' },
 ];
 
 /* Removable plates with a note raised on the label shelf: plates across, along and both,
@@ -532,7 +645,8 @@ for (const cs of CASES) {
      Losing the lip silently would make anything carved unstackable. A half-size bin
      is held to the same: it stacks on a half-size bin as a bin sits on a plate. */
   let lipOk = true;
-  if ((cs.cells || halfSize(cs)) && !cs.solid && !cs.edges) {
+  // a finger slot takes the lip, as a lowered wall does: the section on them checks that
+  if ((cs.cells || halfSize(cs)) && !cs.solid && !cs.edges && !cs.slots) {
     const expTotal = cs.hUnits * 7 + 3.95;
     lipOk = r.meta.hasLip === true && Math.abs(r.meta.totalH - expTotal) < 0.001;
     if (!lipOk) console.log(`${''.padEnd(14)}  LIP MISSING: hasLip ${r.meta.hasLip}, ` +
@@ -1165,6 +1279,12 @@ console.log('\nwalls across the whole range the page accepts');
       ['1x1x3 holes', Object.assign({ u: 1, v: 1, hUnits: 3 }, BOTH), true],
       ['L-2x2 holes', { u: 2, v: 2, hUnits: 3, cells: cellsExcept(2, 2, [[1, 1]]), magnets: true, screws: true }, true],
       ['2x1x3 label holes', { u: 2, v: 1, hUnits: 3, label: 12, magnets: true, screws: true }, true],
+      // finger slots move points along every straight of both wall rings
+      ['2x1x3 finger slots', { u: 2, v: 1, hUnits: 3, fingerSlots: { f: true, b: true, l: true, r: true } }],
+      ['3x2x4 slots, everything', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12,
+                                    fingerSlots: { f: true, l: true, r: true } }],
+      ['1.5x1x4 slots, rails', { u: 1.5, v: 1, hUnits: 4, divX: 1, divRemovable: true, scoop: 8, label: 12,
+                                 fingerSlots: { f: true, b: true, l: true, r: true } }],
     ];
     const holeWalls = [lo, 0.4, 1.2, 3, 4.9, 5.1, 6.1, 6.3, 8, hi]
       .filter((w, i, a) => w >= lo && w <= hi && a.indexOf(w) === i);
@@ -1234,7 +1354,11 @@ for (const hUnits of [1, 3, 6]) {
                               ['rectangle, holes', { u: 2, v: 1, magnets: true, screws: true }],
                               ['L-2x2, holes', { u: 2, v: 2, cells: L3, magnets: true, screws: true }],
                               ['half-size, scoop + label', { u: 1.5, v: 0.5, scoop: H, label: 42 }],
-                              ['half-size, rails', { u: 0.5, v: 1.5, divY: 1, divRemovable: true }]])
+                              ['half-size, rails', { u: 0.5, v: 1.5, divY: 1, divRemovable: true }],
+                              ['rectangle, finger slots', { u: 2, v: 1, scoop: H, label: 42,
+                                                            fingerSlots: { f: true, b: true, l: true, r: true } }],
+                              ['rectangle, side slots + label', { u: 2, v: 2, scoop: H, label: 12,
+                                                                  fingerSlots: { l: true, r: true } }]])
     sweepReport(`${hUnits}u ${name}`, floors.map((floorT) =>
       [`floor ${floorT.toFixed(2)}`, Object.assign({ hUnits, floorT }, base)]));
 }
@@ -1812,8 +1936,11 @@ console.log('\nremovable dividers: every plate goes into its slot');
     /* The bin with no dividers, and no lip, scoop or shelf either, which stand over a
        slot only where it is notched or its plate cut: its walls and floor alone. The rows
        that share one come together, so only the last few are kept: kept for every row,
-       they held gigabytes. */
-    const bareKey = JSON.stringify(Object.assign({}, cfg, { divX: 0, divY: 0, divRemovable: false, lip: false, scoop: 0, label: 0 }));
+       they held gigabytes. Nor holes: a bin with plates is built with none, and asked for
+       them with no lip either, it can have a block across its floor that this one has
+       not. */
+    const bareKey = JSON.stringify(Object.assign({}, cfg, { divX: 0, divY: 0, divRemovable: false, lip: false, scoop: 0, label: 0,
+      insert: 0 }));
     if (!bare.has(bareKey)) {
       if (bare.size >= 8) bare.delete(bare.keys().next().value);
       bare.set(bareKey, trisOf(buildBin(G, JSON.parse(bareKey)).polys));
@@ -2032,6 +2159,10 @@ console.log('\nremovable dividers: every plate goes into its slot');
      their notches in the lowered shelf, past the letters, and the plates along in front of
      it. Each bin is checked whole as well, watertight and wound. */
   report('a note raised on the shelf, lip on', NOTE_PLATES.map(([name, cfg]) => [name, cfg, true]), false);
+  /* With finger slots (CASES): no lip, and under a front slot the scoop held lower than the
+     plates need, which the plates across are cut to and the plates along stand on. */
+  report('finger slots, no lip and the scoop held', CASES.filter((c) => c.slots && c.divRemovable)
+    .map((c) => [c.name, c, true]), false);
 }
 
 /* Plates that go in are no proof on their own: a bin with no lip, no scoop and no shelf
@@ -2328,7 +2459,13 @@ console.log('\nnotes raised on the label shelf');
     let divClear = Infinity, notchClear = Infinity;
     const H = cs.hUnits * SPEC.unitH;
     const id = (cs.v - 1) * SPEC.pitch / 2 + SPEC.half - (cs.wall || BIN_DEFAULTS.wall);
-    if (!s.fit) faults.push(`NO LETTERS (${s.why})`);
+    if (cs.noNote) {
+      /* A finger slot in the back wall takes the shelf's place, and the letters with it:
+         nothing stands at the back but the floor, and the page is told why. */
+      const back = at(0, id - 3).pop();
+      if (s.fit || s.why !== cs.noNote) faults.push(`shelfNote says ${s.fit ? 'letters' : s.why}, not ${cs.noNote}`);
+      if (!(back < H / 2)) faults.push(`something at the back stands ${back.toFixed(2)} high`);
+    } else if (!s.fit) faults.push(`NO LETTERS (${s.why})`);
     else {
       // the shelf through the strip in front of the letters, beside one: clear of dividers
       const [x, y] = s.fit.segs[0][0];
@@ -2382,9 +2519,10 @@ console.log('\nnotes raised on the label shelf');
     }
     console.log(`  ${cs.name.padEnd(22)} ${s.fit ? (s.fit.cap.toFixed(2) + ' mm, ' + s.fit.lines.length +
       (s.fit.lines.length > 1 ? ' lines' : ' line') + (s.fit.cut ? ', cut' : '')).padEnd(20) : ''.padEnd(20)} ` +
-      (faults.length ? faults.join('; ') : 'letters at H - 0.4 on a shelf at H - 1.0' +
-        (isFinite(divClear) ? `, ${divClear.toFixed(2)} off the nearest divider` : '') +
-        (isFinite(notchClear) ? `, ${notchClear.toFixed(2)} off the nearest notch` : '')));
+      (faults.length ? faults.join('; ') : cs.noNote ? `no shelf and no letters: ${cs.noNote}`
+        : 'letters at H - 0.4 on a shelf at H - 1.0' +
+          (isFinite(divClear) ? `, ${divClear.toFixed(2)} off the nearest divider` : '') +
+          (isFinite(notchClear) ? `, ${notchClear.toFixed(2)} off the nearest notch` : '')));
     if (faults.length) bad++;
   }
 
@@ -2751,6 +2889,7 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
   const L3 = [[0, 0], [1, 0], [0, 1]], U5 = [[0, 0], [1, 0], [2, 0], [0, 1], [2, 1]];
   const PLUS = [[1, 0], [0, 1], [1, 1], [2, 1], [1, 2]];
   const NOTE = { labelMode: 1, note: 'M3 screws' };
+  const SLOTS4 = { f: true, b: true, l: true, r: true };
   const CASES = [
     ['2x2x3, 8 mm scoop, 12 mm shelf', { u: 2, v: 2, hUnits: 3, scoop: 8, label: 12 }],
     ['3x2x6, scoop, shelf, fixed dividers', { u: 3, v: 2, hUnits: 6, scoop: 8, label: 12, divX: 2, divY: 1 }],
@@ -2813,15 +2952,75 @@ console.log('\nwhat a bin weighs is the plastic it is built of');
        LIP_TOL: they are 0.9999 as built, and the upright slip is 0.2 points past it. */
     ['carved plus, 10 mm walls, 1 unit', { u: 3, v: 3, hUnits: 1, wall: 10, cells: PLUS }, LIP_TOL],
     ['carved plus, 10 mm, 1 unit, floor 0',{ u: 3, v: 3, hUnits: 1, wall: 10, floorT: 0, cells: PLUS }, LIP_TOL],
+    /* Finger slots (fingerSlots): no lip, and so no notches in one, the dips out of the
+       walls, a back slot's shelf left off with its notches and its raised note, and with
+       holes asked for those laid out for the shelf it takes away (the 1x1x4's spread into
+       its room, the 1x0.5x3's kept clear, which leaves room for none), a front one's scoop
+       held under it, on walls of 5, 6.5 and 10 mm, lowered walls, a half-size bin, and
+       removable plates (#57: the scoop under both caps, the slots off the rails). Weighed
+       as the bin without them, the trial merge of this with them came to 1.093 to 1.336. */
+    ['1x1x3, a front slot', { u: 1, v: 1, hUnits: 3, fingerSlots: { f: true } }],
+    ['1x1x3, front slot over an 8 mm scoop', { u: 1, v: 1, hUnits: 3, scoop: 8, fingerSlots: { f: true } }],
+    ['2x1x3, back slot, 12 mm shelf and note', { u: 2, v: 1, hUnits: 3, label: 12, ...NOTE, fingerSlots: { b: true } }],
+    ['1x1x4, back slot over AA holes, shelf', { u: 1, v: 1, hUnits: 4, insert: 1, label: 12, fingerSlots: { b: true } }],
+    ['1x0.5x3, back slot, AAA kept clear', { u: 1, v: 0.5, hUnits: 3, insert: 2, label: 8, fingerSlots: { b: true } }],
+    ['3x2x4, side slots, scoop and shelf', { u: 3, v: 2, hUnits: 4, scoop: 15, label: 12, fingerSlots: { l: true, r: true } }],
+    ['3x2x4, a slot in all four walls', { u: 3, v: 2, hUnits: 4, fingerSlots: SLOTS4 }],
+    ['2x1x6, 5 mm walls, front and back slots', { u: 2, v: 1, hUnits: 6, wall: 5, fingerSlots: { f: true, b: true } }],
+    ['2x2x6, 10 mm walls, all four slots', { u: 2, v: 2, hUnits: 6, wall: 10, fingerSlots: SLOTS4 }],
+    ['3x2x4, front at half, front and left', { u: 3, v: 2, hUnits: 4, scoop: 8, edges: { f: 0.5, b: 1, l: 1, r: 1 },
+                                               fingerSlots: { f: true, l: true } }],
+    ['2x2x6, walls at 0.66, all four, divided', { u: 2, v: 2, hUnits: 6, divX: 1, divY: 1,
+                                                 edges: { f: 0.66, b: 0.66, l: 0.66, r: 0.66 }, fingerSlots: SLOTS4 }],
+    ['2x1x6, 6.5 mm walls, back at half', { u: 2, v: 1, hUnits: 6, wall: 6.5, label: 12, edges: { f: 1, b: 0.5, l: 1, r: 1 },
+                                            fingerSlots: { f: true, b: true } }],
+    ['1.5x1x3, half size, front and back', { u: 1.5, v: 1, hUnits: 3, scoop: 8, label: 12, fingerSlots: { f: true, b: true } }],
+    ['2x1x2, 2 removable, front slot, scoop', { u: 2, v: 1, hUnits: 2, divX: 2, divRemovable: true, scoop: 10,
+                                                fingerSlots: { f: true } }],
+    ['3x2x4, 2 x 1 removable, slots f, l, r', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, divRemovable: true, scoop: 20,
+                                                fingerSlots: { f: true, l: true, r: true } }],
+    ['3x2x4, 2 x 6 removable, back slot, L12', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 6, divRemovable: true, scoop: 8,
+                                                 label: 12, fingerSlots: { b: true } }],
   ];
-  const off = [];
+  const off = [], meshes = new Map();
   for (const [name, cfg, tol = tolOf(cfg)] of CASES) {
     const est = binVolume(cfg, 0.15).raw, mesh = enclosedVolume(buildBin(G, cfg).polys);
     const ratio = est / mesh, out = Math.abs(ratio - 1) > tol;
+    meshes.set(name, mesh);
     console.log(`  ${name.padEnd(40)} ${(est / 1000).toFixed(2).padStart(6)} of ${(mesh / 1000).toFixed(2).padStart(6)} cm³` +
                 `  ${ratio.toFixed(3)}${out ? '  OFF' : ''}`);
     if (out) off.push(name);
   }
+  /* And what the slots take off the weight is what they take off the plastic: each slotted
+     row against the same bin with none (its twin), the weight's drop within 1% of the
+     mesh's, or 5 mm³ (what enclosedVolume measures to here). The 2x1x3's twin has its note
+     raised, whose letters the weight leaves out (binVolume), 61 mm³ of them; the rest
+     agree to 15 mm³. And no row passes by being too coarse to tell: each would be OFF, by
+     its ratio or by its drop, with the slots' own term left out or taken twice, which is
+     the dips (fingerSlots' area times the wall) and the lip the twin has. Every row is
+     built with the slots it asks for. */
+  const slotOff = [], blind = [], unbuilt = [];
+  for (const [name, cfg] of CASES.filter(([, c]) => c.fingerSlots)) {
+    const p = fingerSlotPlan(cfg), twin = Object.assign({}, cfg, { fingerSlots: {} });
+    const asked = Object.keys(cfg.fingerSlots).filter((k) => cfg.fingerSlots[k]).sort().join('');
+    if (p.built.split('').sort().join('') !== asked) unbuilt.push(`${name} (${p.built || 'none'} of ${asked})`);
+    const est = binVolume(cfg, 0.15).raw, mesh = meshes.get(name);
+    const estT = binVolume(twin, 0.15), meshT = enclosedVolume(buildBin(G, twin).polys), dM = meshT - mesh;
+    const term = p.area * (cfg.wall || BIN_DEFAULTS.wall) + estT.parts.lip;
+    const holds = (e) => Math.abs(e / mesh - 1) <= TOL && Math.abs((estT.raw - e) - dM) <= Math.max(0.01 * Math.abs(dM), 5);
+    console.log(`  ${name.padEnd(40)} takes ${((estT.raw - est) / 1000).toFixed(3)} of ${(dM / 1000).toFixed(3)} cm³ off; ` +
+                `left out ${((est + term) / mesh).toFixed(3)}, twice ${((est - term) / mesh).toFixed(3)}` +
+                `${holds(est) ? '' : '  OFF'}${holds(est + term) || holds(est - term) ? '  BLIND' : ''}`);
+    if (!holds(est)) slotOff.push(name);
+    if (holds(est + term) || holds(est - term)) blind.push(name);
+  }
+  console.log(`  finger slots: ` + (slotOff.length || blind.length || unbuilt.length
+    ? [slotOff.length ? `OFF: ${slotOff.join('; ')}` : '', blind.length ? `BLIND to the term: ${blind.join('; ')}` : '',
+       unbuilt.length ? `NOT BUILT: ${unbuilt.join('; ')}` : ''].filter(Boolean).join('; ')
+    : 'each takes off what its mesh loses, and each would show the term left out or taken twice'));
+  if (slotOff.length) bad++;
+  if (blind.length) bad++;
+  if (unbuilt.length) bad++;
   /* And bins drawn at random, the same ones every run (a fixed seed): whole, half and
      carved, walls 0.4 to 10 mm, edges lowered and open, a scoop, a label shelf with and
      without its note raised, fixed and removable dividers at any plate and clearance,
@@ -2957,7 +3156,7 @@ function weldOpen(polys, tol) {
   const ITEM = { 1: { across: 15.0, len: 50.5 }, 2: { across: 11.0, len: 44.5 },
                  3: { across: 19.0, len: 65.5 }, 4: { across: 6.65, len: 25, hex: true } };
   const near = (z, want) => z !== undefined && Math.abs(z - want) < 1e-6;
-  for (const cs of CASES.filter((c) => c.insert)) {
+  for (const cs of CASES.filter((c) => c.insert && c.holes)) {
     const t0 = Date.now();
     const r = buildBin(G, cs);
     const ms = Date.now() - t0;
@@ -2991,7 +3190,8 @@ function weldOpen(polys, tol) {
       const hw = (cs.u - 1) * 21 + 20.75, hd = (cs.v - 1) * 21 + 20.75;
       const lip = !cs.edges, Wl = Math.max(0.4, wall);
       const side = lip ? Math.max(0.8, 2.70 + 0.25 - Wl) : 0.8;
-      const shelf = cs.label ? shelfNote(cs) : null;
+      // a finger slot in the back wall takes the shelf away
+      const shelved = cs.label && !(cs.slots && cs.slots.b), shelf = shelved ? shelfNote(cs) : null;
       const webs = [];
       for (let i = 1; i < h.xs.length; i++) webs.push(h.xs[i] - h.xs[i - 1] - bx);
       for (let j = 1; j < h.ys.length; j++) webs.push(h.ys[j] - h.ys[j - 1] - by);
@@ -3023,11 +3223,13 @@ function weldOpen(polys, tol) {
          that checkManifold, which rounds to a micron, could miss. */
       const open = weldOpen(r.polys, 0.01), was = weldOpen(buildBin(G, Object.assign({}, cs, { insert: 0 })).polys, 0.01);
       if (open > was) faults.push(`${open} edges open welded at 10 microns, where the bin without holes has ${was}`);
-      if (cs.label) {
-        // the shelf as built: noteOnShelf's depth with a note, else as asked (12 fits all of these)
-        const sd = shelf && shelf.depth ? shelf.depth : cs.label;
+      // the shelf as built: noteOnShelf's depth with a note, else as asked (12 fits all of these)
+      const sd = shelf && shelf.depth ? shelf.depth : cs.label;
+      // given way to a back slot, they keep clear of where it would be, as if it were there
+      if ((shelved || cs.gave) && backY > hd - Wl - sd - 0.8 + 1e-9)
+        faults.push(`a hole reaches under ${shelved ? 'the shelf' : 'where the shelf would be'}, to ${backY.toFixed(2)}`);
+      if (shelved) {
         const top = shelf && shelf.fit ? H - 1.0 : H;
-        if (backY > hd - Wl - sd - 0.8 + 1e-9) faults.push(`a hole reaches under the shelf, to ${backY.toFixed(2)}`);
         const under = at(0, hd - Wl - sd / 2);
         if (!under.some((z) => near(z, floor + depth))) faults.push('no block under the shelf');
         if (!near(under[under.length - 1], top)) faults.push(`the block comes through the shelf: ${under[under.length - 1].toFixed(2)}`);
@@ -3097,6 +3299,22 @@ function weldOpen(polys, tol) {
     : `${SAME.length} kinds, each the same STL to the byte, and the page told why`));
   if (moved.length) bad++;
 
+  /* The most holes one bin is built with, at the boundary: exactly HOLES_MAX are laid
+     out, and one more is refused ('many'), where the row above only tries 2392. Asked of
+     insertPlan alone: the 2000 AAA holes are 1.07 million triangles to build. */
+  const EDGE = [
+    ['AAA on an 11.5x14.5, 40 x 50', { u: 11.5, v: 14.5, hUnits: 6, insert: 2, holeClr: -0.3 }, '', HOLES_MAX],
+    ['hex bits on a 4.5x18, 5 mm walls', { u: 4.5, v: 18, hUnits: 6, wall: 5, insert: 4, holeClr: -0.3 },
+     'many', HOLES_MAX + 1],
+  ];
+  const off = EDGE.map(([name, cfg, why, n]) => {
+    const h = insertPlan(cfg), got = why ? h.count : h.n;
+    return h.why === why && got === n ? '' : `${name}: ${h.why || 'built'}, ${got} holes`;
+  }).filter(Boolean);
+  console.log(`  ${'the most holes'.padEnd(20)} ` + (off.length ? 'WRONG: ' + off.join('; ')
+    : `${HOLES_MAX} laid out, ${HOLES_MAX + 1} refused`));
+  if (off.length) bad++;
+
   /* Links from before holes, built by the engine before them: the same bytes. A shelf, a
      raised note and the dividers and scoop are what the holes' code goes past on its way,
      so those are the rows. Notes ride in bnotes, so the two that print one are given it.
@@ -3125,6 +3343,316 @@ function weldOpen(polys, tol) {
   console.log(`  ${'links from before'.padEnd(20)} ` + (changed.length ? 'CHANGED: ' + changed.join('; ')
     : `${BEFORE.length} links, each the same STL to the byte`));
   if (changed.length) bad++;
+}
+
+/* Finger slots: a U-shaped dip in the top of a wall, one per compartment.
+ *
+ * Built, not merely closed: a bin whose slots were left out is just as watertight. So the
+ * top of every wall asked for one is read off the mesh, on both its faces, and every dip
+ * in its inner face, where a finger goes in, measured against the spec, written here:
+ * 20 mm across the top or the room the
+ * compartment has, never under 13; sides at 70 degrees; two 4 mm rounded corners at the
+ * bottom; the bottom half way down the wall's own height above the floor, or where the
+ * two corners meet if that is higher, or half a millimetre over the block of holes across
+ * the floor if that is higher still. A wall's top edge as a whole is held to the 75
+ * degrees every wall's is (see where a lowered wall meets a full-height one), and the
+ * stacking lip has to be gone, since a lip over a dip has nothing under it. The outer face
+ * takes the same fractions of its straight, which is the longer on a wall over 3.35 mm,
+ * where the cavity's corners stop getting smaller, so there each dip is wider by the two
+ * straights' ratio, about the same middle, to the same bottom.
+ *
+ * Nothing inside may stand in a slot: along each one, just inside the wall, the highest
+ * thing is no higher than the top of the wall there. That is what keeps a slot off the
+ * dividers and rails, the scoop, the label shelf and the block of holes. */
+console.log('\nfinger slots');
+{
+  const F = { top: 20, angle: 70, round: 4, share: 0.5, least: 13, clear: 0.5 };
+  const tan = (d) => Math.tan(d * Math.PI / 180);
+  const deepest = (a) => (a - F.round * tan(F.angle / 2)) * tan(F.angle);
+  const measured = new Map();      // each case's slots on each wall's inner face, as measured
+  for (const cs of CASES.filter((c) => c.slots)) {
+    const r = buildBin(G, cs), at = prober(r.polys), faults = [];
+    const seen = {};
+    measured.set(cs, seen);
+    const H = cs.hUnits * SPEC.unitH;
+    const wall = Math.max(0.4, cs.wall === undefined ? BIN_DEFAULTS.wall : cs.wall);
+    const floorT = cs.screws ? Math.max(BIN_DEFAULTS.floorT, HOLE.floor) : BIN_DEFAULTS.floorT;
+    const floorZ = SPEC.footH + floorT;
+    const hw = (cs.u - 1) * 21 + 20.75, hd = (cs.v - 1) * 21 + 20.75;
+    let zmax = -Infinity;
+    for (const p of r.polys) for (const w of p.verts) zmax = Math.max(zmax, w[2]);
+    if (r.meta.hasLip || r.meta.lipH || zmax > H + 1e-6) faults.push(`a lip: ${zmax.toFixed(2)} tall`);
+    const want = Object.entries(cs.slots);
+    const n = want.reduce((s, [, k]) => s + k, 0);
+    if (r.meta.fingers !== n) faults.push(`${r.meta.fingers} slots built, ${n} wanted`);
+    /* The holes the page is told of are the ones built, and with a back slot over a
+       shelf, whether they gave way to it, and why: 'many' when spread into its room they
+       would come to more than one bin is built with, 'high' and the walls whose slots they
+       would stand too high for. */
+    const plan = fingerSlotPlan(cs), told = cs.insert ? insertPlan(cs).n || 0 : 0;
+    if ((r.meta.holes || 0) !== (cs.holes || 0) || told !== (cs.holes || 0))
+      faults.push(`${r.meta.holes || 0} holes built, ${told} said, ${cs.holes || 0} wanted`);
+    if (plan.shelfOff !== !!(cs.label && cs.slots.b)) faults.push(`shelfOff ${plan.shelfOff}`);
+    const g = plan.holesGaveWay, gave = g ? g.why + (g.walls ? ':' + g.walls : '') : false;
+    if (gave !== (cs.gave || false)) faults.push(`holesGaveWay ${gave}, not ${cs.gave || false}`);
+    let worstSide = 0, narrowest = Infinity, widest = 0, bottoms = [];
+    for (const side of ['f', 'b', 'l', 'r']) {
+      const e = cs.edges && cs.edges[side] !== undefined ? cs.edges[side] : 1;
+      const T = floorZ + e * (H - floorZ);
+      /* The top of the wall along each face, the highest point at each place along it, read
+         off the ribbon across the wall's top: its faces are the only ones with a corner on
+         each face, so a divider, the scoop or the shelf against the inner face is not taken
+         for the wall. */
+      const across = side === 'f' || side === 'b', sign = side === 'f' || side === 'l' ? -1 : 1;
+      const outerAt = sign * (across ? hd : hw), innerAt = outerAt - sign * wall;
+      const on = (w, f) => Math.abs(w[across ? 1 : 0] - f) < 1e-4;
+      const ribbon = r.polys.filter((p) => p.verts.some((w) => on(w, outerAt)) && p.verts.some((w) => on(w, innerAt)));
+      const topAlong = (f) => {
+        const tops = new Map();
+        for (const p of ribbon) for (const w of p.verts) {
+          if (!on(w, f) || w[2] < floorZ + 0.5) continue;
+          const k = (across ? w[0] : w[1]).toFixed(4);
+          tops.set(k, Math.max(tops.get(k) ?? -Infinity, w[2]));
+        }
+        return [...tops].map(([k, z]) => [+k, z]).sort((a, b) => a[0] - b[0]);
+      };
+      const outer = topAlong(outerAt), prof = topAlong(innerAt);
+      const edgeAt = (x) => {
+        for (let i = 1; i < prof.length; i++)
+          if (x <= prof[i][0]) return prof[i - 1][1] + (prof[i][1] - prof[i - 1][1]) *
+            (x - prof[i - 1][0]) / (prof[i][0] - prof[i - 1][0]);
+        return prof[prof.length - 1][1];
+      };
+      // the whole top edge, ramps and all, on both faces
+      const steepest = (pr) => {
+        let steep = 0;
+        for (let i = 1; i < pr.length; i++) {
+          const climb = Math.abs(pr[i][1] - pr[i - 1][1]);
+          if (climb >= 0.2) steep = Math.max(steep, Math.atan2(climb, pr[i][0] - pr[i - 1][0]) * 180 / Math.PI);
+        }
+        return steep;
+      };
+      for (const [f, pr] of [['inner', prof], ['outer', outer]])
+        if (steepest(pr) > 75) faults.push(`${side}: a cliff of ${steepest(pr).toFixed(1)} degrees on the ${f} face`);
+      // each run below the wall's own top is a slot, from the top corner before it to the one after
+      const dipsOf = (pr) => {
+        const dips = [];
+        for (let i = 0; i < pr.length; i++) {
+          if (!(pr[i][1] < T - 1e-6)) continue;
+          let j = i;
+          while (j + 1 < pr.length && pr[j + 1][1] < T - 1e-6) j++;
+          if (i === 0 || j + 1 === pr.length) return [];      // no top corner: not a slot
+          dips.push({ x0: pr[i - 1][0], x1: pr[j + 1][0], run: pr.slice(i - 1, j + 2) });
+          i = j;
+        }
+        return dips;
+      };
+      const dips = dipsOf(prof), outs = dipsOf(outer);
+      seen[side] = dips.map((d) => ({ x0: d.x0, x1: d.x1, bottom: Math.min(...d.run.map(([, z]) => z)) }));
+      if (dips.length !== (cs.slots[side] || 0) || outs.length !== dips.length) {
+        faults.push(`${side}: ${dips.length} slots inside, ${outs.length} outside, ${cs.slots[side] || 0} wanted`);
+        continue;
+      }
+      // the two straights, end to end along each face: the outer is the longer on a thick wall
+      const stretch = (outer[outer.length - 1][0] - outer[0][0]) / (prof[prof.length - 1][0] - prof[0][0]);
+      for (const [i, d] of dips.entries()) {
+        const w = d.x1 - d.x0, mid = (d.x0 + d.x1) / 2;
+        const bottom = Math.min(...d.run.map(([, z]) => z));
+        let sides = 0;
+        for (let i = 1; i < d.run.length; i++) {
+          const climb = Math.abs(d.run[i][1] - d.run[i - 1][1]);
+          if (climb >= 0.2) sides = Math.max(sides, Math.atan2(climb, d.run[i][0] - d.run[i - 1][0]) * 180 / Math.PI);
+        }
+        // just inside the wall, at the slot's middle and along it
+        const inside = (x) => {
+          const q = across ? [x, side === 'f' ? -hd + wall + 0.3 : hd - wall - 0.3]
+                           : [side === 'l' ? -hw + wall + 0.3 : hw - wall - 0.3, x];
+          const zs = at(q[0], q[1]);
+          return zs.length ? zs[zs.length - 1] : -Infinity;
+        };
+        const block = cs.insert ? inside(mid) + F.clear : -Infinity;
+        const expect = Math.max(T - Math.min(F.share * (T - floorZ), deepest(w / 2)), block);
+        if (w > F.top + 1e-6 || w < F.least - 1e-6) faults.push(`${side}: ${w.toFixed(2)} across`);
+        if (Math.abs(sides - F.angle) > 0.5) faults.push(`${side}: sides at ${sides.toFixed(1)} degrees`);
+        if (Math.abs(bottom - expect) > 1e-3)
+          faults.push(`${side}: bottom at ${bottom.toFixed(3)}, not ${expect.toFixed(3)}`);
+        const o = outs[i], ow = o.x1 - o.x0;
+        if (Math.abs(ow - w * stretch) > 1e-3 || Math.abs((o.x0 + o.x1) / 2 - mid * stretch) > 1e-3 ||
+            Math.abs(Math.min(...o.run.map(([, z]) => z)) - bottom) > 1e-6)
+          faults.push(`${side}: ${ow.toFixed(2)} across outside, not ${(w * stretch).toFixed(2)}`);
+        for (let x = d.x0 + 0.5; x <= d.x1 - 0.5; x += 0.5) {
+          const z = inside(x), edge = edgeAt(x) - (cs.insert ? F.clear : 0);
+          if (z > edge + 1e-3) { faults.push(`${side}: at ${x.toFixed(1)} something inside stands ${(z - edge).toFixed(2)} into the slot`); break; }
+        }
+        // with nothing to keep it off-centre, in the middle of the wall
+        if (!cs.divX && !cs.divY && !cs.label && !cs.scoop && !cs.edges && Math.abs(mid) > 1e-3)
+          faults.push(`${side}: ${mid.toFixed(2)} off the middle`);
+        widest = Math.max(widest, ow);
+        worstSide = Math.max(worstSide, sides);
+        narrowest = Math.min(narrowest, w);
+        bottoms.push(bottom);
+      }
+    }
+    console.log(`  ${cs.name.padEnd(22)} ` + (faults.length ? 'WRONG: ' + faults.slice(0, 4).join('; ')
+      : `${String(n).padStart(2)} ${n > 1 ? 'slots' : 'slot '} ${narrowest.toFixed(2)}+ across` +
+        `${widest > narrowest + 1e-3 && cs.wall > 3.35 ? ` (to ${widest.toFixed(2)} outside)` : ''}, sides ` +
+        `${worstSide.toFixed(1)}°, bottom ${Math.min(...bottoms).toFixed(2)}${bottoms.some((b) => b !== bottoms[0]) ? ' to ' + Math.max(...bottoms).toFixed(2) : ''}, no lip`));
+    if (faults.length) bad++;
+  }
+
+  /* On a bin with removable plates. Each slot keeps a millimetre off the rails either side
+     of it, so off the gap between them a plate stands in, as it keeps off a divider. The
+     scoop is held to the smaller of two caps, read off the mesh at the front wall and
+     worked out here from the slots as measured: nine tenths of the way up to the bottom of
+     the lowest slot in the front wall, and what keeps each plate across a millimetre of its
+     front end in its rails (its top, the clearance under the rim, less that millimetre and
+     the clearance over the scoop). The plates across are cut to the scoop as built, no
+     more than twice their clearance above it, and a plate along over it stands on it.
+     Where plates cross, each keeps a millimetre, and the two halve the height they share. No
+     lip, so no notches in one, and as many plates as fit with none; and a back slot leaves
+     no shelf, so none in that either,
+     and the plates along are as many as with no shelf asked for, the plain count past the
+     5 that keep in front of one. */
+  for (const cs of CASES.filter((c) => c.slots && c.divRemovable)) {
+    const r = buildBin(G, cs), at = prober(r.polys), faults = [], seen = measured.get(cs);
+    const c = Object.assign({}, BIN_DEFAULTS, cs), H = c.hUnits * SPEC.unitH, zf = r.meta.floorZ + 0.05;
+    const floorZ = r.meta.floorZ, wall = Math.max(0.4, c.wall), t = c.divT, clr = c.divClr, slot = t / 2 + clr;
+    const hwO = (c.u - 1) * 21 + 20.75, hdO = (c.v - 1) * 21 + 20.75, iw = hwO - wall, id = hdO - wall;
+    const built = dividersBuilt(cs), RAIL_T = 1.2;
+    const pos = (n, inner) => Array.from({ length: n }, (_, k) => -inner + (2 * inner) * (k + 1) / (n + 1));
+    const pX = pos(built.divX, iw), pY = pos(built.divY, id);
+    const highest = (x, y) => { const z = at(x, y); return z.length ? z[z.length - 1] : -Infinity; };
+    // a millimetre off every rail: the plates across have theirs on the front and back walls
+    let keep = Infinity;
+    for (const [side, ps] of [['f', pX], ['b', pX], ['l', pY], ['r', pY]])
+      for (const d of seen[side] || []) for (const p of ps)
+        keep = Math.min(keep, Math.max(p - slot - RAIL_T - d.x1, d.x0 - (p + slot + RAIL_T)));
+    if (keep < 1 - 1e-6) faults.push(`a slot ${keep.toFixed(3)} mm off a rail`);
+    // the scoop: the smaller cap, under the slot
+    let scoop = '';
+    if (c.scoop) {
+      const front = (seen.f || []).map((d) => d.bottom);
+      const caps = { asked: c.scoop, depth: 0.9 * id, height: 0.9 * (H - floorZ),
+                     slot: front.length ? 0.9 * (Math.min(...front) - floorZ) : Infinity,
+                     plates: pX.length ? (H - clr + 0.05) - 1 - clr - floorZ : Infinity };
+      const want = Math.min(...Object.values(caps)), by = Object.keys(caps).find((k) => caps[k] === want);
+      const xs = [-iw].concat(pX, [iw]), x = (xs[0] + xs[1]) / 2;
+      const got = highest(x, -id + 1e-4) - floorZ;
+      if (Math.abs(got - want) > 5e-3) faults.push(`the scoop ${got.toFixed(3)} tall, not ${want.toFixed(3)} (${by})`);
+      if (front.length && floorZ + got > Math.min(...front) + 1e-6) faults.push('the scoop above the slot');
+      scoop = `scoop ${got.toFixed(2)} (${by}${by === 'slot' && isFinite(caps.plates) ? `; the plates' ${caps.plates.toFixed(2)}` : ''}), `;
+    }
+    // the plates across cut to it; the plates along stand on it
+    const withOutline = (m) => Object.assign({ outline: [[-m.span / 2, zf], [m.span / 2, zf], [m.span / 2, zf + m.tall], [-m.span / 2, zf + m.tall]] }, m);
+    const chainAt = (ol, u) => {
+      const b = ol.slice(0, ol.findIndex((q) => q[0] === Math.max(...ol.map((w) => w[0]))) + 1);
+      for (let i = 1; i < b.length; i++) if (b[i][0] > b[i - 1][0] && u >= b[i - 1][0] && u <= b[i][0])
+        return b[i - 1][1] + (b[i][1] - b[i - 1][1]) * (u - b[i - 1][0]) / (b[i][0] - b[i - 1][0]);
+      return NaN;
+    };
+    if (c.scoop && pX.length) {
+      const ol = withOutline(dividerPart(G, cs, 'y', 1).meta).outline;
+      let probed = 0;
+      for (let u = -id + clr + 0.5; u < 0; u += 0.25) {
+        const z = highest(pX[0], u);
+        if (z < zf + 0.2 || z > H - 1 || Math.abs(z - highest(pX[0], u - 0.1)) > 0.1) continue;
+        probed++;
+        const gap = chainAt(ol, u) - z;
+        if (!(gap >= -1e-6 && gap <= 2 * clr + 0.1)) { faults.push(`a plate across ${gap.toFixed(3)} mm above the scoop at y ${u.toFixed(2)}`); break; }
+      }
+      if (!probed) faults.push('no scoop under the plates across to measure');
+    }
+    let standing = 0, halved = 0;
+    const acrossOl = pX.length ? withOutline(dividerPart(G, cs, 'y', 1).meta).outline : null;
+    const ztop = zf + dividerPart(G, Object.assign({}, cs, { divY: 0 }), 'x').meta.tall;
+    pY.forEach((q, k) => {
+      const olY = withOutline(dividerPart(G, cs, 'x', k + 1).meta).outline;
+      const z = highest(0, q - t / 2 + 1e-4), zb = Math.min(...olY.map((w) => w[1]));
+      if (z > zf + 1e-6) {
+        standing++;
+        if (!(zb >= z - 1e-6 && zb - z < 0.01)) faults.push(`plate along ${k + 1} stands at ${zb.toFixed(3)}, the scoop under it at ${z.toFixed(3)}`);
+      }
+      // where it crosses the plates across: each keeps a millimetre, and they halve the height they share
+      if (!acrossOl) return;
+      const cut = Math.min(...acrossOl.filter((w) => w[0] >= q - slot - 1e-9 && w[0] <= q + slot + 1e-9 &&
+                                                   w[1] > chainAt(acrossOl, w[0]) + 1e-9).map((w) => w[1]));
+      const lift = Math.max(...olY.filter((w) => w[0] >= pX[0] - slot - 1e-9 && w[0] <= pX[0] + slot + 1e-9).map((w) => w[1]));
+      const keepX = cut - chainAt(acrossOl, q - slot), keepY = ztop - lift;
+      if (!isFinite(cut) || !isFinite(lift)) faults.push(`crossing ${k + 1} not halved`);
+      else if (keepX < 1 - 1e-6 || keepY < 1 - 1e-6) faults.push(`crossing ${k + 1} keeps ${keepX.toFixed(2)} and ${keepY.toFixed(2)} mm`);
+      else if (Math.abs(lift - cut - 2 * clr) > 1e-6) faults.push(`crossing ${k + 1} slots ${(lift - cut).toFixed(3)} mm apart`);
+      else halved++;
+    });
+    // no lip to notch, and with a back slot no shelf: nothing over the floor at the back
+    let zmax = -Infinity;
+    for (const pl of r.polys) for (const w of pl.verts) zmax = Math.max(zmax, w[2]);
+    if (zmax > H + 1e-6) faults.push(`something ${(zmax - H).toFixed(2)} over the rim`);
+    if (c.label && seen.b && seen.b.length && built.divY !== dividersBuilt(Object.assign({}, cs, { label: 0 })).divY)
+      faults.push(`${built.divY} plates along, kept in front of a shelf that is not built`);
+    const shelved = c.label && seen.b && seen.b.length ? dividersBuilt(Object.assign({}, cs, { fingerSlots: null })).divY : NaN;
+    if (shelved >= built.divY) faults.push(`fixture: ${shelved} plates along in front of the shelf, no fewer`);
+    /* No lip, so counted as the bin with none, and Checks puts the count down to something
+       it has: never to the lip's notches. With its lip, the same bin is counted by their
+       rule. Asked for holes, a bin asked for no lip lays them out with more room, so it is
+       another bin: there it is this one counted without the lip's rule (lipTaken). */
+    const lipless = dividersBuilt(Object.assign({}, cs, cs.insert ? { lipTaken: true } : { lip: false }));
+    if (built.divX !== lipless.divX || built.divY !== lipless.divY)
+      faults.push(`${built.divX} across and ${built.divY} along, where ${lipless.divX} and ${lipless.divY} fit with no lip`);
+    const why = dividersWhy(cs);
+    if (Object.values(why).some((w) => /lip|Corners/.test(w || ''))) faults.push(`Checks gives ${JSON.stringify(why)}`);
+    const lipped = dividersBuilt(Object.assign({}, cs, { fingerSlots: null }));
+    const byLip = c.label && seen.b && seen.b.length ? '' : ['divX', 'divY'].filter((k) => lipped[k] < built[k])
+      .map((k) => `${built[k]} ${k === 'divX' ? 'across' : 'along'} (${lipped[k]} with its lip)`).join(' and ');
+    if (c.label && seen.b && seen.b.length)
+      // the middle of each compartment, and each plate's slot, where the shelf was notched
+      for (const x of [-iw].concat(pX).map((a, k, xs) => (a + (k + 1 < xs.length ? xs[k + 1] : iw)) / 2).concat(pX))
+        if (highest(x, id - 0.3) > zf + 1e-6) { faults.push(`a shelf at x ${x.toFixed(2)}`); break; }
+    console.log(`  ${cs.name.padEnd(22)} ` + (faults.length ? 'WRONG: ' + faults.slice(0, 4).join('; ')
+      : `${scoop}${isFinite(keep) ? `slots ${keep.toFixed(2)}+ off the rails` : 'no rails on a wall with a slot'}, ` +
+        `${pX.length && c.scoop ? 'plates across cut to the scoop, ' : ''}` +
+        `${standing ? `${standing} along standing on it, ` : ''}${halved ? `${halved} crossing${halved > 1 ? 's' : ''} halved, ` : ''}no lip${c.label ? `, no shelf and ${built.divY} along (${shelved} with it)` : ''}` +
+        `${byLip ? `, so ${byLip}` : ''}`));
+    if (faults.length) bad++;
+  }
+
+  /* Opt-in, and only where one can be built: every other bin is built to the byte as it
+     was, whatever its slot settings say, and its plates are counted as they were. Each row
+     is a bin that has to come out the same as without them, and the reason fingerSlotPlan
+     gives the page for building none. */
+  const stl = (cfg) => Buffer.from(G.stlBinary(buildBin(G, cfg).polys, 'b')).toString('base64');
+  const one = { u: 1, v: 1, hUnits: 3 }, front = { fingerSlots: { f: true } };
+  const SAME = [
+    ['none asked for', { u: 3, v: 2, hUnits: 4, divX: 2, divY: 1, scoop: 8, label: 12 },
+     { fingerSlots: { f: false, b: false, l: false, r: false } }, null],
+    ['a 1-unit bin, too shallow', Object.assign({}, one, { hUnits: 1 }), front, 'low'],
+    ['a quarter-height front', Object.assign({}, one, { edges: { f: 0.25 } }), front, 'low'],
+    ['an open front', Object.assign({}, one, { edges: { f: 0 } }), front, 'open'],
+    ['four compartments in a 1x1', Object.assign({}, one, { divX: 3 }), front, 'narrow'],
+    ['half a cell square', { u: 0.5, v: 0.5, hUnits: 3 }, { fingerSlots: { f: true, b: true, l: true, r: true } }, 'narrow'],
+    ['carved', { u: 3, v: 3, hUnits: 3, cells: cellsExcept(3, 3, [[2, 2]]) }, front, 'carved'],
+    ['solid', Object.assign({}, one, { solid: true }), front, 'solid'],
+    ['AA cells in a 1x1x3', Object.assign({}, one, { insert: 1 }), front, 'holes'],
+    /* Holes that leave no room for a slot front or back: the plates along it asks for (and
+       is built without, as the holes divide it) are counted as without slots, in front of
+       its shelf and on its scoop. Counted as if the slots were built, they came to 10, not
+       3, and stood on a scoop held to 3.62 mm, not 7.25. */
+    ['AA cells, a shelf and plates along in a 1x1x2', { u: 1, v: 1, hUnits: 2, insert: 1, label: 12, scoop: 8, divY: 12,
+      divRemovable: true }, { fingerSlots: { f: true, b: true } }, 'holes'],
+  ];
+  // and the plates counted, which the field for them is held to, though none are built
+  const counted = (cfg) => JSON.stringify([railedLimit(cfg, 'y'), dividersBuilt(cfg), plateLayout(cfg, dividersBuilt(cfg)).r]);
+  const moved = SAME.map(([name, cfg, extra, why]) => {
+    const withIt = Object.assign({}, cfg, extra), plan = fingerSlotPlan(withIt);
+    if (stl(cfg) !== stl(withIt)) return `${name}: BUILT DIFFERENTLY`;
+    if (counted(cfg) !== counted(withIt)) return `${name}: counts its plates ${counted(withIt)}, not ${counted(cfg)}`;
+    if (buildBin(G, withIt).meta.fingers || plan.n) return `${name}: counts slots`;
+    const got = Object.values(plan.sides).map((s) => s.why);
+    return why === null ? (got.length ? `${name}: says ${got}` : '')
+      : got.length && got.every((g) => g === why) ? '' : `${name}: fingerSlotPlan says ${got}, not ${why}`;
+  }).filter(Boolean);
+  console.log(`  ${'bins with no slots'.padEnd(22)} ` + (moved.length ? 'FAILED: ' + moved.join('; ')
+    : `${SAME.length} kinds, each the same STL to the byte and the same plates counted, and the page told why`));
+  if (moved.length) bad++;
 }
 
 console.log(bad ? `\n${bad} case(s) FAILED` : '\nall cases clean');
