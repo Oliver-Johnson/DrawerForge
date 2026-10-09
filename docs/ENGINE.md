@@ -905,5 +905,6 @@ currently installed):
   counterbore's ceiling 2 microns from an edge of its own. Every piece with a seam on its
   left failed to build, for heads from 7.3 mm to the cap; 2.339 and 2.341 mm built. The
   second run is kept only if it comes out closed: a jigsaw plate at 41.24 mm with magnets
-  from above settles open after the merge, and fails to build as it did before rather
-  than going out with holes.
+  from above and main's bores (a 7.504 mm counterbore and a 3 mm shank, corners on the
+  sizes) settles open after the merge, and fails to build as it did before rather than
+  going out with holes.

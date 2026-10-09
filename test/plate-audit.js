@@ -1482,7 +1482,10 @@ function sectionArea(polys, z, dy) {
  * magnet's pocket stood 0.4 microns off the plane of a flat of the shank. The shank is
  * turned for that now (MOUNT_BORE.hole.turn), so both rows build whole here, and so does
  * the third, a 7.4 mm head, which main builds whole as well. Of those heads only 7.31 mm
- * still leaks, its corners 0.001 mm inside the magnet's (#77). */
+ * still leaks, its corners 0.001 mm inside the magnet's (#77). The fourth cuts main's
+ * bores, the head and shank whose polygons are main's 7.504 and 3 mm ones, 7.504 cos(π/14)
+ * and 3 cos(π/12): it runs out of passes here as on main and throws, so the second run's
+ * guard is still tested. */
 console.log('\na counterbore whose ceiling three cut lines cross at one point (#76):');
 {
   const PLATE = { pitch: 39.07, drawerW: 170, drawerD: 90, bedW: 100, bedD: 400, marginMode: 'auto',
@@ -1517,7 +1520,9 @@ console.log('\na counterbore whose ceiling three cut lines cross at one point (#
                    screwHeadD: 7.504, magnets: true, magnetSide: 'top', magnetD: 7.3, magnetH: 2.25 };
   for (const [label, over] of [['41.24 mm jigsaw: 55 bad edges a piece', {}],
                                ['2.264 mm magnet: folded twice', { magnetH: 2.264 }],
-                               ['7.4 mm head', { screwHeadD: 7.4 }]]) {
+                               ['7.4 mm head', { screwHeadD: 7.4 }],
+                               ["main's bores", { screwHeadD: 7.504 * Math.cos(Math.PI / 14),
+                                                  screwHoleD: 3 * Math.cos(Math.PI / 12) }]]) {
     const b = build({ ...JIGSAW, ...over });
     const held = b.whole || /^healCsgSeams/.test(b.err || '');
     console.log(`  ${label.padEnd(38)} ${b.text}${held ? '' : '  NEITHER THREW NOR BUILT WHOLE'}`);

@@ -529,8 +529,8 @@ test.describe('a screw head that does not clear its shank is cut as none', () =>
    said so already, but the list under the cut map, where a design is read for what is
    wrong with it, was empty, so Download was off with no reason given there. The failure is
    forced rather than taken from a design that fails, which would tie this test to an engine
-   bug a later fix should remove: #76's plate builds now (below), and the 41.24 mm jigsaw
-   plate in plate-audit.js still fails in the seam repair, as it does on main. */
+   bug a later fix should remove: #76's plate builds now (below), and so does the 41.24 mm
+   jigsaw plate in plate-audit.js, which failed in the seam repair on main. */
 test('a failed build says so in the checks, the table and the dialog, and Download goes off',
   async ({ page }) => {
     const pageErrors = [];

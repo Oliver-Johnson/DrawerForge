@@ -531,9 +531,9 @@ function warningsList() {
      under the cut map. Drawn as an error but not flagged `err`, which would stop the next
      build as well, and the next build, on any change, is what clears it. It says Download
      is off, not that nothing can be downloaded: the pieces built before it keep their own
-     STL buttons in the piece table. And it promises no size that gets past it: the 41.24 mm
-     jigsaw plate in plate-audit.js fails with a 7.504 mm head and builds with holes at
-     7.502 mm, on main as well. */
+     STL buttons in the piece table. And it promises no size that gets past it: a size a
+     hundredth off one that fails can build with holes, as the 41.24 mm jigsaw plate in
+     plate-audit.js did at 7.502 mm on main, beside a 7.504 mm head that failed. */
   if (buildFailed)
     out.push({ failed: true, t: `Piece ${buildFailed} could not be built, so the build stopped ` +
       'there and Download is off. That is a fault in this tool, not in the design; moving a cut ' +

@@ -402,7 +402,9 @@ function healCsgSeams(polys, again) {
      every soup, but not every one. None of 1,100 random plates of every joint and mount
      ran out; the turned cutters of a cell cut again do on a few engine-only cells (see
      the fastener cut in buildPiece), and so does a jigsaw plate at 41.24 mm with magnets
-     from above and a 3.126 mm counterbore, on the first cut of both its pieces.
+     from above and a 3.126 mm counterbore, on the first cut of both its pieces, with
+     main's 7.504 mm head over a 3 mm shank (the bores 7.504 cos(π/14) and 3 cos(π/12) here,
+     where a bore's flats stand on its size).
 
      The second run is kept only if it comes out closed, and that jigsaw plate is why.
      The merge lets its repair settle, but open, and returned that was 55 bad edges on
