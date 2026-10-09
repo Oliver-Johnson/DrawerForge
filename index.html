@@ -2392,7 +2392,7 @@ const PLATE_RANGES = {
   pitch: { min: 13.5, max: 200 },
   topCutoff: { min: 0.1, max: 1 },
   connClr: { min: 0, max: 1, dovetail: 0.3, snapTop: 0.3, puzzleKey: 0.8,
-             smallPitch: 20, small: 0.3, puzzleRoom: 6.5 },
+             smallPitch: 20, puzzlePitch: 20.7, small: 0.3, puzzleRoom: 6.5 },
   bottomPad: { min: 0, max: 20 },
   magnetD: { min: 1 }, magnetH: { min: 0.5, max: 10 },
   screwHoleD: { min: 1 }, screwHeadD: { min: 1 }, screwHeadDepth: { min: 0.5, max: 10 },
@@ -2407,12 +2407,12 @@ function fitClearances(field) {
 }
 /* The fit clearance's ceiling for one design, as { max, by }; `by` says what sets it, for
  * the page to put in words: 'dovetail', 'snaptop', 'pitch', 'joint', or 'slip' for the
- * plain 1 mm. One function, because four things have to agree on it — the field's range,
- * the clamp on a number a link brings in, the message saying why, and the fit coupon's
- * slackest pair — and it takes the whole design because the answer depends on the joint,
- * which way its key goes in and the pitch. It took a connector name, and a 1 mm ceiling
- * for everything but the dovetail let a snap clip's housing into the next piece and let
- * small pitches leak.
+ * plain 1 mm, and with 'pitch', `below` is the pitch its band runs up to. One function,
+ * because four things have to agree on it — the field's range, the clamp on a number a
+ * link brings in, the message saying why, and the fit coupon's slackest pair — and it
+ * takes the whole design because the answer depends on the joint, which way its key goes
+ * in and the pitch. It took a connector name, and a 1 mm ceiling for everything but the
+ * dovetail let a snap clip's housing into the next piece and let small pitches leak.
  *
  * Measured first on 2 × 2 and 1-cell pieces from 13.5 to 60 mm, every 0.5 mm of pitch —
  * at every 0.05 of clearance for the puzzle, the bowtie and the puzzle key, at six for
@@ -2441,13 +2441,18 @@ function fitClearances(field) {
  *             pair did the same for any field from 0.3 up. 0.3 holds the wall one BLOAT,
  *             0.05, inside the piece, the overlap the cell regions keep; the coupon's
  *             slackest pair is this ceiling cut the key's way, so it stops there too.
- *   pitch     0.3 below 20 mm for the puzzle and a puzzle key in the floor, earned. Past
- *             it they left holes from 13.5 to 19 mm — a puzzle key at 14 from 0.4, a
- *             puzzle at 19 from 0.35 — which cutAgain closes, and 0.35 builds clean at
- *             every pitch; but on 1-cell pieces a line across the pitch that climbs with
- *             the field puts the cut on the edge of the band two cells share, and the
- *             shells share it: a puzzle key from 0.37 (at 18.07 mm), a puzzle tab from
- *             0.38 (at 18.54). The puzzle's lobe also needs room in its cell: it opens the
+ *   pitch     0.3 for a puzzle below 20.7 mm and a puzzle key in the floor below 20,
+ *             earned. Past it they left holes from 13.5 to 19 mm — a puzzle key at 14
+ *             from 0.4, a puzzle at 19 from 0.35 — which cutAgain closes, and 0.35 builds
+ *             clean at every pitch; but on 1-cell pieces a line across the pitch that
+ *             climbs with the field puts the cut on the edge of the band two cells share,
+ *             and the shells share it: a puzzle key from 0.37 (at 18.07 mm), a puzzle tab
+ *             from 0.38 (at 18.54). The puzzle's line climbs 0.05 every 0.16 mm and runs
+ *             on past 20 — 0.8 at 19.89, 0.85 at 20.05, 0.9 at 20.21 — out of the field,
+ *             1 at 20.53 and 1.05 at 20.69, so its band runs to 20.7, where the plain
+ *             1 mm has its step to spare. Off the line the field builds clean from 20 to
+ *             20.7, and a ceiling that followed the line would gain only there; one band
+ *             is simpler. The puzzle's lobe also needs room in its cell: it opens the
  *             plate once its clearance passes half the pitch less 6.475 mm, so it stops at
  *             half the pitch less 6.5 — 0.25 at 13.5, and 0.3 from 13.6. A bowtie in the
  *             floor was held here too, for holes at 18 mm at 1. It builds clean at every
@@ -2461,20 +2466,21 @@ function fitClearances(field) {
  *   slip      1 for the rest. A key in the walls is cut to keySlim's own clearance, which
  *             the field does not move. The snap and the H-clip did not leak above 0.3 at
  *             any pitch measured but in one band — an H-clip dropped in from above leaks
- *             at 0.74 to 0.745 and nowhere else. From 20 mm up the bowtie and the puzzle
- *             leak only at isolated values: the bowtie at 25 mm at 0.64, the puzzle at
- *             0.39–0.4 at 21 and 32.5–35 mm and here and there from 0.52 to 0.87. That is
- *             the sliver class again, not a ceiling — no limit short of 0.38 misses them,
- *             and the same class turns up under the default too: a snap at 20 mm at 0.29,
- *             a bowtie at 17 mm at 0.15 and under. One is not isolated: on 2 × 2 pieces
- *             a puzzle at 0.35 exactly, and not 0.34 or 0.36, has two shells sharing an
- *             edge at every pitch from 31.6 to 52.2 mm, where a corner of a notch's lobe,
- *             centred on the line between two cells, stands on the edge of the band they
- *             share. That wants mending in the cut; no ceiling misses a single value.
+ *             at 0.74 to 0.745 and nowhere else. From 20 mm up (20.7 for the puzzle) the
+ *             bowtie and the puzzle leak only at isolated values: the bowtie at 25 mm at
+ *             0.64, the puzzle at 0.39–0.4 at 21 and 32.5–35 mm and here and there from
+ *             0.52 to 0.87. That is the sliver class again, not a ceiling — no limit
+ *             short of 0.38 misses them, and the same class turns up under the default
+ *             too: a snap at 20 mm at 0.29, a bowtie at 17 mm at 0.15 and under. One is
+ *             not isolated: on 2 × 2 pieces a puzzle at 0.35 exactly, and not 0.34 or
+ *             0.36, has two shells sharing an edge at every pitch from 31.6 to 52.2 mm,
+ *             where a corner of a notch's lobe, centred on the line between two cells,
+ *             stands on the edge of the band they share. That wants mending in the cut
+ *             (issue #72); no ceiling misses a single value.
  *
  * test/plate-audit.js builds the step that earns each ceiling, which has to leak or cross
- * the seam and be refused, and the bowtie's step to spare, which has to build closed and
- * be refused. */
+ * the seam and be refused, and the bowtie's step to spare and the step under the puzzle's
+ * line past 20 mm, which have to build closed and be refused. */
 function connClrCeiling(cfg) {
   const R = PLATE_RANGES.connClr;
   const kind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
@@ -2482,10 +2488,11 @@ function connClrCeiling(cfg) {
   if (kind === 'snaptop') return { max: R.snapTop, by: 'snaptop' };
   const floorKey = cfg.connector === 'puzzlekey' && cfg.keyMount !== 'wall';
   if (cfg.connector !== 'puzzle' && !floorKey) return { max: R.max, by: 'slip' };
-  if (cfg.pitch < R.smallPitch) {
+  const below = cfg.connector === 'puzzle' ? R.puzzlePitch : R.smallPitch;
+  if (cfg.pitch < below) {
     const room = cfg.connector === 'puzzle'
       ? Math.floor((cfg.pitch / 2 - R.puzzleRoom) * 100 + 1e-9) / 100 : Infinity;
-    return { max: Math.min(R.small, room), by: 'pitch' };
+    return { max: Math.min(R.small, room), by: 'pitch', below };
   }
   if (cfg.connector === 'puzzlekey') return { max: R.puzzleKey, by: 'joint' };
   return { max: R.max, by: 'slip' };
@@ -7504,23 +7511,24 @@ const LIMITS = {
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
   // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
   connClr: { min: RANGES.connClr.min, max: () => connClrCeiling(state).max, label: 'Fit clearance',
-    when: () => state.connector !== 'none', why: () => clrWhy(connClrCeiling(state).by) },
+    when: () => state.connector !== 'none', why: () => clrWhy(connClrCeiling(state)) },
 };
 /* What sets the clearance's ceiling, in words: core.js connClrCeiling decides it and says
    which reason applies. A ceiling that moves with the pitch names the pitch, as the mount
-   sizes do, because that is the number to change; 'slip' is the plain 1 mm and keeps the
-   millimetres advice. The puzzle and the puzzle key said they opened holes in the plate,
-   as they did until a joint's cut was taken again when it came out open (cutAgain in
-   core.js); past each ceiling now two cells' shells share an edge at some pitches, which
-   is not watertight either but is no hole. The dovetail said its pocket broke through
-   into the socket beside it, which it does from 0.25, under its ceiling. */
+   sizes do, because that is the number to change, and the pitch its band runs up to,
+   which for the puzzle is its own; 'slip' is the plain 1 mm and keeps the millimetres
+   advice. The puzzle and the puzzle key said they opened holes in the plate, as they did
+   until a joint's cut was taken again when it came out open (cutAgain in core.js); past
+   each ceiling now two cells' shells share an edge at some pitches, which is not
+   watertight either but is no hole. The dovetail said its pocket broke through into the
+   socket beside it, which it does from 0.25, under its ceiling. */
 const CLR_JOINT = { puzzle: 'puzzle tab', puzzlekey: 'puzzle key' };
-const clrWhy = (by) => ({
+const clrWhy = ({ by, below }) => ({
   dovetail: '— any looser and a dovetail pocket leaves the plate not watertight at some ' +
     'pitches',
   snaptop: '— any looser and the housing of a snap clip dropped in from above runs up to ' +
     'the seam and on into the next piece',
-  pitch: `${atPitch()} — on cells under ${RANGES.connClr.smallPitch} mm a ` +
+  pitch: `${atPitch()} — on cells under ${below} mm a ` +
     `looser ${CLR_JOINT[state.connector]} leaves the plate not watertight`,
   joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess leaves the plate not ` +
     'watertight at some pitches',
