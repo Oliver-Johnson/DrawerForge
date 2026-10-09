@@ -5214,11 +5214,24 @@ function saveNow() {
        drawer the address is at: marked before it, a reload took the save before for its
        own, and after another tab put the drawer back to that one, the reload wrote this
        page's later change back over it. */
-    try { history.replaceState(drawers.stamp(h, linkedNow && bootDesc !== null), '', '#' + h); }
-    catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
-                     worth an exception that stops the rest of the page working */ }
+    if (!pastedOver()) {
+      try { history.replaceState(drawers.stamp(h, linkedNow && bootDesc !== null), '', '#' + h); }
+      catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
+                       worth an exception that stops the rest of the page working */ }
+      ownHash = location.hash;
+    }
   }
 }
+/* The address as this page last left it: as it arrived, then as each save wrote it. One
+   that differs, with a layout in it, is a link gone to over this page, pasted or picked
+   from the bookmarks, whose hashchange (above) has not run yet: a page busy drawing comes
+   to a save that was waiting first. That save is still made, so the layout the link
+   replaces holds the change and is set aside with it, but the address is the link's.
+   Written back over, the hashchange found this page's design there and reloaded that,
+   and the link was gone. */
+let ownHash = null;
+const pastedOver = () => ownHash !== null && location.hash !== ownHash &&
+  isLayoutHash((location.hash || '').replace(/^#/, ''));
 /* A reload takes the address as it stands when it starts, and the page runs on until the
    new one arrives. A save still waiting would land in that gap and record in the saved
    drawer a design the reloaded page did not arrive with, and the page came back unsaved.
@@ -5623,14 +5636,20 @@ let arrivedWith = '';    // the design string this page was opened with
      layout was set aside and offered a Put back that brought nothing back. */
   let keptAside = false;
   if (aside) {
+    const asideLinked = linkKeys(saved, linked).length ? linked : '';
     writeKey(PREV_KEY, saved);
     keptAside = readKey(PREV_KEY) === saved;
-    if (keptAside) writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
+    if (keptAside) writeKey(PREV_LINKED_KEY, asideLinked);
+    /* With the record of whether it is a link's refused, the one left from the layout set
+       aside before would answer for it. That goes, and put back, this one is yours: still
+       better than not setting it aside (unkept), which keeps it only until the first
+       change made on the link. */
+    if (keptAside && readKey(PREV_LINKED_KEY) !== asideLinked) writeKey(PREV_LINKED_KEY, '');
     /* Not kept, it is not written over either (unkept), unless a hand-over of your own
        brings on anything the other page sets: then the save holds the drawer, bed or the
        other page's settings from before, and a bare visit took those back to the other
        page. One still carrying someone's link is that link, and your layout is kept. */
-    else unkept = !handOver || handOver.link.length > 0 || drawers.onlyMine(saved, src);
+    if (!keptAside) unkept = !handOver || handOver.link.length > 0 || drawers.onlyMine(saved, src);
   }
   const canPutBack = (replaces && !kept && (keptAside || (savedLinked && !!readKey(PREV_KEY)))) ||
     (back && keptAside);
@@ -5674,6 +5693,7 @@ if (pendingNotes) {
 }
 readControls();
 hashReady = true;                         // loadFromHash has had its say; ours may start
+ownHash = location.hash;
 initThree();
 initMap();
 drawLayerTabs();

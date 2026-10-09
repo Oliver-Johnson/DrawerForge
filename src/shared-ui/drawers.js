@@ -983,7 +983,14 @@ const DRAWERS = (function () {
                link's, and this tool's half was saved into the drawer with them. */
             if (noted && next.open !== true && typeof d.marks[o.tool] === 'string' &&
                 restore(arrivedWith, d, next.link, str(came[o.tool]))) return;
-            if (!(noted && next.caughtUp) && catchUp(arrivedWith, d)) return;
+            /* Not a hand-over from a page whose saves into the drawer were refused, the
+               storage full: the drawer has both halves as that page last saved them (the
+               note's marks), so a size that differs is one changed there since, which the
+               drawer could not take. Caught up, the drawer's older size came back over it,
+               as though another tab had moved the drawer on. */
+            const asLeft = noted && typeof came[otherTool] === 'string' &&
+              d.marks[otherTool] === came[otherTool] && d.marks[o.tool] === came[o.tool];
+            if (!(noted && next.caughtUp) && !asLeft && catchUp(arrivedWith, d)) return;
             /* A hand-over is written down now rather than at the page's first save, which
                is 400 ms off: a reload before it found no record of this tool in the
                drawer, and the page came back unsaved. The half goes in with the mark, as

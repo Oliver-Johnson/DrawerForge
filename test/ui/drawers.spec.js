@@ -429,6 +429,67 @@ test('with storage full, a size changed on the other page outlives the save Bins
     expect(errors).toEqual([]);
   });
 
+/* With the drawer's saves refused, a size changed on one page goes to the other in the
+   address alone, and the drawer still has the size from before. The page at the other
+   end caught up with the drawer on the way in, as it does when another tab has moved the
+   drawer on, and the size went back. Here nothing has moved the drawer on: it has both
+   halves as the page that handed over last saved them. */
+for (const tool of ['bins', 'plates']) {
+  test(`with storage full, a size changed on ${tool} is the size on the other page`, async ({ page }) => {
+    await page.addInitScript(fullStorage);
+    const errors = await openPlates(page);
+    await H.setField(page, 'drawerW', '400');
+    await saveAs(page, 'Kitchen');
+    // there and back first, so each page's own save already has the keys a trip brings
+    await toBins(page);
+    await toPlates(page);
+    if (tool === 'bins') await toBins(page);
+    await settle(page);
+    await page.evaluate(() => sessionStorage.setItem('full', '1'));
+    await H.setField(page, 'drawerW', '410');           // the same length, so the page's own save fits
+    await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+    if (tool === 'bins') await toPlates(page); else await toBins(page);
+    expect(await page.inputValue('#drawerW'), 'on the other page').toBe('410');
+    if (tool === 'bins') await toBins(page); else await toPlates(page);
+    expect(await page.inputValue('#drawerW'), 'and back').toBe('410');
+    await expect(page.locator('#setAside')).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+}
+
+/* A layout set aside with the storage full, where the layout fits and the record of whether
+   it is a link's does not: the record of the layout set aside before was left beside it,
+   to say so for the wrong layout. Here that one is planted: a long layout, so the next
+   fits in its place, with a short record, so the next does not. */
+test('with storage full, a layout set aside is not given the record of the one before',
+  async ({ page }) => {
+    await page.addInitScript(fullStorage);
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    const KEY = 'drawerforge:bins:v1';
+    await page.goto(base + 'bins/#w=444&d=444&bl=0-0-1-1-3');   // someone's link
+    await binsReady(page);
+    await H.setField(page, 'gap', '6');                         // changed, still their drawer
+    await settle(page);
+    const edited = await page.evaluate((k) => localStorage.getItem(k), KEY);
+    expect(edited).toContain('bgap=6');
+    await page.evaluate((k) => {
+      localStorage.setItem(k + ':prev', 'v=2&' + 'x'.repeat(4000));
+      localStorage.setItem(k + ':prev:linked', 'v=2&w=300');
+      sessionStorage.setItem('full', '1');
+    }, KEY);
+
+    await page.goto('about:blank');
+    await page.goto(base + 'bins/#w=555&bl=2-2-1-1-3');         // a second link
+    await binsReady(page);
+    await expect(page.locator('#putBack')).toBeVisible();
+    const kept = await page.evaluate((k) => [localStorage.getItem(k + ':prev'),
+      localStorage.getItem(k + ':prev:linked')], KEY);
+    expect(kept[0], 'the changed link set aside').toBe(edited);
+    expect(kept[1], 'and not with the record before it').not.toBe('v=2&w=300');
+    expect(errors).toEqual([]);
+  });
+
 /* The same reload with no save landing. The page is your own drawer handed over, and the
    reload is that page again. Onto a layout another drawer holds, it used to say someone's
    link had replaced your layout, set that aside, and count the drawer's settings as the

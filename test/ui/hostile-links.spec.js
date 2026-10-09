@@ -902,3 +902,28 @@ test('a layout that will not write is not saved as something else', async ({ pag
   await settle(page);
   expect(await stored(page, BINS)).toBe(save);
 });
+
+/* A link pasted over the page as an edit's save comes due. The paste puts the link in the
+   address at once and its hashchange, which reloads onto it, comes after; a page still
+   drawing the edit comes to the waiting save first. That save wrote the page's own design
+   back over the link, the hashchange then found that and reloaded it, and the link was
+   gone, with nothing said. Here the save runs in the same task as the paste, as it did. */
+for (const [tool, key] of [['plates', PLATES], ['bins', BINS]]) {
+  test(`a link pasted over ${tool} as an edit's save comes due is the link`, async ({ page }) => {
+    const errors = watch(page);
+    await arrive(page, tool === 'bins' ? binsUrl() : platesUrl());
+    await H.setField(page, 'drawerW', '412');           // its save waiting
+    await Promise.all([page.waitForEvent('load'), page.evaluate(() => {
+      location.hash = '#w=333&d=444&v=2';
+      saveNow();
+    })]);
+    await ready(page);
+    expect(await page.inputValue('#drawerW')).toBe('333');
+    await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
+    // the edit was saved, and is what the link set aside
+    expect(await stored(page, key + ':prev')).toMatch(/(^|&)w=412(&|$)/);
+    await clickAndLoad(page, '#putBack');
+    expect(await page.inputValue('#drawerW')).toBe('412');
+    expect(errors).toEqual([]);
+  });
+}
