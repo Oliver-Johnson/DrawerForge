@@ -3582,8 +3582,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
        out open (cutAgain), the cell's and the boss's alike: moved one NUDGE, the boss's
        could come back to where the cell's stood, or go where the cell's had gone, and a
        wall puzzle key at 36.13 mm with screws and a margin had 52 more edges used four
-       times than the base. None of that touches a boss no housing reaches, which is built
-       as it was. */
+       times than the base. None of that touches a boss no housing reaches. */
     const fromBelow = [...notches, ...pnotches].map((nb) => tabNotch(cfg, nb, pad));
     if (keyKind === 'recess')
       for (const bo of keyed)
@@ -3639,8 +3638,19 @@ function buildPiece(cfg, layout, piece, onStatus) {
         pts.push([0, bossW]);
         const world = pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v]);
         let boss = extrudePoly(world, 0, bossH);
-        if (bossFastener)
-          boss = csgSubtract(boss, movePolys(bossFastener, ccx + sx*off, ccy + sy*off));
+        /* A boss's pocket is a lottery of its own, so it is cut again (cutAgain) when it
+           comes out open. Default screws in one-cell pieces left 3 to 6 open edges on a
+           boss's underside at 22 of the 901 pitches from 34 to 60 mm that take them, and a
+           9.1 mm magnet at 39.46 mm left 12 a piece; cut again, none of those leaks. Open
+           only: a pocket that comes out closed with a face turned over (13 more of those
+           pitches) has the fold unfoldFinished lays out again, and every one of those
+           pieces came out watertight and oriented, so it is kept as it was, as is every
+           pocket that comes out closed. */
+        if (bossFastener) {
+          const pocket = movePolys(bossFastener, ccx + sx*off, ccy + sy*off);
+          const first = csgSubtract(boss, pocket);
+          boss = first.open ? cutAgain(boss, pocket, first) : first;
+        }
         shells.push(boss);
         continue;
       }
@@ -3666,14 +3676,12 @@ function buildPiece(cfg, layout, piece, onStatus) {
           solids.push({ outline: pts.map(([u, v]) => [bs.cxr - bs.sx*u, bs.cyr - bs.sy*v]), sites: [bs] });
         }
       }
-      /* The pockets are cut again (cutAgain) if they come out open. A boss's pocket is a
-         lottery of its own: default screws in one-cell pieces leave 3 to 6 open edges on
-         a boss's underside at 22 of the 901 pitches from 34 to 60 mm that take them, in
-         bosses no housing reaches, which are built as before. A boss cut short of the
-         piece's edge draws the lottery again at other pitches: four one-cell pieces with
-         dovetails, whose notches reach the bosses from 34 to 36.4 mm, left it at 34.64
-         and 34.72 mm, where the whole boss had built closed. Cut again, no boss a housing
-         reaches leaks at any of those pitches. */
+      /* The pockets are cut again when they come out open, as a whole boss's are (above),
+         or with a face turned over, as the joint's cut below is: this boss is new, with no
+         bytes of its own to keep. A boss cut short of the piece's edge draws their lottery
+         at other pitches: four one-cell pieces with dovetails, whose notches reach the
+         bosses from 34 to 36.4 mm, left it at 34.64 and 34.72 mm, where the whole boss had
+         built closed. */
       for (const { outline, sites } of solids) {
         let boss = extrudePoly(outline, 0, bossH);
         if (bossFastener) {

@@ -2222,6 +2222,18 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
                 `${r.bad ? '   FAIL' : ''}`);
     if (r.bad) bad++;
   }
+  /* A boss no housing reaches has its pockets cut again too when they come out open: default
+     screws in a one-cell drawer left 6 open edges under a boss at 37.7 mm (one of 22
+     pitches from 34 to 60 mm), and a 9.1 mm magnet at 39.46 mm 12 a piece, with no joint. */
+  for (const [name, over] of [
+    ['one cell at 37.7 mm, screws', { pitch: 37.7, drawerW: 37.7, drawerD: 37.7, bedW: 57.7, bedD: 57.7, screws: true }],
+    ['no joint at 39.46 mm, 9.1 magnet', { pitch: 39.46, drawerW: 157.84, drawerD: 78.92, bedW: 94.92, bedD: 400,
+                                           magnets: true, magnetD: 9.1 }]]) {
+    const r = buildAll({ ...over, baseMode: 'bosses', connector: 'none' });
+    console.log(`  ${name.padEnd(36)} ${r.L.pieces.length} piece${r.L.pieces.length > 1 ? 's' : ''}; ${leakText(r)}` +
+                `${r.open ? '   FAIL' : ''}`);
+    if (r.open) bad++;
+  }
   /* And a boss's cut moved one NUDGE could stand where the cell's stands, when one or the
      other was taken again (cutAgain): a wall puzzle key at 36.13 mm with screws and a margin
      had 73 edges used four times in a piece, against 26 with no joint. */

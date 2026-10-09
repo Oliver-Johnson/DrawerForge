@@ -400,12 +400,18 @@ two `NUDGE`s into its own boss, so its walls stand 3.4 microns from the cell's. 
 `NUDGE` is not enough: a cut that comes out open is taken again a `NUDGE` along a
 diagonal, the cell's and the boss's alike, and that could put the boss's walls back on
 the cell's: 52 more four-use edges in a piece, on a wall puzzle key at 36.13 mm.) That leaves
-fewer four-use edges than before (31 a piece for that H-clip) and none used once, and a
-boss no housing reaches is built byte for byte as it was. A boss a housing reaches has
-its pockets cut again (`cutAgain`) if they come out open: a boss's pocket is a lottery of
-its own (default screws in a one-cell piece leave 3 to 6 open edges on a boss's underside
-at 22 of the 901 pitches from 34 to 60 mm that take them, in bosses no housing reaches),
-and the shorter boss draws it again at other pitches.
+fewer four-use edges than before (31 a piece for that H-clip) and none used once.
+
+A boss's pocket is a lottery of its own: default screws in a one-cell piece left 3 to 6
+open edges on a boss's underside at 22 of the 901 pitches from 34 to 60 mm that take
+them, and a 9.1 mm magnet at 39.46 mm 12 a piece, with no joint at all. So every boss's
+pockets are cut again (`cutAgain`) when they come out open. A boss no housing reaches is
+cut again only then, and is otherwise built byte for byte as it was: a pocket that comes
+out closed with a face turned over (13 more of those pitches) has the fold
+`unfoldFinished` lays out again, and every one of those pieces was watertight and
+oriented. A boss a housing reaches is new, and is cut again when a pocket comes out
+turned over too, as the joint's cut is; the shorter boss draws the lottery at other
+pitches (34.64 and 34.72 mm, in four one-cell pieces with dovetails).
 
 `connector: 'puzzle'` used to be listed here as the first kind, and it is **no longer
 open anywhere**. It is worth reading how, because it needed two unrelated fixes and the
