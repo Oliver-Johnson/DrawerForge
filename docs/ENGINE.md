@@ -738,6 +738,12 @@ currently installed):
   the fan moves, every cut is taken again on it. Only then: a 6 mm magnet from above at
   42 mm has a spoke 2.3 microns from a corner in every cell and is closed, and a cell open
   somewhere else (a pocket meeting a joint's housing) gains nothing from a new floor.
+  Corners, not every point a wall stands on: where a counterbore and its shank were
+  unioned, the BSP split each flat of the shank along the head's planes, and with those
+  split points counted as well (24 on the socket floor, against the shank's 12 corners)
+  a 2.4 mm shank under a 4.8 mm head at 44.08 mm, loose, had a point within `FAN_CLEAR`
+  of every centre `fanCentre` tried. The fan stayed put and the cell shipped six edges
+  open. From the corners alone it moves 0.2 mm and the floor closes.
 - **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
   straight walls run only 2.5 mm either side of a cell's middle at 13.5 mm, so every
   housing, notch and clip pocket crosses its corner arcs and cones, at points that move
@@ -775,7 +781,9 @@ currently installed):
   nothing cleared (10.1 to 11.1 mm magnets at 47.91 to 50.05 mm, clean on main). And once
   the cells are built, if the shells `settle` cut again have more bad edges with those
   beside them than they started with, or more open or turned over, they all go back to
-  their first cut. Two cups put in
+  their first cut. That check sees only those shells and their neighbours as the cells
+  left them: the dovetail and puzzle tabs are made after it, and the top-insert pass cuts
+  its housings out of shells after it, so neither is judged by it. Two cups put in
   from above from each side of a piece one cell deep meet face to face at 14.44 mm (twice a
   cup's reach), and there they are built as one solid with `csgUnion`.
 - **A face that is nothing but a straight line has no middle.** A weld that closes a

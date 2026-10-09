@@ -2571,7 +2571,38 @@ function buildPiece(cfg, layout, piece, onStatus) {
     }
     return out;
   };
-  const fastenerFoot = wallsAt(0), fastenerTop = pad > 0.01 ? wallsAt(pad) : [];
+  /* The same, its corners only. Where the walls of two bores were unioned (a counterbore,
+     its screw's shank), the BSP split each wall along the other's planes, and wallsAt
+     hands back those split points as well: two on every flat of the shank, 24 points on
+     the socket floor that are no corner of anything. A 2.4 mm shank under a 4.8 mm head
+     at 44.08 mm, with loose tolerance, had a spoke within FAN_CLEAR of one of them from
+     every point fanCentre tries, so the socket floor's fan never moved and the cell
+     shipped with six open edges. A corner is where two walls that are not in line meet;
+     a split point is where one wall was cut in two. From the corners alone the fan moves
+     0.2 mm and the floor closes. Only the socket floor's list, which only an open cell's
+     refan reads (buildPiece), so every cell that came out closed is built as before. */
+  const cornersAt = (z) => {
+    const ends = new Map();   // a wall end, to the directions of the walls that end there
+    for (const p of cellFastener || []) {
+      const zs = p.verts.map((v) => v[2]);
+      if (!(Math.min(...zs) < z && Math.max(...zs) > z) || Math.abs(p.plane.n[2]) > 1e-9) continue;
+      const d = [-p.plane.n[1], p.plane.n[0]];   // along the wall
+      let lo = null, hi = null;
+      for (const v of p.verts) {
+        const t = v[0]*d[0] + v[1]*d[1];
+        if (!lo || t < lo[0]) lo = [t, v];
+        if (!hi || t > hi[0]) hi = [t, v];
+      }
+      for (const [, v] of [lo, hi]) {
+        const k = `${v[0].toFixed(6)} ${v[1].toFixed(6)}`;
+        if (!ends.has(k)) ends.set(k, { at: [v[0], v[1]], dirs: [] });
+        ends.get(k).dirs.push(d);
+      }
+    }
+    return [...ends.values()].filter(({ dirs }) =>
+      dirs.some((a) => dirs.some((b) => Math.abs(a[0]*b[1] - a[1]*b[0]) > 1e-6))).map((e) => e.at);
+  };
+  const fastenerFoot = wallsAt(0), fastenerTop = pad > 0.01 ? cornersAt(pad) : [];
 
   // ---- connectors ----
   const conn = pieceConnectors(cfg, layout, piece);
@@ -2965,7 +2996,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * And once every cell is built, the shells settle cut again are checked as a whole, with
    * those beside them: if they have more bad edges (checkManifold) than they had before,
    * or more open or turned over (healCsgSeams), every one goes back to its first cut. So
-   * settle never leaves a piece worse than it found it, whatever order the cells come in.
+   * settle never leaves those shells worse than it found them, whatever order the cells
+   * come in. What is made after the check is not judged by it: the dovetail and puzzle
+   * tabs, and what the top-insert pass cuts again (see the check below).
    * `alt` and `pocket` are the cuts a cell was last taken with, so a cell cut again for
    * one reason keeps what it was cut again for the other. */
   const POCKET_TRIES = 7;
@@ -3309,8 +3342,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
          Only here, not on every cell: a 6 mm magnet from above at 42 mm has a spoke 2.3
          microns from a corner in every cell and comes out closed, as most do. And only
          where the fan moves and the cell is open at the floor's height: a cell open
-         somewhere else, as a pocket that meets a joint's housing is, or one whose spokes
-         are already clear, would be cut again for the same result. A bowtie plate at
+         somewhere else, as a pocket that meets a joint's housing is, would be cut again
+         for the same result, and so would one whose fan stays where it was, either because
+         its spokes are already clear or because fanCentre finds no point clear of every
+         corner and keeps the centre. A bowtie plate at
          45.57 mm with screws, open in every piece on main as well, took twice as long
          with every open cell cut again. */
       if (region.open && floorAvoid.length && openAt(region, pad)) {

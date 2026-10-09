@@ -1998,6 +1998,18 @@ console.log('\nthe other limits, built at their ends:');
     console.log(`  ${nm.padEnd(28)} ${leakText(r)}`);
     if (r.bad) bad++;
   }
+  /* A counterbore's floor fan (#61's round 4). Where a 4.8 mm head was unioned with its
+     2.4 mm shank, the shank's flats came back split at the head's planes, and the socket
+     floor's fan was held clear of those split points as well as the corners: no point
+     fanCentre tried was clear of all of them, so the fan stayed put and the cell shipped
+     with 6 open edges, no warning. Only the corners count now. */
+  {
+    const r = buildAll({ pitch: 44.08, drawerW: 137.49, drawerD: 91.53, mLeft: 1.96, mRight: 3.29, mFront: 0.58,
+                         mBack: 2.79, bedW: 400, bedD: 400, connector: 'none', tolerance: 'loose',
+                         screws: true, screwHoleD: 2.4, screwHeadD: 4.8, screwHeadDepth: 2 });
+    console.log(`  ${'counterbore at 44.08 mm'.padEnd(28)} ${leakText(r)}`);
+    if (r.bad) bad++;
+  }
   /* The clearance one step past its end, which leaked, and that was why the end is where
      it is. It no longer does: the joint's cut taken again when it comes out open
      (cutAgain in core.js) closes it, as it closes the steps past the ceilings below. So it
