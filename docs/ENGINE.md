@@ -389,23 +389,30 @@ Corner bosses are built only on an open underside (`cornerBosses`). A floor unde
 sockets, a key housed in the floor (2.8 mm), the puzzle's lobes (2.6) or Extra floor,
 stood round the 2.6 mm bosses and sealed their pockets in it (#70); with one, the plate is
 built as a solid floor builds it, pockets and the floor's growth included, and Checks says
-so. A joint cut from beneath where four cells meet (a wall key's recess, an H-clip's, a
-dovetail's or a puzzle's notch) is taken out of the bosses as well as the cells, after
-their pockets; the bosses used to stand in the whole housing. Cut plainly, the housing's
-outline went into the boss and into the cell it shares faces with, and into both of two
-bosses meeting across a cell edge: an H-clip at 42 mm went from 40 edges used four times
-a piece to 59 and 68. So a boss a housing reaches stops a `BLOAT` short of the piece's
-edge, the two either side of one housing are built as one solid, and the cut is moved
-two `NUDGE`s into its own boss, so its walls stand 3.4 microns from the cell's. (One
-`NUDGE` is not enough: a cut that comes out open is taken again a `NUDGE` along a
-diagonal, the cell's and the boss's alike, and that could put the boss's walls back on
-the cell's: 52 more four-use edges in a piece, on a wall puzzle key at 36.13 mm.) That leaves
-fewer four-use edges than before (31 a piece for that H-clip) and none used once. A boss
-is its pocket's depth and 0.8 mm (a magnet) or 1.0 (a screw head) tall, up to 2.6, and
-one whose top stood level with the ceiling of the cut that reaches it (a dovetail's notch
-2.4 mm, an H-clip's recess 2.3, a wall key's 2.0) came out open there: a 1.6 mm magnet or
-a 1.4 mm head beside a dovetail, 4 to 13 open edges a piece. 0.01 mm off the level either
-way, none did. Such a boss stands `MOUNT_LEVEL` over the ceiling, with a pocket from above
+so. A joint cut from beneath where four cells meet (a wall key's recess, an H-clip's or a
+dovetail's notch; the puzzle's lobes always have their floor, so no boss stands by them)
+is taken out of the bosses as well as the cells, after their pockets; the bosses used to
+stand in the whole housing. Cut plainly, the housing's outline went into the boss and
+into the cell it shares faces with, and into both of two bosses meeting across a cell
+edge: an H-clip at 42 mm went from 40 edges used four times a piece to 59 and 68. So a
+boss a housing reaches stops a `BLOAT` short of the piece's edge, the two either side of
+one housing are built as one solid, and the cut is moved two `NUDGE`s into its own boss,
+so its walls stand off the cell's. (One `NUDGE` is not enough: a cut that comes out open
+is taken again a `NUDGE` along a diagonal, the cell's and the boss's alike, and that could
+put the boss's walls back on the cell's: 52 more four-use edges in a piece, on a wall
+puzzle key at 36.13 mm.) That leaves fewer four-use edges than before (31 a piece for that
+H-clip) and none used once. Two `NUDGE`s keep the walls a `NUDGE` apart or more along
+each axis while at most one of the two cuts is taken again, and that is all they promise:
+with both taken again, a wall square to x can stand where the cell's does (both of
+`cutAgain`'s nudges go up y, so one square to y cannot), and a wall that runs along the
+diagonal the cut is moved on is not moved off the cell's at all. A boss is its pocket's
+depth and 0.8 mm (a magnet) or 1.0 (a screw head) tall, up to 2.6, and one whose top
+stood level with the ceiling of the cut that reaches it (a dovetail's notch 2.4 mm, an
+H-clip's recess 2.3, a wall key's 2.0) came out open there, at every pitch the cut
+reaches it: 4 to 13 open edges a piece beside a dovetail (a 1.6 mm magnet or a 1.4 mm
+head), 9 to 30 beside an H-clip, and 4 to 8, 9 to 18 and 25 to 74 beside a bowtie, a snap
+clip and a puzzle key in the walls. Beside the dovetail, 0.01 mm off the level either way,
+none did. Such a boss stands `MOUNT_LEVEL` over the ceiling, with a pocket from above
 cut from that top.
 
 A boss's pocket is a lottery of its own: default screws in a one-cell piece left 3 to 6

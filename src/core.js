@@ -3812,7 +3812,12 @@ function buildPiece(cfg, layout, piece, onStatus) {
        out open (cutAgain), the cell's and the boss's alike: moved one NUDGE, the boss's
        could come back to where the cell's stood, or go where the cell's had gone, and a
        wall puzzle key at 36.13 mm with screws and a margin had 52 more edges used four
-       times than the base. None of that touches a boss no housing reaches. */
+       times than the base. Two keep them a NUDGE apart or more along each axis while at
+       most one of the two is taken again. That is all they promise: with both taken
+       again, a wall square to x can stand where the cell's does (cutAgain's nudges both
+       go up y, so one square to y cannot), and a wall that runs along the diagonal the cut
+       is moved on is not moved off the cell's at all. None of that touches a boss no
+       housing reaches. */
     const fromBelow = [...notches, ...pnotches].map((nb) => tabNotch(cfg, nb, pad));
     if (keyKind === 'recess')
       for (const bo of keyed)
@@ -3917,13 +3922,22 @@ function buildPiece(cfg, layout, piece, onStatus) {
          A boss whose top stands level with the ceiling of a cut that reaches it came out
          open there, the cut's ceiling and its top in one plane: a dovetail's notch is
          2.4 mm tall, an H-clip's recess 2.3 and a wall key's 2.0, and a boss is its
-         pocket's depth and 0.8 (a magnet) or 1.0 (a screw head), up to 2.6. A 1.6 mm
-         magnet or a 1.4 mm head beside a dovetail left 4 to 9 open edges a piece at every
-         pitch the notch reaches a boss; 0.01 mm off the level either way, none. So such a
+         pocket's depth and 0.8 (a magnet) or 1.0 (a screw head), up to 2.6. Level, a
+         boss left open edges at every pitch the cut reaches it: 4 to 13 a piece beside a
+         dovetail (a 1.6 mm magnet or a 1.4 mm head), 9 to 30 beside an H-clip, and 4 to
+         8, 9 to 18 and 25 to 74 beside a bowtie, a snap clip and a puzzle key in the
+         walls; beside the dovetail, 0.01 mm off the level either way, none. So such a
          boss stands MOUNT_LEVEL over the ceiling, as one with a deeper pocket does, and a
          pocket from above is cut from that top. mountLimits measures it from bossHeight,
          which can only refuse sooner, and a pocket from above that the cut reaches is
-         refused at either height. */
+         refused at either height.
+       *
+         Level here is not rounded to the micron, as mountLimits' is: exactly MOUNT_LEVEL
+         off, a boss is raised or not as the difference comes out in floating point, a
+         2.25 mm one under an H-clip's 2.3 and a 2.45 mm one over a dovetail's 2.4 raised,
+         a 2.35 mm one under the dovetail's not. Both ways build clean. Rounded, the bosses
+         raised now at exactly MOUNT_LEVEL would not be, and their bytes would change: 2.25
+         mm beside an H-clip, 2.05 beside a key in the walls, 2.45 beside a dovetail. */
       const level = ks.filter((k) => Math.abs(cutTops[k] - bossH) < MOUNT_LEVEL);
       const top = level.length ? Math.max(...level.map((k) => cutTops[k])) + MOUNT_LEVEL : bossH;
       const fastener = top === bossH ? bossFastener : fastenerCutter(cfg, top - cfg.magnetH, top + 0.5, top + 0.5);
