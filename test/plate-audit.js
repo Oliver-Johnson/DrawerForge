@@ -1046,10 +1046,15 @@ console.log('\nloose parts and samples, watertight and oriented:');
      their flats on the sizes, the 6 mm counterbore's walls stood 0.022 mm inside the 6 mm
      magnet pocket's from beneath, and the tile left 6 edges open in its underside; a
      counterbore the magnet pocket holds whole is not cut now (fastenerCutter). A magnet
-     from above is cut from the other face, and that tile is built too. */
+     from above is cut from the other face, and that tile is built too. A counterbore
+     deeper than the 2 mm magnet left the same 6 at every depth from 2.25 to 4: it is cut
+     at the pocket's corners now, one prism with it (MOUNT_BORE.head.cut). */
   for (const side of ['bottom', 'top'])
     report(`tile, magnets ${side === 'top' ? 'above' : 'below'}, screws`,
       G.buildTestTile({ ...tileCfg, magnets: true, magnetSide: side, screws: true }).polys);
+  for (const depth of [2.5, 3])
+    report(`tile, below, ${depth} deep`,
+      G.buildTestTile({ ...tileCfg, magnets: true, screws: true, screwHeadDepth: depth }).polys);
 
   for (const conn of CONNECTORS)
     for (const keyInsert of ['bottom', 'top']) {
@@ -2187,6 +2192,35 @@ console.log('\nthe other limits, built at their ends:');
     console.log(`  ${nm.padEnd(30)} ${refused ? `refused, by the magnet's pocket, over ${lim.screwHoleD} mm`
       : `TAKEN up to ${lim.screwHoleD} mm`}; at that, ${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
     if (!refused || r.bad || folds) bad++;
+  }
+  /* A counterbore whose corners come within 0.05 mm of the magnet pocket's, and that
+     reaches the pocket. Both are 14-gons on the same rays, and where one stopped inside
+     the other a hair off it they left a ring that thin. The default 6 mm head's corners
+     stand 0.022 mm inside the 6 mm magnet's, and 3 mm deep under the 6 x 2 magnet from
+     beneath it left 6 edges open at 42 mm; a 6.39 mm head 2 deep broke into a 6.35 x 2
+     magnet pocket from above at 44.46 mm, its corners 0.0018 mm out, and left 248 over
+     two pieces. Main built both closed. Such a counterbore is cut at the pocket's corners
+     now, one prism with it (MOUNT_BORE.head.cut). The shank's turn goes by the counterbore
+     as cut: turned for the 6.02 mm head's corners while it was cut at the magnet's, 3.66
+     under it left 9. And unioned rather than one prism, the two split their shared walls
+     at the pocket's roof, and the jigsaw at 41.76 mm folded twice there. Each is a size
+     the page takes, and has to build closed, with no folds. */
+  for (const [nm, o] of [
+    ['3 under 6, 3 deep, 42', { screwHeadDepth: 3 }],
+    ['4.24 under 6.39, above, 44.46', { pitch: 44.46, drawerW: 88.92, drawerD: 44.46, bedW: 56.46, connector: 'dovetail',
+      magnetD: 6.35, magnetSide: 'top', screwHoleD: 4.24, screwHeadD: 6.39 }],
+    ['3.66 under 6.02, 3 deep, 42', { screwHoleD: 3.66, screwHeadD: 6.02, screwHeadDepth: 3 }],
+    ['41.76 mm jigsaw, 3.742 deep', { pitch: 41.76, drawerW: 83.52, drawerD: 41.76, bedW: 53.76, connector: 'puzzle',
+      screwHoleD: 3.32, screwHeadD: 5.973, screwHeadDepth: 3.742 }],
+  ]) {
+    const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, screws: true, ...o };
+    const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
+    const taken = ['magnetD', 'screwHoleD', 'screwHeadD'].every((f) => cfg[f] <= lim[f] + 1e-9 &&
+      !lim.gaps[f].some(([a, b]) => cfg[f] >= a - 1e-9 && cfg[f] <= b + 1e-9));
+    const r = buildAll(at);
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    console.log(`  ${nm.padEnd(30)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (!taken || r.bad || folds) bad++;
   }
   /* A pocket against a joint's cut in the floor (#64). A bowtie housed in the floor at
      42 mm, with magnets from beneath, built 12 bad edges at 7.9 mm and 19 at 10 with

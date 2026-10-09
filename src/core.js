@@ -911,9 +911,40 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * always was: within 3.5% of the hole it is no seat for a screw head, and all it would
  * add is slivers between the shank's corners.
  *
- * Under a counterbore the shank is turned a little about its axis (`turn`, #74) where a
- * corner of the counterbore or of the magnet pocket would stand on one of its flats
- * carried on past the shank. The BSP splits what it meets along a flat's whole plane, not
+ * A counterbore whose corners come within 0.05 mm of the magnet pocket's (head.snap) is
+ * cut at the pocket's (head.cut), and where it reaches the pocket the two are cut as one
+ * prism (fastenerCutter). Both are 14-gons on the same rays, so a hair apart their walls
+ * stand a hair off each other, and where one stops inside the other it leaves a ring that
+ * thin: the roof of a pocket from beneath round a counterbore deeper than it, the floor
+ * of one from above that a counterbore breaks into, or the counterbore's own roof in the
+ * pocket. Standing its flats on the size put the default 6 mm head's corners 0.022 mm
+ * inside the 6 mm magnet's, where main's, on the size, stood 0.1 inside. Deeper than the
+ * 2 mm magnet from beneath it left 6 edges open a cell at 42 mm, the test tile with
+ * magnets and screws among them, at every depth from 2.25 to 4, and 39 of 49 shanks from
+ * 1 to 5.8 mm under it 3 deep left 3 to 6. A 6.39 head 2 deep over a 4.24 shank broke
+ * into a 6.35 x 2 magnet pocket from above at 44.46 mm, its corners 0.0018 mm out, and
+ * left 131 a cell. Main builds every one of these closed. Cut at the pocket's corners
+ * but unioned with it, the counterbore still split their shared walls at the pocket's
+ * roof, and a jigsaw at 41.76 mm folded there; as one prism it is the pocket made deeper.
+ * A head in the band is cut up to 0.1 mm wider or narrower across its flats than typed,
+ * mountLimits measures it as cut (head.fitsCut), and one the pocket from beneath then
+ * holds whole is not cut, as before. The shank's turn goes by the counterbore as cut: one
+ * turned for a 6.02 mm head's corners while it was cut at the 6 mm magnet's left 3.66
+ * under it open at 42 mm. Measured on 240 random designs whose counterbore's corners are
+ * in the band and reach the pocket (two in three a 6 x 2 magnet, either way up; half at
+ * 42 mm, the rest 34 to 56; one cell, the test tile, 2 x 2, two pieces with dovetails or
+ * jigsaws): of the 223 taken, 12 were open, folded or turned before, with 380 open edges,
+ * and 2 now: one tile at 36.43 mm with a face turned on main as well, and 5.376 under
+ * 6.006 at 42 mm, 12 open edges, a shank that leaks as many under the bare pocket with
+ * no counterbore at all. Main leaves 7 of its 225 bad. A design whose counterbore is not
+ * in the band builds the same bytes as before.
+ *
+ * Where a counterbore is cut, and only there, the shank is turned a little about its
+ * axis (`turn`, #74) where a corner of the counterbore or of the magnet pocket would
+ * stand on one of its flats carried on past the shank. With no counterbore a magnet
+ * pocket's corners alone do not turn it: at 41.24 mm a 3 mm shank under a 7.3 mm magnet
+ * from above, a corner on a flat, builds closed unturned with no counterbore over it.
+ * The BSP splits what it meets along a flat's whole plane, not
  * just the flat: the floor of a magnet pocket from above, which is a ring round the
  * counterbore, or the roof of one from beneath round a counterbore deeper than it. A
  * split a micron or two from the corner was welded onto it (healCsgSeams), which bent the
@@ -941,22 +972,25 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * and none within 0.0039 but under a magnet on a shank under 1.2 mm (magnets of 3 to 13
  * mm, shanks of 1 to 6.5, heads up to 2.4 times the shank, every 0.001 mm round the sizes
  * that put a corner on a flat, and 6.7 million sizes drawn at random round them). The
- * nearest, 0.0032 mm at 1.0197 under 1.0748 with a 3.72 mm magnet, and nine more under
+ * nearest, 0.0033 mm at 1.0197 under 1.0748 with a 3.72 mm magnet, and nine more under
  * 0.0038 build closed at 42 and 49.02 mm, the magnet either way up. Half a facet, π/12,
  * clears the corners as well, but it squares two flats to the cell's edges, and at 37.67
  * mm those folded the socket floor beside the pocket. Measured on 3,846 one-cell plates
  * with a magnet from above, 37.67 to 55 mm, shanks 1 to 5 mm and heads up to 1.15 times
  * them, every 0.001 mm round these sizes: 546 open before, and 1 now, a size the turn
  * leaves alone; none came out worse. On 1,800 random designs a counterbore's corner
- * turns, every kind of mount: 75 open or folded before, 15 now. It closed 72 and opened
- * 12: 11 with a 6 x 2 magnet from beneath under a 3 mm counterbore, all at 42 mm but one,
- * where about one size in ten leaks unturned too, by the same slivers at the magnet
- * pocket's corners in the underside; and 1 at 55 mm under an 8 x 3 magnet from above,
- * 1.723 under 1.89, among sizes that leak turned or not (of 26 turned round it, 6 leak
- * turned and 4 unturned). The magnet's corners change the turn of none of the 1,800. On
+ * turns, every kind of mount: 74 open or folded before, 14 now. It closed 71 and opened
+ * 11: 10 with a 6 x 2 magnet from beneath under a 3 mm counterbore, all at 42 mm but one,
+ * by slivers at the magnet pocket's corners in the underside, sizes main builds closed
+ * but one; and 1 at 55 mm under an 8 x 3 magnet from above, 1.723 under 1.89, among sizes
+ * that leak turned or not (of 26 turned round it, 6 leak turned and 4 unturned). That
+ * mount at 42 mm is the one where the turn does more harm than good: 5 closed against 9
+ * opened, and on 300 random sizes there 5 opened of the 27 it turns and none closed. The
+ * mount leaks by itself as well: of the 273 sizes it leaves unturned, 21 here, 17 on main.
+ * The magnet's corners change the turn of none of the 1,800. On
  * 1,500 random page designs that only a magnet's corner turns (34 to 56 mm; one cell,
  * 2 x 2, and two pieces joined by dovetails or jigsaws; magnets of 3 to 12.7 mm either
- * way up; 115 on corner bosses): 47 open or folded before, 5 now. It closed 43 and opened
+ * way up; 115 on corner bosses): 45 open or folded before, 5 now. It closed 41 and opened
  * 1, two pieces with a jigsaw at 44.46 mm and a 4 mm magnet from above: 3 open edges a
  * piece 2.8 mm up and 2.2 mm off the site, for every shank from 2.487 under a 2.895 head,
  * which builds closed unturned (the counterbore's corners turn it, and open it, from
@@ -967,14 +1001,32 @@ const MOUNT_BORE = {
   head: { sides: 14, r: (d) => d/2 / Math.cos(Math.PI/14),
           fits: (room) => 2 * room * Math.cos(Math.PI / 14),
           over: (hole) => 2 * MOUNT_BORE.hole.r(hole) + 0.01,
-          cuts: (d, hole) => d >= MOUNT_BORE.head.over(hole) },
+          cuts: (d, hole) => d >= MOUNT_BORE.head.over(hole),
+          // how far out a counterbore headD across is cut at its corners, beside a magnet
+          // pocket magnetR out at its corners or none: within `snap` of the pocket's, at
+          // the pocket's (see above)
+          cut: (d, magnetR) => {
+            const r = MOUNT_BORE.head.r(d);
+            return magnetR && Math.abs(r - magnetR) < MOUNT_BORE.head.snap ? magnetR : r;
+          },
+          /* and back the other way, the largest size cut inside a room. `cut` never goes
+             down as the size goes up, so that is a size: below the band, `fits`; for a
+             room the pocket's corners fit but the band's top does not, the band's top,
+             since every size in the band is cut at the pocket's; for one the band's
+             bottom fits but the pocket does not, the band's bottom. */
+          fitsCut: (room, magnetR) => {
+            const { head } = MOUNT_BORE, s = head.snap;
+            if (!magnetR || room >= magnetR + s || room < magnetR - s) return head.fits(room);
+            return head.fits(room >= magnetR ? magnetR + s : magnetR - s) - 1e-6;
+          },
+          snap: 0.05 },
   hole: { sides: 12, r: (d) => d/2 / Math.cos(Math.PI/12),
           fits: (room) => 2 * room * Math.cos(Math.PI / 12),
-          // how far to turn the shank under a counterbore headD across, in a magnet pocket
-          // magnetR out at its corners or none (see above)
-          turn: (d, headD, magnetR) => {
+          // how far to turn the shank under a counterbore cut headR out at its corners
+          // (head.cut), in a magnet pocket magnetR out at its corners or none (see above)
+          turn: (d, headR, magnetR) => {
             // the magnet pocket's corners stand on the same rays as the counterbore's
-            const { head, hole } = MOUNT_BORE, rs = magnetR ? [head.r(headD), magnetR] : [head.r(headD)];
+            const { head, hole } = MOUNT_BORE, rs = magnetR ? [headR, magnetR] : [headR];
             const clear = (t) => {   // the nearest a corner comes to one of the flats' planes
               let g = Infinity;
               for (const R of rs) for (let k = 0; k < head.sides; k++) for (let m = 0; m < hole.sides; m++)
@@ -989,21 +1041,22 @@ const MOUNT_BORE = {
             }
             return most > clear(0) ? best : 0;
           } },
-  /* What fastenerCutter cuts for a design's screw, as { counterbore, turn }: whether the
-     counterbore is cut, and how far the shank is turned under it. Here so that mountLimits
-     measures the same shank the cutter cuts.
+  /* What fastenerCutter cuts for a design's screw, as { counterbore, headR, turn }:
+     whether the counterbore is cut, how far out its corners stand (head.cut), and how far
+     the shank is turned under it. Here so that mountLimits measures the same counterbore
+     and shank the cutter cuts.
      A counterbore the magnet pocket from beneath holds whole is that pocket already: both
-     14 sides, corners on the same rays, no deeper. Since the bores stand their flats on
-     the sizes, the default 6 mm head's walls stand 0.022 mm inside the 6 mm magnet's,
-     and unioned, the test tile at 42 mm with magnets and screws left 6 edges open in
-     its underside. Left out, the pocket is the same solid, and closed. */
+     14 sides, corners on the same rays, no deeper. Left out, the pocket is the same
+     solid. That is the default 6 mm head under the 6 mm magnet 2 deep, cut at the
+     pocket's corners (head.cut), and the test tile at 42 mm with magnets and screws. */
   screw: (cfg) => {
-    const { magnet, head, hole } = MOUNT_BORE, magnetR = magnet.r(cfg.magnetD);
+    const { magnet, head, hole } = MOUNT_BORE, magnetR = cfg.magnets ? magnet.r(cfg.magnetD) : 0;
+    const headR = head.cut(cfg.screwHeadD, magnetR);
     const inMagnet = cfg.magnets && cfg.magnetSide !== 'top' &&
-      head.r(cfg.screwHeadD) <= magnetR && cfg.screwHeadDepth <= cfg.magnetH;
+      headR <= magnetR && cfg.screwHeadDepth <= cfg.magnetH;
     const counterbore = head.cuts(cfg.screwHeadD, cfg.screwHoleD) && !inMagnet;
-    return { counterbore,
-             turn: counterbore ? hole.turn(cfg.screwHoleD, cfg.screwHeadD, cfg.magnets ? magnetR : 0) : 0 };
+    return { counterbore, headR,
+             turn: counterbore ? hole.turn(cfg.screwHoleD, headR, magnetR) : 0 };
   },
 };
 
@@ -1031,15 +1084,21 @@ function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
   // each bore as MOUNT_BORE shapes it
   const { magnet, head, hole } = MOUNT_BORE;
   const magnetR = magnet.r(cfg.magnetD);
+  const { counterbore, headR, turn: t } = cfg.screws ? MOUNT_BORE.screw(cfg) : { counterbore: false };
+  const above = cfg.magnetSide === 'top';
+  // a counterbore cut at the magnet pocket's corners (MOUNT_BORE.head.cut) that reaches the
+  // pocket is one prism with it, from the underside to the top of whichever ends higher:
+  // unioned, their shared walls came out split at the pocket's roof (see MOUNT_BORE)
+  const one = cfg.magnets && counterbore && headR === magnetR && (!above || cfg.screwHeadDepth >= magZ0);
   if (cfg.magnets)
-    add(cfg.magnetSide === 'top'
-      ? cylinder(0, 0, magnetR, magZ0, magZ1, magnet.sides)
+    add(one ? cylinder(0, 0, magnetR, -0.5, Math.max(above ? magZ1 : cfg.magnetH, cfg.screwHeadDepth), magnet.sides)
+      : above ? cylinder(0, 0, magnetR, magZ0, magZ1, magnet.sides)
       : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, magnet.sides));
   if (cfg.screws) {
     // the counterbore, unless the magnet pocket from beneath is that already (MOUNT_BORE.screw)
-    const { counterbore, turn: t } = MOUNT_BORE.screw(cfg);
-    if (counterbore)
-      add(cylinder(0, 0, head.r(cfg.screwHeadD), -0.5, cfg.screwHeadDepth, head.sides));
+    // or it is cut as one with the pocket
+    if (counterbore && !one)
+      add(cylinder(0, 0, headR, -0.5, cfg.screwHeadDepth, head.sides));
     // the shank, turned where a corner of the counterbore or the magnet pocket would stand
     // on one of its flats (#74)
     const shank = cylinder(0, 0, hole.r(cfg.screwHoleD), -0.5, shankTop, hole.sides);
@@ -2818,8 +2877,13 @@ function mountLimits(cfg, layout, known) {
      corners stand out past it, and a magnet's 0.1 mm over its radius where that is
      further. The shank is turned where the cutter turns it, and measured so: its turn
      goes by the sizes asked, the head's and the magnet's as well as its own, so it is
-     the shank of this design that is measured. */
-  const BORE = { magnetD: MOUNT_BORE.magnet, screwHeadD: MOUNT_BORE.head, screwHoleD: MOUNT_BORE.hole };
+     the shank of this design that is measured. A counterbore within MOUNT_BORE.head.snap
+     of the magnet pocket's corners is cut at the pocket's, up to 0.05 mm further out or
+     in, so its sizes are read back through that (head.fitsCut), which goes by the room
+     alone: the cap does not move with the head typed. */
+  const magnetR = cfg.magnets ? MOUNT_BORE.magnet.r(cfg.magnetD) : 0;
+  const BORE = { magnetD: MOUNT_BORE.magnet, screwHoleD: MOUNT_BORE.hole,
+                 screwHeadD: { sides: MOUNT_BORE.head.sides, fits: (room) => MOUNT_BORE.head.fitsCut(room, magnetR) } };
   const shankTurn = cfg.screws ? MOUNT_BORE.screw(cfg).turn : 0;
   // the room the cell, the floor or a boss leaves, and the hole beside
   const own = { magnetD: fit(cfg.magnetSide === 'top' ? top : under), screwHoleD: fit(top), screwHeadD: fit(under) };
