@@ -696,11 +696,13 @@ currently installed):
   sides for a magnet and a counterbore and 12 for a shank, and one with its corners on
   the size asked is narrower than that across its flats: the default 6 mm counterbore was
   5.85 mm, the 3 mm shank 2.90, a 10 mm magnet's pocket 9.94 even with its 0.1 mm press
-  fit at the corners. So `fastenerCutter` stands the corners 1/cos(π/n) of the radius out
-  and the flats on it, and the magnet keeps its 0.1 at the corners where that is further,
-  up to 7.77 mm. A screw gets no allowance on top: its head drops into the counterbore,
-  which the field already sizes with room round it. `mountLimits` measures every room to
-  the corners, so the largest size it takes is that room times cos(π/n).
+  fit at the corners. So every bore stands its corners 1/cos(π/n) of the radius out and
+  its flats on it, and the magnet keeps its 0.1 at the corners where that is further, up
+  to 7.77 mm. A screw gets no allowance on top: its head drops into the counterbore,
+  which the field already sizes with room round it. `MOUNT_BORE` says each bore's sides
+  and corner radius, and the largest size whose corners fit a room; `fastenerCutter` cuts
+  what it says, and `mountLimits`, which measures every room to the corners, reads its
+  sizes back from it, so the shape is decided in one place.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the

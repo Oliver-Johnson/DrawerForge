@@ -813,6 +813,36 @@ function cylinder(cx, cy, r, z0, z1, seg) {
   return polys;
 }
 
+/* The polygon each mounting bore is cut as: how many sides, and how far out its corners
+ * stand for a size typed (`r`), and back the other way, the largest size whose corners
+ * stay inside a room (`fits`). fastenerCutter and screwCutter cut these and mountLimits
+ * holds the sizes to them, so a bore's shape is decided here and nowhere else. Each is
+ * cylinder's polygon about the site, a corner at every 2πk/sides from +x.
+ *
+ * Every bore stands its flats on the size asked, so its corners are 1/cos(π/sides) of the
+ * radius out and it is no narrower anywhere than the size typed.
+ *   - magnet: 14 sides, cut 0.1 mm over the magnet's radius at its corners: 0.2 over the
+ *     diameter, the press fit bins/bin.js keeps as well ("the plate's rule"). Its flats
+ *     are cos(π/14) of that, and past a 7.78 mm magnet they came inside the magnet
+ *     itself: 4.972 mm for a 10 mm one, a pocket narrower than what goes in it, where
+ *     bins/bin.js's 16 sides keep their flats outside every magnet its field takes. So
+ *     the corners go out as far as it takes for the flats to stand on the magnet's
+ *     radius. For a magnet up to 7.77 mm, the 6 mm default among them, nothing moves.
+ *   - head, the counterbore: 14 sides, and hole, the shank: 12. Both had their corners on
+ *     the size asked, so their flats came inside it at every size, 5.85 mm across for the
+ *     default 6 mm head and 2.90 for the 3 mm hole. Now their corners go out the same
+ *     way, and no further: the magnet's 0.1 is a press fit, and a screw head is not
+ *     pressed in. It drops into its counterbore, which the field already sizes with room
+ *     round it (6 mm for an M3's 5.5 mm head), and the shank is a clearance hole. */
+const MOUNT_BORE = {
+  magnet: { sides: 14, r: (d) => Math.max(d/2 + 0.1, d/2 / Math.cos(Math.PI/14)),
+            fits: (room) => 2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14)) },
+  head: { sides: 14, r: (d) => d/2 / Math.cos(Math.PI/14),
+          fits: (room) => 2 * room * Math.cos(Math.PI / 14) },
+  hole: { sides: 12, r: (d) => d/2 / Math.cos(Math.PI/12),
+          fits: (room) => 2 * room * Math.cos(Math.PI / 12) },
+};
+
 /* Everything removed at one mounting site, as ONE solid.
  *
  * Up to three cylinders share this axis: a magnet pocket, a screw shank, and the head's
@@ -834,30 +864,17 @@ function cylinder(cx, cy, r, z0, z1, seg) {
 function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
   let cut = null;
   const add = (c) => { cut = cut ? csgUnion(cut, c) : c; };
-  /* A magnet's pocket is 14-sided, cut 0.1 mm over the magnet's radius at its corners:
-     0.2 over the diameter, the press fit bins/bin.js keeps as well ("the plate's rule").
-     Its flats are cos(π/14) of that, and past a 7.78 mm magnet they came inside the
-     magnet itself: 4.972 mm for a 10 mm one, a pocket narrower than what goes in it,
-     where bins/bin.js's 16 sides keep their flats outside every magnet its field takes.
-     So the corners go out as far as it takes for the flats to stand on the magnet's
-     radius. For a magnet up to 7.77 mm, the 6 mm default among them, nothing moves. */
-  const magnetR = Math.max(cfg.magnetD/2 + 0.1, cfg.magnetD/2 / Math.cos(Math.PI/14));
+  // each bore as MOUNT_BORE shapes it
+  const { magnet, head, hole } = MOUNT_BORE;
+  const magnetR = magnet.r(cfg.magnetD);
   if (cfg.magnets)
     add(cfg.magnetSide === 'top'
-      ? cylinder(0, 0, magnetR, magZ0, magZ1, 14)
-      : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, 14));
-  /* A screw's two bores had their corners on the size asked, so their flats came inside
-     it at every size: the 14-sided counterbore cos(π/14) of the head and the 12-sided
-     shank cos(π/12) of the hole, 5.85 mm across the flats for the default 6 mm head and
-     2.90 for the 3 mm shank. Their corners go out the same way, so the flats stand on the
-     radius and neither bore is narrower anywhere than the size typed. And no more than
-     that: the magnet's 0.1 is a press fit, and a screw head is not pressed in. It drops
-     into its counterbore, which the field already sizes with room round it (6 mm for an
-     M3's 5.5 mm head), and the shank is a clearance hole. */
+      ? cylinder(0, 0, magnetR, magZ0, magZ1, magnet.sides)
+      : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, magnet.sides));
   if (cfg.screws) {
     if (cfg.screwHeadD > cfg.screwHoleD)
-      add(cylinder(0, 0, cfg.screwHeadD/2 / Math.cos(Math.PI/14), -0.5, cfg.screwHeadDepth, 14));
-    add(cylinder(0, 0, cfg.screwHoleD/2 / Math.cos(Math.PI/12), -0.5, shankTop, 12));
+      add(cylinder(0, 0, head.r(cfg.screwHeadD), -0.5, cfg.screwHeadDepth, head.sides));
+    add(cylinder(0, 0, hole.r(cfg.screwHoleD), -0.5, shankTop, hole.sides));
   }
   return cut;
 }
@@ -873,15 +890,15 @@ function movePolys(polys, dx, dy) {
   }));
 }
 
-// counterbore: hole cylinder full height + wider recess from chosen face, each with its
-// flats on its size as fastenerCutter cuts them
+// counterbore: hole cylinder full height + wider recess from chosen face, each bore as
+// MOUNT_BORE shapes it
 function screwCutter(cx, cy, holeD, headD, z0, z1, headDepth, fromTop) {
-  let polys = cylinder(cx, cy, holeD/2 / Math.cos(Math.PI/12), z0 - 0.5, z1 + 0.5, 12);
+  const { head, hole } = MOUNT_BORE;
+  let polys = cylinder(cx, cy, hole.r(holeD), z0 - 0.5, z1 + 0.5, hole.sides);
   if (headD > holeD) {
-    const headR = headD/2 / Math.cos(Math.PI/14);
     const rec = fromTop
-      ? cylinder(cx, cy, headR, z1 - headDepth, z1 + 0.5, 14)
-      : cylinder(cx, cy, headR, z0 - 0.5, z0 + headDepth, 14);
+      ? cylinder(cx, cy, head.r(headD), z1 - headDepth, z1 + 0.5, head.sides)
+      : cylinder(cx, cy, head.r(headD), z0 - 0.5, z0 + headDepth, head.sides);
     polys = csgUnion(polys, rec);
   }
   return polys;
@@ -2490,13 +2507,10 @@ function mountLimits(cfg, layout) {
   const own = fit(cfg.magnetSide === 'top' ? top : under);
   const room = Math.min(own, magnetJoint);
   return {
-    // a magnet pocket's corners are 0.1 mm over the magnet's radius, or out to where its
-    // flats stand on that radius if that is further (fastenerCutter)
-    magnetD: r10(2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14))),
-    // a screw's bores have their flats on its size, so their corners stand 1/cos(π/n) of
-    // it out: the shank's 12 sides and the counterbore's 14 (fastenerCutter)
-    screwHoleD: r10(2 * Math.min(fit(top), below) * Math.cos(Math.PI / 12)),
-    screwHeadD: r10(2 * Math.min(fit(under), below) * Math.cos(Math.PI / 14)),
+    // every room above is to a bore's corners, which stand out past its size (MOUNT_BORE)
+    magnetD: r10(MOUNT_BORE.magnet.fits(room)),
+    screwHoleD: r10(MOUNT_BORE.hole.fits(Math.min(fit(top), below))),
+    screwHeadD: r10(MOUNT_BORE.head.fits(Math.min(fit(under), below))),
     // in the solid floor the pad grows to suit, so only a boss caps the depth
     depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
     // which of the sizes the cut beside it stops, rather than the floor, cell or boss
