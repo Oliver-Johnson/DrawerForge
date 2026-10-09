@@ -283,6 +283,7 @@ if (window.matchMedia && matchMedia('(max-width: 980px)').matches)
       <label class="f"><b>Head depth</b><input id="screwHeadDepth" type="number" step="0.1" min="0.5" max="10" value="2" aria-describedby="errScrew"></label>
     </div>
     <span class="hint" id="errScrew" style="color:var(--red)" hidden></span>
+    <span class="hint" id="screwHeadHint" hidden></span>
     <label class="f" id="baseModeRow" style="display:none"><b>Mounting base</b>
       <select id="baseMode">
         <option value="solid">Solid floor — at least 2.8 mm base under everything</option>

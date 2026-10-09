@@ -322,6 +322,12 @@ function showFieldErrors() {
   }
 }
 
+/* A head wider than the hole that does not clear its corners is cut as no counterbore
+   (MOUNT_BORE.head.cuts, #73); and the size one is cut from, to the hundredth above. */
+const headCutAsNone = () => state.screwHeadD > state.screwHoleD &&
+  !MOUNT_BORE.head.cuts(state.screwHeadD, state.screwHoleD);
+const headClearsFrom = (hole) => Math.ceil(MOUNT_BORE.head.over(hole) * 100 - 1e-9) / 100;
+
 function readControls() {
   fieldErrors.clear(); noRoom.clear();
   /* The switches before the numbers: which ranges apply, and how wide they are, depend
@@ -392,6 +398,15 @@ function readControls() {
   if (halfOpt && halfOpt.textContent !== halfText) halfOpt.textContent = halfText;
   $('magRow').style.display = state.magnets ? '' : 'none';
   $('screwRow').style.display = state.screws ? '' : 'none';
+  /* A head wider than the hole that does not clear its corners is cut as none (#73); the
+     README said so, and nothing at the field did. Not while either size is refused: the
+     red line under the fields says what to do first. */
+  const noBore = state.screws && headCutAsNone() &&
+    !['screwHoleD', 'screwHeadD'].some((id) => fieldErrors.has(id) || noRoom.has(id));
+  $('screwHeadHint').hidden = !noBore;
+  if (noBore) $('screwHeadHint').textContent = `A ${state.screwHeadD} mm head does not clear ` +
+    `the corners of a ${state.screwHoleD} mm hole, so no counterbore is cut. One is from ` +
+    `${headClearsFrom(state.screwHoleD)} mm.`;
   $('connHintDove').style.display = state.connector === 'dovetail' ? '' : 'none';
   $('connHintPuzzle').style.display = state.connector === 'puzzle' ? '' : 'none';
   // Bowtie and puzzle key shared one hint, so picking between them meant reading the
@@ -1844,12 +1859,10 @@ function readmeText() {
   /* A head that does not clear the hole's corners is cut as none (MOUNT_BORE in core.js),
      and one no wider than the hole always was; the README says so, and for a head that
      was meant as a counterbore, the size that would be one. */
-  const { head } = MOUNT_BORE;
   if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ` +
-    (head.cuts(state.screwHeadD, state.screwHoleD) ? `${state.screwHeadD} mm counterbore`
-      : 'no counterbore' + (state.screwHeadD <= state.screwHoleD ? ''
-        : ` (a head clears a ${state.screwHoleD} mm hole from ` +
-          `${Math.ceil(head.over(state.screwHoleD) * 100 - 1e-9) / 100} mm)`)));
+    (MOUNT_BORE.head.cuts(state.screwHeadD, state.screwHoleD) ? `${state.screwHeadD} mm counterbore`
+      : 'no counterbore' + (headCutAsNone()
+        ? ` (a head clears a ${state.screwHoleD} mm hole from ${headClearsFrom(state.screwHoleD)} mm)` : '')));
   /* The figure the dialog quotes, said the way it says it, with the price it was worked
      out at: the README is read away from the page. The ZIP is only made once every piece
      exists, so there is always a total to give. */
