@@ -2343,8 +2343,13 @@ const MOUNT_WALL = 1.0;
  * These are measurements, not field ranges, and can come out below the field's minimum
  * or negative — a screw shank at a 34 mm pitch has −0.1 mm. That means no cut of any size
  * fits there; the page turns it into a check on the design rather than a range for the
- * field (src/ui.js readNumber), since no number typed into the field could fix it. */
-function mountLimits(cfg, layout) {
+ * field (src/ui.js readNumber), since no number typed into the field could fix it.
+ *
+ * `known` is the `cuts` of an earlier answer for the same design on the same layout,
+ * with only the mounting sizes changed since: the joint's cuts are not measured again
+ * unless the floor has moved, which moves their ceilings. The page reads the magnet's
+ * size last and asks again for it, after the screws' sizes have settled the floor. */
+function mountLimits(cfg, layout, known) {
   const half = cfg.pitch / 2, off = cfg.holeOffset;
   const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
   // distance from a point at (s, s) to the edge of a rounded square of half-size h,
@@ -2401,14 +2406,16 @@ function mountLimits(cfg, layout) {
      cuts, none of the 7,823 that stopped short of the cut built a bad edge, and the first
      went bad 0.035 mm into it. A wall of 1 mm would refuse the 6 mm magnet from beneath
      with a bowtie at 42 mm, which has 0.84 mm to spare and always built clean. */
-  const jointCuts = [];   // { room, top }: the nearest a site comes to one cut, its ceiling
+  const pad = platePad(cfg), again = !!known && known.pad === pad;
+  // { room, top }: the nearest a site comes to one cut, its ceiling
+  const jointCuts = again ? known.list : [];
   /* Room past the most the cell or the floor leaves cannot stop a size, so nothing
      further off than that is measured, and nothing at all where neither leaves any. A
      plate the page will build has at most 900 cells; at 30 × 30 with puzzle tabs this
      is a few milliseconds, on every redraw. */
   const reach = Math.max(fit(top), fit(under));
-  if (layout && !bosses && cfg.connector !== 'none' && reach > 0) {
-    const plan = keyPlan(cfg), pad = platePad(cfg), H = pad + cfg.plateHeight;
+  if (layout && !again && !bosses && cfg.connector !== 'none' && reach > 0) {
+    const plan = keyPlan(cfg), H = pad + cfg.plateHeight;
     /* A cut's footprint, as the segments its walls stand on, its extent and its ceiling,
        for each seam it can be cut from. Every cut from one seam is the same solid moved
        along it (keyHalf, puzzleShape, tabNotch), so it is worked out at the origin once
@@ -2476,7 +2483,7 @@ function mountLimits(cfg, layout) {
     c.top + MOUNT_SKIN > z + 1e-6 ? Math.min(m, c.room) : m, Infinity);
   const below = jointRoom(-Infinity);   // a magnet from beneath, a counterbore, a shank
   const magnetJoint = cfg.magnetSide === 'top' && jointCuts.length
-    ? jointRoom(platePad(cfg) - cfg.magnetH) : below;
+    ? jointRoom(pad - cfg.magnetH) : below;
   const own = fit(cfg.magnetSide === 'top' ? top : under);
   const room = Math.min(own, magnetJoint);
   return {
@@ -2493,6 +2500,8 @@ function mountLimits(cfg, layout) {
               screwHeadD: under >= beside && below >= beside },
     // and which a joint's cut stops, before any of those
     joint: { magnetD: magnetJoint < own, screwHoleD: below < fit(top), screwHeadD: below < fit(under) },
+    // what was measured of the joint's cuts, for `known`
+    cuts: { pad, list: jointCuts },
   };
 }
 

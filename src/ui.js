@@ -81,11 +81,16 @@ const RANGES = PLATE_RANGES;
 const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
 /* The sizes a joint's cut in the floor leaves room for depend on where the seams are and
    on the clearance, so mountLimits takes the layout, and readControls reads the mounting
-   sizes after everything that moves either. One answer per size it reads, kept here
-   meanwhile: the layout and the cuts are measured once, not once for the range and
-   again for the reason. */
-let mountNow = null;
-const mount = () => mountNow || (mountNow = mountLimits(state, computeLayout(state)));
+   sizes after everything that moves either. The layout is worked out once for a read, the
+   first time a size needs it, and recomputeLayout keeps that one rather than working it
+   out again: none of the mounting sizes moves it. In Fewest plates mode one is a search,
+   about 100 ms, and with magnets on a keystroke ran three. The answer is kept meanwhile,
+   for the range and the reason alike. */
+let mountNow = null, mountLayout = null;
+const mount = () => mountNow ||
+  (mountNow = mountLimits(state, mountLayout || (mountLayout = computeLayout(state))));
+// how deep a pocket goes: only a corner boss caps it, which needs no layout
+const mountDepth = () => mountLimits(state).depth;
 // "an 18 mm pitch", "an 80 mm pitch": the article goes by how the number is said
 const atPitch = () => `at ${/^(8|1[18](\.|$))/.test(String(state.pitch)) ? 'an' : 'a'} ` +
   `${state.pitch} mm pitch`;
@@ -125,13 +130,13 @@ const LIMITS = {
     why: () => '— past that a spec bin rides on the rim instead of seating in its socket' },
   magnetD: { ...RANGES.magnetD, max: () => mount().magnetD, label: 'Magnet Ø', when: () => state.magnets,
     why: () => mountWhy(state.magnetSide === 'top', 'magnetD'), off: 'magnet pockets' },
-  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mount().depth), label: 'Magnet depth',
+  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mountDepth()), label: 'Magnet depth',
     when: () => state.magnets, why: bossDepth },
   screwHoleD: { ...RANGES.screwHoleD, max: () => mount().screwHoleD, label: 'Screw hole Ø',
     when: () => state.screws, why: () => mountWhy(true, 'screwHoleD'), off: 'screw holes' },
   screwHeadD: { ...RANGES.screwHeadD, max: () => mount().screwHeadD, label: 'Screw head Ø',
     when: () => state.screws, why: () => mountWhy(false, 'screwHeadD'), off: 'screw holes' },
-  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mount().depth),
+  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mountDepth()),
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
   // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
   connClr: { min: RANGES.connClr.min, max: () => connClrCeiling(state).max, label: 'Fit clearance',
@@ -304,10 +309,11 @@ function readControls() {
   /* The mounting sizes last, since a joint's cut beside the sites moves with the margins,
      the split and the clearance (see mount). The magnet's is the very last, and measured
      again: a pocket from above meets a cut by how thick the floor is, which the screws
-     and the magnet's own depth set. */
-  mountNow = null;
+     and the magnet's own depth set. Only that step is taken again, on the same layout
+     and the cuts already measured, unless the floor has moved (mountLimits' `known`). */
+  mountNow = mountLayout = null;
   for (const id of MOUNT_LAST) {
-    if (id === 'magnetD') mountNow = null;
+    if (id === 'magnetD' && mountNow) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
     state[id] = readNumber(id);
   }
   // and Checks says what is wrong in the panel's order, not the order it was read in
@@ -382,7 +388,7 @@ function plateStyleHint() {
    nothing, and each of those is a discrete edit. */
 function recomputeLayout(ev) {
   readControls();
-  layout = computeLayout(state);
+  layout = mountLayout || computeLayout(state);   // the one the sizes were read against, if any
   // clamp stored manual cuts to the current grid
   if (state.splitMode === 'manual') {
     state.rowCuts = layout.rowCuts.slice();
