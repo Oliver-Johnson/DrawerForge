@@ -81,9 +81,10 @@ const mount = () => mountLimits(state);
 // "an 18 mm pitch", "an 80 mm pitch": the article goes by how the number is said
 const atPitch = () => `at ${/^(8|1[18](\.|$))/.test(String(state.pitch)) ? 'an' : 'a'} ` +
   `${state.pitch} mm pitch`;
-const mountWhy = (opens) => `${atPitch()} — mounting holes sit ` +
+const mountWhy = (opens, field) => `${atPitch()} — mounting holes sit ` +
   `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
-  (state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
+  (mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
+    : state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
     : opens ? 'a cut open to the socket has to stay on the socket floor'
     : 'a pocket under the floor has to stay inside its cell');
 const bossDepth = () => state.baseMode === 'bosses'
@@ -112,13 +113,13 @@ const LIMITS = {
     tooSmall: 'at 0 the rim between sockets is a face with no width, and the plate comes out open',
     why: () => '— past that a spec bin rides on the rim instead of seating in its socket' },
   magnetD: { ...RANGES.magnetD, max: () => mount().magnetD, label: 'Magnet Ø', when: () => state.magnets,
-    why: () => mountWhy(state.magnetSide === 'top'), off: 'magnet pockets' },
+    why: () => mountWhy(state.magnetSide === 'top', 'magnetD'), off: 'magnet pockets' },
   magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mount().depth), label: 'Magnet depth',
     when: () => state.magnets, why: bossDepth },
   screwHoleD: { ...RANGES.screwHoleD, max: () => mount().screwHoleD, label: 'Screw hole Ø',
-    when: () => state.screws, why: () => mountWhy(true), off: 'screw holes' },
+    when: () => state.screws, why: () => mountWhy(true, 'screwHoleD'), off: 'screw holes' },
   screwHeadD: { ...RANGES.screwHeadD, max: () => mount().screwHeadD, label: 'Screw head Ø',
-    when: () => state.screws, why: () => mountWhy(false), off: 'screw holes' },
+    when: () => state.screws, why: () => mountWhy(false, 'screwHeadD'), off: 'screw holes' },
   screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mount().depth),
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
   // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
@@ -507,20 +508,25 @@ function warningsList() {
         : `${pieces(across('deep'), 'P')} ${across('deep').length > 1 ? 'are' : 'is'} one cell deep ` +
           `and ${pieces(across('wide'), 'p')} one cell wide`;
       const keyName = { bowtie: 'bowtie keys', puzzlekey: 'puzzle keys', snap: 'snap clips' }[state.connector];
-      /* Each named the way it is set: the insert direction is part of the joint (an H-clip
-         from above leaks where one from beneath is watertight), and a snap clip goes in
-         from above only from inside the walls, where the page has the insert control. */
-      const JOINT = { dovetail: 'dovetail tabs', hclip: 'H-clips put in from beneath',
+      /* Each named the way it is set: the insert direction is part of the joint, and a
+         snap clip goes in from above only from inside the walls, where the page has the
+         insert control. The H-clip is named by its insert too, each way that clears, since
+         picking H-clips keeps the Key insertion you had: it was named from beneath alone,
+         and a key put in from above became an H-clip from above that Checks never named. */
+      const JOINT = { dovetail: 'dovetail tabs', puzzle: 'puzzle tabs', hclip: 'H-clips put in from beneath',
+                      'hclip top': 'H-clips put in from above',
                       'snap top': 'snap clips inside the walls, put in from above',
                       wall: `${keyName} inside the walls, put in from beneath`,
                       cup: `${keyName} inside the walls, put in from above` };
       // on a snap plate the snap clip from above is the key in use in the wall from above
       const ok = jointsThatFit(state, layout)
         .map((j) => (state.connector === 'snap' && j.id === 'snap top' ? 'cup' : j.id));
-      // the key in the wall both ways is one item, not the same words twice over
+      // a joint both ways is one item, not the same words twice over
       if (ok.includes('wall') && ok.includes('cup'))
         JOINT.wall = `${keyName} inside the walls, put in from beneath or above`;
-      const fit = ok.filter((id) => !(id === 'cup' && ok.includes('wall'))).map((id) => JOINT[id]);
+      if (ok.includes('hclip') && ok.includes('hclip top')) JOINT.hclip = 'H-clips put in from beneath or above';
+      const fit = ok.filter((id) => !(id === 'cup' && ok.includes('wall')) &&
+                                    !(id === 'hclip top' && ok.includes('hclip'))).map((id) => JOINT[id]);
       // items that have a comma of their own are kept apart with semicolons
       const named = fit.some((t) => t.includes(','))
         ? (fit.length < 2 ? fit.join('') : `${fit.slice(0, -1).join('; ')}; or ${fit[fit.length - 1]}`)

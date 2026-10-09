@@ -296,11 +296,12 @@ const CASES = [
      plane, so its edges ran the same way as its neighbours' (three on each of two pieces).
      healCsgSeams now lays a face out again only where its plain fan lies back to back with
      it, and only in a layout whose every triangle lies within 60 degrees of the face, keeps
-     its winding and repeats no edge. The bowtie keeps folds where main has them by the
-     cup, fewer (6 and 3 against main's 10 and 5). The puzzle tabs keep three on each of
-     the two pieces, at the sliver itself, which faces the wrong way however it is laid
-     out; main builds those two clean, because its puzzle notch regions are cut
-     differently (the pole moved into one region, above). */
+     its winding and repeats no edge. The bowtie kept folds where main has them by the
+     cup, fewer (6 and 3 against main's 10 and 5), until healCsgSeams counted the faces it
+     turns over and buildPiece cut the cup again (cutAgain): none now. The puzzle tabs
+     keep three on each of the two pieces, at the sliver itself, which faces the wrong way
+     however it is laid out; main builds those two clean, because its puzzle notch regions
+     are cut differently (the pole moved into one region, above). */
   { name: 'H-clip above, holes in', pitch: 14.3, drawerW: 3 * 14.3, drawerD: 3 * 14.3,
     bedW: 400, bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], []],
     connector: 'hclip', keyType: 'bowtie', keyInsert: 'top', magnets: true, magnetSide: 'top',
@@ -309,8 +310,7 @@ const CASES = [
     bedW: 400, bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], []],
     connector: 'bowtie', keyType: 'bowtie', keyMount: 'wall', keyInsert: 'top', magnets: true,
     magnetSide: 'top', holeOffset: 2, magnetD: 2.5, key: { ...G.DEFAULTS.key, clr: 0.1 },
-    arcSegs: 6, oriQuarantine: 'slivers by the cup, folded as on main, fewer',
-    oriWorst: { A2: 6, A3: 3 } },
+    arcSegs: 6 },
   { name: 'puzzle 20, holes in', pitch: 20, drawerW: 60, drawerD: 100, bedW: 400, bedD: 400,
     splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]], connector: 'puzzle',
     keyType: 'bowtie', magnets: true, magnetSide: 'top', holeOffset: 3.5, magnetD: 5.1,
@@ -328,16 +328,16 @@ const CASES = [
     key: { ...G.DEFAULTS.key, clr: 0.93 }, hclip: { ...G.DEFAULTS.hclip, clr: 0.93 } },
   /* A cell whose pockets come out open is cut again (see the fastener cut in buildPiece),
      and here the turned cutters' cut throws: healCsgSeams' T-junction pass limit. Taken
-     unguarded, that one try made the whole plate fail to build, where main builds it open;
-     now the first cut stands. Engine-only again (the sites 2.5 mm in, at 15.5 mm), and
-     open by 3 to 9 edges a piece, where main has 9 and folds on every piece. */
+     unguarded, that one try made the whole plate fail to build, where main builds it open.
+     The throw is passed over, and the cutters nudged 1.7 microns, the try after it, close
+     every cell left open here (3 to 9 edges a piece; main has 9 and folds on every piece).
+     Engine-only again: the sites 2.5 mm in, at 15.5 mm. */
   { name: 'a retry that throws', pitch: 15.5, drawerW: 3 * 15.5, drawerD: 5 * 15.5, bedW: 400,
     bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]],
     connector: 'snap', keyType: 'snap', keyInsert: 'top', magnets: true, screws: true,
     holeOffset: 2.5, magnetD: 3.3, screwHeadD: 3.3, screwHoleD: 1.7, arcSegs: 6,
     tab: { ...G.DEFAULTS.tab, clr: 0.3 }, puzzle: { ...G.DEFAULTS.puzzle, clr: 0.3 },
-    key: { ...G.DEFAULTS.key, clr: 0.25 }, hclip: { ...G.DEFAULTS.hclip, clr: 0.25 },
-    quarantine: 'pocket slivers with the sites moved in, open as on main', worst: 9 },
+    key: { ...G.DEFAULTS.key, clr: 0.25 }, hclip: { ...G.DEFAULTS.hclip, clr: 0.25 } },
 
   /* --- quarantined: real, measured, not regressions, still leaking --- */
 
@@ -1648,6 +1648,10 @@ console.log('\nthe smallest pitch the page allows:');
     'columns one cell wide': (p) => ({ drawerW: 3 * p, drawerD: 3 * p, splitMode: 'manual',
                                        rowCuts: [], colCuts: [[1, 2]] }),
   });
+  // folds too, which an edge count cannot see: a sliver turned over against its neighbour
+  const foldsOf = (r) => r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+  const health = (r, folds) => r.bad ? leakText(r) + (folds ? `, ${folds} FOLDS` : '')
+                                     : folds ? `${folds} FOLDS` : 'watertight';
   const refused = [];
   for (const [ln, lay] of Object.entries(LAYOUTS)) {
     const leaks = [];
@@ -1655,12 +1659,13 @@ console.log('\nthe smallest pitch the page allows:');
       const r = buildAll(Object.assign({ pitch: P }, lay(P), conf));
       const meet = G.keysMeet(r.cfg, r.L);
       if (meet.length) { refused.push({ cn, ln, r, meet }); continue; }
-      if (r.bad) leaks.push(`${cn} ${leakText(r)}`);
+      const folds = foldsOf(r);
+      if (r.bad || folds) leaks.push(`${cn} ${health(r, folds)}`);
     }
     const no = refused.filter((f) => f.ln === ln).length;
     console.log(`  ${P} mm, ${ln}: ${Object.keys(CONFIGS).length} configurations` +
                 `${no ? `, ${no} refused (below)` : ''}, ` +
-                (leaks.length ? `LEAKING: ${leaks.join('; ')}` : 'every other one watertight'));
+                (leaks.length ? `LEAKING: ${leaks.join('; ')}` : 'every other one watertight, with no folds'));
     bad += leaks.length;
   }
   for (const { cn, ln, r, meet } of refused) {
@@ -1692,40 +1697,134 @@ console.log('\nthe smallest pitch the page allows:');
                                : `each watertight at ${P}`));
     if (!earned || !clean || badFit.length || !fit.length) bad++;
   }
-  // the step below: 13.3 opened the narrow pieces of four joints
+  // the step below: 13.3 opened the narrow pieces of four joints; with the joint's cut tried
+  // again when it comes out open (cutAgain in core.js) it opens the puzzle's alone
   const below = Math.round((P - 0.2) * 10) / 10;
   const opened = ['puzzle', 'bowtie', 'puzzlekey', 'snap'].filter((cn) =>
     buildAll(Object.assign({ pitch: below }, LAYOUTS['1-cell pieces'](below), CONFIGS[cn])).open > 0);
   console.log(`  ${below} mm, 1-cell pieces: ${opened.length ? `open on ${opened.join(', ')} — the floor is earned`
                                                               : 'ALL CLOSED — the pitch floor can come down'}`);
   if (!opened.length) bad++;
+
+  /* And above it. Everything here was built at 13.5 mm and nowhere else, so what the page
+     took between that and 16 mm went out unread: a sweep of the joints and layouts above
+     every 0.01 mm, at the clearances as they come, found 285 of the 14,194 plates it took
+     open, with shells touching, or folded, and one every 0.05 mm across the field found
+     the H-clip put in from above open at a field of 0.74 at every pitch. One plate from
+     each run of pitches main left that way is built here at the clearances as they come,
+     and then some at other fields. Each has to be taken, closed, its shells apart, and
+     with no folds. */
+  const MAIN_LEFT = {
+    dovetail: { '2x2 pieces': [15.1], 'rows one cell deep': [15.1] },
+    puzzle: { '2x2 pieces': [15.71], '1-cell pieces': [14.41, 14.51],
+              'rows one cell deep': [13.91, 14.95, 15.71], 'columns one cell wide': [14.52] },
+    bowtie: { '2x2 pieces': [13.59, 13.66, 13.98, 14.58], '1-cell pieces': [14.9], 'rows one cell deep': [14.58] },
+    puzzlekey: { '1-cell pieces': [15.02], 'rows one cell deep': [14.46, 15.02, 15.18, 15.43, 15.56],
+                 'columns one cell wide': [14.56, 15.11, 15.18] },
+    snap: { '2x2 pieces': [14.84, 15.98], '1-cell pieces': [14.19, 14.53, 14.63, 15.42],
+            'rows one cell deep': [14.84, 15.98], 'columns one cell wide': [15.98] },
+    hclip: { '2x2 pieces': [14.3, 16], '1-cell pieces': [14.3, 16],
+             'rows one cell deep': [14.3, 16], 'columns one cell wide': [14.3, 16] },
+    'bowtie wall': { '2x2 pieces': [15.13, 15.19, 15.21, 15.34, 15.61], '1-cell pieces': [15.61],
+                     'rows one cell deep': [14.67, 15.13, 15.19, 15.21, 15.34, 15.61],
+                     'columns one cell wide': [15.61] },
+    'puzzlekey wall': { '2x2 pieces': [13.56, 14.07, 14.36, 15.43],
+                        'rows one cell deep': [13.54, 13.58, 13.8, 14.07, 14.36, 14.42, 14.48, 14.67],
+                        'columns one cell wide': [13.54, 13.58, 13.8, 14.42, 14.48] },
+    'snap wall': { '2x2 pieces': [13.51, 14.81, 15.13], '1-cell pieces': [14.81],
+                   'rows one cell deep': [13.51, 13.85, 14.67, 14.81, 15.13, 15.24],
+                   'columns one cell wide': [14.81] },
+    'hclip top': { '2x2 pieces': [14.85], '1-cell pieces': [14.85],
+                   'rows one cell deep': [14.85], 'columns one cell wide': [14.85] },
+    'bowtie wall top': { 'rows one cell deep': [14.44, 14.97], 'columns one cell wide': [14.44] },
+    'puzzlekey wall top': { '2x2 pieces': [13.99, 14.85, 15.8], '1-cell pieces': [14, 14.85, 15.88],
+                            'rows one cell deep': [14.44, 14.79, 15.54, 15.71, 15.86, 15.94],
+                            'columns one cell wide': [14.44, 14.85, 15.54, 15.81] },
+  };
+  // [joint, layout, pitch, field, and the layout written out where it is none of the above]:
+  // the field as the page cuts it, or the joint's ceiling if lower
+  const AT_FIELD = [
+    ['hclip top', '2x2 pieces', 14.75, 0.74], ['hclip top', '1-cell pieces', 13.5, 0.74],
+    ['hclip top', 'rows one cell deep', 14.75, 0.74], ['hclip top', 'columns one cell wide', 13.5, 0.74],
+    ['hclip top', 'columns one cell wide', 15.8, 0.74], ['hclip top', '2x2 pieces', 14.85, 0.2],
+    ['hclip top', 'rows one cell deep', 15.15, 0.5], ['hclip top', 'columns one cell wide', 15.65, 1],
+    ['hclip', '2x2 pieces', 14.3, 0.2], ['hclip', 'rows one cell deep', 14.6, 0.5],
+    ['hclip', 'columns one cell wide', 15, 0.9],
+    ['dovetail', 'columns one cell wide', 13.5, 0.1], ['dovetail', '2x2 pieces', 13.55, 0.3],
+    ['dovetail', 'rows one cell deep', 13.55, 0.3], ['dovetail', 'columns one cell wide', 13.55, 0.3],
+    ['dovetail', '2x2 pieces', 15.1, 0.2],
+    ['puzzle', 'columns one cell wide', 13.6, 0.1], ['puzzle', '1-cell pieces', 14.55, 0],
+    ['puzzle', 'rows one cell deep', 14.95, 0.2], ['puzzle', '2x2 pieces', 15.4, 0.3],
+    ['puzzle', 'rows one cell deep', 15.75, 0.3],
+    ['puzzlekey', '1-cell pieces', 13.55, 0.3], ['puzzlekey', '2x2 pieces', 13.85, 0.3],
+    ['puzzlekey', '2x2 pieces', 13.9, 0], ['puzzlekey', 'rows one cell deep', 14.35, 0],
+    ['puzzlekey', 'rows one cell deep', 15.2, 0.3],
+    ['bowtie', '2x2 pieces', 13.8, 0], ['bowtie', 'columns one cell wide', 14.8, 0],
+    ['bowtie', '1-cell pieces', 14.9, 0.2],
+    ['snap', '2x2 pieces', 13.55, 0], ['snap', '2x2 pieces', 13.95, 0.9], ['snap', '1-cell pieces', 14.35, 0],
+    ['snap', '1-cell pieces', 14.95, 0.7], ['snap', 'rows one cell deep', 15.3, 0.5],
+    // a spoke of the bottom cap 8.1 microns from a lobe's corner (fanCentre in core.js)
+    ['puzzle', 'rows beside columns', 14.71, 0.3, { drawerW: 3 * 14.71, drawerD: 5 * 14.71,
+      splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]] }],
+  ];
+  /* And the same lottery at 42 mm, where it is rarer: a dovetail at a field of 0.3 on
+     rows one cell wide (an edge used four times and a fold at each seam), a puzzle key in
+     the wall at the page's own smoothness (a face left as a line, four edges used four
+     times), and the H-clip from above at 0.74. */
+  const AT_42 = [
+    ['dovetail', 'a column of rows', 0.3, { drawerW: 42, drawerD: 126, splitMode: 'manual',
+                                            rowCuts: [1, 2], colCuts: [[], [], []] }],
+    ['puzzlekey wall', 'columns one cell wide', undefined,
+     { ...LAYOUTS['columns one cell wide'](42), arcSegs: G.DEFAULTS.arcSegs, magnets: true, magnetSide: 'top' }],
+    ['hclip top', 'rows one cell deep', 0.74, LAYOUTS['rows one cell deep'](42)],
+  ];
+  const cases = [];
+  for (const [cn, by] of Object.entries(MAIN_LEFT))
+    for (const [ln, ps] of Object.entries(by)) for (const p of ps) cases.push([cn, ln, p]);
+  const fielded = cases.length;
+  cases.push(...AT_FIELD, ...AT_42.map(([cn, ln, f, lay]) => [cn, ln, 42, f, lay]));
+  const notClean = [];
+  const t0 = Date.now();
+  for (const [cn, ln, p, f, lay] of cases) {
+    const over = { pitch: p, ...(lay || LAYOUTS[ln](p)), ...CONFIGS[cn] };
+    if (f !== undefined) over.clr = Math.min(f, G.connClrCeiling(designCfg(over)).max);
+    const r = buildAll(over);
+    const at = `${cn} at ${p} mm, ${ln}${f === undefined ? '' : `, field ${over.clr}`}`;
+    if (G.keysMeet(r.cfg, r.L).length) { notClean.push(`${at}: REFUSED`); continue; }
+    const folds = foldsOf(r);
+    if (r.bad || folds) notClean.push(`${at}: ${health(r, folds)}`);
+  }
+  console.log(`  above it: ${fielded} plates from 13.5 to 16 mm that main left leaking or folded at the ` +
+              'clearances as they come, ' +
+              `${AT_FIELD.length} at other fields, and ${AT_42.length} at 42 mm, ` +
+              `built in ${((Date.now() - t0) / 1000).toFixed(0)} s: ` +
+              (notClean.length ? `NOT ALL CLEAN: ${notClean.slice(0, 6).join('; ')}` +
+                                 (notClean.length > 6 ? ` and ${notClean.length - 6} more` : '')
+                               : 'every one taken, watertight and with no folds'));
+  bad += notClean.length;
 }
 
 /* The joints Checks names in place of keys that meet, across every pitch it refuses at.
  *
  * The section above builds them at 13.5 mm and the default clearance only, and named
- * that way the message sent people to plates that leaked. jointsThatFit now names a
- * joint only from the pitch it was swept clean from (KEY_ALTERNATIVES in core.js), and
- * this holds it to that two ways.
+ * that way the message sent people to plates that leaked. jointsThatFit names a joint
+ * only from the pitch it was swept clean from (KEY_ALTERNATIVES in core.js). It held
+ * some back from where they leaked, 006ea48 named all but the cup, and this built a plate
+ * just short of each bound; the joint's cut taken again (cutAgain in core.js) closed
+ * every one of them, so every joint is named wherever it clears and none is held back.
  *
- * First, a plate from that sweep for each joint the rule holds back, each just short of
- * where it is named from: it has to leak still, or the bound can come down, and Checks
- * must not name it. 006ea48 named all but the cup, which it never named.
+ * So this builds what it names, the way it is named, insert and all: the H-clip put in
+ * from beneath or from above, the snap clip inside the walls from above. Every 0.4 mm
+ * from 13.5 to 15.9, the last pitch anything is refused at, and at 14.3, 14.5 and 15.3,
+ * where joints used to be held back from; rows one cell deep, and rows beside columns
+ * one cell wide in one drawer; the field every 0.1 from 0, and 0.74, as far as the joint
+ * in use goes. The joint named is built at that field, or at its own ceiling where that
+ * is lower: the page refuses a field over the ceiling ("Fit clearance must be ... or
+ * less") until it is lowered, and the ceiling is as far as it has to come. A plate that
+ * leaks, or that keysMeet refuses after all, fails it.
  *
- * Then what it does name, built the way it is named, insert and all: the H-clip put in
- * from beneath, the snap clip inside the walls from above. Every 0.4 mm from 13.5 to
- * 15.9, the last pitch anything is refused at, and at each joint's own bound; rows one
- * cell deep, and rows beside columns one cell wide in one drawer; the field every 0.1
- * from 0, and 0.74, as far as the joint in use goes. The joint named is built at that
- * field, or at its own ceiling where that is lower: the page refuses a field over the
- * ceiling ("Fit clearance must be ... or less") until it is lowered, and the ceiling is
- * as far as it has to come. A plate that leaks, or that keysMeet refuses after all,
- * fails it.
- *
- * The fields were 0, 0.3 and the ceiling, and the H-clip was named with the design's
- * own insert: after a key put in from above it was the H-clip from above, which leaks
- * at a field of 0.74 at every pitch (see KEY_ALTERNATIVES), and none of the three met
- * it. Built here as it was named then, this section fails on it at 14.3 mm. */
+ * The fields were 0, 0.3 and the ceiling, and none of the three met the H-clip from
+ * above at 0.74, which leaked at every pitch until cutAgain (see KEY_ALTERNATIVES). */
 console.log('\nthe joints named in place of keys that meet, wherever they meet:');
 {
   const LAYS = {
@@ -1737,34 +1836,20 @@ console.log('\nthe joints named in place of keys that meet, wherever they meet:'
     'bowtie wall top': { connector: 'bowtie', keyMount: 'wall', keyInsert: 'top' },
     'puzzlekey wall top': { connector: 'puzzlekey', keyMount: 'wall', keyInsert: 'top' },
   };
-  const OVER = {
-    dovetail: { connector: 'dovetail' }, puzzle: { connector: 'puzzle' },
-    hclip: { connector: 'hclip', keyInsert: 'bottom' },
-    wall: { keyMount: 'wall', keyInsert: 'bottom' }, cup: { keyMount: 'wall', keyInsert: 'top' },
-  };
   // the joint named, at the field as it stands or at the joint's own ceiling if lower
   const named = (p, lay, conf, f, over) => {
     const base = { pitch: p, ...lay(p), ...conf, ...over };
     return { ...base, clr: Math.min(f, G.connClrCeiling(designCfg(base)).max) };
   };
-  const HELD = [
-    ['dovetail', 'bowtie', 13.6, 0.3], ['hclip', 'snap', 14.2, 1], ['puzzle', 'snap', 15.94, 1],
-    ['wall', 'puzzlekey', 14.48, 0.3], ['wall', 'snap', 15.24, 1], ['cup', 'bowtie', 14.44, 0.3],
-  ];
-  const held = [], unheld = [];
-  for (const [id, cn, p, f] of HELD) {
-    const cfg = designCfg({ pitch: p, ...LAYS.rows(p), ...IN_USE[cn], clr: f });
-    const L = G.computeLayout(cfg);
-    const r = buildAll(named(p, LAYS.rows, IN_USE[cn], f, OVER[id]));
-    const says = G.jointsThatFit(cfg, L).some((j) => j.id === id);
-    held.push(`${id} for ${cn} at ${p}, ${leakText(r)}`);
-    if (!G.keysMeet(cfg, L).length) unheld.push(`${id} for ${cn} at ${p}: NOTHING REFUSED`);
-    else if (says) unheld.push(`${id} for ${cn} at ${p}: NAMED, ${leakText(r)}`);
-    else if (!r.bad) unheld.push(`${id} for ${cn} at ${p}: NOW CLEAN — its bound can come down`);
-  }
-  console.log(`  held back: ${held.join('; ')}` + (unheld.length ? `   FAIL: ${unheld.join('; ')}` : ''));
-  bad += unheld.length;
-
+  /* These were held back, and leaked: the dovetail for a bowtie at 13.6 with 0.3, the
+     H-clip from beneath for a snap clip at 14.2 with 1, puzzle tabs for a snap clip at
+     15.94 with 1, a puzzle key in the wall from beneath at 14.48 with 0.3 and a snap clip
+     at 15.24 with 1, a bowtie in a cup at 14.44 with 0.3. Each builds clean now and is
+     named, so nothing is held back and nothing is checked for it. Should a sweep (every
+     0.01 mm from 13.5 to 16, every 0.05 of the field, both layouts below) find a joint
+     that leaks where it would be named, it goes back into KEY_ALTERNATIVES with a bound,
+     and a plate just short of that bound goes here: built as named it has to leak still,
+     keysMeet has to refuse the key in use, and jointsThatFit must not name the joint. */
   const pitches = new Set([14.3, 14.5, 15.3]);
   for (let p = 13.5; p <= 15.9 + 1e-9; p = Math.round((p + 0.4) * 10) / 10) pitches.add(p);
   const built = new Set(), leaks = [], names = {}, folded = {};
@@ -1803,14 +1888,14 @@ console.log('\nthe joints named in place of keys that meet, wherever they meet:'
                               (leaks.length > 6 ? ` and ${leaks.length - 6} more` : '')
                             : 'every one watertight'));
   bad += leaks.length + (refused && built.size ? 0 : 1);
-  /* And folds, which an edge count cannot see. The H-clip put in from beneath has them on
-     main as it does here, the same plates and the same counts: a sliver of the bed face
-     by the clip's pocket turned over, four on a piece, and no edge open. Here it is where
-     the pitch is 14.1 mm more than the field; a sweep every 0.05 mm and every 0.02 of
-     the field finds it on 27 plates of 5,202 from 14.3 to 15.95 mm (86 on main, and 67
-     before unfoldFinished laid out the slivers that stand on edge). It is held to the
-     plates on file, as a quarantine is; any other joint named here that folds fails. */
-  const FOLDED = { hclip: { plates: 8, most: 8 } };
+  /* And folds, which an edge count cannot see. The H-clip put in from beneath had them: a
+     sliver of the bed face by the clip's pocket turned over, four on a piece, and no edge
+     open, where the pitch is 14.1 mm more than the field (27 plates of 5,202 from 14.3 to
+     15.95 mm every 0.05 and every 0.02 of the field, and 8 here). It was held to the
+     plates on file, as a quarantine is, until healCsgSeams counted the faces it turns
+     over and cutAgain took those cuts again. None is on file now: a joint named here
+     that folds fails. */
+  const FOLDED = {};
   const foldNotes = [], foldFails = [];
   for (const [id, xs] of Object.entries(folded)) {
     if (!xs.length) continue;
@@ -1853,11 +1938,78 @@ console.log('\nthe other limits, built at their ends:');
     console.log(`  ${nm.padEnd(28)} ${leakText(r)}`);
     if (r.bad) bad++;
   }
-  // the clearance one step past its end, which is why the end is where it is
+  /* A cell's four sites are 2 × holeOffset apart, so past a pitch of about 50 mm it is the
+     site beside a pocket, not the cell edge or the socket floor, that stops it. A 1-inch
+     magnet from beneath at 55 mm met the pocket beside it and left 52 edges open, with
+     Download on. The rule, worked out here rather than read from the engine: a cut stops
+     half a MOUNT_WALL short of the line halfway to the one beside it, so its corners stop
+     at holeOffset less 0.5 and the wall between two pockets is at least 1 mm. A magnet
+     pocket's corners are at the larger of 0.1 over the magnet's radius and
+     the radius over cos(π/14) (its flats on the magnet); a screw's bores have their corners
+     on its size. At 55 and 60 mm, each way in: the widest the page takes has to build
+     watertight, and the first tenth past the rule has to be refused. */
+  const reach = G.DEFAULTS.holeOffset - 0.5;
+  const corner = { magnetD: (d) => Math.max(d / 2 + 0.1, d / 2 / Math.cos(Math.PI / 14)),
+                   screwHoleD: (d) => d / 2, screwHeadD: (d) => d / 2 };
+  const firstPast = (f) => { let d = 1; while (corner[f](d) <= reach + 1e-9) d = Math.round(d * 10 + 1) / 10; return d; };
+  const WIDE = [
+    ['magnet from below', { magnets: true }, 'magnetD'],
+    ['magnet from above', { magnets: true, magnetSide: 'top' }, 'magnetD'],
+    ['screw head', { screws: true, screwHoleD: 3 }, 'screwHeadD'],
+    ['screw shank', { screws: true }, 'screwHoleD'],
+  ];
+  // the shank as wide as the head, so there is no head pocket and the shank is the cut
+  const sized = (o, f, d) => ({ ...o, [f]: d, ...(f === 'screwHoleD' ? { screwHeadD: d } : {}) });
+  for (const p of [55, 60])
+    for (const [nm, o, f] of WIDE) {
+      const at = { pitch: p, drawerW: 2 * p, drawerD: 2 * p, ...o };
+      const lims = G.mountLimits(designCfg(at)), lim = lims[f];
+      const takes = (d) => d <= lim + 1e-9 && (f !== 'screwHoleD' || d <= lims.screwHeadD + 1e-9);
+      const widest = buildAll(sized(at, f, lim));
+      const past = firstPast(f);
+      const over = takes(past) ? buildAll(sized(at, f, past)) : null;
+      console.log(`  ${`${nm} at ${p} mm`.padEnd(28)} widest ${lim} mm ${leakText(widest)}; ${past} mm ` +
+                  (over ? `TAKEN, and ${leakText(over)}` : 'refused'));
+      if (widest.bad) bad++;
+      if (over) bad++;
+    }
+  /* Two shells sharing a cell corner's edge. A pocket's flat, carried across its cell by
+     the BSP, crossed the cell's side 0.03 microns from where the corner of the cell beside
+     it stands on that side: each shell closed, the corner's edge used four times. The
+     magnet built clean on main and not on 0bb9e4d; the screw shank, twice over, on
+     neither. A cell now checks the shells built beside it and cuts the pockets again,
+     its own or the other's (settle in core.js), so both have to build watertight.
+     settle's first way of doing that kept a try that touched fewer shells, and left a
+     shell built later sharing an edge no try cleared: 10.1 to 11.1 mm magnets at 47.91,
+     48.55, 48.98 and 50.05 mm, clean on main, with 2 or 3 edges used four times on
+     d9442d4. It counts the edges shared now, and the two below are two of those, one
+     each way in.
+     And with the pocket that stands on the magnet's radius, a pocket from above lost a
+     sliver of the socket floor by a corner 4.7 microns from one of the floor's spokes:
+     11.1 mm at 48.55, 24 open edges on d9442d4. Main's pocket has a corner 1.0 micron
+     from the same spoke and none open, so it is how the cut falls, not how near. A cell
+     open at the floor's height has its floor fanned again (fanCentre). */
+  for (const [nm, o] of [['21.7 mm magnet at 55 mm', { pitch: 55, magnets: true, magnetD: 21.7 }],
+                         ['22.2 mm screw shank at 56.5', { pitch: 56.5, screws: true, screwHoleD: 22.2, screwHeadD: 22.2 }],
+                         ['10.1 mm magnet above, 47.91', { pitch: 47.91, magnets: true, magnetD: 10.1, magnetSide: 'top' }],
+                         ['10.6 mm magnet below, 48.98', { pitch: 48.98, magnets: true, magnetD: 10.6 }],
+                         ['11.1 mm magnet above, 48.55', { pitch: 48.55, magnets: true, magnetD: 11.1, magnetSide: 'top' }]]) {
+    const r = buildAll({ drawerW: 2 * o.pitch, drawerD: 2 * o.pitch, ...o });
+    console.log(`  ${nm.padEnd(28)} ${leakText(r)}`);
+    if (r.bad) bad++;
+  }
+  /* The clearance one step past its end, which leaked, and that was why the end is where
+     it is. It no longer does: the joint's cut taken again when it comes out open
+     (cutAgain in core.js) closes it, as it closes the steps past the ceilings below. So it
+     has to stay closed, and the field has to go on refusing it: the cap stays where it is
+     until a sweep says how far it can go, the dovetail every 0.01 mm of pitch and every
+     0.05 of the field past 0.3, on both piece layouts, clean up to the new cap. */
   const past = buildAll({ ...split, connector: 'dovetail', clr: 0.35 });
+  const capped = 0.35 > G.connClrCeiling({ ...G.DEFAULTS, connector: 'dovetail' }).max + 1e-9;
   console.log(`  ${'dovetail at 0.35 clearance'.padEnd(28)} ${leakText(past)}` +
-              (past.open ? ' — the cap is earned' : '   NOW CLOSED — the cap can go up'));
-  if (!past.open) bad++;
+              (!capped ? '   THE FIELD TAKES IT' : past.bad ? '   OPEN AGAIN — cutAgain no longer closes it'
+                : ' — closed, and the cap waits on a sweep'));
+  if (!capped || past.bad) bad++;
 
   /* A corner boss is 2.6 mm tall and does not grow, so the pocket in it is capped — at
      what leaves a layer over it, which takes the spec's 6.5 × 2.4 magnet. Built at every
@@ -1902,7 +2054,8 @@ console.log('\nthe other limits, built at their ends:');
  * its footprint but the tabs and lobes buildPiece declares.
  *
  * Then the step past each ceiling that set it, which has to be open or across the seam
- * still: if the engine closes one, this says that ceiling can go up. It has to be past the
+ * still: if the engine closes one, this says that ceiling can go up (four are closed, and
+ * wait on a sweep to say how far; see PAST below). It has to be past the
  * ceiling as well, refused by the field. A puzzle key in the floor loosened to 0.9 built
  * clean at 20, 30 and 42 and its step past, 0.82, leaked as before, so a ceiling moved
  * over the very number that earned it passed; now the field taking that number fails.
@@ -1942,12 +2095,14 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
     }
     return [...new Set([...at, 16, C.smallPitch - 0.5, 30, 42])].sort((a, b) => a - b);
   };
-  /* Shells touching rather than a hole, at one clearance, pinned at what it is: the
-     dovetail's notch at 0.3 puts its top back edge, 2.2 mm in and 2.4 up, on an edge of
-     the region next to it on the 1-cell layout's narrow pieces — 0.295 is clear of it,
-     and it is no hole. The puzzle's lobe apex was let through here as well, at any count,
-     until the region past it stopped carrying it (see the cases at the top). */
-  const KNOWN = { 'dovetail @ 42 mm 1-cell pieces': 3 };
+  /* Shells touching rather than a hole, at one clearance, pinned at what it is. The
+     dovetail's notch at 0.3 put its top back edge, 2.2 mm in and 2.4 up, on an edge of
+     the region next to it on the 1-cell layout's narrow pieces, 3 edges used four times
+     at 42 mm, until a jointed cell that shares an edge with the one beside it was cut
+     again (touchesBuilt in core.js); none is pinned now. The puzzle's lobe apex was let
+     through here as well, at any count, until the region past it stopped carrying it
+     (see the cases at the top). */
+  const KNOWN = {};
   const OVER = 1e-6;
   /* How near a snap-from-above housing comes to the seam face it opens onto: every vertex
      of the housing keySiteOps hands back for a site, found in the solid built there, and
@@ -2018,16 +2173,24 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
   if (held.length) bad++;
 
   /* The puzzle key in the floor's step is 0.82, the first clearance that leaked at every
-     pitch measured from 20 to 60; a ceiling at or over it lets the field take it. */
+     pitch measured from 20 to 60; a ceiling at or over it lets the field take it.
+
+     The last four were earned by open edges alone, and the joint's cut taken again when
+     it comes out open (cutAgain in core.js) closes all four. Those ceilings stay where
+     they are until a sweep as fine as the one that found the small-pitch leaks says how
+     far each can go: the joint every 0.01 mm over its pitch band and every 0.05 of the
+     field past its ceiling, on both piece layouts, clean up to the new one. `waits` marks
+     such a step: it has to stay closed, or cutAgain has lost ground, and the field still
+     has to refuse it. */
   const PAST = [
     ['snap from above, 0.35 at 42', { connector: 'snap', keyInsert: 'top', pitch: 42, clr: 0.35 }, '2x2 pieces'],
     ['puzzle, 0.3 at 13.5', { connector: 'puzzle', pitch: 13.5, clr: 0.3 }, '1-cell pieces'],
-    ['puzzle, 0.35 at 19', { connector: 'puzzle', pitch: 19, clr: 0.35 }, '2x2 pieces'],
-    ['bowtie, 0.35 at 15', { connector: 'bowtie', pitch: 15, clr: 0.35 }, '2x2 pieces'],
-    ['puzzle key, 0.4 at 14', { connector: 'puzzlekey', pitch: 14, clr: 0.4 }, '2x2 pieces'],
-    ['puzzle key, 0.82 at 42', { connector: 'puzzlekey', pitch: 42, clr: 0.82 }, '2x2 pieces'],
+    ['puzzle, 0.35 at 19', { connector: 'puzzle', pitch: 19, clr: 0.35 }, '2x2 pieces', 'waits'],
+    ['bowtie, 0.35 at 15', { connector: 'bowtie', pitch: 15, clr: 0.35 }, '2x2 pieces', 'waits'],
+    ['puzzle key, 0.4 at 14', { connector: 'puzzlekey', pitch: 14, clr: 0.4 }, '2x2 pieces', 'waits'],
+    ['puzzle key, 0.82 at 42', { connector: 'puzzlekey', pitch: 42, clr: 0.82 }, '2x2 pieces', 'waits'],
   ];
-  for (const [what, o, ln] of PAST) {
+  for (const [what, o, ln, waits] of PAST) {
     const r = buildAll({ ...PIECE_LAYOUTS[ln](o.pitch), ...o });
     /* A snap from above earns its ceiling in the seam face, before anything crosses the
        seam: one step past, its slot's wall is nearer the face than a BLOAT. */
@@ -2044,8 +2207,10 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
       : inFace ? `its slot ${(Math.round(face.near * 1e4) / 1e4 + 0).toFixed(3)} mm off the seam face`
       : leakText(r)}` +
                 (!refused ? `   THE FIELD TAKES IT: the ceiling went up to ${most}`
+                  : waits ? (still ? '   OPEN AGAIN — cutAgain no longer closes it'
+                                   : ' — closed, and the ceiling waits on a sweep')
                   : still ? ' — the ceiling is earned' : '   NOW CLEAN — that ceiling can go up'));
-    if (!still || !refused) bad++;
+    if (!refused || (waits ? still : !still)) bad++;
   }
 
   /* activeJoint in src/ui.js, with the field at the ceiling — a fixture, as in the coupon
