@@ -3608,9 +3608,14 @@ function buildPiece(cfg, layout, piece, onStatus) {
            screw head to sit against; a nudge moves every plane off the crossing that lost
            the sliver. The first closed result is
            kept; a cell that comes out closed first time, which is nearly every one, is
-           built exactly as before. A try that throws (healCsgSeams' T-junction pass limit,
-           which the turned cutters reach on a few engine-only cells) is passed over and
-           the first cut stands, open as it was rather than a failed build.
+           built exactly as before. A try that throws is passed over and the first cut
+           stands, open as it was rather than a failed build. The turned cutters reach
+           healCsgSeams' T-junction pass limit on a few engine-only cells, and they threw
+           there until #76; now the repair makes one point of the few it was still
+           putting into edges and runs once more, so such a try can come back closed and
+           be kept where the nudged one after it used to be (the audit's "a retry that
+           throws": every piece's bytes change, and every piece is still watertight). One
+           whose second run comes out open still throws, and is passed over.
 
            Only a cell open by a sliver or a few is cut again, at most 24 edges: six at
            each of its four pockets. Cells cut again have been open by anything from 1 to

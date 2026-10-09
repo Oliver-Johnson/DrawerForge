@@ -327,11 +327,16 @@ const CASES = [
     tab: { ...G.DEFAULTS.tab, clr: 0.98 }, puzzle: { ...G.DEFAULTS.puzzle, clr: 0.98 },
     key: { ...G.DEFAULTS.key, clr: 0.93 }, hclip: { ...G.DEFAULTS.hclip, clr: 0.93 } },
   /* A cell whose pockets come out open is cut again (see the fastener cut in buildPiece),
-     and here the turned cutters' cut throws: healCsgSeams' T-junction pass limit. Taken
-     unguarded, that one try made the whole plate fail to build, where main builds it open.
-     The throw is passed over, and the cutters nudged 1.7 microns, the try after it, close
-     every cell left open here (3 to 9 edges a piece; main has 9 and folds on every piece).
-     Engine-only again: the sites 2.5 mm in, at 15.5 mm. */
+     and here the turned cutters' cut reaches healCsgSeams' T-junction pass limit, ten
+     times over the five pieces. Taken unguarded, that one try made the whole plate fail to
+     build, where main builds it open. Until #76 it threw there: the throw was passed over,
+     and the cutters nudged 1.7 microns, the try after it, closed every cell left open here
+     (3 to 9 edges a piece; main has 9 and folds on every piece). Now the repair makes one
+     point of those it was still putting into edges and settles, closed, so the turned try
+     is kept itself: every piece's bytes change, and every piece is still watertight and
+     oriented. So the row is named for what it was found as: it no longer reaches the catch
+     that passes over a try that throws, and no row here does. Engine-only again: the
+     sites 2.5 mm in, at 15.5 mm. */
   { name: 'a retry that throws', pitch: 15.5, drawerW: 3 * 15.5, drawerD: 5 * 15.5, bedW: 400,
     bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]],
     connector: 'snap', keyType: 'snap', keyInsert: 'top', magnets: true, screws: true,
