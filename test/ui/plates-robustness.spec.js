@@ -130,6 +130,12 @@ test.describe('ranges on the geometry fields', () => {
       /Magnet Ø of 11\.93 mm is refused at a 41\.49 mm pitch — .* Use 11\.89 mm or less, 11\.92 mm, or 11\.95 mm or more\./],
     ['#pi=31&cl=0&mg=1&md=1', 'errMagnet',
       /Magnet Ø of 1 mm is refused at a 31 mm pitch — .* Use 1\.01 mm, or 1\.04 mm or more\./],
+    /* #70: the joint is cut from the corner bosses now, so a boss's pocket can reach it as
+       a cell's can. A bowtie key in the walls at 36.13 mm took a 7.9 mm magnet, and with
+       the recess cut from the bosses it would have built 19 open edges a piece. */
+    ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie&km=wall&ki=bottom' +
+      '&bm=bosses&mg=1&md=7.9', 'errMagnet',
+      /Magnet Ø must be 6\.1 mm or less at a 36\.13 mm pitch — .* the recesses the bowtie keys fit into/],
   ];
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {
@@ -170,6 +176,56 @@ test.describe('ranges on the geometry fields', () => {
       expect(await exportOff(page)).toBe(false);
       expect(errors).toEqual([]);
     });
+
+  /* #70: corner pockets over a floor. A bowtie housed in the floor stood its 2.8 mm floor
+     round the 2.6 mm bosses and sealed their pockets in it, with Download on, and an extra
+     floor did the same. Such a plate is built as a solid floor builds it now, and Checks
+     says so; the floor grows to suit, so a 3 mm magnet goes in where a boss stops at 2.4.
+     With the key in the walls the underside is open and the bosses stand again. */
+  test('corner pockets over a floor are cut into the floor, and Checks says so', async ({ page }) => {
+    const errors = await openAt(page, `${BOWTIE_42}&bm=bosses&mg=1&mh=3`);
+    const note = /Corner pockets need an open underside, and this joint is housed in a floor, so the plate is built with a solid floor and the magnet pockets are cut into it\./;
+    expect(await text(page, 'warnings')).toMatch(note);
+    expect(await shown(page, 'errMagnet')).toBe(false);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    await page.selectOption('#keyMount', 'wall');
+    await page.waitForFunction((re) => new RegExp(re).test(
+      document.getElementById('pieceTail').textContent), SETTLED.source, { timeout: 30000 });
+    expect(await text(page, 'warnings')).not.toMatch(/Corner pockets need an open underside/);
+    expect(await text(page, 'errMagnet')).toMatch(/Magnet depth must be 2\.4 mm or less with corner pockets/);
+    expect(await exportOff(page)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+  /* #79's review: a refused pocket over a floored key went on to say that keys inside the
+     walls, put in from above, keep out of the solid floor under it. With corner pockets
+     that is the way back to #75: such a key needs no floor, so the bosses stand again
+     and its cup stands in their pockets. An extra floor keeps them buried, and there the
+     hint holds, as it does for a solid base. */
+  test('corner pockets over a floored key are not pointed at keys put in from above', async ({ page }) => {
+    const at = '#pi=37.98&w=151.92&d=75.96&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=91.96&bd=400&cn=bowtie&km=floor' +
+               '&ki=bottom&bm=bosses&mg=1&md=5.81';
+    const errors = await openAt(page, at);
+    const refusal = /Magnet Ø must be 3\.8 mm or less at a 37\.98 mm pitch — .* the recesses the bowtie keys fit into/;
+    const hint = /put in from above keep out of the solid floor/;
+    expect(await text(page, 'errMagnet')).toMatch(refusal);
+    expect(await text(page, 'errMagnet')).not.toMatch(hint);
+    expect(await text(page, 'warnings')).not.toMatch(hint);
+    expect(await exportOff(page)).toBe(true);
+    await page.goto('about:blank');
+    await openAt(page, at.replace('&bm=bosses', '&bm=bosses&bp=1'));
+    expect(await text(page, 'errMagnet')).toMatch(refusal);
+    expect(await text(page, 'errMagnet')).toMatch(hint);
+    expect(errors).toEqual([]);
+  });
+  test('corner pockets under an extra floor are cut into it, and Checks says so', async ({ page }) => {
+    const errors = await openAt(page, '#cn=none&bm=bosses&sc=1&bp=1');
+    expect(await text(page, 'warnings')).toMatch(
+      /Corner pockets need an open underside, and Extra floor closes it, so the plate is built with a solid floor and the screw pockets are cut into it\./);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
 
   /* The half-inch magnet on the default dovetail at 42 mm: its pocket breaks 0.04 to
      0.09 mm into the notches, the magnet 0.24 mm clear of the tabs, and it builds clean,
