@@ -77,8 +77,8 @@ test.describe('ranges on the geometry fields', () => {
   /* [link, the line under the field, what it has to say]. The magnet and screw maxima
      are the standard 42 mm pitch's, from mountLimits; the pitch cases show the same
      limit moving with the cell, down to no room at all. Those take no joint (cn=none):
-     the default dovetail's notches stop a magnet from beneath first, at 12.3 mm, and
-     the joint cases at the end of the list say so. */
+     the default dovetail's tabs stop a magnet from beneath first, at 13.1 mm, and the
+     joint cases at the end of the list say so. */
   const BOWTIE_42 = '#pi=42&w=168&d=84&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=100&bd=400&cn=bowtie&km=floor&ki=bottom';
   const CASES = [
     ['#tc=0', 'errFloor', /Rim cutoff must be at least 0\.1 mm/],
@@ -110,13 +110,20 @@ test.describe('ranges on the geometry fields', () => {
        beneath reached a bowtie's recess at 42 mm, and the plate built with 19 bad edges a
        piece and Download on; from above, an 8 mm one stood over the key. */
     [`${BOWTIE_42}&mg=1&md=10`, 'errMagnet',
-      /Magnet Ø must be 7\.6 mm or less at a 42 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a hole has to stay out of the recesses the bowtie keys fit into/],
+      /Magnet Ø must be 7\.6 mm or less at a 42 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a hole has to stay out of the recesses the bowtie keys fit into; keys housed inside the walls and put in from above leave the floor clear\./],
     [`${BOWTIE_42}&mg=1&ms=top&md=8`, 'errMagnet',
       /Magnet Ø must be 7\.6 mm or less at a 42 mm pitch — .* the recesses the bowtie keys fit into/],
     [`${BOWTIE_42.replace('cn=bowtie', 'cn=snap')}&sc=1&sd=10`, 'errScrew',
       /Screw head Ø must be 7\.8 mm or less at a 42 mm pitch — .* the recesses the snap clips fit into/],
+    /* A dovetail's notch lets a pocket from beneath in (#69's review, option c), so long
+       as the magnet stays clear of the tab and the pocket is not as deep as the notch,
+       and does not stop just short of its edge; each refusal says which it is. */
     ['#mg=1&md=20', 'errMagnet',
-      /Magnet Ø must be 12\.3 mm or less at a 42 mm pitch — .* the notches the dovetail tabs fit into/],
+      /Magnet Ø must be 13\.1 mm or less at a 42 mm pitch — .* a magnet has to stay clear of the dovetail tabs in the notches beside it\./],
+    ['#mg=1&mh=2.4&md=13', 'errMagnet',
+      /Magnet Ø must be 12\.5 mm or less at a 42 mm pitch — .* a pocket 2\.4 mm deep, as deep as the notches the dovetail tabs fit into, has to stay out of them\./],
+    ['#pi=36&mg=1&md=5.6', 'errMagnet',
+      /Magnet Ø of 5\.6 mm is refused at a 36 mm pitch — its pocket would come too near the edge of the notches the dovetail tabs fit into to cut cleanly\. Use 5\.5 mm or less, or 5\.7 mm or more\./],
   ];
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {
@@ -157,6 +164,18 @@ test.describe('ranges on the geometry fields', () => {
       expect(await exportOff(page)).toBe(false);
       expect(errors).toEqual([]);
     });
+
+  /* The half-inch magnet on the default dovetail at 42 mm: its pocket breaks 0.04 to
+     0.09 mm into the notches, the magnet 0.24 mm clear of the tabs, and it builds clean,
+     so the field takes it; 2.4 mm deep, level with the notch, it would not. */
+  test('a half-inch magnet beside the default dovetail is taken', async ({ page }) => {
+    const errors = await openAt(page, '#mg=1&md=12.7&mh=2');
+    expect(await page.evaluate(() => document.getElementById('magnetD').max)).toBe('13.1');
+    expect(await shown(page, 'errMagnet')).toBe(false);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
 
   test('a typed value is held to the same range, and a good one clears it', async ({ page }) => {
     await H.openPlates(page);
@@ -385,8 +404,8 @@ test.describe('limits no tighter than the geometry', () => {
     expect(s.built).toBeCloseTo(7.05, 9);
   });
 
-  /* The 34 mm case takes no joint: the default dovetail's notches hold its 6 mm screw head
-     to 3.8 mm there, which is a field error of its own. The puzzle tabs' are what leave
+  /* The 34 mm case takes no joint: the default dovetail's tabs hold its 6 mm screw head
+     to 4.2 mm there, which is a field error of its own. The puzzle tabs' are what leave
      a magnet no room at 36 mm, where the cell alone would take 7.7. */
   for (const [hash, id, errId, carried, msg] of [
     ['#cn=none&sc=1&pi=34', 'screwHoleD', 'errScrew', 3,
