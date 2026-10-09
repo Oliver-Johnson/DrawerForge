@@ -194,11 +194,38 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
    bin with holes across its floor, which the holes divide, as buildBin builds it
    (binDividers, which asks the holes as holesIn does), with the new-bin settings at a
    1x1 as these are. A bin with finger slots ticked asks the holes of its kept plan
-   (insertPlanOf), as binDividers would ask them of the slots all over again. */
+   (insertPlanOf), as binDividers would ask them of the slots all over again.
+   Kept by the settings that asked, as fingerPlan is: a refresh asks this of each bin ten
+   times over, for its key, its name, Checks and its compartments, and 63 bins with
+   removable plates spent 60 to 150 ms of an 85 to 180 ms refresh in dividersBuilt with
+   finger slots ticked, about three quarters of it, and 20 to 45 of 35 to 85 without;
+   kept, the whole refresh takes 12 to 50. Everything it goes by is binCfg's, and whether
+   the bin has a size of its own, so nothing here changes an answer under its key. */
+const keptDivs = new Map();
 const builtDivs = (b) => {
   const c = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
-  if (!(b.u && b.v && fingerPlan(b))) return binDividers(c);
-  return +c.insert > 0 && insertPlanOf(b).n ? { divX: 0, divY: 0 } : dividersBuilt(c);
+  const key = (b.u && b.v ? '' : '1x1 ') + JSON.stringify(c);
+  let d = keptDivs.get(key);
+  if (!d) {
+    if (keptDivs.size >= 500) keptDivs.clear();
+    keptDivs.set(key, (d = !(b.u && b.v && fingerPlan(b)) ? binDividers(c)
+      : +c.insert > 0 && insertPlanOf(b).n ? { divX: 0, divY: 0 } : dividersBuilt(c)));
+  }
+  return { divX: d.divX, divY: d.divY };
+};
+/* And why a removable bin is built with fewer than it asks for (dividersWhy), kept the
+   same way for `cfg`, the bin's binCfg at its size: Checks asks it of every such bin each
+   refresh, at 0.3 to 1 ms a bin, and with all 63 asking for more plates than fit it took
+   30 to 50 ms of an 80 to 100 ms refresh once their dividers were kept. */
+const keptWhys = new Map();
+const divsWhy = (cfg) => {
+  const key = JSON.stringify(cfg);
+  let w = keptWhys.get(key);
+  if (!w) {
+    if (keptWhys.size >= 500) keptWhys.clear();
+    keptWhys.set(key, (w = dividersWhy(cfg)));
+  }
+  return { divX: w.divX, divY: w.divY };
 };
 // and how many compartments they make, or 0 for a bin with none
 const compartments = (b) => {
@@ -3041,7 +3068,7 @@ function binIssues(b, k, claims) {
     /* What brought each direction's count down (dividersWhy). The rails' own rules are
        said together as one note; what stands over a slot, the lip and the shelf, and what
        the plates keep where they cross or stand on the scoop, each in a note of its own. */
-    const why = dividersWhy(cfg);
+    const why = divsWhy(cfg);
     /* The rails' own rules, said together as one note (railedLimit): the slots, the
        corners, and two more. 'lone': room for one divider's slot and a rail either side,
        but not for the rails the other way beside it, which are kept room for whether or
