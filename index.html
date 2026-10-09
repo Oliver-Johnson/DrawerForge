@@ -3512,11 +3512,19 @@ function annulusStrip(outerLoop, innerLoop, cx, cy, z, up) {
    pieces. So they are avoided as well, with FAN_JOINT more room than the mounting
    cutters' corners, since 8.1 microns is past FAN_NEAR and still went; `avoid` takes a
    point's extra room as its third number. A plate with no joint has no such point, and
-   its fan is where it was. */
+   its fan is where it was.
+
+   The socket floor is fanned the same way, from the cell's centre (directCellRegion), and
+   a magnet pocket from above or a screw's shank stands on it. An 11.1 mm magnet from
+   above at 48.55 mm put a corner of each pocket 3 microns off a spoke to the floor's
+   rounded corner: six open edges in every cell, whatever way the pockets were cut. So a
+   cell that comes out open has its floor fanned again clear of those cutters' corners
+   (buildPiece), from `start`, the centre it is fanned from when nothing is near. */
 const FAN_NEAR = 0.008, FAN_CLEAR = 0.01, FAN_JOINT = 0.01;
-function fanCentre(oc, avoid) {
+function fanCentre(oc, avoid, start) {
   const n = oc.length, cc = [0, 0];
-  for (const p of oc) { cc[0] += p[0]/n; cc[1] += p[1]/n; }
+  if (start) { cc[0] = start[0]; cc[1] = start[1]; }
+  else for (const p of oc) { cc[0] += p[0]/n; cc[1] += p[1]/n; }
   if (!avoid || !avoid.length) return cc;
   const gap = (c) => {
     let g = Infinity;
@@ -3552,8 +3560,8 @@ function fanCentre(oc, avoid) {
    loops being star-shaped about that point.
 
    `avoid` is where the mounting and joint cutters' walls stand on the bottom face
-   (fanCentre). */
-function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half, avoid) {
+   (fanCentre), and `floorAvoid` where the mounting cutters' stand on the socket floor. */
+function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half, avoid, floorAvoid) {
   const polys = [];
   const { pts: oc } = earTriangulate(clipped);
   const n = oc.length;
@@ -3599,7 +3607,7 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half, avoid) {
       if (p) polys.push(p);
     }
     const fl = rings[0];
-    const c = [cx, cy, fl[0][2]];
+    const c = [...(floorAvoid ? fanCentre(fl, floorAvoid, [cx, cy]) : [cx, cy]), fl[0][2]];
     for (let j = 0; j < rn; j++) {
       const k = (j + 1) % rn;
       const p = makePoly([c, fl[j], fl[k]]); if (p) polys.push(p);
@@ -3714,8 +3722,9 @@ function mountLimits(cfg) {
   const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // the fields step in tenths
   /* A cell's four sites are 2 × holeOffset apart, 26 mm, so past a pitch of about 50 mm
      the room above lets a cut reach the one beside it before it reaches anything else:
-     two 1-inch magnet pockets met at a 55 mm pitch and left 52 open edges. Each cut keeps
-     half a MOUNT_WALL to the one beside it, which stops a pocket's corners at 12.5 mm. */
+     two 1-inch magnet pockets met at a 55 mm pitch and left 52 open edges. Each cut stops
+     half a MOUNT_WALL short of the line halfway between two sites, so a pocket's corners
+     stop at 12.5 mm and the wall between two pockets is at least MOUNT_WALL, 1 mm. */
   const beside = off - MOUNT_WALL / 2;
   const fit = (r) => Math.min(r, beside);
   const room = fit(cfg.magnetSide === 'top' ? top : under);
@@ -3933,19 +3942,21 @@ function buildPiece(cfg, layout, piece, onStatus) {
     const turn = (v) => [v[0]*ca - v[1]*sa, v[0]*sa + v[1]*ca, v[2]];
     return { verts: p.verts.map(turn), plane: { n: turn(p.plane.n), w: p.plane.w } };
   }));
-  // the corners of its walls where they stand on the bottom face, about its axis (fanCentre)
-  const fastenerFoot = [];
-  if (cellFastener) {
-    const seen = new Set();
-    for (const p of cellFastener) {
+  // the corners of its walls where they stand on the bottom face, and on the socket floor
+  // (a magnet pocket from above, a screw's shank), about its axis (fanCentre)
+  const wallsAt = (z) => {
+    const out = [], seen = new Set();
+    for (const p of cellFastener || []) {
       const zs = p.verts.map((v) => v[2]);
-      if (!(Math.min(...zs) < 0 && Math.max(...zs) > 0)) continue;
+      if (!(Math.min(...zs) < z && Math.max(...zs) > z)) continue;
       for (const v of p.verts) {
         const k = `${v[0].toFixed(6)} ${v[1].toFixed(6)}`;
-        if (!seen.has(k)) { seen.add(k); fastenerFoot.push([v[0], v[1]]); }
+        if (!seen.has(k)) { seen.add(k); out.push([v[0], v[1]]); }
       }
     }
-  }
+    return out;
+  };
+  const fastenerFoot = wallsAt(0), fastenerTop = pad > 0.01 ? wallsAt(pad) : [];
 
   // ---- connectors ----
   const conn = pieceConnectors(cfg, layout, piece);
@@ -4265,8 +4276,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
     }
   };
   // does this shell share an edge with built shell c, inside the band where the two overlap?
-  // (`sides`, when given, hands bandEdges each shell's edges by its sides: sideEdges)
-  const touchesBuilt = (polys, own, c, sides) => {
+  const touchesBuilt = (polys, own, c) => {
     const b = [Math.max(own[0], c.box[0]) - 1e-3, Math.max(own[1], c.box[1]) - 1e-3,
                Math.min(own[2], c.box[2]) + 1e-3, Math.min(own[3], c.box[3]) + 1e-3];
     const theirs = new Map();   // lower corner -> the higher corners it has an edge to
@@ -4274,13 +4284,13 @@ function buildPiece(cfg, layout, piece, onStatus) {
     bandEdges(them, b, (lo, hi) => {
       const l = theirs.get(lo);
       if (l) l.push(hi); else theirs.set(lo, [hi]);
-    }, sides && sides(them, c.box));
+    });
     if (!theirs.size) return false;
     let shared = false;
     bandEdges(polys, b, (lo, hi) => {
       const l = theirs.get(lo);
       return (shared = !!l && l.includes(hi));
-    }, sides && sides(polys, own));
+    });
     return shared;
   };
   const TOUCH_TRIES = [(solid, cut) => oneByOne(solid, cut),
@@ -4303,17 +4313,28 @@ function buildPiece(cfg, layout, piece, onStatus) {
    *
    * So with mounting pockets on the piece, every shell the cells and margins make is
    * checked against those built before it beside it, as jointed cells are above. One that
-   * shares an edge has its pockets cut again with the cutters moved 1.7 microns along the
-   * diagonal one way, then the other, then turned a 28th of a turn (pocketTries, in the
-   * cell), which takes every pocket plane off the corner, and a try that leaves it
-   * touching fewer shells is kept. A corner of its own on another's split does not move
-   * that way, so each shell it still touches then has its pockets cut again instead,
-   * kept if it shares no edge with this one or anything else beside it. Either way a try
+   * shares an edge has its pockets cut again with the cutters moved 1.7 microns along one
+   * diagonal or the other, turned a 28th of a turn, or turned and moved (pocketTries, in
+   * the cell), which takes every pocket plane off the corner, and the try that leaves the
+   * fewest edges shared with all the shells beside it is kept. A corner of its own on
+   * another's split does not move that way, so each shell it still shares an edge with
+   * then has its pockets cut again instead, as they were first cut or any of those ways,
+   * and the cut sharing the fewest with everything beside that shell, this one included,
+   * is kept. Edges are counted, not shells: a 10.1 mm magnet from above at 47.91 mm kept
+   * a turned cut in its second cell because it touched one shell where the first cut
+   * touched two, and the fourth cell then shared an edge with it that nothing cleared,
+   * since every nudged cut of the second cell touched the first cell again and was
+   * refused for it. Three edges used four times, where main had none. Either way a try
    * that ends more open or with more turned over is passed over, and a shell that touches
-   * nothing, which is nearly every one, is built as before. `alt` and `pocket` are the
-   * cuts a cell was last taken with, so a cell cut again for one reason keeps what it was
-   * cut again for the other. */
-  const POCKET_TRIES = 3;
+   * nothing, which is nearly every one, is built as before.
+   *
+   * And once every cell is built, the shells settle cut again are checked as a whole, with
+   * those beside them: if they have more bad edges (checkManifold) than they had before,
+   * or more open or turned over (healCsgSeams), every one goes back to its first cut. So
+   * settle never leaves a piece worse than it found it, whatever order the cells come in.
+   * `alt` and `pocket` are the cuts a cell was last taken with, so a cell cut again for
+   * one reason keeps what it was cut again for the other. */
+  const POCKET_TRIES = 7;
   const mountCells = [];
   const builtBeside = (box) => mountCells.filter((c) => c.box[0] < box[2] && box[0] < c.box[2] &&
                                                         c.box[1] < box[3] && box[1] < c.box[3]);
@@ -4340,27 +4361,55 @@ function buildPiece(cfg, layout, piece, onStatus) {
     bySides.set(polys, out);
     return out;
   };
-  const touches = (polys, own, c) => touchesBuilt(polys, own, c, sideEdges);
+  // how many edges this shell shares with built shell c, in the band where the two overlap
+  const sharedWith = (polys, own, c) => {
+    const b = [Math.max(own[0], c.box[0]) - 1e-3, Math.max(own[1], c.box[1]) - 1e-3,
+               Math.min(own[2], c.box[2]) + 1e-3, Math.min(own[3], c.box[3]) + 1e-3];
+    const theirs = new Map();   // lower corner -> the higher corners it has an edge to
+    const them = c.polys || shells[c.i];
+    bandEdges(them, b, (lo, hi) => {
+      const l = theirs.get(lo);
+      if (l) l.push(hi); else theirs.set(lo, [hi]);
+    }, sideEdges(them, c.box));
+    if (!theirs.size) return 0;
+    const both = new Set();
+    bandEdges(polys, b, (lo, hi) => {
+      const l = theirs.get(lo);
+      if (l && l.includes(hi)) both.add(lo + ' ' + hi);
+    }, sideEdges(polys, own));
+    return both.size;
+  };
+  const sharedAll = (polys, own, near) => near.reduce((n, c) => n + sharedWith(polys, own, c), 0);
+  const before = new Map();   // shell index -> that shell as it was before settle first cut it again
   const settle = (cell, polys) => {
     const beside = builtBeside(cell.box);
-    const touched = (p) => beside.filter((c) => touches(p, cell.box, c));
-    let touching = touched(polys);
-    for (let k = 0; touching.length && cell.recut && k < POCKET_TRIES; k++) {
+    const first = polys;
+    let now = sharedAll(polys, cell.box, beside);
+    for (let k = 0; now && cell.recut && k < POCKET_TRIES; k++) {
       let again;
       try { again = cell.recut(cell.alt, k); } catch (e) { continue; }
       if (!again || worse(again, polys)) continue;
-      const left = touched(again);
-      if (left.length < touching.length) { polys = again; cell.pocket = k; touching = left; }
+      const n = sharedAll(again, cell.box, beside);
+      if (n < now) { polys = again; cell.pocket = k; now = n; }
     }
+    if (polys !== first) before.set(cell.i, first);
     const mine = { box: cell.box, polys };
-    for (const c of touching) {
-      if (!c.recut) continue;   // a margin or a half cell: no pockets to cut again
-      const others = builtBeside(c.box).filter((d) => d !== c);
-      for (let k = 0; k < POCKET_TRIES; k++) {
+    for (const c of beside) {
+      if (!c.recut || !sharedWith(polys, cell.box, c)) continue;   // a margin or half cell has no pockets
+      const near = builtBeside(c.box).filter((d) => d !== c).concat([mine]);
+      let best = shells[c.i], most = sharedAll(best, c.box, near), pick = c.pocket;
+      for (let k = -1; most && k < POCKET_TRIES; k++) {
+        const pocket = k < 0 ? undefined : k;   // undefined: the pockets as first cut
+        if (pocket === c.pocket) continue;
         let again;
-        try { again = c.recut(c.alt, k); } catch (e) { continue; }
-        if (again && !worse(again, shells[c.i]) && !touches(again, c.box, mine) &&
-            !others.some((d) => touches(again, c.box, d))) { shells[c.i] = again; c.pocket = k; break; }
+        try { again = c.recut(c.alt, pocket); } catch (e) { continue; }
+        if (!again || worse(again, shells[c.i])) continue;
+        const n = sharedAll(again, c.box, near);
+        if (n < most) { best = again; most = n; pick = pocket; }
+      }
+      if (best !== shells[c.i]) {
+        if (!before.has(c.i)) before.set(c.i, shells[c.i]);
+        shells[c.i] = best; c.pocket = pick;
       }
     }
     mountCells.push(cell);
@@ -4528,6 +4577,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
           const t = a[2] / (a[2] - b[2]);
           avoid.push([a[0] + t*(b[0] - a[0]), a[1] + t*(b[1] - a[1]), FAN_JOINT]);
         });
+      // and the socket floor's, of the mounting cutters' corners there
+      const floorAvoid = halfX || halfY ? [] : [-1, 1].flatMap((sx) => [-1, 1].flatMap((sy) =>
+        fastenerTop.map(([u, v]) => [cx + sx*cfg.holeOffset + u, cy + sy*cfg.holeOffset + v])));
       let region = skel
         ? skeletonCellRegion(clipped, prof, cx, cy, H, cfg.arcSegs || 6,
                              Math.max(0.4, cfg.skin || 0.8), open)
@@ -4594,10 +4646,14 @@ function buildPiece(cfg, layout, piece, onStatus) {
          so a try can still end open there; one that ends more open or with more turned over
          than the cut it would replace is not taken (`worse`). `pocket` cuts the pockets
          one of the ways a shell that touches another's edge takes them (settle). */
-      const base = region;
+      let base = region;
       const pocketTries = [(r, cut) => csgSubtract(r, movePolys(cut, NUDGE, NUDGE)),
                            (r, cut) => csgSubtract(r, movePolys(cut, -NUDGE, -NUDGE)),
-                           (r) => csgSubtract(r, fasteners(turnedFastener()))];
+                           (r) => csgSubtract(r, fasteners(turnedFastener())),
+                           (r, cut) => csgSubtract(r, movePolys(cut, NUDGE, -NUDGE)),
+                           (r, cut) => csgSubtract(r, movePolys(cut, -NUDGE, NUDGE)),
+                           (r) => csgSubtract(r, movePolys(fasteners(turnedFastener()), NUDGE, NUDGE)),
+                           (r) => csgSubtract(r, movePolys(fasteners(turnedFastener()), -NUDGE, -NUDGE))];
       const cutCell = (alt, pocket) => {
         let r = base;
         for (const [kind, cut] of Object.entries(cuts)) {
@@ -4611,6 +4667,20 @@ function buildPiece(cfg, layout, piece, onStatus) {
       const own = [x0, y0, x1, y1];
       const cell = { box: own, i: shells.length, recut: cuts.fastener.length ? cutCell : null, alt: null };
       region = cutCell(null);
+      /* Still open, with pockets standing on the socket floor: the floor fanned clear of
+         their corners (fanCentre), and every cut taken again on it. Kept if it is less
+         open and no more turned over, and then it is the cell every later cut starts from.
+         Only here, not on every cell: a 6 mm magnet from above at 42 mm has a spoke 2.3
+         microns from a corner in every cell and comes out closed, as most do. */
+      if (region.open && floorAvoid.length) {
+        const first = base;
+        base = directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6,
+                                undefined, avoid.length ? avoid : undefined, floorAvoid);
+        let again = null;
+        try { again = cutCell(null); } catch (e) { /* the first cut stands */ }
+        if (again && again.open < region.open && !worse(again, region)) region = again;
+        else base = first;
+      }
       if (cuts.notch.length || cuts.key.length || cuts.puzzle.length) {
         const beside = jointCells.filter((c) => c.box[0] < x1 && x0 < c.box[2] &&
                                                 c.box[1] < y1 && y0 < c.box[3]);
@@ -4642,6 +4712,20 @@ function buildPiece(cfg, layout, piece, onStatus) {
       done++;
       if (onStatus && done % 8 === 0) onStatus(`cells ${done}`);
     }
+  }
+  /* settle's check (see above). An edge two unchanged shells share counts the same both
+     ways, so the shells cut again and the ones beside them are all it needs to look at;
+     it runs only where settle cut something, which few plates do: 3 of 6,406 mount
+     designs from 50 to 60 mm. */
+  if (before.size) {
+    const at = new Map(mountCells.map((c) => [c.i, c]));
+    const local = new Set(before.keys());
+    for (const i of before.keys()) for (const c of builtBeside(at.get(i).box)) local.add(c.i);
+    const now = (i) => shells[i], then = (i) => before.get(i) || shells[i];
+    const bad = (pick) => checkManifold([].concat(...[...local].map(pick))).bad;
+    const sum = (pick, f) => [...before.keys()].reduce((n, i) => n + (pick(i)[f] || 0), 0);
+    if (bad(now) > bad(then) || sum(now, 'open') > sum(then, 'open') || sum(now, 'turned') > sum(then, 'turned'))
+      for (const [i, s] of before) shells[i] = s;
   }
 
   // magnet 'top' pockets  // magnet 'top' pockets sit in the socket floor: they need pad and were cut
