@@ -525,7 +525,13 @@ test.describe('a screw head that does not clear its shank is cut as none', () =>
       });
 });
 
-test('a failed build says so in the table and the dialog, and Download goes off',
+/* The checks name the piece as well (#76). The table, the preview and Download's tooltip
+   said so already, but the list under the cut map, where a design is read for what is
+   wrong with it, was empty, so Download was off with no reason given there. The failure is
+   forced rather than taken from a design that fails, which would tie this test to an engine
+   bug a later fix should remove: #76's plate builds now (below), and the 41.24 mm jigsaw
+   plate in plate-audit.js still fails in the seam repair, as it does on main. */
+test('a failed build says so in the checks, the table and the dialog, and Download goes off',
   async ({ page }) => {
     const pageErrors = [];
     page.on('pageerror', (e) => pageErrors.push(String(e)));
@@ -550,8 +556,13 @@ test('a failed build says so in the table and the dialog, and Download goes off'
       zipOff: document.querySelector('#exFiles [data-ex="zip"]').disabled,
       off: document.getElementById('openExport').disabled,
       failed: buildFailed,
+      checks: [...document.querySelectorAll('#warnings .w.err')].map((w) => w.textContent),
     }));
     expect(s.tail).toMatch(new RegExp(`build failed at piece ${s.failed}`));
+    expect(s.checks.join(' '), 'the checks name the piece that failed')
+      .toMatch(new RegExp(`Piece ${s.failed} could not be built`));
+    // Download, not every file: the pieces built before it keep their own STL buttons
+    expect(s.checks.join(' ')).toMatch(/Download is off/);
     expect(s.rows).toMatch(/failed/);
     expect(s.fit).toMatch(new RegExp(`Piece ${s.failed} could not be built`));
     expect(s.zipOff).toBe(true);
@@ -564,6 +575,20 @@ test('a failed build says so in the table and the dialog, and Download goes off'
     await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
                                null, { timeout: 30000 });
     expect(await exportOff(page)).toBe(false);
+    expect(await text(page, 'warnings')).not.toMatch(/could not be built/);
+  });
+
+/* #76: B1 of this plate threw in the engine's seam repair (healCsgSeams), so only A1 was
+   ever listed and Download stayed off. At 2.33 or 2.35 mm it built; plate-audit.js has the
+   rows either side. */
+test('#76: the 39.07 mm dovetail plate with a 2.34 mm counterbore builds both pieces',
+  async ({ page }) => {
+    const errors = await openAt(page, '#pi=39.07&w=170&d=90&bw=100&bd=400&cn=dovetail&sc=1&sh=3&se=2.34&sd=8',
+                                60000);
+    expect(await text(page, 'pieceTail')).toMatch(/2 ready/);
+    expect(await text(page, 'warnings')).not.toMatch(/could not be built/);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
   });
 
 /* ---- #20: spacing on the print plate ---------------------------------------------- */

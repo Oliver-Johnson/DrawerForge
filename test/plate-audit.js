@@ -327,11 +327,16 @@ const CASES = [
     tab: { ...G.DEFAULTS.tab, clr: 0.98 }, puzzle: { ...G.DEFAULTS.puzzle, clr: 0.98 },
     key: { ...G.DEFAULTS.key, clr: 0.93 }, hclip: { ...G.DEFAULTS.hclip, clr: 0.93 } },
   /* A cell whose pockets come out open is cut again (see the fastener cut in buildPiece),
-     and here the turned cutters' cut throws: healCsgSeams' T-junction pass limit. Taken
-     unguarded, that one try made the whole plate fail to build, where main builds it open.
-     The throw is passed over, and the cutters nudged 1.7 microns, the try after it, close
-     every cell left open here (3 to 9 edges a piece; main has 9 and folds on every piece).
-     Engine-only again: the sites 2.5 mm in, at 15.5 mm. */
+     and here the turned cutters' cut reaches healCsgSeams' T-junction pass limit, ten
+     times over the five pieces. Taken unguarded, that one try made the whole plate fail to
+     build, where main builds it open. Until #76 it threw there: the throw was passed over,
+     and the cutters nudged 1.7 microns, the try after it, closed every cell left open here
+     (3 to 9 edges a piece; main has 9 and folds on every piece). Now the repair makes one
+     point of those it was still putting into edges and settles, closed, so the turned try
+     is kept itself: every piece's bytes change, and every piece is still watertight and
+     oriented. So the row is named for what it was found as: it no longer reaches the catch
+     that passes over a try that throws, and no row here does. Engine-only again: the
+     sites 2.5 mm in, at 15.5 mm. */
   { name: 'a retry that throws', pitch: 15.5, drawerW: 3 * 15.5, drawerD: 5 * 15.5, bedW: 400,
     bedD: 400, splitMode: 'manual', rowCuts: [1, 2], colCuts: [[], [], [1, 2]],
     connector: 'snap', keyType: 'snap', keyInsert: 'top', magnets: true, screws: true,
@@ -1443,6 +1448,72 @@ function sectionArea(polys, z, dy) {
     }
   }
   return area;
+}
+
+/* #76: a counterbore whose ceiling three cut lines cross at one point.
+ *
+ * At 39.07 mm, with a dovetail joint, a 3 mm shank and a counterbore 2.34 mm deep, every
+ * piece with a seam on its left threw in healCsgSeams and was never built: B1 on the page's
+ * two-piece plate, B1 to D1 on a four-piece one. Two facets of the socket's sloped wall at
+ * the cell's corner, carried down by the cell's tree, cross the counterbore's ceiling about
+ * 2 microns from an edge of the ceiling's own, and the weld's T-junction pass flipped
+ * between the three corners of the triangle that leaves until it ran out of passes. It
+ * was a point and not a band: 2.339 and 2.341 mm built, as did 39.06 and 39.08 mm, a
+ * 2.5 or 3.4 mm shank, and heads up to 7.2 mm; from 7.3 mm to the 9.4 cap every head threw.
+ * The repair now makes one point of the three and runs again (see healCsgSeams). So the
+ * plate as filed, the other drawer the issue names, three seams, the smallest head that
+ * threw and the cap, and the step either side in depth and pitch: every piece built,
+ * watertight, and with every shell facing outwards. The last is asked as well as the edge
+ * count because a merge can close a hole with a fold.
+ *
+ * And where the merge does not help. A jigsaw plate at 41.24 mm, with magnets from above
+ * and a counterbore 3.126 mm deep under a 7.504 mm head, runs out of passes on the first
+ * cut of both its pieces, and threw there before the merge. The merge lets that repair
+ * settle, but open; kept as it came, the page built both pieces with 55 bad edges and
+ * Download on, and with the magnet 2.264 mm deep, closed but folded twice, with NaN normals
+ * in the STL. A second run that comes out open throws now, so the plate fails to build, as
+ * it did before, and the checks say so. These two rows are built as the page builds them
+ * (its clearances and margins), and hold "threw in the seam repair, or watertight and
+ * oriented": whatever builds them later has to build them whole. */
+console.log('\na counterbore whose ceiling three cut lines cross at one point (#76):');
+{
+  const PLATE = { pitch: 39.07, drawerW: 170, drawerD: 90, bedW: 100, bedD: 400, marginMode: 'auto',
+                  connector: 'dovetail', screws: true, screwHoleD: 3, screwHeadDepth: 2.34, screwHeadD: 8 };
+  const ROWS = [
+    ['as filed: B1 threw', {}],
+    ['164 mm wide: B1 threw', { drawerW: 164 }],
+    ['three seams: B1, C1, D1 threw', { drawerW: 280 }],
+    ['7.3 mm head, the smallest that threw', { screwHeadD: 7.3 }],
+    ['9.4 mm head, the cap', { screwHeadD: 9.4 }],
+    ['7.2 mm head', { screwHeadD: 7.2 }],
+    ['2.33 mm deep', { screwHeadDepth: 2.33 }],
+    ['2.35 mm deep', { screwHeadDepth: 2.35 }],
+    ['39.06 mm', { pitch: 39.06 }],
+    ['39.08 mm', { pitch: 39.08 }],
+  ];
+  const build = (over) => {
+    let r = null, err = null;
+    try { r = buildAll(over); } catch (e) { err = e.message; }
+    const turned = r ? r.pieces.map(checkOrientation).filter((o) => !o.ok) : [];
+    const text = err ? `THREW: ${err}` : `${r.pieces.length} pieces, ${leakText(r)}, ` +
+      (turned.length ? `${turned.length} pieces: ${orientationNote(turned[0])}` : 'oriented');
+    return { r, err, whole: r && !r.bad && !turned.length, text };
+  };
+  for (const [label, over] of ROWS) {
+    const b = build({ ...PLATE, ...over });
+    console.log(`  ${label.padEnd(38)} ${b.text}`);
+    if (!b.whole) bad++;
+  }
+  const JIGSAW = { pitch: 41.24, drawerW: 84.79, drawerD: 60.96, bedW: 53.61, bedD: 400, marginMode: 'auto',
+                   connector: 'puzzle', clr: 0.2, screws: true, screwHoleD: 3, screwHeadDepth: 3.126,
+                   screwHeadD: 7.504, magnets: true, magnetSide: 'top', magnetD: 7.3, magnetH: 2.25 };
+  for (const [label, over] of [['41.24 mm jigsaw: 55 bad edges a piece', {}],
+                               ['2.264 mm magnet: folded twice', { magnetH: 2.264 }]]) {
+    const b = build({ ...JIGSAW, ...over });
+    const held = b.whole || /^healCsgSeams/.test(b.err || '');
+    console.log(`  ${label.padEnd(38)} ${b.text}${held ? '' : '  NEITHER THREW NOR BUILT WHOLE'}`);
+    if (!held) bad++;
+  }
 }
 
 /* A margin of any width beside a corner, square or rounded.
