@@ -1437,6 +1437,44 @@ function sectionArea(polys, z, dy) {
   return area;
 }
 
+/* #76: a counterbore whose ceiling three cut lines cross at one point.
+ *
+ * At 39.07 mm, with a dovetail joint, a 3 mm shank and a counterbore 2.34 mm deep, every
+ * piece with a seam on its left threw in healCsgSeams and was never built: B1 on the page's
+ * two-piece plate, B1 to D1 on a four-piece one. Two facets of the socket's sloped wall at
+ * the cell's corner, carried down by the cell's tree, cross the counterbore's ceiling about
+ * 2 microns from an edge of the ceiling's own, and the weld's T-junction pass flipped
+ * between the three corners of the triangle that leaves until it ran out of passes. It
+ * was a point and not a band: 2.339 and 2.341 mm built, as did 39.06 and 39.08 mm, a
+ * 2.5 or 3.4 mm shank, and heads up to 7.2 mm; from 7.3 mm to the 9.4 cap every head threw.
+ * The repair now makes one point of the three and runs again (see healCsgSeams). So the
+ * plate as filed, the other drawer the issue names, three seams, the smallest head that
+ * threw and the cap, and the step either side in depth and pitch: every piece built, and
+ * watertight. */
+console.log('\na counterbore whose ceiling three cut lines cross at one point (#76):');
+{
+  const PLATE = { pitch: 39.07, drawerW: 170, drawerD: 90, bedW: 100, bedD: 400, marginMode: 'auto',
+                  connector: 'dovetail', screws: true, screwHoleD: 3, screwHeadDepth: 2.34, screwHeadD: 8 };
+  const ROWS = [
+    ['as filed: B1 threw', {}],
+    ['164 mm wide: B1 threw', { drawerW: 164 }],
+    ['three seams: B1, C1, D1 threw', { drawerW: 280 }],
+    ['7.3 mm head, the smallest that threw', { screwHeadD: 7.3 }],
+    ['9.4 mm head, the cap', { screwHeadD: 9.4 }],
+    ['7.2 mm head', { screwHeadD: 7.2 }],
+    ['2.33 mm deep', { screwHeadDepth: 2.33 }],
+    ['2.35 mm deep', { screwHeadDepth: 2.35 }],
+    ['39.06 mm', { pitch: 39.06 }],
+    ['39.08 mm', { pitch: 39.08 }],
+  ];
+  for (const [label, over] of ROWS) {
+    let r = null, err = null;
+    try { r = buildAll({ ...PLATE, ...over }); } catch (e) { err = e.message; }
+    console.log(`  ${label.padEnd(38)} ${err ? `THREW: ${err}` : `${r.pieces.length} pieces, ${leakText(r)}`}`);
+    if (err || r.bad) bad++;
+  }
+}
+
 /* A margin of any width beside a corner, square or rounded.
  *
  * A margin is a region of its own, cut from the plate's outline beside the cells it runs

@@ -201,7 +201,7 @@ class BspNode {
    instrument, not a correctness one, and it was choosing the worse number. */
 const VTOL = 2e-3;
 
-function healCsgSeams(polys) {
+function healCsgSeams(polys, again) {
   if (!polys.length) return polys;
 
   /* ---- one vertex table for the whole soup, bucketed as it is built ----
@@ -302,16 +302,18 @@ function healCsgSeams(polys) {
    *
    * Inserting can expose a further T-junction on a longer edge, hence the loop. Two
    * passes is the most anything here has needed; the cap is headroom, and it THROWS if
-   * it is ever reached with work still to do rather than quietly returning a mesh with
-   * holes in it. Silent partial success is the failure this project keeps rediscovering
-   * — earTriangulate does it, and it shipped bins with 218 boundary edges.
+   * it is ever reached with work still to do (after the one more go described where it
+   * is reached) rather than quietly returning a mesh with holes in it. Silent partial
+   * success is the failure this project keeps rediscovering — earTriangulate does it,
+   * and it shipped bins with 218 boundary edges.
    *
    * The distance tolerance is VTOL and not something tighter: the collapse above may
    * just have moved a vertex that far, and a weld that cannot reach it would leave the
    * T-junction it was meant to close. */
   const PASSES = 6;
-  let pass = 0;
+  let pass = 0, put = [];   // the points this pass put into edges, and the edges' ends
   for (; pass < PASSES; pass++) {
+    put = [];
     /* Count polygon edges, not triangle edges — a fan's diagonals always pair up inside
        the fan, so the two counts differ only by matched pairs. */
     const use = new Map();
@@ -370,7 +372,8 @@ function healCsgSeams(polys) {
         }
         if (!hits.length) continue;
         hits.sort((x, y) => x[0] - y[0]);
-        for (const [, q] of hits) grown.push(q);
+        for (const [, q] of hits) { grown.push(q); put.push(q); }
+        put.push(ia, ib);
         touched = true;
       }
       if (!touched) continue;
@@ -378,7 +381,50 @@ function healCsgSeams(polys) {
     }
     if (!changed) break;
   }
-  if (pass === PASSES) throw new Error('healCsgSeams: T-junctions still appearing after ' + PASSES + ' passes');
+  /* Out of passes with the same few points still going into each other's edges. Three cut
+     lines that cross a face within a couple of microns of one point leave a triangle a
+     couple of microns on a side there. Each corner is just over VTOL from the other two,
+     so the collapse keeps all three, and each is within VTOL of the line through the other
+     two, so this loop puts one corner into the edge between the others, then a second
+     corner back into the edge that made, and so on for as many passes as it is given.
+     That was #76, a dovetail plate at 39.07 mm with a 2.34 mm counterbore: two facets of
+     the socket's sloped wall at the cell's corner, carried down from 5.3 mm by the cell's
+     tree, cross the counterbore's ceiling 2 microns from an edge of the ceiling's own, and
+     40 passes do not settle it any more than 6 do.
+
+     At that size the three corners are one point, and the collapse would have said so
+     had they been a hair closer: it already makes one point of two that are each within
+     VTOL of a third, up to two VTOL apart. So the points the last pass was still putting
+     in, and the ends of the edges it put them in, that lie within two VTOL of each other
+     become one; every vertex of the input that collapsed onto one of them goes with it;
+     and the repair runs once more from the start. Only here: a soup that settles inside
+     the passes, which every one did across 1,100 random plates of every joint and mount,
+     never comes this way and is repaired exactly as before. A second run that still does
+     not settle throws, and so does one with nothing close enough to merge. */
+  if (pass === PASSES) {
+    if (!again) {
+      const ids = [...new Set(put)], up = new Map(ids.map((i) => [i, i]));
+      const top = (i) => { while (up.get(i) !== i) i = up.get(i); return i; };
+      for (let x = 0; x < ids.length; x++)
+        for (let y = x + 1; y < ids.length; y++) {
+          const v = verts[ids[x]], w = verts[ids[y]];
+          if (Math.hypot(v[0] - w[0], v[1] - w[1], v[2] - w[2]) > 2 * VTOL) continue;
+          const ra = top(ids[x]), rb = top(ids[y]);
+          if (ra !== rb) up.set(ra, rb);
+        }
+      const size = new Map();
+      for (const i of ids) size.set(top(i), (size.get(top(i)) || 0) + 1);
+      const onto = new Map();   // an input vertex's id -> where it goes
+      for (let i = 0; i < verts.length; i++) {
+        const r = find(i);
+        if (up.has(r) && size.get(top(r)) > 1 && top(r) !== i) onto.set(i, verts[top(r)]);
+      }
+      if (onto.size)
+        return healCsgSeams(polys.map((p) => ({ verts: p.verts.map((v) => onto.get(idOf(v)) || v),
+                                                plane: p.plane })), true);
+    }
+    throw new Error('healCsgSeams: T-junctions still appearing after ' + PASSES + ' passes');
+  }
 
   /* Welding creates the other kind of fold. A sliver triangle D-C-B whose corners are
      nearly collinear really does have its third corner sitting on the opposite edge, so
