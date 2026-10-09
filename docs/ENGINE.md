@@ -853,4 +853,7 @@ currently installed):
   that way. #76 was this: a dovetail plate at 39.07 mm with a 3 mm shank and a 2.34 mm
   counterbore, where two facets of the socket's sloped wall at the cell's corner cross the
   counterbore's ceiling 2 microns from an edge of its own. Every piece with a seam on its
-  left failed to build, for heads from 7.3 mm to the cap; 2.339 and 2.341 mm built.
+  left failed to build, for heads from 7.3 mm to the cap; 2.339 and 2.341 mm built. The
+  second run is kept only if it comes out closed: a jigsaw plate at 41.24 mm with magnets
+  from above settles open after the merge, and fails to build as it did before rather
+  than going out with holes.

@@ -1449,8 +1449,19 @@ function sectionArea(polys, z, dy) {
  * 2.5 or 3.4 mm shank, and heads up to 7.2 mm; from 7.3 mm to the 9.4 cap every head threw.
  * The repair now makes one point of the three and runs again (see healCsgSeams). So the
  * plate as filed, the other drawer the issue names, three seams, the smallest head that
- * threw and the cap, and the step either side in depth and pitch: every piece built, and
- * watertight. */
+ * threw and the cap, and the step either side in depth and pitch: every piece built,
+ * watertight, and with every shell facing outwards. The last is asked as well as the edge
+ * count because a merge can close a hole with a fold.
+ *
+ * And where the merge does not help. A jigsaw plate at 41.24 mm, with magnets from above
+ * and a counterbore 3.126 mm deep under a 7.504 mm head, runs out of passes on the first
+ * cut of both its pieces, and threw there before the merge. The merge lets that repair
+ * settle, but open; kept as it came, the page built both pieces with 55 bad edges and
+ * Download on, and with the magnet 2.264 mm deep, closed but folded twice, with NaN normals
+ * in the STL. A second run that comes out open throws now, so the plate fails to build, as
+ * it did before, and the checks say so. These two rows are built as the page builds them
+ * (its clearances and margins), and hold "threw in the seam repair, or watertight and
+ * oriented": whatever builds them later has to build them whole. */
 console.log('\na counterbore whose ceiling three cut lines cross at one point (#76):');
 {
   const PLATE = { pitch: 39.07, drawerW: 170, drawerD: 90, bedW: 100, bedD: 400, marginMode: 'auto',
@@ -1467,11 +1478,28 @@ console.log('\na counterbore whose ceiling three cut lines cross at one point (#
     ['39.06 mm', { pitch: 39.06 }],
     ['39.08 mm', { pitch: 39.08 }],
   ];
-  for (const [label, over] of ROWS) {
+  const build = (over) => {
     let r = null, err = null;
-    try { r = buildAll({ ...PLATE, ...over }); } catch (e) { err = e.message; }
-    console.log(`  ${label.padEnd(38)} ${err ? `THREW: ${err}` : `${r.pieces.length} pieces, ${leakText(r)}`}`);
-    if (err || r.bad) bad++;
+    try { r = buildAll(over); } catch (e) { err = e.message; }
+    const turned = r ? r.pieces.map(checkOrientation).filter((o) => !o.ok) : [];
+    const text = err ? `THREW: ${err}` : `${r.pieces.length} pieces, ${leakText(r)}, ` +
+      (turned.length ? `${turned.length} pieces: ${orientationNote(turned[0])}` : 'oriented');
+    return { r, err, whole: r && !r.bad && !turned.length, text };
+  };
+  for (const [label, over] of ROWS) {
+    const b = build({ ...PLATE, ...over });
+    console.log(`  ${label.padEnd(38)} ${b.text}`);
+    if (!b.whole) bad++;
+  }
+  const JIGSAW = { pitch: 41.24, drawerW: 84.79, drawerD: 60.96, bedW: 53.61, bedD: 400, marginMode: 'auto',
+                   connector: 'puzzle', clr: 0.2, screws: true, screwHoleD: 3, screwHeadDepth: 3.126,
+                   screwHeadD: 7.504, magnets: true, magnetSide: 'top', magnetD: 7.3, magnetH: 2.25 };
+  for (const [label, over] of [['41.24 mm jigsaw: 55 bad edges a piece', {}],
+                               ['2.264 mm magnet: folded twice', { magnetH: 2.264 }]]) {
+    const b = build({ ...JIGSAW, ...over });
+    const held = b.whole || /^healCsgSeams/.test(b.err || '');
+    console.log(`  ${label.padEnd(38)} ${b.text}${held ? '' : '  NEITHER THREW NOR BUILT WHOLE'}`);
+    if (!held) bad++;
   }
 }
 

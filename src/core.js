@@ -398,9 +398,20 @@ function healCsgSeams(polys, again) {
      in, and the ends of the edges it put them in, that lie within two VTOL of each other
      become one; every vertex of the input that collapsed onto one of them goes with it;
      and the repair runs once more from the start. Only here: a soup that settles inside
-     the passes, which every one did across 1,100 random plates of every joint and mount,
-     never comes this way and is repaired exactly as before. A second run that still does
-     not settle throws, and so does one with nothing close enough to merge. */
+     the passes never comes this way and is repaired exactly as before. That is nearly
+     every soup, but not every one. None of 1,100 random plates of every joint and mount
+     ran out; the turned cutters of a cell cut again do on a few engine-only cells (see
+     the fastener cut in buildPiece), and so does a jigsaw plate at 41.24 mm with magnets
+     from above and a 3.126 mm counterbore, on the first cut of both its pieces.
+
+     The second run is kept only if it comes out closed, and that jigsaw plate is why.
+     The merge lets its repair settle, but open, and returned that was 55 bad edges on
+     each piece with Download on, where before the same pieces failed to build and the
+     page said so; with a 2.264 mm magnet the cut was open by four edges and the piece
+     came out closed but folded. So a second run that does not settle throws, as does one
+     that settles open, or one with nothing close enough to merge. Faces it turned over
+     are no reason to throw: #76 with an 8.3 mm head turns six and builds watertight,
+     every shell facing outwards. */
   if (pass === PASSES) {
     if (!again) {
       const ids = [...new Set(put)], up = new Map(ids.map((i) => [i, i]));
@@ -419,9 +430,11 @@ function healCsgSeams(polys, again) {
         const r = find(i);
         if (up.has(r) && size.get(top(r)) > 1 && top(r) !== i) onto.set(i, verts[top(r)]);
       }
-      if (onto.size)
-        return healCsgSeams(polys.map((p) => ({ verts: p.verts.map((v) => onto.get(idOf(v)) || v),
-                                                plane: p.plane })), true);
+      if (onto.size) {
+        const res = healCsgSeams(polys.map((p) => ({ verts: p.verts.map((v) => onto.get(idOf(v)) || v),
+                                                     plane: p.plane })), true);
+        if (!res.open) return res;   // open, it fails as it did before the merge
+      }
     }
     throw new Error('healCsgSeams: T-junctions still appearing after ' + PASSES + ' passes');
   }
