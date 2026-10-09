@@ -2516,6 +2516,22 @@ const MOUNT_BORE = {
             }
             return most > clear(0) ? best : 0;
           } },
+  /* What fastenerCutter cuts for a design's screw, as { counterbore, turn }: whether the
+     counterbore is cut, and how far the shank is turned under it. Here so that mountLimits
+     measures the same shank the cutter cuts.
+     A counterbore the magnet pocket from beneath holds whole is that pocket already: both
+     14 sides, corners on the same rays, no deeper. Since the bores stand their flats on
+     the sizes, the default 6 mm head's walls stand 0.022 mm inside the 6 mm magnet's,
+     and unioned, the test tile at 42 mm with magnets and screws left 6 edges open in
+     its underside. Left out, the pocket is the same solid, and closed. */
+  screw: (cfg) => {
+    const { magnet, head, hole } = MOUNT_BORE, magnetR = magnet.r(cfg.magnetD);
+    const inMagnet = cfg.magnets && cfg.magnetSide !== 'top' &&
+      head.r(cfg.screwHeadD) <= magnetR && cfg.screwHeadDepth <= cfg.magnetH;
+    const counterbore = head.cuts(cfg.screwHeadD, cfg.screwHoleD) && !inMagnet;
+    return { counterbore,
+             turn: counterbore ? hole.turn(cfg.screwHoleD, cfg.screwHeadD, cfg.magnets ? magnetR : 0) : 0 };
+  },
 };
 
 /* Everything removed at one mounting site, as ONE solid.
@@ -2547,19 +2563,12 @@ function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
       ? cylinder(0, 0, magnetR, magZ0, magZ1, magnet.sides)
       : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, magnet.sides));
   if (cfg.screws) {
-    /* A counterbore the magnet pocket from beneath holds whole is that pocket already: both
-       14 sides, corners on the same rays, no deeper. Since the bores stand their flats on
-       the sizes, the default 6 mm head's walls stand 0.022 mm inside the 6 mm magnet's,
-       and unioned, the test tile at 42 mm with magnets and screws left 6 edges open in
-       its underside. Left out, the pocket is the same solid, and closed. */
-    const inMagnet = cfg.magnets && cfg.magnetSide !== 'top' &&
-      head.r(cfg.screwHeadD) <= magnetR && cfg.screwHeadDepth <= cfg.magnetH;
-    const counterbore = head.cuts(cfg.screwHeadD, cfg.screwHoleD) && !inMagnet;
+    // the counterbore, unless the magnet pocket from beneath is that already (MOUNT_BORE.screw)
+    const { counterbore, turn: t } = MOUNT_BORE.screw(cfg);
     if (counterbore)
       add(cylinder(0, 0, head.r(cfg.screwHeadD), -0.5, cfg.screwHeadDepth, head.sides));
     // the shank, turned off the counterbore's corners where one would stand on a flat (#74)
     const shank = cylinder(0, 0, hole.r(cfg.screwHoleD), -0.5, shankTop, hole.sides);
-    const t = counterbore ? hole.turn(cfg.screwHoleD, cfg.screwHeadD, cfg.magnets ? magnetR : 0) : 0;
     const c = Math.cos(t), s = Math.sin(t), turn = (v) => [v[0]*c - v[1]*s, v[0]*s + v[1]*c, v[2]];
     add(t ? shank.map((p) => ({ verts: p.verts.map(turn), plane: { n: turn(p.plane.n), w: p.plane.w } }))
           : shank);
@@ -4070,16 +4079,17 @@ const MOUNT_WALL = 1.0;
 const MOUNT_LEVEL = 0.05, MOUNT_SEAM = 0.01;
 /* How far a mounting bore about (x, y) can grow before it meets any of `segs`, as the
    radius of the circle through its corners: the polygon cylinder() cuts, `sides` flats
-   with a corner at every 2πk/sides from +x. A point is in that polygon when it stands no
-   further out along any flat's normal than R cos(π/sides), so along one segment the
-   least R that takes a point of it in is at an end, or where the segment crosses the
-   line out through a corner, on which a point's R is its distance. */
-function boreReach(sides, segs, x, y) {
+   with a corner at every 2πk/sides from +x, or that turned `turn` about its axis, as
+   fastenerCutter turns a shank (MOUNT_BORE.screw). A point is in that polygon when it
+   stands no further out along any flat's normal than R cos(π/sides), so along one
+   segment the least R that takes a point of it in is at an end, or where the segment
+   crosses the line out through a corner, on which a point's R is its distance. */
+function boreReach(sides, segs, x, y, turn = 0) {
   const step = 2 * Math.PI / sides, h = Math.cos(step / 2);
   const cx = [], cy = [], nx = [], ny = [];
   for (let k = 0; k < sides; k++) {
-    cx.push(Math.cos(k * step)); cy.push(Math.sin(k * step));
-    nx.push(Math.cos((k + 0.5) * step)); ny.push(Math.sin((k + 0.5) * step));
+    cx.push(Math.cos(k * step + turn)); cy.push(Math.sin(k * step + turn));
+    nx.push(Math.cos((k + 0.5) * step + turn)); ny.push(Math.sin((k + 0.5) * step + turn));
   }
   const at = (dx, dy) => {
     let m = -Infinity;
@@ -4215,10 +4225,11 @@ function mountLimits(cfg, layout, known) {
      magnet from beneath with a bowtie at 42 mm, which has 0.84 mm to spare and always
      built clean. */
   const pad = platePad(cfg), again = !!known && known.pad === pad;
-  /* Each cut as { top, sites }: its ceiling, and each site in reach of it as how far a
-     bore's corner circle (`room`) and the bores themselves (`bore`, by their sides) can
-     grow before they meet the cut, and a magnet or screw (`body`) before it meets the
-     part in it. */
+  /* Each cut as { top, segs, sites }: its ceiling, its footprint, and each site in reach
+     of it as how far a bore's corner circle (`room`) and the bores themselves (`bore`, by
+     their sides) can grow before they meet the cut, and a magnet or screw (`body`) before
+     it meets the part in it. Where the site stands from the cut's own origin (`x`, `y`)
+     is kept for a shank turned under its counterbore, measured for the sizes asked. */
   const jointCuts = again ? known.list : [];
   /* Room past the most the cell or the floor leaves cannot stop a size, so nothing
      further off than that is measured, and nothing at all where neither leaves any. A
@@ -4295,17 +4306,20 @@ function mountLimits(cfg, layout, known) {
             const room = from(segs, x, y);
             if (room >= reach) continue;
             const bore = (n) => room > 0 ? boreReach(n, segs, x, y) : room;
-            sites.push({ room, body: from(part, x, y), bore: { 12: bore(12), 14: bore(14) } });
+            sites.push({ x, y, room, body: from(part, x, y), bore: { 12: bore(12), 14: bore(14) } });
           }
-        if (sites.length) jointCuts.push({ top: ceiling, sites });
+        if (sites.length) jointCuts.push({ top: ceiling, segs, sites });
       }
     }
   }
   /* The bores as fastenerCutter cuts them (MOUNT_BORE): how many sides, and the largest
      size whose corners stay inside a radius. Each stands its flats on its size, so its
      corners stand out past it, and a magnet's 0.1 mm over its radius where that is
-     further. */
+     further. The shank is turned where the cutter turns it, and measured so: its turn
+     goes by the sizes asked, the head's and the magnet's as well as its own, so it is
+     the shank of this design that is measured. */
   const BORE = { magnetD: MOUNT_BORE.magnet, screwHeadD: MOUNT_BORE.head, screwHoleD: MOUNT_BORE.hole };
+  const shankTurn = cfg.screws ? MOUNT_BORE.screw(cfg).turn : 0;
   // the room the cell, the floor or a boss leaves, and the hole beside
   const own = { magnetD: fit(cfg.magnetSide === 'top' ? top : under), screwHoleD: fit(top), screwHeadD: fit(under) };
   // a dovetail's notch takes a pocket from beneath that breaks into it; every other cut does not
@@ -4319,6 +4333,9 @@ function mountLimits(cfg, layout, known) {
      into, but not stop just short of. */
   const jointFor = (f) => {
     const { sides, fits } = BORE[f];
+    // the room a bore has, measured again for a shank turned under its counterbore
+    const turn = f === 'screwHoleD' ? shankTurn : 0;
+    const reach = (c, s) => !turn ? s.bore[sides] : s.room > 0 ? boreReach(sides, c.segs, s.x, s.y, turn) : s.room;
     const above = f === 'magnetD' && cfg.magnetSide === 'top';
     // how high a pocket from beneath goes; a shank goes through
     const ceiling = f === 'magnetD' ? cfg.magnetH : f === 'screwHeadD' ? cfg.screwHeadDepth : Infinity;
@@ -4334,10 +4351,10 @@ function mountLimits(cfg, layout, known) {
       const level = Math.round(Math.abs(ceiling - c.top) * 1e6) / 1e6 < MOUNT_LEVEL;
       const stop = above ? 'floor' : !notch ? 'cut' : level ? 'level' : 'part';
       for (const s of c.sites) {
-        const short = fits(s.bore[sides] - MOUNT_SEAM);
+        const bore = reach(c, s), short = fits(bore - MOUNT_SEAM);
         const size = stop === 'part' ? 2 * s.body : short;
         if (size < cap) { cap = size; why = stop; }
-        if (stop === 'part') near.push([short, fits(s.bore[sides])]);
+        if (stop === 'part') near.push([short, fits(bore)]);
       }
     }
     return { cap, why, near };
