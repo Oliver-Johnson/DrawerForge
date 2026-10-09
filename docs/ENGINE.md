@@ -717,7 +717,9 @@ currently installed):
   rays, so where π/84 would bring one of those within 0.005 mm of a flat instead, the
   shank takes the step of the 24 across those 30/7° that keeps both furthest off. Turned,
   no corner of either comes within 0.0039 mm of a flat, and a shank no corner of the
-  counterbore's came near is cut as before.
+  counterbore's came near is cut as before. `MOUNT_BORE.screw` says whether a design's
+  counterbore is cut and how far its shank is turned, for the cutter and for
+  `mountLimits`, which measures that shank turned.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the
