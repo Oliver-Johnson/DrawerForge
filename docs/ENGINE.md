@@ -701,23 +701,23 @@ currently installed):
   to 7.77 mm. A screw gets no allowance on top: its head drops into the counterbore,
   which the field already sizes with room round it. `MOUNT_BORE` says each bore's sides
   and corner radius, and the largest size whose corners fit a room; `fastenerCutter` cuts
-  what it says, and `mountLimits`, which measures every room to the corners, reads its
-  sizes back from it, so the shape is decided in one place. A counterbore is cut only over
-  a shank it clears, its flats outside the shank's corners: the hole over cos(π/12), and
-  0.01 mm more. Narrower, the 14 flats cross the 12 corners and the two cuts' walls weave
-  round the hole, and here and there a cell leaked by the hundred (#73: 2.03 mm over 2
-  with the corners on the sizes, 2.046 over 2 and 1.034 over 1 with the flats). Such a
-  head is cut as none, as one no wider than the hole always was. And the shank is turned
-  π/84 about its axis where one of the counterbore's corners would otherwise stand within
-  0.005 mm of a flat's plane carried on past the shank (`MOUNT_BORE.hole.turn`): the BSP
-  splits a magnet pocket's floor or roof along that whole plane, the weld pulled the
-  corner onto the split, and the plate came out open by the dozen round every site (#74:
-  136 edges a piece for 1.0353 mm under 1.0873 with a magnet from above at 42 mm, on
-  main). The magnet pocket's corners stand on the same rays, so where π/84 would bring one
-  of those within 0.005 mm of a flat instead, the shank takes the step of the 24 across
-  those 30/7° that keeps both furthest off. Turned, no corner of either comes within
-  0.0039 mm of a flat, and a shank no corner of the counterbore's came near is cut as
-  before.
+  what it says, and `mountLimits` measures each bore as that polygon (`boreReach`) and
+  reads its sizes back from it, so the shape is decided in one place. A counterbore is
+  cut only over a shank it clears, its flats outside the shank's corners: the hole over
+  cos(π/12), and 0.01 mm more. Narrower, the 14 flats cross the 12 corners and the two
+  cuts' walls weave round the hole, and here and there a cell leaked by the hundred (#73:
+  2.03 mm over 2 with the corners on the sizes, 2.046 over 2 and 1.034 over 1 with the
+  flats). Such a head is cut as none, as one no wider than the hole always was. And the
+  shank is turned π/84 about its axis where one of the counterbore's corners would
+  otherwise stand within 0.005 mm of a flat's plane carried on past the shank
+  (`MOUNT_BORE.hole.turn`): the BSP splits a magnet pocket's floor or roof along that
+  whole plane, the weld pulled the corner onto the split, and the plate came out open by
+  the dozen round every site (#74: 136 edges a piece for 1.0353 mm under 1.0873 with a
+  magnet from above at 42 mm, on main). The magnet pocket's corners stand on the same
+  rays, so where π/84 would bring one of those within 0.005 mm of a flat instead, the
+  shank takes the step of the 24 across those 30/7° that keeps both furthest off. Turned,
+  no corner of either comes within 0.0039 mm of a flat, and a shank no corner of the
+  counterbore's came near is cut as before.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the
@@ -780,22 +780,47 @@ currently installed):
 - **A pocket that reaches a joint's cut goes bad where the two ceilings are level.** A
   key's recess, an H-clip's and a tab's notch are all cut up from under the plate, as a
   magnet pocket from beneath and a counterbore are. Run into one, the pocket comes out
-  closed at any depth but one: the recess's 2 mm (a 2 mm magnet, the default counterbore)
+  closed at nearly any depth but one: the recess's 2 mm (a 2 mm magnet, the default counterbore)
   or the notch's 2.4 (the spec's 6.5 × 2.4 magnet), where the two ceilings share a face
   that two subtractions each split their own way. A bowtie in the floor at 42 mm left 12
   edges open at 7.9 mm and 19 at 10; puzzle tabs at 36 to 40 mm left 26 to 86 with the
-  spec's magnet. Over 768 such pockets 0.1 to 1.25 mm into a key's recess, magnets from
-  beneath and screw heads, four keys at four pitches, the 96 level with it went bad 74
-  times, and the 672 at seven other depths, as near as 0.01 mm either side, never. It is
-  not mended, it is refused: the pocket has broken into the space the key or the other
-  piece's tab fills, and a magnet there would sit against it.
-  `mountLimits` measures every mounting site of a whole cell against each cut on the
-  layout and holds every size to the room, with no wall: of 10,882 designs over seven keyed
-  joints, 71 pitches and five cuts, none that stopped short of the cut built a bad edge,
-  and the first went bad 0.035 mm into it. A pocket from above meets a cut unless its
-  floor stands a layer over the cut's ceiling. The housings a key is dropped into from
-  above start 1.3 mm over the socket floor and nothing reaches them, and a pocket in a
-  corner boss is left out: the boss is a shell of its own, and no joint is cut from it.
+  spec's magnet. All 86 pockets tried level with a cut went bad; 0.001 mm off it, 3 did,
+  and 0.003 mm or more off it, none. Off the level it depends on the cut, and `mountLimits`
+  measures every mounting site of a whole cell against each cut on the layout, by the
+  pocket's own polygon (`boreReach`), not the circle through its corners:
+  - **A key's recess, an H-clip's or a puzzle tab's notch takes no pocket.** A sliver in
+    can go bad off the level too: 0.019 mm into a snap key's recess at 36.52 mm, with a
+    0.5 mm fit clearance, on main at four depths. Let in wherever the magnet or screw stays
+    clear of the key or tab, 7 of 2,519 such pockets at the default fit or tighter went bad
+    (0.02 to 0.14 mm in), and 8 of 1,151 at looser fits (0.2 to 0.65 mm in).
+  - **A dovetail's notch takes a pocket from beneath**, a sliver or deep, unless it is
+    level with the notch (within 0.05 mm either way, `MOUNT_LEVEL`, measured to the
+    micron) or the magnet or screw in it would reach the other piece's tab,
+    which stands the fit clearance inside the notch. None of 3,699 such designs went bad,
+    1,086 of them on the page's design at 40.5 to 44.5 mm. A 12.7 mm magnet at 42 mm, 2 or
+    3 mm thick, is taken: its pocket is 0.04 to 0.09 mm into the notch and the magnet
+    0.24 mm clear of the tab. 2.4 mm thick it is level, built 96 bad edges, and is refused.
+  - **A pocket from above** meets any of them unless its floor stands a layer over the
+    cut's ceiling. The housings a key is dropped into from above start 1.3 mm over the
+    socket floor and nothing reaches them, and a pocket in a corner boss is left out: the
+    boss is a shell of its own, and no joint is cut from it.
+
+  A pocket that stops short of a cut stops 0.01 mm short (`MOUNT_SEAM`): the weld in
+  `healCsgSeams` takes points `VTOL` apart for one, and a thinner wall can come out welded
+  through. 4 of 715 pockets less than 0.005 mm short went bad, and none of 1,941 from 0.005
+  to 0.03 mm. Under a dovetail's notch that leaves a few hundredths of a millimetre of
+  refused sizes below the largest, between the pocket that stops 0.01 mm short and the one
+  that breaks in, about 0.02 mm wide and rounded out to the hundredth either side, as the
+  field takes them: at 36 mm on the page's design 5.59, 5.6, 5.73 and 5.74 mm are refused,
+  and 5.58, 5.61, 5.72 and 5.75 are taken. The page says so at the field and names the
+  sizes taken either side. Past the weld's reach there is still the
+  lottery the room cannot see, about one design in a thousand, single sizes with clean
+  ones on either side, and it needs the pocket and the cut together: a 14.1 mm
+  counterbore 2.4 to 3 mm deep, 0.09 mm short of a dovetail's notch at 43.17 mm, loose,
+  folds an edge at the notch's corner, byte for byte as main does, and is clean at 2.35 mm
+  deep, at 14.075 and 14.125 mm across, at every size from there into the notch, and with
+  no counterbore. A guard out that far would refuse sizes that build clean on both sides
+  of it and still miss the next, 0.1 mm off.
 - **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
   straight walls run only 2.5 mm either side of a cell's middle at 13.5 mm, so every
   housing, notch and clip pocket crosses its corner arcs and cones, at points that move

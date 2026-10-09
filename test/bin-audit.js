@@ -3596,13 +3596,13 @@ console.log('\nfinger slots');
     if (shelved >= built.divY) faults.push(`fixture: ${shelved} plates along in front of the shelf, no fewer`);
     /* No lip, so counted as the bin with none, and Checks puts the count down to something
        it has: never to the lip's notches. With its lip, the same bin is counted by their
-       rule. The rows asking for holes build none, as their holes give way to the back slot,
-       so each is the bin with no lip and no holes as well. Counted as asking for holes with
-       no lip, as before #58-SF-C was fixed, such a bin laid them out with more room than it
-       gives them: a row fitted, held the back wall too low for a slot and kept a plate in
-       front of a shelf that is not built. Held to itself counted without the lip's rule
-       (lipTaken), these two rows were held to what dividersBuilt asks of itself, and could
-       not fail. */
+       rule. The rows asking for holes build none, as their holes give way to the back slot
+       (and on the 2.5 x 0.5 to the front one too), so each is the bin with no lip and no
+       holes as well. Counted as asking for holes with no lip, as before #58-SF-C was fixed,
+       such a bin laid them out with more room than it gives them: a row fitted, held the
+       back wall too low for a slot and kept a plate in front of a shelf that is not built.
+       Held to itself counted without the lip's rule (lipTaken), these two rows were held to
+       what dividersBuilt asks of itself, and could not fail. */
     const lipless = dividersBuilt(Object.assign({}, cs, { lip: false, insert: 0 }));
     if (built.divX !== lipless.divX || built.divY !== lipless.divY)
       faults.push(`${built.divX} across and ${built.divY} along, where ${lipless.divX} and ${lipless.divY} fit with no lip`);
@@ -3630,10 +3630,12 @@ console.log('\nfinger slots');
      it, and dividersBuilt builds those. Checks had a reason of its own for a bin that broke
      this, 'slot', which no bin reached, and which is gone; were one to break it, Checks
      would put its plates down to the lip it does not have, and so this asks that too. Thin
-     walls and thin plates, where the lip binds, both counts at what fits without it and
-     one of them at less, slots on one wall, two and all four, plain and with a scoop and a
-     note raised on a shelf; and a hundred or more where the lip would hold the plates, or
-     the grid has stopped aiming at it. */
+     walls and thin plates, where the lip binds, both counts at what fits without it, one
+     of them at less, one of them at one more, and 40 each way: Checks gives a reason only
+     for a count put down, so without the counts past what fits, a reason asked of the
+     wrong bin passed here. Slots on one wall, two and all four, plain and with a scoop and
+     a note raised on a shelf; and a hundred or more where the lip would hold the plates,
+     or the grid has stopped aiming at it. */
   {
     let n = 0, marked = 0, bound = 0;
     const off = [];
@@ -3644,7 +3646,7 @@ console.log('\nfinger slots');
                                        fingerSlots: Object.fromEntries([...s].map((k) => [k, true])) }, extra);
           const fit = (axis) => railedLimit(Object.assign({ lipTaken: true }, base), axis).most;
           const fx = fit('x'), fy = fit('y');
-          for (const [divX, divY] of [[fx, fy], [fx, 1], [1, fy], [fx, 0], [0, fy]]) {
+          for (const [divX, divY] of [[fx, fy], [fx, 1], [1, fy], [fx, 0], [0, fy], [fx + 1, 0], [0, fy + 1], [40, 40]]) {
             const cfg = Object.assign({}, base, { divX, divY }), by = countedAs(cfg);
             n++;
             if (!by.lipTaken) continue;

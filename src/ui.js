@@ -76,28 +76,53 @@ const MOUNT_LAST = ['magnetH', 'screwHeadDepth', 'screwHoleD', 'screwHeadD', 'ma
  * off, nor margins outside Custom, because a complaint about a field you cannot see is
  * one you cannot act on. `why` finishes the too-big message where "check the figure is
  * in millimetres" would be the wrong advice, and `off` names the switch that drops a cut
- * the pitch has no room for. */
+ * the pitch has no room for. `gaps` are sizes under `max` refused all the same, as
+ * [from, to] with both ends taken. */
 const RANGES = PLATE_RANGES;
 const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
 /* The sizes a joint's cut in the floor leaves room for depend on where the seams are and
    on the clearance, so mountLimits takes the layout, and readControls reads the mounting
-   sizes after everything that moves either. One answer per size it reads, kept here
-   meanwhile: the layout and the cuts are measured once, not once for the range and
-   again for the reason. */
-let mountNow = null;
-const mount = () => mountNow || (mountNow = mountLimits(state, computeLayout(state)));
+   sizes after everything that moves either. The layout is worked out once for a read, the
+   first time a size needs it, and recomputeLayout keeps that one rather than working it
+   out again: none of the mounting sizes moves it. In Fewest plates mode one is a search,
+   about 100 ms, and with magnets on a keystroke ran three. The answer is kept meanwhile,
+   for the range and the reason alike. */
+let mountNow = null, mountLayout = null;
+const mount = () => mountNow ||
+  (mountNow = mountLimits(state, mountLayout || (mountLayout = computeLayout(state))));
+// how deep a pocket goes: only a corner boss caps it, which needs no layout
+const mountDepth = () => mountLimits(state).depth;
 // "an 18 mm pitch", "an 80 mm pitch": the article goes by how the number is said
 const atPitch = () => `at ${/^(8|1[18](\.|$))/.test(String(state.pitch)) ? 'an' : 'a'} ` +
   `${state.pitch} mm pitch`;
-const mountWhy = (opens, field) => `${atPitch()} — mounting holes sit ` +
-  `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
-  (mount().joint[field] ? `a hole has to stay out of the ` +
-    `${['dovetail', 'puzzle'].includes(state.connector) ? 'notches' : 'recesses'} the ` +
-    `${CONNECTOR_NAMES[state.connector]} fit into`
-    : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
-    : state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
-    : opens ? 'a cut open to the socket has to stay on the socket floor'
-    : 'a pocket under the floor has to stay inside its cell');
+// a joint's cut in the floor, as the messages name it: "the notches the dovetail tabs fit into"
+const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'notches' : 'recesses'} the ` +
+  `${CONNECTOR_NAMES[state.connector]} fit into`;
+/* Why `field` stops where it does. A joint's cut stops it in one of the ways mountLimits'
+   `joint` names: a pocket from beneath as deep as a dovetail's notch, a magnet or screw
+   that would reach the tab in one, a pocket any wider coming too near the notch's edge,
+   or any other hole breaking into the cut. */
+const mountWhy = (opens, field) => {
+  const joint = mount().joint[field];
+  const cuts = cutsNamed();
+  return `${atPitch()} — mounting holes sit ` +
+    `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
+    (joint === 'level' ? `a pocket ${field === 'magnetD' ? state.magnetH : state.screwHeadDepth} mm deep, ` +
+        `as deep as the ${cuts}, has to stay out of them`
+      : joint === 'part' ? `${{ magnetD: 'a magnet', screwHeadD: 'a screw head', screwHoleD: 'a screw' }[field]} ` +
+        `has to stay clear of the ${CONNECTOR_NAMES[state.connector]} in the notches beside it`
+      : joint === 'near' ? `a pocket any wider would come too near the edge of the ${cuts} to cut cleanly`
+      : joint ? `a hole has to stay out of the ${cuts}`
+      : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
+      : state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
+      : opens ? 'a cut open to the socket has to stay on the socket floor'
+      : 'a pocket under the floor has to stay inside its cell') +
+    (joint && KEYED.includes(state.connector) && !keyFromTop()
+      ? `; keys ${keyInWall() ? '' : 'housed inside the walls and '}put in from above ` +
+        'keep out of the solid floor under these pockets' : '');
+};
+// why a size under the largest is refused (mountLimits' `gaps`)
+const nearWhy = () => `${atPitch()} — its pocket would come too near the edge of the ${cutsNamed()} to cut cleanly`;
 const bossDepth = () => state.baseMode === 'bosses'
   ? 'with corner pockets — a boss is 2.6 mm tall, while the solid floor grows to suit' : '';
 const LIMITS = {
@@ -124,14 +149,17 @@ const LIMITS = {
     tooSmall: 'at 0 the rim between sockets is a face with no width, and the plate comes out open',
     why: () => '— past that a spec bin rides on the rim instead of seating in its socket' },
   magnetD: { ...RANGES.magnetD, max: () => mount().magnetD, label: 'Magnet Ø', when: () => state.magnets,
-    why: () => mountWhy(state.magnetSide === 'top', 'magnetD'), off: 'magnet pockets' },
-  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mount().depth), label: 'Magnet depth',
+    why: () => mountWhy(state.magnetSide === 'top', 'magnetD'), off: 'magnet pockets',
+    gaps: () => mount().gaps.magnetD },
+  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mountDepth()), label: 'Magnet depth',
     when: () => state.magnets, why: bossDepth },
   screwHoleD: { ...RANGES.screwHoleD, max: () => mount().screwHoleD, label: 'Screw hole Ø',
-    when: () => state.screws, why: () => mountWhy(true, 'screwHoleD'), off: 'screw holes' },
+    when: () => state.screws, why: () => mountWhy(true, 'screwHoleD'), off: 'screw holes',
+    gaps: () => mount().gaps.screwHoleD },
   screwHeadD: { ...RANGES.screwHeadD, max: () => mount().screwHeadD, label: 'Screw head Ø',
-    when: () => state.screws, why: () => mountWhy(false, 'screwHeadD'), off: 'screw holes' },
-  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mount().depth),
+    when: () => state.screws, why: () => mountWhy(false, 'screwHeadD'), off: 'screw holes',
+    gaps: () => mount().gaps.screwHeadD },
+  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mountDepth()),
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
   // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
   connClr: { min: RANGES.connClr.min, max: () => connClrCeiling(state).max, label: 'Fit clearance',
@@ -244,6 +272,27 @@ function readNumber(id) {
         (why ? `${why}.` : `— check the figure is in ${unitName}.`));
     return hi;
   }
+  /* A size under the largest can be refused as well, where its pocket would come too near
+     the edge of a dovetail's notch (mountLimits' `gaps`); the sizes either side are taken.
+     Two gaps can meet at one taken size, so the advice names the sizes taken round the
+     run of gaps the size is in, inside the field's range: "Use 11.89 mm or less, 11.92 mm,
+     or 11.95 mm or more" at 41.49 mm, never a size in the next gap, under the field's least
+     or over its largest. */
+  const gaps = inPlay && lim.gaps ? lim.gaps() : [];
+  const at = gaps.findIndex(([a, b]) => v > a && v < b);
+  if (at >= 0) {
+    let i = at, j = at;
+    while (i > 0 && gaps[i - 1][1] >= gaps[i][0] - 1e-9) i--;
+    while (j < gaps.length - 1 && gaps[j + 1][0] <= gaps[j][1] + 1e-9) j++;
+    const ok = [];
+    if (gaps[i][0] > lo) ok.push(`${both(gaps[i][0])} or less`);
+    else if (gaps[i][0] === lo) ok.push(both(lo));
+    for (let k = i; k < j; k++) if (gaps[k][1] >= lo) ok.push(both(gaps[k][1]));
+    ok.push(gaps[j][1] < hi ? `${both(gaps[j][1])} or more` : both(gaps[j][1]));
+    say(`${lim.label} of ${both(v)} is refused ${nearWhy()}. Use ` +
+        (ok.length > 1 ? `${ok.slice(0, -1).join(', ')}, or ${ok[ok.length - 1]}` : ok[0]) + '.');
+    return gaps[at][0] >= lo ? gaps[at][0] : gaps[at][1];
+  }
   return v;
 }
 /* The invalid state is set on the element rather than through a class, because the
@@ -311,10 +360,11 @@ function readControls() {
   /* The mounting sizes last, since a joint's cut beside the sites moves with the margins,
      the split and the clearance (see mount). The magnet's is the very last, and measured
      again: a pocket from above meets a cut by how thick the floor is, which the screws
-     and the magnet's own depth set. */
-  mountNow = null;
+     and the magnet's own depth set. Only that step is taken again, on the same layout
+     and the cuts already measured, unless the floor has moved (mountLimits' `known`). */
+  mountNow = mountLayout = null;
   for (const id of MOUNT_LAST) {
-    if (id === 'magnetD') mountNow = null;
+    if (id === 'magnetD' && mountNow) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
     state[id] = readNumber(id);
   }
   // and Checks says what is wrong in the panel's order, not the order it was read in
@@ -389,7 +439,7 @@ function plateStyleHint() {
    nothing, and each of those is a discrete edit. */
 function recomputeLayout(ev) {
   readControls();
-  layout = computeLayout(state);
+  layout = mountLayout || computeLayout(state);   // the one the sizes were read against, if any
   // clamp stored manual cuts to the current grid
   if (state.splitMode === 'manual') {
     state.rowCuts = layout.rowCuts.slice();

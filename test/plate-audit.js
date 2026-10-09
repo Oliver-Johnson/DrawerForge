@@ -2084,13 +2084,14 @@ console.log('\nthe other limits, built at their ends:');
      has to come out watertight, and the first tenth past it, and a size main took that
      reaches the cut (the first that leaked, where one did), have to be refused. Two
      pieces side by side, so the seam between them is cut. The bands are #61's, where its
-     wider pocket brought the leak 0.1 to 0.4 mm lower. From above, an 8 mm magnet meets
-     the recess under it without a bad edge, and would sit on the key; in the wall, main's
-     widest leaked. The 38.13 mm link is the one #61 left for later: its
-     6.5 mm counterbore stood 0.7 mm into a puzzle key's recess. The last two are the
-     spec's 6.5 × 2.4 magnet beside a tab, whose notch stops 2.4 mm up as well. And the
-     same bowtie in four pieces with strips of half cells and margins round them, whose
-     whole cells are the ones measured. */
+     wider pocket brought the leak 0.1 to 0.4 mm lower. From above, an 8 mm magnet's
+     pocket breaks into the recess under it without a bad edge, the magnet itself about
+     0.13 mm clear of the key: refused all the same, as every pocket that breaks into a
+     key's recess is (see mountLimits). In the wall, main's widest leaked. The 38.13 mm link is
+     the one #61 left for later: its 6.5 mm counterbore stood 0.7 mm into a puzzle key's
+     recess. The last two are the spec's 6.5 × 2.4 magnet beside a tab, whose notch stops
+     2.4 mm up as well. And the same bowtie in four pieces with strips of half cells and
+     margins round them, whose whole cells are the ones measured. */
   const pair = (p, o) => ({ pitch: p, drawerW: 4 * p, drawerD: 2 * p, bedW: 2 * p + 16, bedD: 400, ...o });
   const JOINTED = [   // [what, design, field, a size main took into the cut]
     ['bowtie, magnet below, 42', pair(42, { connector: 'bowtie', magnets: true }), 'magnetD', 7.9],
@@ -2120,6 +2121,43 @@ console.log('\nthe other limits, built at their ends:');
                 (taken.join('; ') || `${past} and ${into} mm refused`));
     if (widest.bad) bad++;
     bad += taken.length;
+  }
+  /* What a pocket may and may not do in a joint's cut, by size, each with the reason
+     mountLimits gives (false where it takes the size). A dovetail's notch takes a pocket
+     from beneath that breaks into it, unless the two ceilings are level or the magnet
+     reaches the tab: the half-inch magnet on the page's default design at 42 mm, 2 and
+     3 mm thick, has to be taken and come out watertight; 2.4 thick, level with the
+     notch, it built 96 bad edges and has to be refused, but 2.45 thick, as far off level
+     as 2.35, is taken; and 13.2 mm, 2 thick, builds clean but would touch the tab. At
+     36 mm a 5.6 mm magnet's pocket would stand right on the notch's wall, under
+     MOUNT_SEAM from it, so it is refused there (a gap), and 5.65 and 5.7, which break in,
+     are taken. Any other cut takes none: the snap clip at 36.52 mm
+     is the review's, a 1.5 mm magnet at a fit clearance of 0.5 whose pocket is only
+     0.019 mm into the recess, and main built it with 6 bad edges at 2.5 mm deep (and at
+     1.9, 2.1 and 2.4). The refused ones are built too, to show what main would have, but
+     only the reason is held to. */
+  const PAGE = { marginMode: 'auto', connector: 'dovetail', magnets: true };
+  const SNAP = { pitch: 36.52, drawerW: 73.04, drawerD: 73.04, bedW: 52.52, bedD: 400, splitMode: 'balanced',
+                 connector: 'snap', keyMount: 'floor', keyInsert: 'bottom', tolerance: 'tight', clr: 0.5,
+                 magnets: true, magnetH: 2.5, screws: true, screwHoleD: 1.6, screwHeadD: 1.6, screwHeadDepth: 2 };
+  for (const [nm, o, f, d, why] of [
+    ['dovetail, 12.7 x 2, page', { ...PAGE, magnetH: 2 }, 'magnetD', 12.7, false],
+    ['dovetail, 12.7 x 3, page', { ...PAGE, magnetH: 3 }, 'magnetD', 12.7, false],
+    ['dovetail, 12.7 x 2.4, page', { ...PAGE, magnetH: 2.4 }, 'magnetD', 12.7, 'level'],
+    ['dovetail, 12.7 x 2.45, page', { ...PAGE, magnetH: 2.45 }, 'magnetD', 12.7, false],
+    ['dovetail, 13.2 x 2, page', { ...PAGE, magnetH: 2 }, 'magnetD', 13.2, 'part'],
+    ['dovetail, 5.6 x 2, page, 36', { ...PAGE, pitch: 36, magnetH: 2 }, 'magnetD', 5.6, 'gap'],
+    ['dovetail, 5.65 x 2, page, 36', { ...PAGE, pitch: 36, magnetH: 2 }, 'magnetD', 5.65, false],
+    ['dovetail, 5.7 x 2, page, 36', { ...PAGE, pitch: 36, magnetH: 2 }, 'magnetD', 5.7, false],
+    ['snap, 1.5 x 2.5, 36.52', SNAP, 'magnetD', 1.5, 'cut']]) {
+    const cfg = designCfg(sized(o, f, d));
+    const lims = G.mountLimits(cfg, G.computeLayout(cfg));
+    const r = buildAll(sized(o, f, d));
+    const refused = d > lims[f] ? lims.joint[f] : lims.gaps[f].some(([a, b]) => d > a && d < b) && 'gap';
+    const holds = why ? refused === why : !refused && !r.bad;
+    console.log(`  ${nm.padEnd(28)} ${refused ? `refused (${refused}), would build` : 'taken,'} ` +
+                `${leakText(r)}${holds ? '' : `   FAIL: ${why ? `has to be refused as ${why}` : 'has to be taken watertight'}`}`);
+    if (!holds) bad++;
   }
   /* A counterbore's floor fan (#61's round 4). Where a 4.8 mm head was unioned with its
      2.4 mm shank, the shank's flats came back split at the head's planes, and the socket
