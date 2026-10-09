@@ -404,7 +404,9 @@ function healCsgSeams(polys, again) {
      the fastener cut in buildPiece), and so does a jigsaw plate at 41.24 mm with magnets
      from above and a 3.126 mm counterbore, on the first cut of both its pieces, with
      main's 7.504 mm head over a 3 mm shank (the bores 7.504 cos(π/14) and 3 cos(π/12) here,
-     where a bore's flats stand on its size).
+     where a bore's flats stand on its size) cut apart from the magnet's pocket. Here that
+     head is cut as the pocket (MOUNT_BORE.head.snap) and the plate builds whole; the audit
+     cuts it apart again to reach this guard.
 
      The second run is kept only if it comes out closed, and that jigsaw plate is why.
      The merge lets its repair settle, but open, and returned that was 55 bad edges on
@@ -4894,7 +4896,7 @@ const DEFAULTS = {
 
 if (typeof module !== 'undefined') {
   module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, keysMeet, jointsThatFit, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
-    platePad, cornerBosses, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
+    platePad, cornerBosses, mountLimits, MOUNT_BORE, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, roundedRectRing, clampZ, profilePrism,

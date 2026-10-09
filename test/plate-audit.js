@@ -1489,8 +1489,11 @@ function sectionArea(polys, z, dy) {
  * the third, a 7.4 mm head, which main builds whole as well. Of those heads only 7.31 mm
  * still leaks, its corners 0.001 mm inside the magnet's (#77). The fourth cuts main's
  * bores, the head and shank whose polygons are main's 7.504 and 3 mm ones, 7.504 cos(π/14)
- * and 3 cos(π/12): it runs out of passes here as on main and throws, so the second run's
- * guard is still tested. */
+ * and 3 cos(π/12). That head's corners stand 0.002 mm outside the magnet's, inside the band
+ * where the counterbore is cut as the magnet's pocket (MOUNT_BORE.head.snap), so it builds
+ * whole now. The fifth cuts the same head apart from the pocket, as before the band: it runs
+ * out of passes as on main and throws, so the second run's guard is still tested (without
+ * the guard it builds both pieces with 55 bad edges). */
 console.log('\na counterbore whose ceiling three cut lines cross at one point (#76):');
 {
   const PLATE = { pitch: 39.07, drawerW: 170, drawerD: 90, bedW: 100, bedD: 400, marginMode: 'auto',
@@ -1527,8 +1530,14 @@ console.log('\na counterbore whose ceiling three cut lines cross at one point (#
                                ['2.264 mm magnet: folded twice', { magnetH: 2.264 }],
                                ['7.4 mm head', { screwHeadD: 7.4 }],
                                ["main's bores", { screwHeadD: 7.504 * Math.cos(Math.PI / 14),
-                                                  screwHoleD: 3 * Math.cos(Math.PI / 12) }]]) {
-    const b = build({ ...JIGSAW, ...over });
+                                                  screwHoleD: 3 * Math.cos(Math.PI / 12) }],
+                               ["main's bores, cut apart", { screwHeadD: 7.504 * Math.cos(Math.PI / 14),
+                                                             screwHoleD: 3 * Math.cos(Math.PI / 12),
+                                                             apart: true }]]) {
+    const { apart, ...sizes } = over, snap = G.MOUNT_BORE.head.snap;
+    if (apart) G.MOUNT_BORE.head.snap = 0;
+    let b;
+    try { b = build({ ...JIGSAW, ...sizes }); } finally { G.MOUNT_BORE.head.snap = snap; }
     const held = b.whole || /^healCsgSeams/.test(b.err || '');
     console.log(`  ${label.padEnd(38)} ${b.text}${held ? '' : '  NEITHER THREW NOR BUILT WHOLE'}`);
     if (!held) bad++;
