@@ -813,17 +813,17 @@ currently installed):
   a screw shank 22.2 mm across its corners at 56.5 mm, on main too). With pockets on the
   piece, every cell and margin is checked against the shells built beside it (`settle`),
   and the pockets of one or the other are cut again moved 1.7 microns, turned a 28th of a
-  turn, or both. The
-  cut kept is the one that shares the fewest edges with every shell beside it: keeping one
-  that touched fewer shells, as `settle` first did, left a cell built later sharing an edge
-  nothing cleared (10.1 to 11.1 mm magnets at 47.91 to 50.05 mm, clean on main). And once
-  the cells are built, if the shells `settle` cut again have more bad edges with those
-  beside them than they started with, or more open or turned over, they all go back to
-  their first cut. That check sees only those shells and their neighbours as the cells
-  left them: the dovetail and puzzle tabs are made after it, and the top-insert pass cuts
-  its housings out of shells after it, so neither is judged by it. Two cups put in
-  from above from each side of a piece one cell deep meet face to face at 14.44 mm (twice a
-  cup's reach), and there they are built as one solid with `csgUnion`.
+  turn, or both. The cut kept is the one that shares the fewest edges with every shell
+  beside it: keeping one that touched fewer shells, as `settle` first did, left a cell
+  built later sharing an edge nothing cleared (10.1 to 11.1 mm magnets at 47.91 to
+  50.05 mm, clean on main). And once the cells are built, if the shells `settle` cut
+  again have more bad edges with those beside them than they started with, or more open
+  or turned over, they all go back to their first cut. That check sees only those shells
+  and their neighbours as the cells left them: the dovetail and puzzle tabs are made
+  after it, and the top-insert pass cuts its housings out of shells after it, so neither
+  is judged by it. Two cups put in from above from each side of a piece one cell deep
+  meet face to face at 14.44 mm (twice a cup's reach), and there they are built as one
+  solid with `csgUnion`.
 - **A face that is nothing but a straight line has no middle.** A weld that closes a
   T-junction can leave three corners on one line. Fanned from its average, the spokes land
   a fraction of a micron from a corner and read, to `checkManifold`'s thousandths, as the

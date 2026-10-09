@@ -386,9 +386,11 @@ test.describe('limits no tighter than the geometry', () => {
   });
 
   /* The 34.5 mm case takes no joint: the default dovetail's notches hold its 6 mm screw
-     head to 4.1 mm there, which is a field error of its own. Nor 34 mm, where the head's
-     flats on its size leave the cell room for 5.8. The puzzle tabs' are what leave a
-     magnet no room at 36 mm, where the cell alone would take 7.7. */
+     head to 4.1 mm there, which is a field error of its own. It was 34 mm until a head
+     was cut with its flats on its size; at 34 the cell now has room for a 5.8 mm head,
+     so the 6 mm one would be a field error too, and 34.5 still has no room for a shank.
+     The puzzle tabs' are what leave a magnet no room at 36 mm, where the cell alone
+     would take 7.7. */
   for (const [hash, id, errId, carried, msg] of [
     ['#cn=none&sc=1&pi=34.5', 'screwHoleD', 'errScrew', 3,
      /Screw hole Ø: there is no room for one at a 34\.5 mm pitch.*Use a larger pitch, or turn off screw holes\./],
