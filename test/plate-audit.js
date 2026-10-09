@@ -1998,6 +1998,51 @@ console.log('\nthe other limits, built at their ends:');
     console.log(`  ${nm.padEnd(28)} ${leakText(r)}`);
     if (r.bad) bad++;
   }
+  /* A pocket against a joint's cut in the floor (#64). A bowtie housed in the floor at
+     42 mm, with magnets from beneath, built 12 bad edges at 7.9 mm and 19 at 10 with
+     Download on: the pocket reached the key's recess, and with both ceilings 2 mm up the
+     two shared a face. mountLimits keeps every mounting cut out of a joint's cut now,
+     measured on the layout, so each case is built at the widest the page takes, which
+     has to come out watertight, and the first tenth past it, and a size main took that
+     reaches the cut (the first that leaked, where one did), have to be refused. Two
+     pieces side by side, so the seam between them is cut. The bands are #61's, where its
+     wider pocket brought the leak 0.1 to 0.4 mm lower. From above, an 8 mm magnet meets
+     the recess under it without a bad edge, and would sit on the key; in the wall, main's
+     widest leaked. The 38.13 mm link is the one #61 left for later: its
+     6.5 mm counterbore stood 0.7 mm into a puzzle key's recess. The last two are the
+     spec's 6.5 × 2.4 magnet beside a tab, whose notch stops 2.4 mm up as well. And the
+     same bowtie in four pieces with strips of half cells and margins round them, whose
+     whole cells are the ones measured. */
+  const pair = (p, o) => ({ pitch: p, drawerW: 4 * p, drawerD: 2 * p, bedW: 2 * p + 16, bedD: 400, ...o });
+  const JOINTED = [   // [what, design, field, a size main took into the cut]
+    ['bowtie, magnet below, 42', pair(42, { connector: 'bowtie', magnets: true }), 'magnetD', 7.9],
+    ['bowtie, magnet above, 42', pair(42, { connector: 'bowtie', magnets: true, magnetSide: 'top' }), 'magnetD', 8],
+    ['bowtie, screw head, 42', pair(42, { connector: 'bowtie', screws: true }), 'screwHeadD', 8.2],
+    ['snap, magnet below, 49.02', pair(49.02, { connector: 'snap', magnets: true }), 'magnetD', 17.2],
+    ['puzzle key, below, 46', pair(46, { connector: 'puzzlekey', magnets: true }), 'magnetD', 16],
+    ['puzzle key, below, 49.02', pair(49.02, { connector: 'puzzlekey', magnets: true }), 'magnetD', 20.2],
+    ['bowtie in the wall, 44.17', pair(44.17, { connector: 'bowtie', keyMount: 'wall', magnets: true }), 'magnetD', 15.7],
+    ['38.13 mm link, counterbore', { drawerW: 134.56, drawerD: 120.48, mLeft: 11.96, mRight: 8.21, mFront: 5.39,
+      mBack: 0.7, bedW: 67.2, bedD: 86.26, connector: 'puzzlekey', clr: 0.2, screws: true, screwHoleD: 3,
+      screwHeadD: 6.5, pitch: 38.13, outerRadius: 3.49, topCutoff: 1 }, 'screwHeadD', 6.5],
+    ['puzzle tabs, 2.4 deep, 38', pair(38, { connector: 'puzzle', magnets: true, magnetH: 2.4 }), 'magnetD', 6.5],
+    ['dovetail, 2.4 deep, 36', pair(36, { connector: 'dovetail', magnets: true, magnetH: 2.4 }), 'magnetD', 6.5],
+    ['bowtie, half cells, 42', { pitch: 42, drawerW: 199, drawerD: 199, marginMode: 'half', bedW: 120, bedD: 120,
+      connector: 'bowtie', magnets: true }, 'magnetD', 7.9],
+  ];
+  for (const [nm, o, f, into] of JOINTED) {
+    const cfg = designCfg(o);
+    const lims = G.mountLimits(cfg, G.computeLayout(cfg)), lim = lims[f];
+    const takes = (d) => d <= lim + 1e-9;
+    const widest = buildAll(sized(o, f, lim));
+    const past = Math.round(lim * 10 + 1) / 10;
+    const taken = [past, into].filter(takes)
+      .map((d) => `${d} mm TAKEN, and ${leakText(buildAll(sized(o, f, d)))}`);
+    console.log(`  ${nm.padEnd(28)} widest ${lim} mm ${leakText(widest)}; ` +
+                (taken.join('; ') || `${past} and ${into} mm refused`));
+    if (widest.bad) bad++;
+    bad += taken.length;
+  }
   /* A counterbore's floor fan (#61's round 4). Where a 4.8 mm head was unioned with its
      2.4 mm shank, the shank's flats came back split at the head's planes, and the socket
      floor's fan was held clear of those split points as well as the corners: no point

@@ -76,7 +76,10 @@ test.describe('Fewest plates on a big grid', () => {
 test.describe('ranges on the geometry fields', () => {
   /* [link, the line under the field, what it has to say]. The magnet and screw maxima
      are the standard 42 mm pitch's, from mountLimits; the pitch cases show the same
-     limit moving with the cell, down to no room at all. */
+     limit moving with the cell, down to no room at all. Those take no joint (cn=none):
+     the default dovetail's notches stop a magnet from beneath first, at 12.3 mm, and
+     the joint cases at the end of the list say so. */
+  const BOWTIE_42 = '#pi=42&w=168&d=84&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=100&bd=400&cn=bowtie&km=floor&ki=bottom';
   const CASES = [
     ['#tc=0', 'errFloor', /Rim cutoff must be at least 0\.1 mm/],
     ['#tc=5', 'errFloor', /Rim cutoff must be 1 mm or less — past that a spec bin rides on the rim/],
@@ -87,9 +90,9 @@ test.describe('ranges on the geometry fields', () => {
     ['#mg=1&md=0', 'errMagnet', /Magnet Ø must be at least 1 mm/],
     ['#mg=1&mh=0', 'errMagnet', /Magnet depth must be at least 0\.5 mm/],
     ['#mg=1&ms=top&mh=-5', 'errMagnet', /Magnet depth must be at least 0\.5 mm/],
-    ['#mg=1&md=20', 'errMagnet', /Magnet Ø must be 13\.6 mm or less at a 42 mm pitch/],
+    ['#cn=none&mg=1&md=20', 'errMagnet', /Magnet Ø must be 13\.6 mm or less at a 42 mm pitch/],
     ['#mg=1&ms=top&md=10', 'errMagnet', /Magnet Ø must be 8 mm or less at a 42 mm pitch/],
-    ['#mg=1&pi=30', 'errMagnet', /Magnet Ø must be 1\.8 mm or less at a 30 mm pitch/],
+    ['#cn=none&mg=1&pi=30', 'errMagnet', /Magnet Ø must be 1\.8 mm or less at a 30 mm pitch/],
     // past about 50 mm it is the hole beside a pocket that stops it: a 1-inch magnet met it
     ['#pi=55&w=110&d=110&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=400&bd=400&mg=1&md=25.4', 'errMagnet',
       /Magnet Ø must be 24\.3 mm or less at a 55 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a cell's four holes have to stay clear of each other/],
@@ -97,12 +100,23 @@ test.describe('ranges on the geometry fields', () => {
       /Screw head Ø must be 25 mm or less at a 60 mm pitch — .* a cell's four holes have to stay clear of each other/],
     ['#mg=1&bm=bosses&mh=3', 'errMagnet', /Magnet depth must be 2\.4 mm or less with corner pockets/],
     ['#sc=1&sh=20', 'errScrew', /Screw hole Ø must be 8\.3 mm or less/],
-    ['#sc=1&sd=30', 'errScrew', /Screw head Ø must be 14 mm or less/],
+    ['#cn=none&sc=1&sd=30', 'errScrew', /Screw head Ø must be 14 mm or less/],
     ['#sc=1&se=50', 'errScrew', /Screw head depth must be 10 mm or less/],
     ['#cl=1', 'errConnClr', /Fit clearance must be 0\.3 mm or less — any looser and a dovetail pocket/],
     ['#cn=bowtie&cl=5', 'errConnClr', /Fit clearance must be 1 mm or less — check the figure is in millimetres/],
     ['#cl=-1', 'errConnClr', /Fit clearance must be at least 0 mm/],
     ['#pi=10', 'errPitch', /Grid pitch must be at least 13\.5 mm/],
+    /* #64: a hole has to stay out of a joint's cut in the floor. A 10 mm magnet from
+       beneath reached a bowtie's recess at 42 mm, and the plate built with 19 bad edges a
+       piece and Download on; from above, an 8 mm one stood over the key. */
+    [`${BOWTIE_42}&mg=1&md=10`, 'errMagnet',
+      /Magnet Ø must be 7\.6 mm or less at a 42 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a hole has to stay out of the recesses the bowtie keys fit into/],
+    [`${BOWTIE_42}&mg=1&ms=top&md=8`, 'errMagnet',
+      /Magnet Ø must be 7\.6 mm or less at a 42 mm pitch — .* the recesses the bowtie keys fit into/],
+    [`${BOWTIE_42.replace('cn=bowtie', 'cn=snap')}&sc=1&sd=10`, 'errScrew',
+      /Screw head Ø must be 7\.8 mm or less at a 42 mm pitch — .* the recesses the snap clips fit into/],
+    ['#mg=1&md=20', 'errMagnet',
+      /Magnet Ø must be 12\.3 mm or less at a 42 mm pitch — .* the notches the dovetail tabs fit into/],
   ];
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {
@@ -117,6 +131,32 @@ test.describe('ranges on the geometry fields', () => {
       expect(errors).toEqual([]);
     });
   }
+
+  /* The range moves with the joint. With a bowtie in the floor at 42 mm a magnet from
+     beneath goes up to 7.6 mm, where the cell alone takes 13.6: at 7.6 it builds with
+     Download on, a tenth past is refused with Download off, and with no joint the field
+     takes the cell's size again. */
+  test('a magnet pocket is held out of a joint\'s recess, and the field says how far',
+    async ({ page }) => {
+      const errors = await openAt(page, `${BOWTIE_42}&mg=1&md=7.6`);
+      const max = () => page.evaluate(() => document.getElementById('magnetD').max);
+      expect(await max()).toBe('7.6');
+      expect(await shown(page, 'errMagnet')).toBe(false);
+      expect(await text(page, 'pieceTail')).toMatch(/ready/);
+      expect(await exportOff(page)).toBe(false);
+      await H.setField(page, 'magnetD', '7.7');
+      expect(await text(page, 'errMagnet'))
+        .toMatch(/Magnet Ø must be 7\.6 mm or less .* the recesses the bowtie keys fit into/);
+      expect(await text(page, 'pieceTail')).toMatch(/not building/);
+      expect(await exportOff(page)).toBe(true);
+      await page.selectOption('#connector', 'none');
+      await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
+                                 null, { timeout: 30000 });
+      expect(await max()).toBe('13.6');
+      expect(await shown(page, 'errMagnet')).toBe(false);
+      expect(await exportOff(page)).toBe(false);
+      expect(errors).toEqual([]);
+    });
 
   test('a typed value is held to the same range, and a good one clears it', async ({ page }) => {
     await H.openPlates(page);
@@ -345,11 +385,16 @@ test.describe('limits no tighter than the geometry', () => {
     expect(s.built).toBeCloseTo(7.05, 9);
   });
 
+  /* The 34 mm case takes no joint: the default dovetail's notches hold its 6 mm screw head
+     to 3.8 mm there, which is a field error of its own. The puzzle tabs' are what leave
+     a magnet no room at 36 mm, where the cell alone would take 7.7. */
   for (const [hash, id, errId, carried, msg] of [
-    ['#sc=1&pi=34', 'screwHoleD', 'errScrew', 3,
+    ['#cn=none&sc=1&pi=34', 'screwHoleD', 'errScrew', 3,
      /Screw hole Ø: there is no room for one at a 34 mm pitch.*Use a larger pitch, or turn off screw holes\./],
     ['#mg=1&pi=20', 'magnetD', 'errMagnet', 6,
-     /Magnet Ø: there is no room for one at a 20 mm pitch.*Use a larger pitch, or turn off magnet pockets\./]])
+     /Magnet Ø: there is no room for one at a 20 mm pitch.*Use a larger pitch, or turn off magnet pockets\./],
+    ['#cn=puzzle&mg=1&pi=36', 'magnetD', 'errMagnet', 6,
+     /Magnet Ø: there is no room for one at a 36 mm pitch — .* the notches the puzzle tabs fit into\. Use a larger pitch, or turn off magnet pockets\./]])
     test(`${hash}: no room at all is a check on the design, not a field nothing satisfies`,
       async ({ page }) => {
         const errors = await openAt(page, hash);

@@ -44,6 +44,8 @@ const PIECE_COLORS = ['#4fc3e8','#e8b34f','#7fd8a5','#e88a8a','#b18ae8','#7fb5e8
 const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFront','mBack',
   'pitch','outerRadius','bottomPad','topCutoff','magnetD','magnetH',
   'screwHoleD','screwHeadD','screwHeadDepth','infill'];
+// the ones readControls reads after the rest, in this order (see there)
+const MOUNT_LAST = ['magnetH', 'screwHeadDepth', 'screwHoleD', 'screwHeadD', 'magnetD'];
 
 /* The fields that carry a real-world size, and the range one can be.
  *
@@ -77,13 +79,22 @@ const numIds = ['drawerW','drawerD','bedW','bedD','bedH','mLeft','mRight','mFron
  * the pitch has no room for. */
 const RANGES = PLATE_RANGES;
 const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
-const mount = () => mountLimits(state);
+/* The sizes a joint's cut in the floor leaves room for depend on where the seams are and
+   on the clearance, so mountLimits takes the layout, and readControls reads the mounting
+   sizes after everything that moves either. One answer per size it reads, kept here
+   meanwhile: the layout and the cuts are measured once, not once for the range and
+   again for the reason. */
+let mountNow = null;
+const mount = () => mountNow || (mountNow = mountLimits(state, computeLayout(state)));
 // "an 18 mm pitch", "an 80 mm pitch": the article goes by how the number is said
 const atPitch = () => `at ${/^(8|1[18](\.|$))/.test(String(state.pitch)) ? 'an' : 'a'} ` +
   `${state.pitch} mm pitch`;
 const mountWhy = (opens, field) => `${atPitch()} — mounting holes sit ` +
   `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
-  (mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
+  (mount().joint[field] ? `a hole has to stay out of the ` +
+    `${['dovetail', 'puzzle'].includes(state.connector) ? 'notches' : 'recesses'} the ` +
+    `${CONNECTOR_NAMES[state.connector]} fit into`
+    : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
     : state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
     : opens ? 'a cut open to the socket has to stay on the socket floor'
     : 'a pocket under the floor has to stay inside its cell');
@@ -270,7 +281,7 @@ function readControls() {
   state.magnets = $('magnets').checked;
   state.screws = $('screws').checked;
   state.magnetSide = $('magnetSide').value;
-  for (const id of numIds) state[id] = readNumber(id);
+  for (const id of numIds) if (!MOUNT_LAST.includes(id)) state[id] = readNumber(id);
   if (state.noMargin) { state.marginMode = 'custom'; state.mLeft = state.mRight = state.mFront = state.mBack = 0; }
   // the per-corner radii need no range here: buildPiece caps each one at the socket's rim
   if ($('perCorner').checked) {
@@ -290,6 +301,21 @@ function readControls() {
   state.key = Object.assign({}, DEFAULTS.key, { clr: fit.key });
   state.hclip = Object.assign({}, DEFAULTS.hclip, { clr: fit.hclip });
   state.puzzle = Object.assign({}, DEFAULTS.puzzle, { clr: fit.puzzle });
+  /* The mounting sizes last, since a joint's cut beside the sites moves with the margins,
+     the split and the clearance (see mount). The magnet's is the very last, and measured
+     again: a pocket from above meets a cut by how thick the floor is, which the screws
+     and the magnet's own depth set. */
+  mountNow = null;
+  for (const id of MOUNT_LAST) {
+    if (id === 'magnetD') mountNow = null;
+    state[id] = readNumber(id);
+  }
+  // and Checks says what is wrong in the panel's order, not the order it was read in
+  for (const m of [fieldErrors, noRoom]) {
+    const read = new Map(m);
+    m.clear();
+    for (const id of [...numIds, 'connClr']) if (read.has(id)) m.set(id, read.get(id));
+  }
   // half cells keep the alignment: it places what is left after them
   $('alignRow').style.display = mm === 'auto' || mm === 'half' ? '' : 'none';
   $('halfHint').style.display = mm === 'half' ? '' : 'none';
