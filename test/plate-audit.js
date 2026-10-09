@@ -2055,8 +2055,10 @@ console.log('\nthe other limits, built at their ends:');
      flats on the sizes, are a 1 mm shank under 1.06 (36 a cell). 4.25 over 4 left 26 and
      3.305 over 3 62; 5.4959 over 3 under an 8 x 3 magnet, a head nearly twice the shank,
      55; and from beneath, the magnet's roof round a counterbore deeper than it, 1.06 over
-     1 left 12. The shank is turned off the corners now (MOUNT_BORE.hole.turn). Each has
-     to build closed, with no folds. */
+     1 left 12. The shank is turned off the corners now (MOUNT_BORE.hole.turn). The last
+     two are where π/84 alone put a corner of the magnet pocket's on a flat instead (35 and
+     25 edges in the socket floor), so the turn keeps those clear too. Each has to build
+     closed, with no folds. */
   for (const [nm, o] of [
     ['main\'s 1.0353 under 1.0873, 42', { pitch: 42, drawerW: 168, drawerD: 84, bedW: 100, bedD: 400,
       screwHoleD: 1.0353 * Math.cos(Math.PI / 12), screwHeadD: 1.0873 * Math.cos(Math.PI / 14) }],
@@ -2065,6 +2067,8 @@ console.log('\nthe other limits, built at their ends:');
     ['3.305 mm head over 3, 42', { screwHoleD: 3, screwHeadD: 3.305 }],
     ['5.4959 over 3, 8 x 3 magnet', { screwHoleD: 3, screwHeadD: 5.4959, magnetD: 8, magnetH: 3 }],
     ['1.06 over 1, from beneath', { screwHoleD: 1, screwHeadD: 1.06, magnetSide: 'bottom', screwHeadDepth: 3 }],
+    ['4.85 under 7.246, 49.02', { pitch: 49.02, drawerW: 49.02, drawerD: 49.02, screwHoleD: 4.85, screwHeadD: 7.246 }],
+    ['5.773 under 12.053, 55', { pitch: 55, drawerW: 55, drawerD: 55, screwHoleD: 5.773, screwHeadD: 12.053 }],
   ]) {
     const r = buildAll({ pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true,
                          magnetSide: 'top', screws: true, ...o });

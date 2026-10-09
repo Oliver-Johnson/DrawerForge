@@ -713,8 +713,11 @@ currently installed):
   splits a magnet pocket's floor or roof along that whole plane, the weld pulled the
   corner onto the split, and the plate came out open by the dozen round every site (#74:
   136 edges a piece for 1.0353 mm under 1.0873 with a magnet from above at 42 mm, on
-  main). Turned, no corner comes within 0.0039 mm of a flat at any size, and a shank no
-  corner came near is cut as before.
+  main). The magnet pocket's corners stand on the same rays, so where π/84 would bring one
+  of those within 0.005 mm of a flat instead, the shank takes the step of the 24 across
+  those 30/7° that keeps both furthest off. Turned, no corner of either comes within
+  0.0039 mm of a flat, and a shank no corner of the counterbore's came near is cut as
+  before.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the
