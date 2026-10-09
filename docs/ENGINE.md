@@ -396,7 +396,10 @@ outline went into the boss and into the cell it shares faces with, and into both
 bosses meeting across a cell edge: an H-clip at 42 mm went from 40 edges used four times
 a piece to 59 and 68. So a boss a housing reaches stops a `BLOAT` short of the piece's
 edge, the two either side of one housing are built as one solid, and the cut is moved
-`NUDGE` into its own boss, so its walls stand 1.7 microns from the cell's. That leaves
+two `NUDGE`s into its own boss, so its walls stand 3.4 microns from the cell's. (One
+`NUDGE` is not enough: a cut that comes out open is taken again a `NUDGE` along a
+diagonal, the cell's and the boss's alike, and that could put the boss's walls back on
+the cell's: 52 more four-use edges in a piece, on a wall puzzle key at 36.13 mm.) That leaves
 fewer four-use edges than before (31 a piece for that H-clip) and none used once, and a
 boss no housing reaches is built byte for byte as it was. A boss a housing reaches has
 its pockets cut again (`cutAgain`) if they come out open: a boss's pocket is a lottery of

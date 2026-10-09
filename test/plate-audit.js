@@ -2108,8 +2108,8 @@ console.log('\nthe other limits, built at their ends:');
    above and screws, and read along vertical lines 0.3 mm apart. The housing is what the
    joint takes out of the plate without its mountings (solid with no joint, empty with
    one), and none of it may be solid with the bosses on, and solid 5 microns round: a
-   boss's cut stands NUDGE off the cell's (see buildPiece), and the sliver of boss that
-   leaves in a housing, 1.7 microns thick, is not a fill. Every pocket has to be empty
+   boss's cut stands two NUDGEs off the cell's (see buildPiece), and the sliver of boss
+   that leaves in a housing, 3.4 microns thick, is not a fill. Every pocket has to be empty
    from its mouth to its floor. And the edges two bosses share where they meet, used four
    times (quarantined above), may not be more than the same plate has with no joint. */
 console.log('\ncorner bosses beside a joint cut from beneath:');
@@ -2221,6 +2221,18 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
     console.log(`  ${`dovetail, one-cell pieces at ${p} mm, screws`.padEnd(36)} ${r.L.pieces.length} pieces; ${leakText(r)}` +
                 `${r.bad ? '   FAIL' : ''}`);
     if (r.bad) bad++;
+  }
+  /* And a boss's cut moved one NUDGE could stand where the cell's stands, when one or the
+     other was taken again (cutAgain): a wall puzzle key at 36.13 mm with screws and a margin
+     had 73 edges used four times in a piece, against 26 with no joint. */
+  {
+    const p = 36.13, at = { pitch: p, drawerW: 4 * p + 7.3, drawerD: 2 * p + 5.1, mLeft: 3.1, mRight: 4.2, mFront: 2.5,
+      mBack: 2.6, bedW: 2 * p + 16, bedD: 400, baseMode: 'bosses', screws: true };
+    const r = buildAll({ ...at, connector: 'puzzlekey', keyMount: 'wall', keyInsert: 'bottom' });
+    const plain = buildAll({ ...at, connector: 'none' });
+    const good = !r.open && r.bad <= plain.bad;
+    console.log(`  ${'wall puzzle keys at 36.13 mm, screws'.padEnd(36)} ${leakText(r)}, ${plain.bad} with no joint${good ? '' : '   FAIL'}`);
+    if (!good) bad++;
   }
 }
 

@@ -3576,9 +3576,14 @@ function buildPiece(cfg, layout, piece, onStatus) {
        An H-clip at 42 mm went from 40 edges used four times a piece to 59 and 68. So a
        boss a housing reaches stops a BLOAT short of the piece's edge, where the cell's
        rim stands in for it; the two that meet on either side of the same housing are one
-       solid, the pair's outline drawn whole; and the cut is moved NUDGE (1.7 microns) one
-       way along each axis, so its walls stand in the boss a hair from where they stand in
-       the cell. None of that touches a boss no housing reaches, which is built as it was. */
+       solid, the pair's outline drawn whole; and the cut is moved two NUDGEs (3.4 microns)
+       one way along each axis, so its walls stand in the boss a hair from where they stand
+       in the cell. Two, because a cut is taken again a NUDGE along a diagonal when it comes
+       out open (cutAgain), the cell's and the boss's alike: moved one NUDGE, the boss's
+       could come back to where the cell's stood, or go where the cell's had gone, and a
+       wall puzzle key at 36.13 mm with screws and a margin had 52 more edges used four
+       times than the base. None of that touches a boss no housing reaches, which is built
+       as it was. */
     const fromBelow = [...notches, ...pnotches].map((nb) => tabNotch(cfg, nb, pad));
     if (keyKind === 'recess')
       for (const bo of keyed)
@@ -3678,7 +3683,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
         }
         const b = flatBox(boss), cut = [];
         for (const k of ks)
-          if (meets(cutBoxes[k], b)) cut.push(...movePolys(fromBelow[k], -sx*NUDGE, -sy*NUDGE));
+          if (meets(cutBoxes[k], b)) cut.push(...movePolys(fromBelow[k], -2*sx*NUDGE, -2*sy*NUDGE));
         if (cut.length) boss = cutAgain(boss, cut, csgSubtract(boss, cut));
         shells.push(boss);
       }
