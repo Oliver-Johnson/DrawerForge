@@ -106,8 +106,11 @@ const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'n
    stands into a boss's pocket (#75). Nor where the bosses are buried in the floor a
    joint needs (cornerBosses): a key put in from above, in the walls, needs none, so
    taking the hint would stand them up again, and the cup in their pockets. Only a floor
-   asked for (bottomPad) keeps them buried whatever the joint. */
+   asked for (bottomPad) keeps them buried whatever the joint. A screw hole the magnet
+   pocket stops is stopped whatever the pitch, so that is all it says. */
 const mountWhy = (opens, field) => {
+  if (field === 'screwHoleD' && mount().throughMagnet)
+    return `— it runs through the ${state.magnetD} mm magnet's pocket, and has to be narrower than the pocket`;
   const joint = mount().joint[field];
   const cuts = cutsNamed();
   return `${atPitch()} — mounting holes sit ` +
@@ -379,6 +382,15 @@ function readControls() {
   for (const id of MOUNT_LAST) {
     if (id === 'magnetD' && mountNow) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
     state[id] = readNumber(id);
+  }
+  /* And the shank once more, on the sizes just read: how far it is turned goes by the head
+     and the magnet (MOUNT_BORE.screw), and the magnet pocket it runs through caps it
+     (mountLimits' throughMagnet), both read after it. Read before them only, a 5 mm hole
+     stood under a 5.1 mm magnet typed in after it, refused only at the next keystroke. */
+  if (state.screws && mountNow) {
+    mountNow = mountLimits(state, mountLayout, mountNow.cuts);
+    fieldErrors.delete('screwHoleD'); noRoom.delete('screwHoleD');
+    state.screwHoleD = readNumber('screwHoleD');
   }
   // and Checks says what is wrong in the panel's order, not the order it was read in
   for (const m of [fieldErrors, noRoom]) {

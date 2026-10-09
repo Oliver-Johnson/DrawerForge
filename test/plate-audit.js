@@ -2140,10 +2140,11 @@ console.log('\nthe other limits, built at their ends:');
      flats on the sizes, are a 1 mm shank under 1.06 (36 a cell). 4.25 over 4 left 26 and
      3.305 over 3 62; 5.4959 over 3 under an 8 x 3 magnet, a head nearly twice the shank,
      55; and from beneath, the magnet's roof round a counterbore deeper than it, 1.06 over
-     1 left 12. The shank is turned off the corners now (MOUNT_BORE.hole.turn). The last
+     1 left 12. The shank is turned off the corners now (MOUNT_BORE.hole.turn). The next
      two are where π/84 alone put a corner of the magnet pocket's on a flat instead (35 and
-     25 edges in the socket floor), so the turn keeps those clear too. Each has to build
-     closed, with no folds. */
+     25 edges in the socket floor), so the turn keeps those clear too. A magnet's corner on
+     a flat calls for the turn as a counterbore's does: 4.9911 under 7.246 at 49.02 mm, no
+     counterbore corner near, left 44 unturned. Each has to build closed, with no folds. */
   for (const [nm, o] of [
     ['main\'s 1.0353 under 1.0873, 42', { pitch: 42, drawerW: 168, drawerD: 84, bedW: 100, bedD: 400,
       screwHoleD: 1.0353 * Math.cos(Math.PI / 12), screwHeadD: 1.0873 * Math.cos(Math.PI / 14) }],
@@ -2154,12 +2155,38 @@ console.log('\nthe other limits, built at their ends:');
     ['1.06 over 1, from beneath', { screwHoleD: 1, screwHeadD: 1.06, magnetSide: 'bottom', screwHeadDepth: 3 }],
     ['4.85 under 7.246, 49.02', { pitch: 49.02, drawerW: 49.02, drawerD: 49.02, screwHoleD: 4.85, screwHeadD: 7.246 }],
     ['5.773 under 12.053, 55', { pitch: 55, drawerW: 55, drawerD: 55, screwHoleD: 5.773, screwHeadD: 12.053 }],
+    ['4.9911 under 7.246, 49.02', { pitch: 49.02, drawerW: 49.02, drawerD: 49.02, screwHoleD: 4.9911, screwHeadD: 7.246 }],
   ]) {
     const r = buildAll({ pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true,
                          magnetSide: 'top', screws: true, ...o });
     const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
     console.log(`  ${nm.padEnd(30)} ${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
     if (r.bad || folds) bad++;
+  }
+  /* A shank the magnet pocket does not clear as a counterbore has to, its corners at the
+     pocket's flats or through them, is refused (mountLimits' throughMagnet): the walls
+     weave, and no turn kept them closed. 5 mm under a 5.4 mm head and a 5.1 mm magnet, its
+     corners 4.6 microns outside the pocket's flats, built closed unturned and left 47
+     edges turned for the magnet's corners; 3.0177 under 6.557 with a 3 mm magnet at
+     43.43 mm, two pieces with a dovetail, left 58 turned for the shank's corners on the
+     pocket's flats as well; and 5.8561 under 12.053 with a 6 mm magnet at 55 mm left 116
+     unturned (#77). Each is refused, by the magnet's pocket, and builds closed at the
+     widest shank taken. */
+  for (const [nm, o] of [
+    ['5 under 5.4, 5.1 mm magnet', { screwHoleD: 5, screwHeadD: 5.4, magnetD: 5.1 }],
+    ['3.0177 under 6.557, 43.43', { pitch: 43.43, drawerW: 86.86, drawerD: 43.43, bedW: 55.43, bedD: 400,
+      connector: 'dovetail', screwHoleD: 3.0177, screwHeadD: 6.557, screwHeadDepth: 1.5, magnetD: 3, magnetH: 1.5 }],
+    ['5.8561 under 12.053, 55', { pitch: 55, drawerW: 55, drawerD: 55, screwHoleD: 5.8561, screwHeadD: 12.053 }],
+  ]) {
+    const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, magnetSide: 'top',
+                 screws: true, ...o };
+    const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
+    const refused = at.screwHoleD > lim.screwHoleD && lim.throughMagnet;
+    const r = buildAll({ ...at, screwHoleD: lim.screwHoleD });
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    console.log(`  ${nm.padEnd(30)} ${refused ? `refused, by the magnet's pocket, over ${lim.screwHoleD} mm`
+      : `TAKEN up to ${lim.screwHoleD} mm`}; at that, ${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (!refused || r.bad || folds) bad++;
   }
   /* A pocket against a joint's cut in the floor (#64). A bowtie housed in the floor at
      42 mm, with magnets from beneath, built 12 bad edges at 7.9 mm and 19 at 10 with

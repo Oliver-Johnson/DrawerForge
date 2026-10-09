@@ -767,11 +767,15 @@ currently installed):
   shank under a 7.3 mm magnet from above, whose corner stood 0.4 microns off a flat). The
   two pockets' corners stand on the same rays, so where π/84 would bring one within 0.005
   mm of a flat, the shank takes the step of the 24 across those 30/7° that keeps both
-  furthest off. Turned, no corner of either comes within 0.0039 mm of a flat where the
-  magnet stands 0.3 mm or more outside the shank's corners, and a shank no corner of
-  either came near is cut as before. `MOUNT_BORE.screw` says whether a design's
-  counterbore is cut and how far its shank is turned, for the cutter and for
-  `mountLimits`, which measures that shank turned.
+  furthest off. A shank has to clear the magnet pocket it runs through as it would a
+  counterbore, and `mountLimits` refuses a wider one, which the field says
+  (`throughMagnet`): the pocket's flats cross the shank's corners, the walls weave, and
+  no turn kept them closed (5 mm under a 5.1 mm magnet and a 5.4 head at 42 mm left 47
+  edges turned for the magnet's corners). Turned, no corner of either comes within
+  0.0039 mm of a flat, and a shank no corner came near is cut as before. The page reads
+  the shank again after the head and the magnet, since its turn and that cap go by both.
+  `MOUNT_BORE.screw` says whether a design's counterbore is cut and how far its shank is
+  turned, for the cutter and for `mountLimits`, which measures that shank turned.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the

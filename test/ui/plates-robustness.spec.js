@@ -136,6 +136,11 @@ test.describe('ranges on the geometry fields', () => {
     ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie&km=wall&ki=bottom' +
       '&bm=bosses&mg=1&md=7.9', 'errMagnet',
       /Magnet Ø must be 6\.1 mm or less at a 36\.13 mm pitch — .* the recesses the bowtie keys fit into/],
+    /* #81: a shank has to clear the magnet pocket it runs up the middle of, as it would a
+       counterbore. 5 mm under a 5.1 mm magnet and a 5.4 mm head built 47 open edges at
+       42 mm. */
+    ['#cn=none&mg=1&md=5.1&ms=top&sc=1&sh=5&sd=5.4', 'errScrew',
+      /Screw hole Ø must be 4\.9 mm or less — it runs through the 5\.1 mm magnet's pocket, and has to be narrower than the pocket\./],
   ];
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {
@@ -176,6 +181,31 @@ test.describe('ranges on the geometry fields', () => {
       expect(await exportOff(page)).toBe(false);
       expect(errors).toEqual([]);
     });
+
+  /* The shank's cap moves with the magnet typed after it, on the one read: the shank is
+     read again after the head and the magnet (readControls). Pasted in, one input event
+     and no change, 5.1 was measured against the 6 mm magnet before it, and built. */
+  test('a screw hole is held inside the magnet pocket typed after it', async ({ page }) => {
+    const errors = await openAt(page, '#cn=none&mg=1&ms=top&sc=1&sh=5&sd=5.4');
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    await page.evaluate(() => {
+      const e = document.getElementById('magnetD');
+      e.value = '5.1';
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+    expect(await text(page, 'errScrew'))
+      .toMatch(/Screw hole Ø must be 4\.9 mm or less — it runs through the 5\.1 mm magnet's pocket/);
+    expect(await text(page, 'pieceTail')).toMatch(/not building/);
+    expect(await exportOff(page)).toBe(true);
+    await H.setField(page, 'magnetD', '6');
+    await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
+                               null, { timeout: 30000 });
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
 
   /* #70: corner pockets over a floor. A bowtie housed in the floor stood its 2.8 mm floor
      round the 2.6 mm bosses and sealed their pockets in it, with Download on, and an extra

@@ -911,47 +911,50 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * always was: within 3.5% of the hole it is no seat for a screw head, and all it would
  * add is slivers between the shank's corners.
  *
- * Under a counterbore the shank is turned a little about its axis (`turn`, #74) where one
- * of the counterbore's corners would stand on one of its flats carried on past the shank.
- * The BSP splits what it meets along a flat's whole plane, not just the flat: the floor
- * of a magnet pocket from above, which is a ring round the counterbore, or the roof of one
- * from beneath round a counterbore deeper than it. A split a micron or two from the
- * corner was welded onto it (healCsgSeams), which bent the counterbore's wall off its
- * plane, and the plate came out open by the dozen round every site: 136 edges a piece at
- * 42 mm for main's 1.0353 mm shank under a 1.0873 head with a 6 x 2 magnet from above, 36
- * a cell for 1.06 over 1 here, 62 for 3.305 over 3, 55 for 5.4959 over 3 under an 8 x 3
- * magnet. Such sizes come every few hundredths at any ratio of head to shank. A corner
- * meets a flat's plane at an odd multiple of 15/7° off the flat's normal; turned π/84,
- * 15/7°, it meets them at the even ones, so a size that put a corner on a flat puts it
- * midway between two. The turn is taken where a corner comes nearer than 0.005 mm
- * unturned and the turn leaves it further off, and a shank no corner came near is cut as
- * it was. A magnet pocket's corners stand on the same rays as the counterbore's, and π/84
- * could bring one of those onto a flat instead: 4.85 mm under 7.246 with a 6 mm magnet
- * from above left 35 edges in the socket floor at 49.02 mm, and 5.773 under 12.053 25 at
- * 55 mm, where the flats unturned miss them by 0.07 and 0.04. So where π/84 leaves a
- * corner of either nearer than 0.005 mm, the turn is the one of 24 steps across those
- * 30/7° that keeps them furthest off. Wherever the counterbore's corners call for a turn,
- * no corner of either then comes within 0.0039 mm of a flat (6 and 8 mm magnets, heads up
- * to 2.2 times the shank). And the magnet's corners call for one as the counterbore's do,
- * since a shank no counterbore corner comes near can have a magnet's corner on a flat
- * all the same: at 41.24 mm a 3 mm shank under a 7.3 mm magnet from above, a corner 0.4
- * microns off a flat, left 26 edges a piece in the socket floor whatever the head, and
- * 4.9911 under 7.246 with a 6 mm one left 44 at 49.02 mm. Wherever the magnet's
- * corners stand 0.3 mm or more outside the shank's, none then comes within 0.0045 mm of
- * a flat (magnets of 3 to 13 mm, heads up to 2.4 times the shank). Half a facet, π/12,
- * clears the corners as well, but it squares two flats to the cell's edges, and at 37.67
- * mm those folded the socket floor beside the pocket. Measured on 3,846 one-cell plates
- * with a magnet from above, 37.67 to 55 mm, shanks 1 to 5 mm and heads up to 1.15 times
- * them, every 0.001 mm round these sizes: 546 open before, and 1 now, a size the turn
- * leaves alone; none came out worse. On 1,800 random designs the turn moves, every kind
- * of mount: 90 open before, 24 now. It closed 83 and opened 17: 14 at 42 mm with a magnet
- * from beneath under a deeper counterbore, where one size in nine leaks unturned too, by
- * the same slivers at the magnet pocket's corners in the underside, and 3 in corner
- * bosses, each at that one size alone. The magnet's corners change the turn of none of
- * those. On 1,500 random page designs that only a magnet's corner turns (34 to 56 mm;
- * one cell, 2 x 2, and two pieces joined by dovetails or jigsaws; magnets of 3 to 12.7 mm
- * either way up; a fifth on corner bosses): 66 bad before, 13 now. It closed 54 and
- * opened 1, at that one size alone; of the 12 still bad, 10 are on corner bosses. */
+ * Under a counterbore the shank is turned a little about its axis (`turn`, #74) where a
+ * corner of the counterbore or of the magnet pocket would stand on one of its flats
+ * carried on past the shank. The BSP splits what it meets along a flat's whole plane, not
+ * just the flat: the floor of a magnet pocket from above, which is a ring round the
+ * counterbore, or the roof of one from beneath round a counterbore deeper than it. A
+ * split a micron or two from the corner was welded onto it (healCsgSeams), which bent the
+ * counterbore's wall off its plane, and the plate came out open by the dozen round every
+ * site: 136 edges a piece at 42 mm for main's 1.0353 mm shank under a 1.0873 head with a
+ * 6 x 2 magnet from above, 36 a cell for 1.06 over 1 here, 62 for 3.305 over 3, 55 for
+ * 5.4959 over 3 under an 8 x 3 magnet. Such sizes come every few hundredths at any ratio
+ * of head to shank. A corner meets a flat's plane at an odd multiple of 15/7° off the
+ * flat's normal; turned π/84, 15/7°, it meets them at the even ones, so a size that put a
+ * corner on a flat puts it midway between two. The turn is taken where a corner comes
+ * nearer than 0.005 mm unturned and the turn leaves it further off, and a shank no corner
+ * came near is cut as it was. The magnet pocket's corners stand on the same rays as the
+ * counterbore's, and π/84 could bring one of those onto a flat instead: 4.85 mm under
+ * 7.246 with a 6 mm magnet from above left 35 edges in the socket floor at 49.02 mm, and
+ * 5.773 under 12.053 25 at 55 mm, where the flats unturned miss them by 0.07 and 0.04. So
+ * where π/84 leaves a corner of either nearer than 0.005 mm, the turn is the one of 24
+ * steps across those 30/7° that keeps them furthest off. And a magnet's corner calls for
+ * a turn as a counterbore's does, since a shank no counterbore corner comes near can have
+ * a magnet's corner on a flat all the same: at 41.24 mm a 3 mm shank under a 7.3 mm
+ * magnet from above, a corner 0.4 microns off a flat, left 26 edges a piece in the socket
+ * floor whatever the head, and 4.9911 under 7.246 with a 6 mm one left 44 at 49.02 mm. A
+ * shank the magnet pocket does not clear as it would a counterbore is refused
+ * (mountLimits): the two walls weave, and no turn kept them closed. On every shank taken,
+ * no corner of either then comes within 0.0039 mm of a flat, whichever called the turn
+ * (magnets of 3 to 13 mm, shanks of 1 to 6.5, heads up to 2.4 times the shank, every
+ * 0.001 mm round the sizes that put a corner on a flat). Half a facet, π/12, clears the
+ * corners as well, but it squares two flats to the cell's edges, and at 37.67 mm those
+ * folded the socket floor beside the pocket. Measured on 3,846 one-cell plates with a
+ * magnet from above, 37.67 to 55 mm, shanks 1 to 5 mm and heads up to 1.15 times them,
+ * every 0.001 mm round these sizes: 546 open before, and 1 now, a size the turn leaves
+ * alone; none came out worse. On 1,800 random designs a counterbore's corner turns, every
+ * kind of mount: 85 open before, 10 now. It closed 80 and opened 5: 3 at 42 mm with a
+ * magnet from beneath under a deeper counterbore, where one size in nine leaks unturned
+ * too, by the same slivers at the magnet pocket's corners in the underside; 1 in a corner
+ * boss, at that one size alone; and 1 at 42 mm under a magnet from above, open for a few
+ * thousandths round 2.114 under 2.253. The magnet's corners change the turn of none of
+ * the 1,800. On 1,500 random page designs that only a magnet's corner turns (34 to 56
+ * mm; one cell, 2 x 2, and two pieces joined by dovetails or jigsaws; magnets of 3 to
+ * 12.7 mm either way up; a fifth on corner bosses): 41 open or folded before, 6 now. It
+ * closed 40 and opened 5, each for a size or two (2 patches 0.002 mm wide, 2 single
+ * sizes, and 1 whose neighbours fold unturned too); the sixth folds the same unturned. */
 const MOUNT_BORE = {
   magnet: { sides: 14, r: (d) => Math.max(d/2 + 0.1, d/2 / Math.cos(Math.PI/14)),
             fits: (room) => 2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14)) },
@@ -1031,7 +1034,8 @@ function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
     const { counterbore, turn: t } = MOUNT_BORE.screw(cfg);
     if (counterbore)
       add(cylinder(0, 0, head.r(cfg.screwHeadD), -0.5, cfg.screwHeadDepth, head.sides));
-    // the shank, turned off the counterbore's corners where one would stand on a flat (#74)
+    // the shank, turned where a corner of the counterbore or the magnet pocket would stand
+    // on one of its flats (#74)
     const shank = cylinder(0, 0, hole.r(cfg.screwHoleD), -0.5, shankTop, hole.sides);
     const c = Math.cos(t), s = Math.sin(t), turn = (v) => [v[0]*c - v[1]*s, v[0]*s + v[1]*c, v[2]];
     add(t ? shank.map((p) => ({ verts: p.verts.map(turn), plane: { n: turn(p.plane.n), w: p.plane.w } }))
@@ -2813,6 +2817,18 @@ function mountLimits(cfg, layout, known) {
   const shankTurn = cfg.screws ? MOUNT_BORE.screw(cfg).turn : 0;
   // the room the cell, the floor or a boss leaves, and the hole beside
   const own = { magnetD: fit(cfg.magnetSide === 'top' ? top : under), screwHoleD: fit(top), screwHeadD: fit(under) };
+  /* A shank runs up the magnet pocket's axis, and has to clear it as it would a
+     counterbore (MOUNT_BORE.head.over): its corners 0.005 mm inside the pocket's flats.
+     Any wider, and the pocket's 14 flats cross the shank's 12 corners, the walls weave
+     round each other as a counterbore's under the line would, and the magnet has no
+     ledge to stop against. No turn of the shank kept such a pair closed: 5 mm under a
+     5.1 mm magnet from above and a 5.4 mm head, closed unturned at 42 mm, left 47 open
+     edges turned for the magnet's corners; turned for the shank's corners on the
+     pocket's flats as well it closed, but 3.0177 under a 3 mm magnet and a 6.557 head at
+     43.43 mm, closed the other two ways, then left 58. */
+  const ledge = cfg.magnets
+    ? MOUNT_BORE.hole.fits(MOUNT_BORE.magnet.r(cfg.magnetD) * Math.cos(Math.PI / MOUNT_BORE.magnet.sides) - 0.005)
+    : Infinity;
   // a dovetail's notch takes a pocket from beneath that breaks into it; every other cut does not
   const notch = cfg.connector === 'dovetail';
   /* The cuts are measured where they stand in the cells, and a corner boss's stands two
@@ -2835,9 +2851,17 @@ function mountLimits(cfg, layout, known) {
      into, but not stop just short of. */
   const jointFor = (f) => {
     const { sides, fits } = BORE[f];
-    // the room a bore has, measured again for a shank turned under its counterbore
+    /* the room a bore has, measured again for a shank turned under its counterbore, and
+       kept on the site by its turn: the page asks again on the same cuts (`known`) once
+       the head and the magnet are read, and on a 30 x 30 puzzle plate that took 3.6 ms */
     const turn = f === 'screwHoleD' ? shankTurn : 0;
-    const reach = (c, s) => !turn ? s.bore[sides] : s.room > 0 ? boreReach(sides, c.segs, s.x, s.y, turn) : s.room;
+    const reach = (c, s) => {
+      if (!turn) return s.bore[sides];
+      if (!(s.room > 0)) return s.room;
+      const kept = s.turned || (s.turned = new Map());
+      if (!kept.has(turn)) kept.set(turn, boreReach(sides, c.segs, s.x, s.y, turn));
+      return kept.get(turn);
+    };
     const above = f === 'magnetD' && cfg.magnetSide === 'top';
     // how high a pocket from beneath goes; a shank goes through
     const ceiling = f === 'magnetD' ? cfg.magnetH : f === 'screwHeadD' ? cfg.screwHeadDepth : Infinity;
@@ -2863,10 +2887,13 @@ function mountLimits(cfg, layout, known) {
     return { cap, why, near };
   };
   const sizes = {}, joint = {}, gaps = {};
+  let byMagnet = false;
   for (const f of ['magnetD', 'screwHoleD', 'screwHeadD']) {
     const cell = BORE[f].fits(own[f]), J = jointFor(f);
-    let size = r10(Math.min(cell, J.cap));
-    joint[f] = J.cap < cell && J.why;
+    const most = f === 'screwHoleD' ? Math.min(cell, ledge) : cell;
+    let size = r10(Math.min(most, J.cap));
+    joint[f] = J.cap < most && J.why;
+    if (f === 'screwHoleD') byMagnet = ledge < cell && !joint[f];
     /* The sizes `near` refuses, out to the hundredths either side, since the field takes
        hundredths: each gap is [from, to], both taken. A window is about 0.02 mm wide, so
        rounded out to the tenths as the cap is, it refused up to a tenth that builds clean
@@ -2881,7 +2908,7 @@ function mountLimits(cfg, layout, known) {
     gaps[f] = [];
     for (const [from, to] of out) {
       if (from >= size) break;
-      if (to > size) { size = from; joint[f] = 'near'; break; }
+      if (to > size) { size = from; joint[f] = 'near'; if (f === 'screwHoleD') byMagnet = false; break; }
       gaps[f].push([from, to]);
     }
     sizes[f] = size;
@@ -2894,8 +2921,10 @@ function mountLimits(cfg, layout, known) {
     depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
     // which of the sizes the cut beside it stops, rather than the floor, cell or boss
     beside: { magnetD: own.magnetD === beside && !joint.magnetD,
-              screwHoleD: own.screwHoleD === beside && !joint.screwHoleD,
+              screwHoleD: own.screwHoleD === beside && !joint.screwHoleD && !byMagnet,
               screwHeadD: own.screwHeadD === beside && !joint.screwHeadD },
+    // whether the magnet pocket the shank runs through stops it, before all of those
+    throughMagnet: byMagnet,
     // and which a joint's cut stops, before any of those, and how (jointFor)
     joint,
     // sizes under the largest refused all the same, as [from, to] with both ends taken
