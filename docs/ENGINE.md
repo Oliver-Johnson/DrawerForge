@@ -419,6 +419,15 @@ oriented. A boss a housing reaches is new, and is cut again when a pocket comes 
 turned over too, as the joint's cut is; the shorter boss draws the lottery at other
 pitches (34.64 and 34.72 mm, in four one-cell pieces with dovetails).
 
+The joint's cut in a boss is a lottery too, and `cutAgain` does not always win it: a wall
+puzzle key at 36.92 mm with screws (a 2 mm hole, a 7.1 × 0.8 mm head), four cells
+square, kept a cut with a face turned over in two of its four pieces after every try,
+three folds on the bed a piece, about one build in 3,600 of bosses a joint reaches. So
+such a cut is taken again moved two `NUDGE`s the other way along one axis, then the
+other, then both, and the first that comes out clean is kept; if none does, the first
+stands. Each stands as far off the cell's walls as the first, and none nearer the
+pockets.
+
 `connector: 'puzzle'` used to be listed here as the first kind, and it is **no longer
 open anywhere**. It is worth reading how, because it needed two unrelated fixes and the
 lesson generalises: **an even count and an odd count on the same case are two separate

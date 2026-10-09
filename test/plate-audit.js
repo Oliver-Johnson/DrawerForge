@@ -2370,6 +2370,22 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
     console.log(`  ${name.padEnd(36)} ${leakText(r)}${r.open ? '   FAIL' : ''}`);
     if (r.open) bad++;
   }
+  /* And a boss's cut can come out with a face turned over after every one of cutAgain's
+     tries: a wall puzzle key at 36.92 mm with screws (a 2 mm hole, a 7.1 x 0.8 head), four
+     2 x 2 pieces, left three folds on the bed in two of them, by the front edge's key, with
+     no edge open, until such a cut was taken again moved the other way (buildPiece). So
+     folds as well, which an edge count cannot see. */
+  {
+    const p = 36.92;
+    const r = buildAll({ pitch: p, drawerW: 4 * p, drawerD: 4 * p, bedW: 2 * p + 16, bedD: 2 * p + 16,
+                         connector: 'puzzlekey', keyMount: 'wall', keyInsert: 'bottom', baseMode: 'bosses',
+                         screws: true, screwHoleD: 2, screwHeadD: 7.1, screwHeadDepth: 0.8 });
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    const good = !r.open && !folds;
+    console.log(`  ${'wall puzzle keys at 36.92 mm, screws'.padEnd(36)} ${r.L.pieces.length} pieces; ${leakText(r)}` +
+                `${folds ? `, ${folds} FOLDS` : ''}${good ? '' : '   FAIL'}`);
+    if (!good) bad++;
+  }
 }
 
 /* The fit clearance at its ceiling, for every joint and every pitch band.

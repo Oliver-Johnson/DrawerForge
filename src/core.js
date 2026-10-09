@@ -3920,10 +3920,34 @@ function buildPiece(cfg, layout, piece, onStatus) {
             movePolys(fastener, bs.ccx + bs.sx*off, bs.ccy + bs.sy*off)));
           boss = cutAgain(boss, pockets, csgSubtract(boss, pockets));
         }
-        const b = flatBox(boss), cut = [];
-        for (const k of ks)
-          if (meets(cutBoxes[k], b)) cut.push(...movePolys(fromBelow[k], -2*sx*NUDGE, -2*sy*NUDGE));
-        if (cut.length) boss = cutAgain(boss, cut, csgSubtract(boss, cut));
+        /* cutAgain's tries are not always enough here. A wall puzzle key at 36.92 mm with
+           screws (a 2 mm hole, a 7.1 x 0.8 head), four cells square, kept a cut with a
+           face turned over in the pair of bosses by the front edge's key, of A2 and of B2,
+           after every try: three folds on the bed a piece, about one build in 3,600 of
+           bosses a joint reaches. Moved two NUDGEs the other way along y it came out
+           clean. So a cut that every try leaves open or turned is taken again moved two
+           NUDGEs the other way along one axis, then the other, then both, and the first
+           that comes out closed with nothing turned over is kept; if none does, the first
+           stands. Two NUDGEs, not more: each stands as far from the cell's walls as the
+           first, and none nearer the pockets (see mountLimits). A cut that comes out right
+           is built exactly as before. */
+        const b = flatBox(boss);
+        const cutAt = (a, c) => ks.flatMap((k) =>
+          meets(cutBoxes[k], b) ? movePolys(fromBelow[k], -a*sx*NUDGE, -c*sy*NUDGE) : []);
+        const cut = cutAt(2, 2);
+        if (cut.length) {
+          const solid = boss;
+          boss = cutAgain(solid, cut, csgSubtract(solid, cut));
+          for (const [a, c] of [[2, -2], [-2, 2], [-2, -2]]) {
+            if (!boss.open && !boss.turned) break;
+            let again;
+            try {
+              const alt = cutAt(a, c);
+              again = cutAgain(solid, alt, csgSubtract(solid, alt));
+            } catch (e) { continue; }   // the first cut stands
+            if (!again.open && !again.turned) boss = again;
+          }
+        }
         shells.push(boss);
       }
     }
