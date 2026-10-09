@@ -2126,10 +2126,13 @@ function annulusStrip(outerLoop, innerLoop, cx, cy, z, up) {
 
    The socket floor is fanned the same way, from the cell's centre (directCellRegion), and
    a magnet pocket from above or a screw's shank stands on it. An 11.1 mm magnet from
-   above at 48.55 mm put a corner of each pocket 3 microns off a spoke to the floor's
-   rounded corner: six open edges in every cell, whatever way the pockets were cut. So a
-   cell that comes out open has its floor fanned again clear of those cutters' corners
-   (buildPiece), from `start`, the centre it is fanned from when nothing is near. */
+   above at 48.55 mm has a corner of each pocket 4.7 microns from a spoke to the floor's
+   rounded corner, by `gap` below, and lost a sliver of floor there: six open edges in
+   every cell, whatever way the pockets were cut. How near is not what decides it: main's
+   pocket for that magnet has a corner 1.0 micron from the same spoke and comes out
+   closed. So a cell that comes out open at the floor's height has its floor fanned again
+   clear of those cutters' corners (buildPiece), from `start`, the centre it is fanned
+   from when nothing is near. */
 const FAN_NEAR = 0.008, FAN_CLEAR = 0.01, FAN_JOINT = 0.01;
 function fanCentre(oc, avoid, start) {
   const n = oc.length, cc = [0, 0];
@@ -2218,6 +2221,8 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half, avoid, f
     }
     const fl = rings[0];
     const c = [...(floorAvoid ? fanCentre(fl, floorAvoid, [cx, cy]) : [cx, cy]), fl[0][2]];
+    // whether that fan moved: where it did not, the floor is the one it would have been
+    if (c[0] !== cx || c[1] !== cy) polys.floorMoved = true;
     for (let j = 0; j < rn; j++) {
       const k = (j + 1) % rn;
       const p = makePoly([c, fl[j], fl[k]]); if (p) polys.push(p);
@@ -2909,6 +2914,25 @@ function buildPiece(cfg, layout, piece, onStatus) {
                        (solid, cut) => oneByOne(solid, cut, true)];
   // a cut that ends more open, or with more turned over, than the one it would replace
   const worse = (a, b) => (a.open || 0) > (b.open || 0) || (a.turned || 0) > (b.turned || 0);
+  // whether a shell has an open edge lying flat at height z: one used an odd number of times,
+  // its ends both at z, to checkManifold's thousandths
+  const openAt = (polys, z) => {
+    const Z = Math.round(z * 1000), use = new Map();
+    const k = (v) => Math.round(v[0] * 1000) + ',' + Math.round(v[1] * 1000);
+    for (const p of polys) {
+      const vs = p.verts;
+      for (let i = 0; i < vs.length; i++) {
+        const a = vs[i], b = vs[(i + 1) % vs.length];
+        if (Math.round(a[2] * 1000) !== Z || Math.round(b[2] * 1000) !== Z) continue;
+        const ka = k(a), kb = k(b);
+        if (ka === kb) continue;
+        const e = ka < kb ? ka + ' ' + kb : kb + ' ' + ka;
+        use.set(e, (use.get(e) || 0) + 1);
+      }
+    }
+    for (const n of use.values()) if (n % 2) return true;
+    return false;
+  };
   /* The same touch, from the mounting pockets. A pocket's walls, carried across the cell as
    * planes by the BSP, split the region's sides where they cross them, and those sides
    * stand on the same planes as the neighbours' sides, a BLOAT either way of the line
@@ -3279,17 +3303,23 @@ function buildPiece(cfg, layout, piece, onStatus) {
       const own = [x0, y0, x1, y1];
       const cell = { box: own, i: shells.length, recut: cuts.fastener.length ? cutCell : null, alt: null };
       region = cutCell(null);
-      /* Still open, with pockets standing on the socket floor: the floor fanned clear of
-         their corners (fanCentre), and every cut taken again on it. Kept if it is less
+      /* Still open on the socket floor, with pockets standing on it: the floor fanned clear
+         of their corners (fanCentre), and every cut taken again on it. Kept if it is less
          open and no more turned over, and then it is the cell every later cut starts from.
          Only here, not on every cell: a 6 mm magnet from above at 42 mm has a spoke 2.3
-         microns from a corner in every cell and comes out closed, as most do. */
-      if (region.open && floorAvoid.length) {
+         microns from a corner in every cell and comes out closed, as most do. And only
+         where the fan moves and the cell is open at the floor's height: a cell open
+         somewhere else, as a pocket that meets a joint's housing is, or one whose spokes
+         are already clear, would be cut again for the same result. A bowtie plate at
+         45.57 mm with screws, open in every piece on main as well, took twice as long
+         with every open cell cut again. */
+      if (region.open && floorAvoid.length && openAt(region, pad)) {
         const first = base;
         base = directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6,
                                 undefined, avoid.length ? avoid : undefined, floorAvoid);
         let again = null;
-        try { again = cutCell(null); } catch (e) { /* the first cut stands */ }
+        if (base.floorMoved)
+          try { again = cutCell(null); } catch (e) { /* the first cut stands */ }
         if (again && again.open < region.open && !worse(again, region)) region = again;
         else base = first;
       }
@@ -3328,7 +3358,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
   /* settle's check (see above). An edge two unchanged shells share counts the same both
      ways, so the shells cut again and the ones beside them are all it needs to look at;
      it runs only where settle cut something, which few plates do: 3 of 6,406 mount
-     designs from 50 to 60 mm. */
+     designs from 50 to 60 mm. Shells made after it are not in it: the dovetail and
+     puzzle tabs, and what the top-insert pass cuts again. None of the designs swept for
+     this has gone wrong there. */
   if (before.size) {
     const at = new Map(mountCells.map((c) => [c.i, c]));
     const local = new Set(before.keys());

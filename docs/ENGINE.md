@@ -729,11 +729,15 @@ currently installed):
   4, none worse. A try that throws (the turned cutters there reach `healCsgSeams`'
   T-junction pass limit) is passed over and the first cut stands, where it used to fail
   the whole build. The socket floor is a fan too, from the cell's centre, and a pocket
-  from above or a screw's shank stands on it: an 11.1 mm magnet from above at 48.55 mm put
-  a corner 3 microns off one of its spokes, six open edges in every cell that no try
-  closed. A cell still open after its tries has that floor fanned again by `fanCentre`,
-  clear of those corners, and every cut taken again on it. Only then: a 6 mm magnet from
-  above at 42 mm has a spoke 2.3 microns from a corner in every cell and is closed.
+  from above or a screw's shank stands on it: an 11.1 mm magnet from above at 48.55 mm has
+  a pocket corner 4.7 microns from one of its spokes, by `fanCentre`'s measure, and loses
+  the sliver there, six open edges in every cell that no try closed. How near is not what
+  decides it: main's pocket for that magnet has a corner 1.0 micron from the same spoke
+  and is closed. A cell still open after its tries, with an open edge at the floor's
+  height, has that floor fanned again by `fanCentre`, clear of those corners, and where
+  the fan moves, every cut is taken again on it. Only then: a 6 mm magnet from above at
+  42 mm has a spoke 2.3 microns from a corner in every cell and is closed, and a cell open
+  somewhere else (a pocket meeting a joint's housing) gains nothing from a new floor.
 - **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
   straight walls run only 2.5 mm either side of a cell's middle at 13.5 mm, so every
   housing, notch and clip pocket crosses its corner arcs and cones, at points that move

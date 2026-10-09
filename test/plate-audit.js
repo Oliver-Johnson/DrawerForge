@@ -1984,9 +1984,11 @@ console.log('\nthe other limits, built at their ends:');
      48.55, 48.98 and 50.05 mm, clean on main, with 2 or 3 edges used four times on
      d9442d4. It counts the edges shared now, and the two below are two of those, one
      each way in.
-     And the pocket that stands on the magnet's radius moved a pocket's corner from above
-     onto a spoke of the socket floor's fan: 11.1 mm at 48.55, 24 open edges on d9442d4
-     and none on main. A cell that comes out open has its floor fanned again (fanCentre). */
+     And with the pocket that stands on the magnet's radius, a pocket from above lost a
+     sliver of the socket floor by a corner 4.7 microns from one of the floor's spokes:
+     11.1 mm at 48.55, 24 open edges on d9442d4. Main's pocket has a corner 1.0 micron
+     from the same spoke and none open, so it is how the cut falls, not how near. A cell
+     open at the floor's height has its floor fanned again (fanCentre). */
   for (const [nm, o] of [['21.7 mm magnet at 55 mm', { pitch: 55, magnets: true, magnetD: 21.7 }],
                          ['22.2 mm screw shank at 56.5', { pitch: 56.5, screws: true, screwHoleD: 22.2, screwHeadD: 22.2 }],
                          ['10.1 mm magnet above, 47.91', { pitch: 47.91, magnets: true, magnetD: 10.1, magnetSide: 'top' }],
