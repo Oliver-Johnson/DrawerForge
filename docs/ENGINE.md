@@ -879,3 +879,18 @@ currently installed):
   a fraction of a micron from a corner and read, to `checkManifold`'s thousandths, as the
   face's own edges a second time (a puzzle key in the wall from beneath with magnets from
   above at 42 mm: four edges used four times). Such a face goes out as it is.
+- **A weld that never settles is three points, not a loop.** Three cut lines that cross a
+  face within a couple of microns of one point leave a triangle a couple of microns on a
+  side there. Each corner is just over `VTOL` from the other two, so the collapse keeps all
+  three, and each is within `VTOL` of the line through the other two, so the T-junction
+  pass puts them into each other's edges in turn and never finishes: it threw at six
+  passes, and forty do no better. When the passes run out, `healCsgSeams` makes one point
+  of those the last pass was still putting in that lie within two `VTOL` of each other,
+  and repairs once more from the start; a soup that settles inside the passes never comes
+  that way. #76 was this: a dovetail plate at 39.07 mm with a 3 mm shank and a 2.34 mm
+  counterbore, where two facets of the socket's sloped wall at the cell's corner cross the
+  counterbore's ceiling 2 microns from an edge of its own. Every piece with a seam on its
+  left failed to build, for heads from 7.3 mm to the cap; 2.339 and 2.341 mm built. The
+  second run is kept only if it comes out closed: a jigsaw plate at 41.24 mm with magnets
+  from above settles open after the merge, and fails to build as it did before rather
+  than going out with holes.
