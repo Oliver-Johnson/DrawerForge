@@ -879,7 +879,17 @@ currently installed):
   `touchesBuilt` compares the two shells' edges inside the band, and a jointed cell that
   shares one with a jointed cell built before it is cut again (`TOUCH_TRIES`: each cutter
   on its own, the cutters reversed, the faces reversed, the cutters one at a time from the
-  last), or else the earlier cell is; the top-insert pass does the same. Mounting pockets
+  last), or else the earlier cell is; the top-insert pass does the same. Those only reorder
+  the cut, and a split that comes from a plane of the cell's own can land in the same
+  place every time, so a jointed cell that still shares an edge after both has its joint
+  cut again with the cutters moved a `NUDGE` along one diagonal and then the other (#72).
+  Puzzle tabs at a 0.35 mm fit clearance, four pieces meeting, left one edge used four
+  times in two of them at every pitch from 31.6 to 52.2 mm: the plane of a socket wall's
+  facet at a cell's corner crossed the notch lobe's face beside its pole 0.3 microns from
+  where the side of the region across the junction crosses it. The lobe moves with the
+  clearance and the facet with the rim cutoff and the tolerance, so it is one clearance
+  for each: 0.349 and 0.35 at the defaults, 0.608 and 0.609 tight, 0.843 and 0.844 with a
+  1 mm rim cutoff, and 0.102, 0.103 and 0.279 to 0.281 with 0.1. Mounting pockets
   do it with no joint at all: a pocket's wall, carried across its cell as a plane, splits
   the cell's side where it crosses it, and that side stands on the same plane as the
   neighbour's, so a split that lands on a corner of the neighbour's region is that

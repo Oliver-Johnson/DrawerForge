@@ -225,6 +225,14 @@ const CASES = [
     mRight: 0.5, mFront: 0.3, mBack: 1, splitMode: 'manual', rowCuts: [1, 2],
     colCuts: [[], [], []], connector: 'puzzle', outerRadius: 4, arcSegs: 6,
     puzzle: { ...G.DEFAULTS.puzzle, clr: 0.1 } },
+  /* Four pieces meeting at a corner with puzzle tabs at a 0.35 mm fit (#72): two of them
+     had an edge used four times beside a notch's pole, at every pitch from 31.6 to 52.2
+     mm, and 0.34 and 0.36 were clean. A socket wall's facet plane, carried across the
+     cell by the BSP, crossed the lobe's face 0.3 microns from where the side of the region
+     across the junction crosses it, and no retry that keeps the cutters where they are
+     moves that plane (the touch retries in buildPiece). */
+  { name: 'puzzle 42 quads, 0.35', pitch: 42, drawerW: 168, drawerD: 168, bedW: 100, bedD: 100,
+    connector: 'puzzle', arcSegs: 6, puzzle: { ...G.DEFAULTS.puzzle, clr: 0.35 } },
   /* A skeleton plate whose far cuts moved half a thousandth, clear of a vertex 0.0995 mm
      from them, so the strip its cells keep solid where the margin was ended a hair from
      the margin's own region: four edges each used four times. A cut that moves now moves

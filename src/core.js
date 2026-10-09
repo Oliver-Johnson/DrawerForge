@@ -3756,6 +3756,30 @@ function buildPiece(cfg, layout, piece, onStatus) {
                 !others.some((d) => touchesBuilt(again, c.box, d))) { shells[c.i] = again; c.alt = alt; break; }
           }
         }
+        /* And if it touches still, the joint is cut again with its cutters moved a NUDGE
+           along one diagonal and then the other, as cutAgain moves them, and the first
+           that is closed, has nothing turned over and shares no edge is kept.
+           TOUCH_TRIES only reorder the cut, and a split that comes from a plane of the
+           cell's own can land in the same place every time. Puzzle tabs at a 0.35 mm fit
+           clearance, four pieces meeting, left one edge used four times in two of them at
+           every pitch from 31.6 to 52.2 mm (#72): the plane of a socket wall's facet at a
+           cell's corner, carried across the cell by the BSP, crossed the notch lobe's face
+           beside its pole 0.3 microns from where the side of the region across the
+           junction crosses it, and the two shells shared the edge there. The lobe moves
+           with the clearance and the facet with the rim cutoff and the tolerance, so it is
+           one clearance for each: 0.349 and 0.35 at the defaults, 0.608 and 0.609 tight,
+           0.843 and 0.844 with a 1 mm rim cutoff, and 0.102, 0.103 and 0.279 to 0.281
+           with 0.1. Moved 1.7 microns, the face is crossed somewhere else. A cell that
+           touches nothing, or that the tries above clear, is built as before. */
+        if (touching.length && beside.some((c) => touchesBuilt(region, own, c)))
+          for (const [dx, dy] of [[NUDGE, NUDGE], [-NUDGE, NUDGE]]) {
+            const alt = (solid, cut) => csgSubtract(solid, movePolys(cut, dx, dy));
+            let again;
+            try { again = cutCell(alt); } catch (e) { continue; }
+            if (again && !worse(again, region) && !beside.some((c) => touchesBuilt(again, own, c))) {
+              region = again; cell.alt = alt; break;
+            }
+          }
         cell.joint = cutCell;
         jointCells.push(cell);
       }
