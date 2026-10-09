@@ -3744,6 +3744,30 @@ const MOUNT_SKIN = PRINT_LAYER;
    corner, its inner corner rounded, never taller than BOSS_H. Named because mountLimits
    has to know how much room a boss leaves around its pocket. */
 const BOSS_W = 12.5, BOSS_R = 3.5, BOSS_H = 2.6;
+/* How tall a corner boss is built: enough for its pocket and a layer, up to BOSS_H. */
+const bossHeight = (cfg) => Math.min(BOSS_H, Math.max(
+  cfg.magnets ? cfg.magnetH + 0.8 : 0,
+  cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
+
+/* The floor a joint houses itself in: keys in the floor, and the puzzle's lobes, whose
+   notch runs up into it. None for the rest. */
+function jointFloor(cfg) {
+  const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
+  if (keyedConn && cfg.keyMount !== 'wall') return cfg.key.depth + 0.8;
+  return cfg.connector === 'puzzle' ? 2.6 : 0;
+}
+
+/* Whether the corner bosses are built: baseMode 'bosses', and nothing under them. A boss
+   stands on the bed, up to 2.6 mm, with its pocket opening below it or on top of it. A
+   floor under the sockets, the one a joint houses itself in (2.8 mm for keys, 2.6 for the
+   puzzle's lobes) or one asked for, would stand round it as tall or taller: the bosses
+   were buried in it and their pockets with them, sealed in solid or cut short by it, and
+   no magnet could go in (#70). A floor is what a solid base is, so with one the plate is
+   built as a solid base builds it, its pockets cut into the floor and the floor grown to
+   suit them; a boss would only have stood inside it. */
+function cornerBosses(cfg) {
+  return cfg.baseMode === 'bosses' && !(cfg.bottomPad > 0) && !(jointFloor(cfg) > 0);
+}
 
 /* How thick the solid floor under the sockets is: what was asked for, raised to whatever
    the plate is carrying needs. A pocket cut into the floor — a magnet from either side, a
@@ -3756,16 +3780,13 @@ function platePad(cfg) {
   /* Rounded to the micron, because 2.6 + 0.2 is 2.8000000000000003 and that is not a
      reason to move every face of a plate that was 2.8 before. */
   const under = (depth) => Math.round((depth + MOUNT_SKIN) * 1e6) / 1e6;
-  if ((cfg.magnets || cfg.screws) && cfg.baseMode !== 'bosses') {
+  if ((cfg.magnets || cfg.screws) && !cornerBosses(cfg)) {
     pad = Math.max(pad, cfg.magnetBase || 2.8);
     if (cfg.magnets) pad = Math.max(pad, under(cfg.magnetH));
     if (cfg.screws && cfg.screwHeadD > cfg.screwHoleD)
       pad = Math.max(pad, under(cfg.screwHeadDepth));
   }
-  const keyedConn = ['bowtie', 'snap', 'puzzlekey'].includes(cfg.connector);
-  if (keyedConn && cfg.keyMount !== 'wall') pad = Math.max(pad, cfg.key.depth + 0.8);
-  if (cfg.connector === 'puzzle') pad = Math.max(pad, 2.6);
-  return pad;
+  return Math.max(pad, jointFloor(cfg));
 }
 
 /* Plastic left round a mounting cut, to whatever holds it. 1 mm rather than a token
@@ -3778,6 +3799,10 @@ const MOUNT_WALL = 1.0;
    level, and how near its walls may come to any joint's cut without breaking into it.
    See mountLimits. */
 const MOUNT_LEVEL = 0.05, MOUNT_SEAM = 0.01;
+/* How far a cut is moved, 1.7 microns along each axis, when it is taken again for coming
+   out open or with a face turned over (cutAgain, in buildPiece). A corner boss's cut from
+   beneath is moved two of them along each axis, off where the cell's stands. */
+const NUDGE = 0.0017;
 /* How far a mounting bore about (x, y) can grow before it meets any of `segs`, as the
    radius of the circle through its corners: the polygon cylinder() cuts, `sides` flats
    with a corner at every 2πk/sides from +x. A point is in that polygon when it stands no
@@ -3855,7 +3880,7 @@ function mountLimits(cfg, layout, known) {
   const inCell = half - off - MOUNT_WALL;
   const s = half - off;              // the site's distance in from the cell's edges
   const inBoss = Math.min(roomIn(BOSS_W, BOSS_R, s), s) - MOUNT_WALL;
-  const bosses = cfg.baseMode === 'bosses';
+  const bosses = cornerBosses(cfg);
   const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
   const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // a cap is given in tenths, rounded down
   /* A cell's four sites are 2 × holeOffset apart, 26 mm, so past a pitch of about 50 mm
@@ -3877,8 +3902,10 @@ function mountLimits(cfg, layout, known) {
 
      Measured off the solids buildPiece cuts, at the sites it cuts pockets at: whole cells
      only, so a housing beside a half cell or a margin is measured from the whole cell on
-     the other side of it, which is the only one with pockets. A corner boss is left out:
-     its pocket is cut in the boss, a shell of its own that no joint is cut from.
+     the other side of it, which is the only one with pockets. A corner boss's pocket is at
+     the same site, and the joint is cut out of the boss too (#70), so it counts the same
+     way; a pocket from above in a boss has its floor the pocket's depth under the boss's
+     top rather than the floor's.
 
      Issue #64: a bowtie in the floor at 42 mm, with magnets from beneath, built 12 bad
      edges at 7.9 mm and 19 at 10, with Download on; puzzle tabs at 36 to 40 mm built 26
@@ -3935,7 +3962,7 @@ function mountLimits(cfg, layout, known) {
      plate the page will build has at most 900 cells; at 30 × 30 with puzzle tabs this
      is a few milliseconds, on every redraw. */
   const reach = Math.max(fit(top), fit(under));
-  if (layout && !again && !bosses && cfg.connector !== 'none' && reach > 0) {
+  if (layout && !again && cfg.connector !== 'none' && reach > 0) {
     const plan = keyPlan(cfg), H = pad + cfg.plateHeight;
     /* A cut's footprint, as the segments its walls stand on, its extent and its ceiling,
        for each seam it can be cut from, and the part's that goes in it: the key's half,
@@ -4024,6 +4051,17 @@ function mountLimits(cfg, layout, known) {
   const own = { magnetD: fit(cfg.magnetSide === 'top' ? top : under), screwHoleD: fit(top), screwHeadD: fit(under) };
   // a dovetail's notch takes a pocket from beneath that breaks into it; every other cut does not
   const notch = cfg.connector === 'dovetail';
+  /* The cuts are measured where they stand in the cells, and a corner boss's stands two
+     NUDGEs along each axis off that (buildPiece), up to 2·NUDGE·√2 (4.8 microns) nearer a
+     pocket: one MOUNT_SEAM short of the cell's cut was 0.0051 to 0.0055 mm short of an
+     H-clip's recess in the boss, and 0.0057 to 0.0070 of a key's in the walls. So in a
+     boss a pocket stops that much further off, MOUNT_SEAM short of the boss's cut as
+     well. Counting a design's magnet, screw hole and screw head apart, at every 0.01 mm
+     of pitch from 30 to 60 with the five joints that reach the bosses, it lowers 2,676
+     of the 33,430 caps a joint sets (8%), all by a tenth but 6 of a dovetail's by a
+     hundredth, and starts a dovetail's refused sizes (`near`) a hundredth lower in 5,392
+     of its 24,008. Without corner bosses nothing moves. */
+  const seam = MOUNT_SEAM + (bosses ? 2 * NUDGE * Math.SQRT2 : 0);
   /* What the joint's cuts leave one size, as { cap, why, near }: the largest size, and what
      stops it: 'cut', a pocket that would break into a key's recess or a puzzle tab's notch;
      'floor', one from above that leaves no layer of floor over a cut; 'level', one from
@@ -4039,8 +4077,9 @@ function mountLimits(cfg, layout, known) {
     let cap = Infinity, why = false;
     const near = [];
     for (const c of jointCuts) {
-      // a pocket from above clears a cut whose ceiling it leaves a layer of floor over
-      if (above && !(c.top + MOUNT_SKIN > pad - cfg.magnetH + 1e-6)) continue;
+      /* a pocket from above clears a cut whose ceiling it leaves a layer of floor over; in
+         a corner boss its floor is the pocket's depth under the boss's top */
+      if (above && !(c.top + MOUNT_SKIN > (bosses ? bossHeight(cfg) : pad) - cfg.magnetH + 1e-6)) continue;
       /* Level within MOUNT_LEVEL, measured to the micron, so a pocket that far above the
          notch's ceiling and one that far below it are taken alike: 2.35 and 2.45 mm deep
          against a notch 2.4 mm high, which both build clean. Unrounded, 2.45 counted as
@@ -4048,7 +4087,7 @@ function mountLimits(cfg, layout, known) {
       const level = Math.round(Math.abs(ceiling - c.top) * 1e6) / 1e6 < MOUNT_LEVEL;
       const stop = above ? 'floor' : !notch ? 'cut' : level ? 'level' : 'part';
       for (const s of c.sites) {
-        const short = fits(s.bore[sides] - MOUNT_SEAM);
+        const short = fits(s.bore[sides] - seam);
         const size = stop === 'part' ? 2 * s.body : short;
         if (size < cap) { cap = size; why = stop; }
         if (stop === 'part') near.push([short, fits(s.bore[sides])]);
@@ -4266,7 +4305,7 @@ function jointsThatFit(cfg, layout) {
    and bloated 0.05mm so shells overlap; slicers union overlapping shells. */
 function buildPiece(cfg, layout, piece, onStatus) {
   const pitch = cfg.pitch, half = pitch/2;
-  const solidBase = cfg.baseMode !== 'bosses';
+  const solidBase = !cornerBosses(cfg);   // with a floor under them, bosses are a solid base
   const pad = platePad(cfg);
   const isHclip = cfg.connector === 'hclip';
   const topInsert = cfg.keyInsert === 'top';
@@ -4553,13 +4592,12 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * So the cut is taken again as the pockets' is, as other trees over the same solids:
    * the cutters in the other order, the solid's faces in the other order, the faces
    * started a third and two thirds of the way round (which puts another of its planes at
-   * the root), the cutters moved 1.7 microns, the jitter the notch cutters already
+   * the root), the cutters moved 1.7 microns (NUDGE), the jitter the notch cutters already
    * carry, two ways, and last each cutter on its own, one after another, since two in
    * one cut split each other's faces and lose a sliver the same way. The first result
    * that is closed and has nothing turned over is kept; a cut that comes out right first
    * time, which is nearly every one, is built exactly as before. A try that throws is
    * passed over. */
-  const NUDGE = 0.0017;
   // the cutters in a cut, each solid on its own (polygons that share a corner go together)
   const apart = (cut) => {
     const up = cut.map((_, i) => i), at = new Map();
@@ -5146,15 +5184,79 @@ function buildPiece(cfg, layout, piece, onStatus) {
     const bossW = BOSS_W, rIn = BOSS_R;
     // never more than BOSS_H, so a pocket deeper than BOSS_H − MOUNT_SKIN would come out
     // through the top: mountLimits refuses one rather than this growing past it
-    const bossH = Math.min(BOSS_H, Math.max(
-      cfg.magnets ? cfg.magnetH + 0.8 : 0,
-      cfg.screws ? cfg.screwHeadDepth + 1.0 : 0));
+    const bossH = bossHeight(cfg);
     const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
+    /* The joint's cuts from beneath are taken out of the bosses as well, after their
+       pockets: the same solids the cells are cut with. A wall key's recess, an H-clip's
+       and a dovetail's notch sit where four cells meet, which is where four bosses meet,
+       and they were cut from the cells only. The bosses stood in every one of them, the
+       whole housing, and the key, the clip or the other piece's tab could not go in (#70).
+     *
+       Cut as they are, a boss and the cell under it share faces, and the cut put the same
+       edges in both: the housing's outline on the bed, where both stand, and on the
+       piece's edge, where both end; and two bosses that meet on a cell's edge, as they all
+       do (quarantined in test/plate-audit.js), shared the housing's outline across it too.
+       An H-clip at 42 mm went from 40 edges used four times a piece to 59 and 68. So a
+       boss a housing reaches stops a BLOAT short of the piece's edge, where the cell's
+       rim stands in for it; the two that meet on either side of the same housing are one
+       solid, the pair's outline drawn whole; and the cut is moved two NUDGEs (3.4 microns)
+       one way along each axis, so its walls stand in the boss a hair from where they stand
+       in the cell. Two, because a cut is taken again a NUDGE along a diagonal when it comes
+       out open (cutAgain), the cell's and the boss's alike: moved one NUDGE, the boss's
+       could come back to where the cell's stood, or go where the cell's had gone, and a
+       wall puzzle key at 36.13 mm with screws and a margin had 52 more edges used four
+       times than the base. Two keep them a NUDGE apart or more along each axis while at
+       most one of the two is taken again. That is all they promise: with both taken
+       again, a wall square to x can stand where the cell's does (cutAgain's nudges both
+       go up y, so one square to y cannot), and a wall that runs along the diagonal the cut
+       is moved on is not moved off the cell's at all. None of that touches a boss no
+       housing reaches. */
+    const fromBelow = [...notches, ...pnotches].map((nb) => tabNotch(cfg, nb, pad));
+    if (keyKind === 'recess')
+      for (const bo of keyed)
+        if (!(plan.junction && offJunction(bo, pitch, piece)))
+          fromBelow.push(keySiteOps(keyKind, keyShape, keyPrm, keyClr, bo.edge, bo.e, bo.s, H).cut);
+    const flatBox = (polys) => {
+      const b = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const p of polys) for (const v of p.verts) {
+        b[0] = Math.min(b[0], v[0]); b[1] = Math.min(b[1], v[1]);
+        b[2] = Math.max(b[2], v[0]); b[3] = Math.max(b[3], v[1]);
+      }
+      return b;
+    };
+    const cutBoxes = fromBelow.map(flatBox);
+    const cutTops = fromBelow.map((polys) => Math.max(...polys.flatMap((p) => p.verts.map((v) => v[2]))));
+    const meets = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
     // whole cells only: a half cell has no mounting sites (see the fastener cut above)
+    const all = [];
     for (let i = 0; i < piece.nx; i++) for (let j = 0; j < piece.ny; j++) {
       const ccx = gx0 + i*pitch + half, ccy = gy0 + j*pitch + half;
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
         const cxr = ccx + sx*half, cyr = ccy + sy*half;    // cell corner
+        const box = [Math.min(cxr, cxr - sx*bossW), Math.min(cyr, cyr - sy*bossW),
+                     Math.max(cxr, cxr - sx*bossW), Math.max(cyr, cyr - sy*bossW)];
+        all.push({ ccx, ccy, sx, sy, cxr, cyr, cuts: cutBoxes.flatMap((a, k) => meets(a, box) ? [k] : []) });
+      }
+    }
+    // the bosses either side of one housing, as one
+    const group = all.map((_, n) => n);
+    const root = (n) => { while (group[n] !== n) n = group[n] = group[group[n]]; return n; };
+    fromBelow.forEach((_, k) => {
+      const reached = all.flatMap((bs, n) => bs.cuts.includes(k) ? [n] : []);
+      for (const n of reached.slice(1)) group[root(n)] = root(reached[0]);
+    });
+    const arc = [];
+    for (let k = 1; k <= 6; k++) {
+      const a = k * (Math.PI/2) / 6;
+      arc.push([bossW - rIn + rIn*Math.cos(a), bossW - rIn + rIn*Math.sin(a)]);
+    }
+    const onEdge = (x, lim) => Math.abs(x) < 1e-6 || Math.abs(x - lim) < 1e-6;
+    for (let n = 0; n < all.length; n++) {
+      if (root(n) !== n) continue;
+      const { ccx, ccy, sx, sy, cxr, cyr } = all[n];
+      const members = all.filter((_, m) => root(m) === n);
+      const ks = [...new Set(members.flatMap((bs) => bs.cuts))];
+      if (!ks.length) {
         // quarter boss with rounded inner corner, oriented into the cell
         const pts = [];
         pts.push([0, 0], [bossW, 0], [bossW, bossW - rIn]);
@@ -5165,8 +5267,108 @@ function buildPiece(cfg, layout, piece, onStatus) {
         pts.push([0, bossW]);
         const world = pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v]);
         let boss = extrudePoly(world, 0, bossH);
-        if (bossFastener)
-          boss = csgSubtract(boss, movePolys(bossFastener, ccx + sx*off, ccy + sy*off));
+        /* A boss's pocket is a lottery of its own, so it is cut again (cutAgain) when it
+           comes out open. Default screws in one-cell pieces left 3 to 6 open edges on a
+           boss's underside at 22 of the 901 pitches from 34 to 60 mm that take them, and a
+           9.1 mm magnet at 39.46 mm left 12 a piece; cut again, none of those leaks. Open
+           only: a pocket that comes out closed with a face turned over (13 more of those
+           pitches) has the fold unfoldFinished lays out again, and every one of those
+           pieces came out watertight and oriented, so it is kept as it was, as is every
+           pocket that comes out closed. */
+        if (bossFastener) {
+          const pocket = movePolys(bossFastener, ccx + sx*off, ccy + sy*off);
+          const first = csgSubtract(boss, pocket);
+          boss = first.open ? cutAgain(boss, pocket, first) : first;
+        }
+        shells.push(boss);
+        continue;
+      }
+      /* In the boss's own frame u runs into the cell along x from its corner and v along
+         y, and a side on the piece's edge starts a BLOAT in. Two that meet on the cell
+         edge through their corner are mirror images across it: the pair's outline is the
+         one quarter's run back mirrored, without the edge between them. */
+      const u0 = onEdge(cxr, W) ? BLOAT : 0, v0 = onEdge(cyr, D) ? BLOAT : 0;
+      const other = members.length === 2 ? members.find((bs) => bs !== all[n]) : null;
+      const pair = other && Math.abs(other.cxr - cxr) < 1e-6 && Math.abs(other.cyr - cyr) < 1e-6 &&
+                   (other.sx === sx) !== (other.sy === sy) ? (other.sx === sx ? 'v' : 'u') : null;
+      const solids = [];
+      if (pair) {
+        const lo = pair === 'v' ? u0 : v0;
+        const run = [[lo, -bossW], ...arc.slice().reverse().map(([p, q]) => [p, -q]),
+                     [bossW, -(bossW - rIn)], [bossW, bossW - rIn], ...arc, [lo, bossW]];
+        const pts = pair === 'v' ? run : run.map(([p, q]) => [q, p]);
+        solids.push({ outline: pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v]), sites: members });
+      } else {
+        for (const bs of members) {
+          const a0 = onEdge(bs.cxr, W) ? BLOAT : 0, b0 = onEdge(bs.cyr, D) ? BLOAT : 0;
+          const pts = [[a0, b0], [bossW, b0], [bossW, bossW - rIn], ...arc, [a0, bossW]];
+          solids.push({ outline: pts.map(([u, v]) => [bs.cxr - bs.sx*u, bs.cyr - bs.sy*v]), sites: [bs] });
+        }
+      }
+      /* The pockets are cut again when they come out open, as a whole boss's are (above),
+         or with a face turned over, as the joint's cut below is: this boss is new, with no
+         bytes of its own to keep. A boss cut short of the piece's edge draws their lottery
+         at other pitches: four one-cell pieces with dovetails, whose notches reach the
+         bosses from 34 to 36.4 mm, left it at 34.64 and 34.72 mm, where the whole boss had
+         built closed.
+       *
+         A boss whose top stands level with the ceiling of a cut that reaches it came out
+         open there, the cut's ceiling and its top in one plane: a dovetail's notch is
+         2.4 mm tall, an H-clip's recess 2.3 and a wall key's 2.0, and a boss is its
+         pocket's depth and 0.8 (a magnet) or 1.0 (a screw head), up to 2.6. Level, a
+         boss left open edges at every pitch the cut reaches it: 4 to 13 a piece beside a
+         dovetail (a 1.6 mm magnet or a 1.4 mm head), 9 to 30 beside an H-clip, and 4 to
+         8, 9 to 18 and 25 to 74 beside a bowtie, a snap clip and a puzzle key in the
+         walls; beside the dovetail, 0.01 mm off the level either way, none. So such a
+         boss stands MOUNT_LEVEL over the ceiling, as one with a deeper pocket does, and a
+         pocket from above is cut from that top. mountLimits measures it from bossHeight,
+         which can only refuse sooner, and a pocket from above that the cut reaches is
+         refused at either height.
+       *
+         Level here is not rounded to the micron, as mountLimits' is: exactly MOUNT_LEVEL
+         off, a boss is raised or not as the difference comes out in floating point, a
+         2.25 mm one under an H-clip's 2.3 and a 2.45 mm one over a dovetail's 2.4 raised,
+         a 2.35 mm one under the dovetail's not. Both ways build clean. Rounded, the bosses
+         raised now at exactly MOUNT_LEVEL would not be, and their bytes would change: 2.25
+         mm beside an H-clip, 2.05 beside a key in the walls, 2.45 beside a dovetail. */
+      const level = ks.filter((k) => Math.abs(cutTops[k] - bossH) < MOUNT_LEVEL);
+      const top = level.length ? Math.max(...level.map((k) => cutTops[k])) + MOUNT_LEVEL : bossH;
+      const fastener = top === bossH ? bossFastener : fastenerCutter(cfg, top - cfg.magnetH, top + 0.5, top + 0.5);
+      for (const { outline, sites } of solids) {
+        let boss = extrudePoly(outline, 0, top);
+        if (fastener) {
+          const pockets = [].concat(...sites.map((bs) =>
+            movePolys(fastener, bs.ccx + bs.sx*off, bs.ccy + bs.sy*off)));
+          boss = cutAgain(boss, pockets, csgSubtract(boss, pockets));
+        }
+        /* cutAgain's tries are not always enough here. A wall puzzle key at 36.92 mm with
+           screws (a 2 mm hole, a 7.1 x 0.8 head), four cells square, kept a cut with a
+           face turned over in the pair of bosses by the front edge's key, of A2 and of B2,
+           after every try: three folds on the bed a piece, about one build in 3,600 of
+           bosses a joint reaches. Moved two NUDGEs the other way along y it came out
+           clean. So a cut that every try leaves open or turned is taken again moved two
+           NUDGEs the other way along one axis, then the other, then both, and the first
+           that comes out closed with nothing turned over is kept; if none does, the first
+           stands. Two NUDGEs, not more: each stands as far from the cell's walls as the
+           first, and none nearer the pockets (see mountLimits). A cut that comes out right
+           is built exactly as before. */
+        const b = flatBox(boss);
+        const cutAt = (a, c) => ks.flatMap((k) =>
+          meets(cutBoxes[k], b) ? movePolys(fromBelow[k], -a*sx*NUDGE, -c*sy*NUDGE) : []);
+        const cut = cutAt(2, 2);
+        if (cut.length) {
+          const solid = boss;
+          boss = cutAgain(solid, cut, csgSubtract(solid, cut));
+          for (const [a, c] of [[2, -2], [-2, 2], [-2, -2]]) {
+            if (!boss.open && !boss.turned) break;
+            let again;
+            try {
+              const alt = cutAt(a, c);
+              again = cutAgain(solid, alt, csgSubtract(solid, alt));
+            } catch (e) { continue; }   // the first cut stands
+            if (!again.open && !again.turned) boss = again;
+          }
+        }
         shells.push(boss);
       }
     }
@@ -5839,7 +6041,7 @@ const DEFAULTS = {
 
 if (typeof module !== 'undefined') {
   module.exports = { computeLayout, gridCells, halfStrips, pieceConnectors, keysMeet, jointsThatFit, buildPiece, buildTestTile, buildFitSample, jointKind, keyOutline, buildKey, puzzleShape, keyHalf, hclipPrm, snapTopClip, snapTopParts, snapTopPrm, keySiteOps, topPocketCup, snapTopPocket, build3mfXML, packPlates, optimizeForPlates, transformPolys, stlBinary, checkManifold, DEFAULTS, csgSubtract, csgUnion, extrudePoly, socketCutter, polysToTriangles,
-    platePad, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
+    platePad, cornerBosses, mountLimits, pieceColumn, compositions, PLATE_RANGES, PLATE_MAX_CELLS, MOUNT_SKIN,
     connClrCeiling, fitClearances, PRINT_LAYER,
     // shared mesh primitives — also used by the bins tool
     makePoly, triangulateRing, earTriangulate, roundedSquareRing, roundedRectRing, clampZ, profilePrism,
@@ -7683,7 +7885,12 @@ const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'n
 /* Why `field` stops where it does. A joint's cut stops it in one of the ways mountLimits'
    `joint` names: a pocket from beneath as deep as a dovetail's notch, a magnet or screw
    that would reach the tab in one, a pocket any wider coming too near the notch's edge,
-   or any other hole breaking into the cut. */
+   or any other hole breaking into the cut. The hint about keys put in from above is not
+   given with corner pockets: there is no solid floor under them, and such a key's cup
+   stands into a boss's pocket (#75). Nor where the bosses are buried in the floor a
+   joint needs (cornerBosses): a key put in from above, in the walls, needs none, so
+   taking the hint would stand them up again, and the cup in their pockets. Only a floor
+   asked for (bottomPad) keeps them buried whatever the joint. */
 const mountWhy = (opens, field) => {
   const joint = mount().joint[field];
   const cuts = cutsNamed();
@@ -7696,16 +7903,18 @@ const mountWhy = (opens, field) => {
       : joint === 'near' ? `a pocket any wider would come too near the edge of the ${cuts} to cut cleanly`
       : joint ? `a hole has to stay out of the ${cuts}`
       : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
-      : state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
+      : cornerBosses(state) ? 'a pocket has to stay inside its corner boss'
       : opens ? 'a cut open to the socket has to stay on the socket floor'
       : 'a pocket under the floor has to stay inside its cell') +
-    (joint && KEYED.includes(state.connector) && !keyFromTop()
+    (joint && KEYED.includes(state.connector) && !keyFromTop() &&
+     !(state.baseMode === 'bosses' && !(state.bottomPad > 0))
       ? `; keys ${keyInWall() ? '' : 'housed inside the walls and '}put in from above ` +
         'keep out of the solid floor under these pockets' : '');
 };
 // why a size under the largest is refused (mountLimits' `gaps`)
 const nearWhy = () => `${atPitch()} — its pocket would come too near the edge of the ${cutsNamed()} to cut cleanly`;
-const bossDepth = () => state.baseMode === 'bosses'
+// corner bosses only where they stand: over a floor the pockets are the floor's (cornerBosses)
+const bossDepth = () => cornerBosses(state)
   ? 'with corner pockets — a boss is 2.6 mm tall, while the solid floor grows to suit' : '';
 const LIMITS = {
   drawerW: { min: 1, max: 2000, label: 'Drawer width' },
@@ -8248,6 +8457,13 @@ function warningsList() {
       state.connector === 'snap' ? 'the snap clips' : 'the keys';
     out.push({ t: `This joint adds a ${Math.max(state.bottomPad, padV).toFixed(1)} mm solid floor to house ${what}. Prefer no floor? Pick a keyed joint and set Key housing to "Inside the walls".` });
   }
+  /* Corner pockets over a floor. The bosses would stand inside it, their pockets sealed or
+     cut short (#70), so core.js builds the plate as a solid floor builds it (cornerBosses),
+     and says so here: the menu still reads "Corner pockets only". */
+  if (state.baseMode === 'bosses' && (state.magnets || state.screws) && !cornerBosses(state))
+    out.push({ t: `Corner pockets need an open underside, and ${jointFloor(state) > 0
+      ? 'this joint is housed in a floor' : 'Extra floor closes it'}, so the plate is built with a solid floor and the ${
+      state.magnets && state.screws ? 'magnet and screw' : state.magnets ? 'magnet' : 'screw'} pockets are cut into it.` });
   if (keyInWall() &&
       layout.seams.some(s => s.junctions.some(j => Math.abs(j - Math.round(j)) > 0.25)))
     out.push({ t: 'One seam overlaps by a single cell — wall-housed keys need a wall junction, so that seam gets no connector. The neighbouring joints still hold the assembly.' });

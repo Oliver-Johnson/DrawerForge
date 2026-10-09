@@ -2204,6 +2204,190 @@ console.log('\nthe other limits, built at their ends:');
   bad += open.length + (holds ? 0 : 1);
 }
 
+/* Corner bosses beside a joint cut from beneath (#70). A boss stands where four cells
+   meet, and so does a wall key's recess, an H-clip's, and the notch a dovetail's or a
+   puzzle's tab goes into from the next piece. The joint was cut from the cells and not
+   from the bosses, so they stood in the whole of each housing and nothing could go in,
+   with Download on: a housing filled in is watertight, and the bosses' own edges were
+   there already. And a joint that houses itself in a floor, keys at 2.8 mm and the
+   puzzle's lobes at 2.6, stood that floor round the 2.6 mm bosses and sealed their
+   pockets in it, as an extra floor did.
+ *
+   So each is built two pieces side by side at 42 mm, with magnets from beneath, from
+   above and screws, and read along vertical lines 0.3 mm apart. The housing is what the
+   joint takes out of the plate without its mountings (solid with no joint, empty with
+   one), and none of it may be solid with the bosses on, and solid 5 microns round: a
+   boss's cut stands two NUDGEs off the cell's (see buildPiece), and the sliver of boss
+   that leaves in a housing, 3.4 microns thick, is not a fill. Every pocket has to be empty
+   from its mouth to its floor. And the edges two bosses share where they meet, used four
+   times (quarantined above), may not be more than the same plate has with no joint. */
+console.log('\ncorner bosses beside a joint cut from beneath:');
+{
+  // along a vertical line, the faces above a height, each counted by which way it faces,
+  // add up to how many shells that height is inside
+  const columns = (polys) => {
+    const cells = new Map(), key = (i, j) => i * 100003 + j;
+    for (const t of G.polysToTriangles(polys)) {
+      const xs = t.map((v) => v[0]), ys = t.map((v) => v[1]);
+      for (let i = Math.floor(Math.min(...xs)); i <= Math.floor(Math.max(...xs)); i++)
+        for (let j = Math.floor(Math.min(...ys)); j <= Math.floor(Math.max(...ys)); j++) {
+          if (!cells.has(key(i, j))) cells.set(key(i, j), []);
+          cells.get(key(i, j)).push(t);
+        }
+    }
+    return (x, y) => {
+      const cross = [];
+      for (const [a, b, c] of cells.get(key(Math.floor(x), Math.floor(y))) || []) {
+        const n = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        if (Math.abs(n) < 1e-12) continue;
+        const d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+        const l1 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / d;
+        const l2 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / d;
+        if (l1 < 0 || l2 < 0 || l1 + l2 > 1) continue;
+        cross.push([l1 * a[2] + l2 * b[2] + (1 - l1 - l2) * c[2], Math.sign(n)]);
+      }
+      return (z) => cross.reduce((w, [zc, s]) => zc > z ? w + s : w, 0);
+    };
+  };
+  const h = 0.3, dz = 0.1;
+  const zs = Array.from({ length: 40 }, (_, k) => (k + 0.5) * dz);
+  const at = { pitch: 42, drawerW: 168, drawerD: 84, bedW: 100, bedD: 400 };
+  const JOINTS = [
+    ['keys in the floor', { connector: 'bowtie' }],
+    ['keys in the wall', { connector: 'bowtie', keyMount: 'wall' }],
+    ['H-clip', { connector: 'hclip' }],
+    ['dovetail', { connector: 'dovetail' }],
+    ['puzzle tabs', { connector: 'puzzle' }],
+    ['extra floor, no joint', { connector: 'none', bottomPad: 1 }],
+  ];
+  const MOUNTS = [
+    ['magnets below', { magnets: true }],
+    ['magnets above', { magnets: true, magnetSide: 'top' }],
+    ['screws', { screws: true }],
+  ];
+  for (const [jn, j] of JOINTS)
+    for (const [mn, m] of MOUNTS) {
+      const r = buildAll({ ...at, baseMode: 'bosses', ...j, ...m });
+      const cfg = r.cfg, pad = G.platePad(cfg);
+      const plain = buildAll({ ...at, baseMode: 'bosses', ...j, ...m, connector: 'none', bottomPad: 0 });
+      const without = buildAll({ ...at, ...j, bottomPad: pad });
+      const solidBefore = buildAll({ ...at, ...j, connector: 'none', bottomPad: pad });
+      let housing = 0, filled = 0, pts = 0, buried = 0;
+      r.pieces.forEach((polys, pi) => {
+        const pc = r.L.pieces[pi];
+        const A = columns(polys), B = columns(without.pieces[pi]), C = columns(solidBefore.pieces[pi]);
+        if (cfg.connector !== 'none') {
+          const W = pc.mL + pc.nx * cfg.pitch + pc.mR, D = pc.mF + pc.ny * cfg.pitch + pc.mB;
+          for (let x = h / 2 + 0.000731; x < W; x += h)
+            for (let y = h / 2 + 0.000419; y < D; y += h) {
+              const a = A(x, y), b = B(x, y), c = C(x, y);
+              let round = null;
+              for (const z of zs)
+                if (c(z) >= 1 && b(z) <= 0) {
+                  housing++;
+                  if (a(z) < 1) continue;
+                  round = round || [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([u, v]) => A(x + u * 0.005, y + v * 0.005));
+                  if (round.every((f) => f(z) >= 1)) filled++;
+                }
+            }
+        }
+        // each pocket's sides and middle, from its mouth to its floor: a standing boss's
+        // top is its own height, and a floor's the floor's
+        const top = G.cornerBosses(cfg) ? Math.min(2.6, Math.max(cfg.magnets ? cfg.magnetH + 0.8 : 0,
+          cfg.screws ? cfg.screwHeadDepth + 1 : 0)) : pad;
+        const spans = [];
+        if (cfg.magnets) spans.push(cfg.magnetSide === 'top'
+          ? [cfg.magnetD / 2 - 0.3, top - cfg.magnetH, top] : [cfg.magnetD / 2 - 0.3, 0, cfg.magnetH]);
+        if (cfg.screws) spans.push([cfg.screwHeadD / 2 - 0.3, 0, cfg.screwHeadDepth], [cfg.screwHoleD / 2 - 0.3, 0, top]);
+        for (let i = 0; i < pc.nx; i++) for (let k = 0; k < pc.ny; k++)
+          for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+            const px = pc.mL + (i + 0.5) * cfg.pitch + sx * cfg.holeOffset;
+            const py = pc.mF + (k + 0.5) * cfg.pitch + sy * cfg.holeOffset;
+            for (const [rad, z0, z1] of spans)
+              for (let q = 0; q < 8; q++) for (const rr of [0, rad / 2, rad]) {
+                const col = A(px + rr * Math.cos(q * Math.PI / 4) + 0.000731, py + rr * Math.sin(q * Math.PI / 4) + 0.000419);
+                for (let z = z0 + 0.1; z <= z1 - 0.1 + 1e-9; z += 0.2) { pts++; if (col(z) >= 1) buried++; }
+              }
+          }
+      });
+      const mm3 = (n) => (n * h * h * dz).toFixed(1);
+      const good = !filled && !buried && !r.open && r.bad <= plain.bad && (cfg.connector === 'none' || housing > 0);
+      console.log(`  ${`${jn}, ${mn}`.padEnd(36)} ` +
+                  (cfg.connector === 'none' ? 'no housing' : !housing ? 'NO HOUSING CUT'
+                    : `housing ${mm3(housing)} mm³, ${filled ? `${mm3(filled)} mm³ OF IT FILLED` : 'none filled'}`) +
+                  `; ${buried ? `${buried} of ${pts} pocket points SOLID` : `pockets open (${pts} points)`}; ` +
+                  `${leakText(r)}${r.bad ? `, ${plain.bad} with no joint` : ''}${good ? '' : '   FAIL'}`);
+      if (!good) bad++;
+    }
+  /* A boss a housing reaches stops short of the piece's edge, and its pockets are a
+     lottery of their own: four one-cell pieces with dovetails, whose notches reach the
+     bosses from 34 to 36.4 mm, left 3 open edges under a boss with default screws at
+     these two pitches, where the whole boss had built closed, until the pockets were cut
+     again where they come out open (buildPiece). */
+  for (const p of [34.64, 34.72]) {
+    const r = buildAll({ pitch: p, drawerW: 2 * p, drawerD: 2 * p, bedW: p + 5, bedD: p + 5,
+                         baseMode: 'bosses', screws: true });
+    console.log(`  ${`dovetail, one-cell pieces at ${p} mm, screws`.padEnd(36)} ${r.L.pieces.length} pieces; ${leakText(r)}` +
+                `${r.bad ? '   FAIL' : ''}`);
+    if (r.bad) bad++;
+  }
+  /* A boss no housing reaches has its pockets cut again too when they come out open: default
+     screws in a one-cell drawer left 6 open edges under a boss at 37.7 mm (one of 22
+     pitches from 34 to 60 mm), and a 9.1 mm magnet at 39.46 mm 12 a piece, with no joint. */
+  for (const [name, over] of [
+    ['one cell at 37.7 mm, screws', { pitch: 37.7, drawerW: 37.7, drawerD: 37.7, bedW: 57.7, bedD: 57.7, screws: true }],
+    ['no joint at 39.46 mm, 9.1 magnet', { pitch: 39.46, drawerW: 157.84, drawerD: 78.92, bedW: 94.92, bedD: 400,
+                                           magnets: true, magnetD: 9.1 }]]) {
+    const r = buildAll({ ...over, baseMode: 'bosses', connector: 'none' });
+    console.log(`  ${name.padEnd(36)} ${r.L.pieces.length} piece${r.L.pieces.length > 1 ? 's' : ''}; ${leakText(r)}` +
+                `${r.open ? '   FAIL' : ''}`);
+    if (r.open) bad++;
+  }
+  /* And a boss's cut moved one NUDGE could stand where the cell's stands, when one or the
+     other was taken again (cutAgain): a wall puzzle key at 36.13 mm with screws and a margin
+     had 73 edges used four times in a piece, against 26 with no joint. */
+  {
+    const p = 36.13, at = { pitch: p, drawerW: 4 * p + 7.3, drawerD: 2 * p + 5.1, mLeft: 3.1, mRight: 4.2, mFront: 2.5,
+      mBack: 2.6, bedW: 2 * p + 16, bedD: 400, baseMode: 'bosses', screws: true };
+    const r = buildAll({ ...at, connector: 'puzzlekey', keyMount: 'wall', keyInsert: 'bottom' });
+    const plain = buildAll({ ...at, connector: 'none' });
+    const good = !r.open && r.bad <= plain.bad;
+    console.log(`  ${'wall puzzle keys at 36.13 mm, screws'.padEnd(36)} ${leakText(r)}, ${plain.bad} with no joint${good ? '' : '   FAIL'}`);
+    if (!good) bad++;
+  }
+  /* A boss is its pocket's depth and 0.8 (a magnet) or 1.0 (a screw head) tall, and one
+     whose top stood level with the ceiling of the cut that reaches it came out open there:
+     a dovetail's notch is 2.4 mm tall, an H-clip's recess 2.3 and a wall key's 2.0. These
+     left 4 to 13 open edges a piece until such a boss stood MOUNT_LEVEL over the ceiling
+     (buildPiece). */
+  for (const [name, over] of [
+    ['dovetail at 36.13 mm, 1.6 mm magnet', { pitch: 36.13, connector: 'dovetail', magnets: true, magnetH: 1.6 }],
+    ['dovetail at 34.04 mm, 1.4 mm head', { pitch: 34.04, connector: 'dovetail', screws: true, screwHeadD: 4, screwHeadDepth: 1.4 }],
+    ['H-clip at 33.5 mm, 1.5 mm magnet', { pitch: 33.5, connector: 'hclip', magnets: true, magnetD: 4, magnetH: 1.5 }],
+    ['wall bowtie at 36.13 mm, 1 mm head', { pitch: 36.13, connector: 'bowtie', keyMount: 'wall', screws: true, screwHeadDepth: 1 }]]) {
+    const p = over.pitch;
+    const r = buildAll({ drawerW: 4 * p, drawerD: 2 * p, bedW: 2 * p + 16, bedD: 400, baseMode: 'bosses', ...over });
+    console.log(`  ${name.padEnd(36)} ${leakText(r)}${r.open ? '   FAIL' : ''}`);
+    if (r.open) bad++;
+  }
+  /* And a boss's cut can come out with a face turned over after every one of cutAgain's
+     tries: a wall puzzle key at 36.92 mm with screws (a 2 mm hole, a 7.1 x 0.8 head), four
+     2 x 2 pieces, left three folds on the bed in two of them, by the front edge's key, with
+     no edge open, until such a cut was taken again moved the other way (buildPiece). So
+     folds as well, which an edge count cannot see. */
+  {
+    const p = 36.92;
+    const r = buildAll({ pitch: p, drawerW: 4 * p, drawerD: 4 * p, bedW: 2 * p + 16, bedD: 2 * p + 16,
+                         connector: 'puzzlekey', keyMount: 'wall', keyInsert: 'bottom', baseMode: 'bosses',
+                         screws: true, screwHoleD: 2, screwHeadD: 7.1, screwHeadDepth: 0.8 });
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    const good = !r.open && !folds;
+    console.log(`  ${'wall puzzle keys at 36.92 mm, screws'.padEnd(36)} ${r.L.pieces.length} pieces; ${leakText(r)}` +
+                `${folds ? `, ${folds} FOLDS` : ''}${good ? '' : '   FAIL'}`);
+    if (!good) bad++;
+  }
+}
+
 /* The fit clearance at its ceiling, for every joint and every pitch band.
  *
  * connClrCeiling's answer depends on the joint, which way its key goes in and the pitch,
