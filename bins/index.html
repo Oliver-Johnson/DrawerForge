@@ -9759,12 +9759,15 @@ function fingerSlotPlan(cfg, divs) {
    for still took the shelf rule off the plates along, which the field for them is held
    by, on bins built with no plates at all. The holes are the ones built, laid out with
    the lip as asked: a bin counted without its lip's rule keeps it for them (lipNotched).
-   But for a few bins: with a back slot over a shelf and a slot in a lowered front wall,
-   whether the holes take the shelf's room can turn on the dividers they would leave
-   (fingerSlots' `lost`), which a plan settled without any does not have. It can then
-   find the shelf kept and no holes where the bin is built with them, and the wall is
-   settled as with none, as it was before; that only moves the along field's max, on a
-   bin built with no plates. */
+   But for a few bins: with a back slot over a shelf, whether the holes take the shelf's
+   room can turn on whether the dividers they would leave allow a slot in another wall,
+   mostly a lowered front (fingerSlots' `lost`), which a plan settled without any does
+   not know. It can then find the shelf kept and no holes where the bin is built with
+   them, and the wall is settled as with none, as it was before; that only moves the
+   along field's max, on a bin built with no plates. Settled with the dividers it is
+   asked to count, it could err the other way, and find holes the bin is not built with,
+   which moves the plates it builds: a wall with none between its ends has room for a
+   slot wherever one with dividers has, so this errs only the way it does. */
 function fingerWall(cfg, k, divX) {
   if (!(cfg.fingerSlots && cfg.fingerSlots[k])) return null;
   const c = halfSized(withWall(Object.assign({}, BIN_DEFAULTS, cfg)));
