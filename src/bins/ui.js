@@ -184,6 +184,8 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
                             and not past the most one layout builds (holdHoles) */
                          insert: insertHeld.has(b) ? 0 : b.insert, insertDepth: b.insertDepth,
                          holeClr: state.holeClr,
+                         // a dip in the top of each wall ticked, one per compartment
+                         fingerSlots: b.fingerSlots,
                          arcSegs: state.arcSegs });
 /* The dividers a bin is built with: removable ones no more than leave every slot room
    for its plate at the page's plate and clearance and keep the end ones out of the rounded
@@ -191,8 +193,13 @@ const binCfg = (b) => ({ u: b.u, v: b.v, hUnits: b.hUnits, wall: b.wall,
    The plates, the names and Checks all go by these, so they say what is built. None on a
    bin with holes across its floor, which the holes divide, as buildBin builds it
    (binDividers, which asks the holes as holesIn does), with the new-bin settings at a
-   1x1 as these are. */
-const builtDivs = (b) => binDividers(Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 }));
+   1x1 as these are. A bin with finger slots ticked asks the holes of its kept plan
+   (insertPlanOf), as binDividers would ask them of the slots all over again. */
+const builtDivs = (b) => {
+  const c = Object.assign(binCfg(b), { u: b.u || 1, v: b.v || 1 });
+  if (!(b.u && b.v && fingerPlan(b))) return binDividers(c);
+  return +c.insert > 0 && insertPlanOf(b).n ? { divX: 0, divY: 0 } : dividersBuilt(c);
+};
 // and how many compartments they make, or 0 for a bin with none
 const compartments = (b) => {
   const d = builtDivs(b);
@@ -200,6 +207,65 @@ const compartments = (b) => {
 };
 const edgeSig = (b) => EDGES.map((k) => (b.edges && b.edges[k] !== undefined ? b.edges[k] : 1)).join(',');
 const allFullEdges = (b) => EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
+/* ---------- finger slots ----------------------------------------------------
+   A dip in the top of each wall ticked, one per compartment (fingerSlots in bin.js),
+   which takes the stacking lip away as a lowered wall does. bin.js decides where each
+   goes and what makes way: fingerSlotPlan, worked out without building anything. A bin
+   that asks for none is answered without asking it, and is the bin it always was. */
+const FINGER_WALLS = { f: 'front', b: 'back', l: 'left', r: 'right' };
+const fingersAsked = (b) => !b.solid && !!b.fingerSlots && FINGER_SIDES.some((k) => b.fingerSlots[k]);
+/* Kept by the settings that asked it: a refresh asks it of each bin several times over,
+   for its key, its name, its lip, Checks and its weight, and 63 slotted bins spent 19 ms
+   a refresh on it. fingerSlotPlan is pure, so the same settings have the same answer,
+   and nothing here changes one. */
+const fingerPlans = new Map();
+const fingerPlan = (b) => {
+  if (!fingersAsked(b)) return null;
+  const cfg = binCfg(b), key = JSON.stringify(cfg);
+  let p = fingerPlans.get(key);
+  if (!p) {
+    if (fingerPlans.size >= 500) fingerPlans.clear();
+    fingerPlans.set(key, (p = fingerSlotPlan(cfg)));
+  }
+  return p;
+};
+// the walls that really get one, 'fb', or '' for none
+const fingersBuilt = (b) => { const p = fingerPlan(b); return p ? p.built : ''; };
+// "front", "front and back", "front, left and right"
+const wallList = (ks) => {
+  const n = [...ks].map((k) => FINGER_WALLS[k]);
+  return n.length < 2 ? n.join('') : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
+};
+// "2 finger slots, front and back", for the rows and the README, or ''
+const fingerText = (b) => {
+  const p = fingerPlan(b);
+  return p && p.n ? `${plural(p.n, 'finger slot')}, ${wallList(p.built)}` : '';
+};
+/* The scoop and the label shelf a bin is built with, for its key and its name, which go
+   by what it is built with: two bins built alike are one part. A front slot holds the
+   scoop under it, so 15 and 25 mm asked for are both built at what it is held to; a back
+   slot leaves the shelf off, so a shelf asked for is no shelf, unless the holes across
+   the floor kept clear of it all the same (holesGaveWay): then how deep it would have
+   been is where they are, and the bin is keyed by that, the depth it is laid out to. The
+   depth asked for is not it: on a bin too short for a 20 mm shelf it is laid out 15 deep,
+   and 14 with a note raised on it, which the slot keeps from printing, so two bins asking
+   for 20 kept their holes a millimetre apart under one key. A bin with no slots is keyed
+   and named by what it asks for, as it always was. Both read the bin's slot plan
+   (fingerPlan), the one buildBin builds it from and binVolume weighs it by: the scoop a
+   front slot holds is the radius scoopBuilt gives both, with removable plates too, whose
+   own cap is the higher. */
+const scoopAsBuilt = (b) => {
+  const p = fingerPlan(b);
+  return p && p.scoop !== null ? +p.scoopNow.toFixed(3) : b.scoop;
+};
+const labelAsBuilt = (b) => {
+  const p = fingerPlan(b);
+  if (!(p && p.shelfOff)) return b.label;
+  return p.holesGaveWay && holesIn(b) ? +p.floor.shelf.depth.toFixed(3) : 0;
+};
+/* Whether the bin has its stacking lip: not a solid block, nor one with a wall lowered
+   or a finger slot in one. The same test buildBin makes. */
+const hasLip = (b) => !b.solid && allFullEdges(b) && !fingersBuilt(b);
 /* Whether "every cell" puts more holes in this bin than "corners" does: not on a 1x1,
    whose four sites are all corners. Where it does not, the two are one part. */
 const everyMatters = (b) => !!b.holesEvery && (b.magnets || b.screws) &&
@@ -223,11 +289,40 @@ const holesText = (b) => {
    or none that fit. Worked out without building anything, so it is cheap to ask. */
 const holesIn = (b) => {
   if (!(+b.insert > 0) || b.solid) return null;
-  const h = insertPlan(binCfg(b));
+  const h = insertPlanOf(b);
   return h.n ? h : null;
 };
 // "16 holes for AA batteries", for the rows and the README, or ''
 const insertText = (b) => { const h = holesIn(b); return h ? `${plural(h.n, 'hole')} for ${h.p.items}` : ''; };
+/* insertPlan's answer for a bin, taken from its kept finger slot plan where it has one
+   (fingerPlan): with slots ticked insertPlan works them all out again to say where the
+   holes go, some 25 times a bin a refresh, and a refresh of 63 bins with a back slot over
+   AA cells took about 40 ms where it takes 10. */
+function insertPlanOf(b) {
+  const p = fingerPlan(b);
+  return p && p.floor ? p.floor.holes : insertPlan(binCfg(b));
+}
+/* Why the holes across a bin's floor keep clear of where its label shelf would be, when a
+   finger slot in its back wall takes the shelf away (holesGaveWay in bin.js), or null when
+   they do not: spread into the shelf's room they would come to more than one bin is built
+   with, or stand too high for a slot. `its` is how the bin is spoken of: 'its' in Checks,
+   'their' for several bins at once, 'the' in the hint. `room` is why, said after "kept
+   clear of where the shelf would be"; `instead` is what the bin has asked for no shelf,
+   for a slot that would go. */
+function keptClearSay(b, its) {
+  const g = (fingerPlan(b) || {}).holesGaveWay;
+  if (!g) return null;
+  if (g.why === 'many')
+    return { many: true, count: g.without.count,
+             room: `since spread into that room there would be ${g.without.count} holes, more than the ` +
+               `${HOLES_MAX} one bin is built with` };
+  const more = g.walls.length > 1 || its === 'their', s = more ? 's' : '';
+  const walls = `${its} ${wallList(g.walls)} wall${s}`;
+  // the hint has just named the back wall's slot: that one is "that slot"
+  return { many: false, slots: g.walls === 'b' ? 'that slot' : `the finger slot${s} in ${walls}`,
+           room: `to leave room for the finger slot${s} in ${walls}`,
+           instead: `${plural(g.without.n, 'hole')} and no finger slot${s} in ${walls}` };
+}
 /* A bin with holes is a part of its own (typeKey): which kind, the hole as built (the
    page's clearance is in it, as the rails' sizes are in a railed bin's key) and how deep.
    Its dividers and scoop are not built, so they leave its key; a bin asked for holes that
@@ -252,19 +347,34 @@ function insertHintSay(b) {
         `builds, so this bin is built without its ${plural(n, 'hole')}.`,
     'Set some of the others to Nothing, or print some bins as a layout of their own.'];
   }
-  const h = insertPlan(binCfg(b));
+  const h = insertPlanOf(b);
   if (h.why === 'off' || h.why === 'solid') return ['', ''];
   const p = h.p;
   if (h.why === 'carved') return ['Holes need a rectangle, so a carved shape is built without them.', ''];
   const size = `Each hole is ${+h.d.toFixed(2)} mm ${p.shape === 'hex' ? 'across the flats' : 'across'}, ` +
     `the largest ${p.items} with ${+(h.d - p.size).toFixed(2)} mm to spare.`;
-  const under = h.under === 'shelf' ? 'the label shelf' : 'the rim';
+  /* A finger slot in the back wall takes the shelf away, and the holes spread into its
+     room unless that is more than one bin is built with or stands them too high for a
+     slot: then they keep clear of where it would be (holesGaveWay), and are said to, with
+     what the bin would have with no shelf asked for. Kept for being too many, the bin has
+     the holes it had with the shelf; kept for standing too high, it has none, since any
+     the shelf's layout had would stand too high as well. Never too short for them: a bin
+     tall enough for a back slot has room for holes under the shelf. */
+  const gave = keptClearSay(b, 'the');
+  const why = gave ? 'The finger slot in the back wall takes the label shelf away, but spread into its room ' +
+    (gave.many ? `there would be ${gave.count} holes, more than the ${HOLES_MAX} one bin is built with.`
+      : `the holes would stand too high for ${gave.slots}.`) : '';
+  const instead = gave && !gave.many ? ` Asked for no label shelf, this bin has ${gave.instead}.` : '';
+  const under = h.under === 'shelf' ? (gave ? 'where the label shelf would be' : 'the label shelf') : 'the rim';
   if (h.why === 'short')
     return [`This bin has room for holes ${h.room > 0.05 ? `only ${mm(h.room)} mm deep` : 'no depth at all'} ` +
             `under ${under}, and they need ${S.minDepth} mm, so it has none.`,
             `A taller bin has room for them${h.shelf ? ', and so has one without a label shelf' : ''}.`];
   if (h.why === 'none')
-    return h.byShelf
+    return gave
+      ? [`The holes keep clear of where the label shelf would be, ${gave.room}, and in front of it there is ` +
+         `no room for even one hole for ${p.items}.`, `${why}${instead} ${size}`]
+      : h.byShelf
       ? [`The label shelf leaves no room in front of it for even one hole for ${p.items}.`,
          `A shallower shelf, or none, has room for them. ${size}`]
       : [`Not one hole for ${p.items} fits in a bin this size.`, size];
@@ -281,6 +391,7 @@ function insertHintSay(b) {
   const off = [b.divX || b.divY ? 'Dividers' : '', b.scoop ? 'the scoop' : ''].filter(Boolean);
   const rest = [
     size,
+    gave ? `They keep clear of where the label shelf would be: ${why[0].toLowerCase()}${why.slice(1)}` : '',
     h.over > 1e-9 && !(h.above > 1e-9) ? `They stop ${mm(-h.above)} mm under the rim, and a bin stacked ` +
       `on this one comes down ${S.seat} mm into it.` : '',
     h.capped ? `${h.asked ? `${mm(want)} mm` : `A third of their length, ${mm(want)} mm,`} is more than ` +
@@ -449,6 +560,7 @@ function noteHintSay(b) {
     noshelf: 'Give it a label shelf above, and the note prints raised on it.',
     carved: 'A carved shape has no label shelf, so the note does not print.',
     back: 'With the back wall lowered there is no label shelf, so the note does not print.',
+    slot: 'A finger slot in the back wall takes the label shelf\u2019s place, so the note does not print.',
     solid: 'A solid block has no label shelf, so the note does not print.',
   }[s.why] || '', ''];
 }
@@ -463,8 +575,9 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
    divKey(b) +
    (allFullEdges(b) ? '' : `-e${edgeSig(b)}`) +
    /* A solid block has no cavity for a scoop or a shelf (buildBin builds neither), so
-      a solid with one is the same part as a solid without. */
-   (b.scoop && !holesIn(b) ? `-s${b.scoop}` : '') + (b.label ? `-L${b.label}` : '')) +
+      a solid with one is the same part as a solid without. Both as built: a finger slot
+      can hold the one and take the other away. */
+   (scoopAsBuilt(b) && !holesIn(b) ? `-s${scoopAsBuilt(b)}` : '') + (labelAsBuilt(b) ? `-L${labelAsBuilt(b)}` : '')) +
   // a mask covering every cell (a hand-written link can say so) is no shape at all
   (maskBits(b) ? `-c${maskBits(b)}` : '') +
   /* A holed bin is a different part from the plain one, and from one holed for another
@@ -473,7 +586,10 @@ const typeKey = (b) => `${b.u}x${b.v}x${b.hUnits}` +
      (feetHolesOff), so it is the plain part and is named as one. */
   (holesBuilt(b) ? `-h${feetBits({ magnets: b.magnets, screws: b.screws })}` +
     (everyMatters(b) ? 'e' : '') + (b.magnets ? `m${state.magnetD}.${state.magnetH}` : '') : '') +
-  noteKey(b) + insertKey(b);
+  noteKey(b) + insertKey(b) +
+  /* The walls with finger slots, as built: one asked for slots it does not get is the
+     plain part, and keyed as one, so its key is the one it always had. */
+  (fingersBuilt(b) ? `-slot-${fingersBuilt(b)}` : '');
 
 /* ---------- half cells -----------------------------------------------------
    A bin's position and size are counted in cells, and since half-size bins they may end
@@ -1080,6 +1196,7 @@ function startScratch() {
               scoop: state.scoop, label: state.label, labelMode: state.labelMode, note: '',
               magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
               insert: state.insert, insertDepth: state.insertDepth,
+              fingerSlots: Object.assign({}, state.fingerSlots),
               edges: Object.assign({}, state.edges) };
   sUndoStack.length = 0; sRedoStack.length = 0;
   focused = true; carving = false;
@@ -1179,13 +1296,19 @@ function setBinLimits(u, v, hUnits) {
    the plate and the clearance, and as go in past the lip and the shelf (railedMost). The
    ones along also as many as keep enough plate where they cross the ones across, or stand
    on the scoop, and leave the lip its corners (dividersBuilt), so `cfg` carries the count
-   across when this is asked for the count along. */
+   across when this is asked for the count along. A bin with a finger slot built in it has
+   no lip, and is counted without it (countedAs), up to as many as still leave a slot
+   built: more plates would leave it none, and its lip back. Whether it has one is settled
+   between the plates both ways, so `cfg` carries the count along when this is asked for
+   the count across, too. */
 function setDividerLimit(id, cfg) {
   const axis = id === 'divX' ? 'x' : 'y';
   let most = mostDividers(axis === 'x' ? cfg.u : cfg.v, cfg.wall);
   if (cfg.divRemovable) {
-    most = Math.min(most, railedMost(cfg, axis));
-    if (axis === 'y') most = dividersBuilt(Object.assign({}, cfg, { divY: most })).divY;
+    const by = countedAs(cfg);
+    most = Math.min(most, railedMost(by, axis));
+    if (axis === 'y' || by.lipTaken)
+      most = dividersBuilt(Object.assign({}, cfg, { [id]: most }))[id];
   }
   $(id).max = most;
 }
@@ -1254,6 +1377,8 @@ function readControls() {
                 l: $('lidL').checked, r: $('lidR').checked },
     edges: { f: parseFloat($('edgeF').value), b: parseFloat($('edgeB').value),
              l: parseFloat($('edgeL').value), r: parseFloat($('edgeR').value) },
+    fingerSlots: { f: $('fingerF').checked, b: $('fingerB').checked,
+                   l: $('fingerL').checked, r: $('fingerR').checked },
   };
   /* Deliberately not part of `t`. Whether a bin has been printed is a fact about the
      world, not a design setting, and `t` is the settings object — bulk-assigned to the
@@ -1341,7 +1466,12 @@ function readControls() {
   // the smallest bin's footprint, with what this pass gives every bin it applies to
   const lim = binCfg(Object.assign({}, t, { u: minU, v: minV, cells: null, divX: 0, divY: 0,
                                             divRemovable: t.divRemovable && !!own }));
-  setDividerLimit('divX', lim);
+  /* The count across is held with the plates along the field asks for, as the count along
+     is with the ones across: plates along can leave a side wall no room for its finger
+     slot, and the bin then has its lip, which holds the plates across to fewer. Held as
+     if there were none, a 1x1x3 with a 0.4 mm wall, a left slot and one plate along was
+     let ask for 11 across and built 10. */
+  setDividerLimit('divX', Object.assign({}, lim, { divY: divCount('divY', mostDividers(minV, t.wall)) }));
   t.divX = divCount('divX', mostDividers(minU, t.wall));
   setDividerLimit('divY', Object.assign(lim, { divX: t.divX }));
   t.divY = divCount('divY', mostDividers(minV, t.wall));
@@ -1371,7 +1501,8 @@ function readControls() {
        its mask whichever kind of bin it is. */
     const nu = t.u, nv = t.v; delete t.u; delete t.v;
     noteSettingsEdit([scratch], t, nu, nv);
-    Object.assign(scratch, t, { edges: Object.assign({}, t.edges) });
+    Object.assign(scratch, t, { edges: Object.assign({}, t.edges),
+                                fingerSlots: Object.assign({}, t.fingerSlots) });
     if (nu !== undefined && (nu !== scratch.u || nv !== scratch.v)) {
       if (dropsShape(scratch, nu, nv)) sizeNote = SHAPE_DROPPED;
       setFootprint(scratch, nu, nv);
@@ -1381,7 +1512,8 @@ function readControls() {
        carve mask, so it goes through setFootprint. */
     const nu = t.u, nv = t.v; delete t.u; delete t.v;
     noteSettingsEdit(sel.map((i) => B()[i]), t, nu, nv);
-    for (const i of sel) Object.assign(B()[i], t, { edges: Object.assign({}, t.edges) });
+    for (const i of sel) Object.assign(B()[i], t, { edges: Object.assign({}, t.edges),
+                                                    fingerSlots: Object.assign({}, t.fingerSlots) });
     if (sel.length === 1 && nu !== undefined && (nu !== b.u || nv !== b.v)) {
       if (dropsShape(b, nu, nv)) sizeNote = SHAPE_DROPPED;
       setFootprint(b, nu, nv);
@@ -1401,10 +1533,14 @@ function readControls() {
   const lipOk = EDGES.every((k) => !t.edges || !isFinite(t.edges[k]) || t.edges[k] >= 1);
   const target = scratch || (sel.length ? B()[selected] : null);
   const carvedNow = !!target && isCarved(target);
+  /* A finger slot takes the lip as well, and has its own sentence: the one about a
+     lowered wall would send someone to the wall menus, which are all at full height. */
+  const slotted = lipOk && !t.solid && !!fingersBuilt(target || Object.assign({}, state, t));
   $('lidRow').style.display = t.solid ? 'none' : '';
   $('lidNoLip').style.display = !t.solid && !lipOk && $('lid').checked ? '' : 'none';
-  $('lidCarved').style.display = !t.solid && lipOk && carvedNow && $('lid').checked ? '' : 'none';
-  $('lidHint').style.display = !t.solid && lipOk && !carvedNow && $('lid').checked ? '' : 'none';
+  $('lidNoLipSlot').style.display = slotted && $('lid').checked ? '' : 'none';
+  $('lidCarved').style.display = !t.solid && lipOk && !slotted && carvedNow && $('lid').checked ? '' : 'none';
+  $('lidHint').style.display = !t.solid && lipOk && !slotted && !carvedNow && $('lid').checked ? '' : 'none';
   /* The feet. "Where" and the count only mean something once there are holes, and each
      hint says what its holes are for, so each shows with its box.
      A half-size bin has no holes yet (feetHolesOff), so its boxes go grey with the
@@ -1436,6 +1572,8 @@ function readControls() {
   $('edgeRowA').style.display = t.solid ? 'none' : '';
   $('edgeRowB').style.display = t.solid ? 'none' : '';
   $('edgeHint').style.display = t.solid ? 'none' : '';
+  $('fingerRow').style.display = t.solid ? 'none' : '';
+  $('fingerHint').style.display = t.solid ? 'none' : '';
   $('featureRow').style.display = t.solid ? 'none' : '';
   $('featureHint').style.display = t.solid ? 'none' : '';
   /* The note raised on the shelf: the menu sits with the shelf it prints on, the hint
@@ -1549,6 +1687,8 @@ function writeControls(src) {
   $('note').value = src.note || '';
   for (const [k, id] of [['f', 'edgeF'], ['b', 'edgeB'], ['l', 'edgeL'], ['r', 'edgeR']])
     $(id).value = String(src.edges && src.edges[k] !== undefined ? src.edges[k] : 1);
+  for (const [k, id] of [['f', 'fingerF'], ['b', 'fingerB'], ['l', 'fingerL'], ['r', 'fingerR']])
+    $(id).checked = !!(src.fingerSlots && src.fingerSlots[k]);
 }
 
 /* ---------- layers -------------------------------------------------------- */
@@ -2340,6 +2480,7 @@ function initMap() {
                    labelMode: state.labelMode, note: '',
                    magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
                    insert: state.insert, insertDepth: state.insertDepth,
+                   fingerSlots: Object.assign({}, state.fingerSlots),
                    edges: Object.assign({}, state.edges) });
         selected = B().length - 1;
         writeControls(B()[selected]);
@@ -2388,6 +2529,7 @@ $('fillRest').addEventListener('click', () => {
                  labelMode: state.labelMode, note: '',
                  magnets: state.magnets, screws: state.screws, holesEvery: state.holesEvery,
                  insert: state.insert, insertDepth: state.insertDepth,
+                 fingerSlots: Object.assign({}, state.fingerSlots),
                  edges: Object.assign({}, state.edges) });
       for (const [px, py] of slotsOf(probe)) taken[py][px] = B().length - 1;
       return;
@@ -2471,6 +2613,7 @@ $('mergeBins').addEventListener('click', () => {
     x: x0, y: y0, u, v,
     cells: cells.length === u * v ? null : cells,   // a solid rectangle needs no mask
     edges: Object.assign({}, bins[0].edges),
+    fingerSlots: Object.assign({}, bins[0].fingerSlots),
   });
   for (const i of sel.sort((a, b) => b - a)) B().splice(i, 1);
   B().push(merged);
@@ -2487,6 +2630,7 @@ $('applyAll').addEventListener('click', () => {
     divX: s.divX, divY: s.divY, solid: s.solid, scoop: s.scoop, label: s.label,
     labelMode: s.labelMode, magnets: !!s.magnets, screws: !!s.screws, holesEvery: !!s.holesEvery,
     insert: +s.insert || 0, insertDepth: +s.insertDepth || 0,
+    fingerSlots: Object.assign({}, s.fingerSlots),
     edges: Object.assign({}, s.edges) });
   drawMap(); refresh();
 });
@@ -2540,6 +2684,8 @@ function settingsChange(b, t, nu, nv) {
   if ((+t.insert || 0) !== (+b.insert || 0)) return 'insert';
   if ((t.note || '') !== (b.note || '')) return 'note';
   if (lidSideBits(t.lidSides) !== lidSideBits(b.lidSides)) return 'lidSides';
+  if (FINGER_SIDES.some((k) => !!(t.fingerSlots && t.fingerSlots[k]) !== !!(b.fingerSlots && b.fingerSlots[k])))
+    return 'fingerSlots';
   return EDGES.some((k) => !sameNum(edgeAt(t, k), edgeAt(b, k))) ? 'edges' : '';
 }
 function noteSettingsEdit(bins, t, nu, nv) {
@@ -2791,6 +2937,8 @@ function binIssues(b, k, claims) {
           out.push(`sits inside the ${bb.u}×${bb.v} bin below on both axes, so it rests over open cavity and would drop in — span its full width or its full depth`);
         if (!allFullEdges(bb))
           out.push('the bin below has a lowered wall, so it has no stacking lip to sit on');
+        else if (fingersBuilt(bb))
+          out.push('the bin below has a finger slot, so it has no stacking lip to sit on');
       }
     }
     /* What stands in the holes of a bin below, past where this one comes down onto its
@@ -2807,7 +2955,7 @@ function binIssues(b, k, claims) {
   /* Bins print upright, so height is a bed constraint too — and an easy one to miss,
      because a deep drawer will let you ask for a bin far taller than the printer's Z.
      Splitting cannot help here: a bin is one piece, so the only fix is fewer units. */
-  const lipUp = (!b.solid && allFullEdges(b)) ? LIP_H : 0;
+  const lipUp = hasLip(b) ? LIP_H : 0;
   const printH = b.hUnits * SPEC.unitH + lipUp;
   if (printH > state.bedH + 0.001)
     out.push(`stands ${printH.toFixed(1)} mm tall, past your printer's ${state.bedH} mm Z height — a bin prints in one piece, so it needs fewer units rather than splitting (max ${Math.max(1, Math.floor((state.bedH - lipUp) / SPEC.unitH))} here)`);
@@ -2935,6 +3083,11 @@ function binIssues(b, k, claims) {
       // both, where one more would go wrong both ways (dividersWhy)
       crossCorners: (any) => `${any ? 'no more' : 'none'} keep ${PLATE_END} mm of plate where they ${stand}, ` +
         `and ${any ? 'more' : 'any'} would notch the stacking lip too close to its corners`,
+      /* A bin with a finger slot has no lip, and is counted without it, but for this: with
+         more plates it would have no slot, and so its lip, which they would notch too close
+         to its corners (dividersWhy). A fallback: no bin swept has reached it. */
+      slot: (any) => `${any ? 'more' : 'any'} would leave no room for its finger slots, and it would have the ` +
+        `stacking lip back, which ${any ? 'no more' : 'none'} can have a notch through clear of its corners`,
     };
     const MANY = {
       lip: 'no more can have a notch through the stacking lip clear of its corners',
@@ -2943,6 +3096,8 @@ function binIssues(b, k, claims) {
       lipCorners: 'more along would notch the stacking lip too close to its corners',
       crossCorners: `no more along keep ${PLATE_END} mm of plate where they cross the ones across, or stand on the ` +
         'scoop, and more would notch the stacking lip too close to its corners',
+      slot: 'more would leave no room for their finger slots, and they would have the stacking lip back, which ' +
+        'no more can have a notch through clear of its corners',
     };
     for (const r of Object.keys(REASON)) {
       const these = short.filter(([k]) => why[k] === r);
@@ -3006,6 +3161,7 @@ function binIssues(b, k, claims) {
         : 'walls too thick'} for its note to fit between them, so its note is not printed` });
   }
   out.push(...insertIssues(b, loose ? null : st.z));
+  out.push(...fingerIssues(b));
   return out;
 }
 /* Holes across the floor, for binIssues: notes, not faults, as the spec has them, bar
@@ -3021,11 +3177,24 @@ function binIssues(b, k, claims) {
  * that sentence for n bins. A solid block has no menu to have set. */
 function insertIssues(b, z) {
   if (!(+b.insert > 0) || b.solid) return [];
-  const h = insertPlan(binCfg(b)), out = [], mm = (x) => +x.toFixed(1);
+  const h = insertPlanOf(b), out = [], mm = (x) => +x.toFixed(1);
   if (h.why === 'off' || h.why === 'solid') return out;
   const p = h.p;
   if (h.why === 'carved') {
     out.push({ note: true, t: `is a carved shape, so its holes for ${p.items} are left off: holes need a rectangle` });
+    return out;
+  }
+  /* Kept clear of a label shelf the back wall's finger slot takes away, because laid out
+     in its room they would come to more than one bin is built with, or stand too high for a
+     slot (holesGaveWay, keptClearSay). The first keeps the holes the shelf's layout has;
+     the second leaves none, never too short a one (insertHintSay says why). */
+  const gave = keptClearSay(b, 'its'), their = keptClearSay(b, 'their');
+  if (gave && h.why === 'none') {
+    out.push({ note: true, group: `gave:none:${b.insert}:${gave.room}`,
+      t: `has no holes for ${p.items}: they keep in front of where its label shelf would be, ${gave.room}, ` +
+         'and there is no room there for even one',
+      many: (n, names) => `${n} bins have no holes for ${p.items}: they keep in front of where their label ` +
+        `shelves would be, ${their.room}, and there is no room there for even one: ${names}` });
     return out;
   }
   if (h.why === 'short' || h.why === 'none') {
@@ -3052,6 +3221,13 @@ function insertIssues(b, z) {
         `built with, so they have none: ${names}` });
     return out;
   }
+  // with holes, only ever kept for being too many
+  if (gave)
+    out.push({ note: true, group: `gave:many:${b.insert}`,
+      t: `has its holes for ${p.items} kept clear of where its label shelf would be, ${gave.room}`,
+      many: (n, names) => `${n} bins have their holes for ${p.items} kept clear of where their label shelves ` +
+        `would be, since spread into that room there would be more than the ${HOLES_MAX} one bin is built ` +
+        `with: ${names}` });
   const divs = !!(b.divX || b.divY), off = [divs ? 'dividers' : '', b.scoop ? 'scoop' : ''].filter(Boolean);
   if (off.length)
     out.push({ note: true, group: `off:${off.join()}`,
@@ -3061,8 +3237,9 @@ function insertIssues(b, z) {
   /* Past where a bin stacked on this one comes down, INSERT_SPEC.seat under the rim, the
      items are in its way, and in a lid's. Most stand above the rim, and are said to; the
      few that stop between the two are said to reach just under it. A bin with a lowered
-     wall has no lip for either, so it is only worth saying of one that has. */
-  if (h.over > 1e-9 && allFullEdges(b)) {
+     wall or a finger slot has no lip for either, so it is only worth saying of one that
+     has. */
+  if (h.over > 1e-9 && hasLip(b)) {
     const lid = !!b.lid && lidFits(b), up = h.above > 1e-9;
     const stand = up ? `standing ${mm(h.above)} mm above its rim` : `reaching to ${mm(-h.above)} mm under ` +
       `its rim, where a bin stacked on it comes ${INSERT_SPEC.seat} mm down`;
@@ -3080,6 +3257,91 @@ function insertIssues(b, z) {
         ? 'and the baseplate takes the drawer\'s whole height' : `past the ${mm(avail)} mm available`) +
         ', so the drawer would not shut over them');
   }
+  return out;
+}
+
+/* Finger slots, for binIssues: notes, not faults. The bin prints either way; these say
+ * which walls ticked get no slot and why, and what made way for the slots it gets. Each
+ * carries a `group`, so Checks says it once for every bin it fits (warnings), and
+ * `many(n, names)` is that sentence for n bins. A bin that ticks none, or a solid block,
+ * which has no walls to tick, is answered with nothing (fingerPlan). */
+function fingerIssues(b) {
+  const p = fingerPlan(b), out = [];
+  if (!p) return out;
+  const mm = (x) => +x.toFixed(1), least = FINGER.least + 2 * FINGER.keep;
+  const sides = Object.keys(p.sides);
+  const walls = (test) => sides.filter((k) => test(p.sides[k], k)).join('');
+  const why = (w) => walls((s) => s.why === w);
+  const wl = (ks) => `${wallList(ks)} wall${ks.length > 1 ? 's' : ''}`;
+  const note = (group, t, many) => out.push({ note: true, group, t, many });
+  if (why('carved')) {
+    note('slot:carved', 'is a carved shape, so its finger slots are left off: they need a rectangle',
+      (n, names) => `${n} bins are carved shapes, so their finger slots are left off: ${names}`);
+    return out;
+  }
+  // a floor as thick as the bin is tall leaves a solid block, with no walls to dip
+  if (why('solid')) {
+    note('slot:solid', 'has a floor that fills it to the top, so there is no wall for a finger slot',
+      (n, names) => `${n} bins have floors that fill them to the top, so there is no wall for a finger slot: ${names}`);
+    return out;
+  }
+  const open = why('open'), low = why('low'), high = why('holes');
+  if (open)
+    note(`slot:open:${open}`, `has its ${wl(open)} open, so there is no finger slot there`,
+      (n, names) => `${n} bins have their ${wl(open)} open, so there is no finger slot there: ${names}`);
+  if (low)
+    note(`slot:low:${low}`, `has its ${wl(low)} too low for a finger slot, so it has none there`,
+      (n, names) => `${n} bins have their ${wl(low)} too low for a finger slot, so they have none there: ${names}`);
+  const h = holesIn(b), items = h ? h.p.items : '';
+  if (high)
+    note(`slot:holes:${b.insert}:${high}`, `has its holes for ${items} reaching too high for a finger slot ` +
+      `in its ${wl(high)}, so it has none there`,
+      (n, names) => `${n} bins have their holes for ${items} reaching too high for a finger slot in their ` +
+        `${wl(high)}, so they have none there: ${names}`);
+  /* Too narrow: the compartments between dividers, where there are dividers across the
+     wall, or else the wall itself, between its corners and whatever else keeps a slot
+     off its ends (a ramp, the scoop, the label shelf). The dividers as built: removable
+     ones no more than fit, and none with holes across the floor (builtDivs). */
+  const divs = builtDivs(b);
+  const across = (k) => (k === 'f' || k === 'b' ? divs.divX : divs.divY) > 0;
+  const tight = walls((s, k) => s.why === 'narrow' && across(k));
+  const short = walls((s, k) => s.why === 'narrow' && !across(k));
+  if (tight)
+    note(`slot:narrow:${tight}`, `has compartments under ${least} mm across along its ${wl(tight)}, too narrow ` +
+      'for a finger slot, so it has none there',
+      (n, names) => `${n} bins have compartments under ${least} mm across along their ${wl(tight)}, too ` +
+        `narrow for a finger slot, so they have none there: ${names}`);
+  if (short)
+    note(`slot:short:${short}`, `has its ${wl(short)} too short for a finger slot, which needs ${least} mm ` +
+      'of straight wall, so it has none there',
+      (n, names) => `${n} bins have their ${wl(short)} too short for a finger slot, which needs ${least} mm ` +
+        `of straight wall, so they have none there: ${names}`);
+  const some = walls((s) => s.slots.length && s.narrow);
+  if (some)
+    note(`slot:some:${some}`, `has some compartments along its ${wl(some)} under ${least} mm across, too ` +
+      'narrow for a finger slot, so those have none',
+      (n, names) => `${n} bins have some compartments along their ${wl(some)} under ${least} mm across, too ` +
+        `narrow for a finger slot, so those have none: ${names}`);
+  // a slot held above the block the holes are in is shallower than half the wall
+  const held = walls((s) => s.slots.length && s.held === 'holes');
+  const heldN = [...held].reduce((n, k) => n + p.sides[k].slots.length, 0);
+  if (held)
+    note(`slot:held:${b.insert}:${held}`, `has its finger ${heldN > 1 ? 'slots' : 'slot'} in its ${wl(held)} ` +
+      `stopping ${FINGER.clear} mm over its holes for ${items}, short of half way down`,
+      (n, names) => `${n} bins have their finger slots in their ${wl(held)} stopping ${FINGER.clear} mm over ` +
+        `their holes for ${items}, short of half way down: ${names}`);
+  if (p.shelfOff) {
+    const noted = +b.labelMode === 1 && !!(b.note || '').trim();
+    note(`slot:shelf:${noted}`, 'has a finger slot in its back wall, so its label shelf is left off' +
+      (noted ? ' and its note is not printed' : ''),
+      (n, names) => `${n} bins have a finger slot in their back walls, so their label shelves are left off` +
+        `${noted ? ' and their notes are not printed' : ''}: ${names}`);
+  }
+  if (p.scoop !== null && p.scoopWas - p.scoopNow > 0.05)
+    note(`slot:scoop:${mm(p.scoopNow)}`, `has a finger slot in its front wall, so its scoop is held to ` +
+      `${mm(p.scoopNow)} mm, under the slot`,
+      (n, names) => `${n} bins have a finger slot in their front walls, so their scoops are held to ` +
+        `${mm(p.scoopNow)} mm, under the slot: ${names}`);
   return out;
 }
 
@@ -3277,6 +3539,7 @@ function drawWarnings() {
    filesystem-safe — a note with a slash in it has no business in a filename. */
 const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
   (t.b.solid ? ' solid' : '') + (insertText(t.b) ? `, ${insertText(t.b)}` : '') +
+  (fingerText(t.b) ? `, ${fingerText(t.b)}` : '') +
   (holesText(t.b) ? `, ${holesText(t.b)} each` : '') +
   (t.qty > 1 ? ` × ${t.qty}` : '') +
   (t.notes && t.notes.length ? ` — ${t.notes.join(', ')}` : '');
@@ -3293,15 +3556,13 @@ const typeLabel = (t) => `${t.b.u}×${t.b.v}×${t.b.hUnits}` +
    printer is "three of these".
 
    A lid can only grip a bin that still HAS a lip, and lowering any wall drops the lip
-   from all four — so a bin with a lowered edge is skipped here rather than offered a lid
-   that could not attach. binHasLip is the same test buildBin uses to decide. */
-const binHasLip = (b) => !b.solid &&
-  EDGES.every((k) => !b.edges || b.edges[k] === undefined || b.edges[k] >= 1);
+   from all four, as a finger slot does — so a bin with either is skipped here rather than
+   offered a lid that could not attach. hasLip is the same test buildBin uses to decide. */
 /* A carved bin keeps its lip, but lidPart only makes a rectangle: on an L it was a full
    125.5 × 83.5 plate over a shape with a corner missing, overhanging the cut-away cells
    by a whole cell. Shaping the lid to the cells is a lid builder of its own, so carved
    bins are not offered one, and the panel says why. */
-const lidFits = (b) => binHasLip(b) && !isCarved(b);
+const lidFits = (b) => hasLip(b) && !isCarved(b);
 const L_LID = (b) => lidPart(G, Object.assign({}, binCfg(b), { lidSides: b.lidSides }));
 /* Bin by bin, not type by type. A lid is not part of typeKey (the bin prints the same
    with or without one), and reading it off a type's first bin and counting the whole
@@ -3549,6 +3810,7 @@ function refresh() {
     const g = gramsOf(gm.vol * t.qty);
     return `<tr><td class="mono">${t.b.u}×${t.b.v}×${t.b.hUnits}${t.b.solid ? ' solid' : ''}${compartments(t.b) ? ` · ${compartments(t.b)} comp` : ''}` +
       `${insertText(t.b) ? ` · ${asText(insertText(t.b))}` : ''}` +
+      `${fingerText(t.b) ? ` · ${asText(fingerText(t.b))}` : ''}` +
       `${holesText(t.b) ? ` · ${asText(holesText(t.b))}` : ''}` +
       /* what it is for, beside what it is — the row is how you tell four identical
          shapes apart when they come off the plate */
@@ -4286,11 +4548,14 @@ const noteTag = (b) => { const p = printedNote(b); return p ? '-note-' + noteSlu
    reads "bin-1x1x3-aa-holes-note-aa-cells-qty1". One asked for holes it does not get is
    the plain bin, and is named as one. */
 const insertTag = (b) => { const h = holesIn(b); return h ? `-${h.p.tag}-holes` : ''; };
+/* A bin with finger slots says which walls, "bin-2x1x3-slot-fb-qty2.stl", in f, b, l, r
+   order. One that ticked walls it gets none in is the plain bin, and named as one. */
+const fingerTag = (b) => (fingersBuilt(b) ? `-slot-${fingersBuilt(b)}` : '');
 function typeName(t) {
   const d = builtDivs(t.b);
   return `bin-${t.b.u}x${t.b.v}x${t.b.hUnits}${t.b.solid ? '-solid' : ''}` +
          `${d.divX || d.divY ? `-${d.divX}x${d.divY}div` : ''}${insertTag(t.b)}` +
-         `${holeTag(t.b)}${noteTag(t.b)}-qty${t.qty}`;
+         `${fingerTag(t.b)}${holeTag(t.b)}${noteTag(t.b)}-qty${t.qty}`;
 }
 /* typeName leaves out the walls and floor, lowered walls, a carved shape, the scoop and
    the label shelf, so two kinds of bin could share a name: a scooped 1x1x3 and a plain
@@ -4312,8 +4577,12 @@ const VARIANT_TAGS = [
   // the cells it keeps, as hex: the same shape is the same name wherever it is drawn
   (b) => (maskBits(b) ? `shaped-${BigInt('0b' + maskBits(b)).toString(16)}` : ''),
   // a bin with holes across its floor is built without its scoop and dividers (holesIn)
-  (b) => (!b.solid && b.scoop && !holesIn(b) ? `scoop${b.scoop}` : ''),
-  (b) => (!b.solid && b.label ? `label${b.label}` : ''),
+  // the scoop and the shelf as built: a finger slot can hold the one and take the other
+  (b) => {
+    const s = scoopAsBuilt(b);
+    return !b.solid && s && !holesIn(b) ? `scoop${s === b.scoop ? s : +s.toFixed(2)}` : '';
+  },
+  (b) => (!b.solid && labelAsBuilt(b) ? `label${labelAsBuilt(b)}` : ''),
   (b) => (!b.solid && b.divRemovable && (builtDivs(b).divX || builtDivs(b).divY) ? 'loose-dividers' : ''),
   // two bins holed for the same thing to different depths
   (b) => { const h = holesIn(b); return h ? `depth${+h.depth.toFixed(1)}` : ''; },
@@ -4402,6 +4671,7 @@ function layoutReadme() {
     if (raised) L.push(`Raised note: “${raised.fit.lines.join(' / ')}” on the label shelf, ` +
       `${+raised.fit.cap.toFixed(1)} mm letters on ${raised.fit.lines.length > 1 ? 'two lines' : 'one line'}` +
       (raised.fit.cut ? ', cut short to fit' : '') + '.');
+    if (fingerText(b)) L.push(`Finger slots: ${fingerText(b)}`);
     if (b.lid && lidFits(b)) L.push('Lid: yes — prints upside down, no supports.');
     L.push(...holesReadme([{ b, qty: 1 }]));
     const job = jobEstimate();
@@ -4437,6 +4707,7 @@ function layoutReadme() {
       `  (${gm.meta.W.toFixed(1)} x ${gm.meta.D.toFixed(1)} x ${gm.meta.totalH.toFixed(1)} mm incl. lip)` +
       `${t.b.solid ? '  solid' : ''}${compartments(t.b) ? `  ${compartments(t.b)} compartments` : ''}` +
       `${insertText(t.b) ? `  ${insertText(t.b)}` : ''}` +
+      `${fingerText(t.b) ? `  ${fingerText(t.b)}` : ''}` +
       // a part of its own, with its note in letters on the shelf
       `${printedNote(t.b) ? '  note raised on the shelf' : ''}` +
       // the README is read beside a pile of printed parts, which is exactly when
@@ -4675,8 +4946,9 @@ const heightSrc = () => scratch || (selected >= 0 && B()[selected] ? B()[selecte
    A bin with holes across its floor takes everything else besides: it has no dividers
    to stand it full height (builtDivs), and the block its holes are in stands as high as
    they go, which the walls, the label shelf and the note on it all have a say in
-   (binTop). */
-const heightCfg = (b) => Object.assign(+b.insert > 0 && !b.solid ? binCfg(b) : {}, {
+   (binTop). So does one with finger slots ticked: whether they take its lip depends on
+   where they fit, which is the whole bin (fingerSlotPlan, which binHeights asks). */
+const heightCfg = (b) => Object.assign((+b.insert > 0 || fingersAsked(b)) && !b.solid ? binCfg(b) : {}, {
                             floorT: b.floorT, screws: b.screws, solid: b.solid, edges: b.edges,
                             ...builtDivs(b === state ? Object.assign({}, b, { divRemovable: false }) : b),
                             u: b.u || 1, v: b.v || 1,
@@ -4782,13 +5054,13 @@ function bedFitText() {
   if (!bins.length) return { cls: 'wait', t: 'No bins placed yet — drag across the drawer map to place one.' };
   const wide = bins.filter((b) => !fitsBed(b.u, b.v));
   const tall = bins.filter((b) => {
-    const lip = (!b.solid && allFullEdges(b)) ? LIP_H : 0;
+    const lip = hasLip(b) ? LIP_H : 0;
     return b.hUnits * SPEC.unitH + lip > state.bedH + 0.001;
   });
   if (!wide.length && !tall.length) {
     const w = Math.max(...bins.map((b) => footW(b.u))), d = Math.max(...bins.map((b) => footW(b.v)));
     const h = Math.max(...bins.map((b) => b.hUnits * SPEC.unitH +
-      ((!b.solid && allFullEdges(b)) ? LIP_H : 0)));
+      (hasLip(b) ? LIP_H : 0)));
     return { cls: 'ok', t: `Everything fits your ${bed}. The largest bin is ` +
       `${Math.max(w, d).toFixed(0)} × ${Math.min(w, d).toFixed(0)} mm and the tallest ` +
       `stands ${h.toFixed(1)} mm, inside your ${state.bedH} mm Z height.` };
@@ -5399,6 +5671,7 @@ for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', '
                   'edgeF', 'edgeB', 'edgeL', 'edgeR', 'scoop', 'label', 'note',
                   'divRemovable', 'divT', 'divClr',
                   'lid', 'lidF', 'lidB', 'lidL', 'lidR',
+                  'fingerF', 'fingerB', 'fingerL', 'fingerR',
                   'magnets', 'screws', 'holesWhere', 'magnetD', 'magnetH',
                   'insert', 'insertDepth', 'holeClr'])
   $(id).addEventListener('input', schedule);
@@ -5406,6 +5679,7 @@ for (const id of ['drawerW', 'drawerD', 'drawerH', 'plateH', 'infill', 'bedW', '
    back to the one in use, and leaving fires change, not input. */
 for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR', 'divRemovable',
                   'lid', 'lidF', 'lidB', 'lidL', 'lidR',
+                  'fingerF', 'fingerB', 'fingerL', 'fingerR',
                   'magnets', 'screws', 'holesWhere', 'magnetD', 'magnetH',
                   'insert', 'insertDepth', 'holeClr', ...BIN_FIELDS])
   $(id).addEventListener('change', schedule);
@@ -5418,6 +5692,8 @@ $('labelMode').addEventListener('change', () => {
 });
 $('presetTray').addEventListener('click', () => {
   for (const id of ['edgeF', 'edgeB', 'edgeL', 'edgeR']) $(id).value = '0';
+  // a tray has no walls to dip, so it asks for no finger slots
+  for (const id of ['fingerF', 'fingerB', 'fingerL', 'fingerR']) $(id).checked = false;
   $('solid').checked = false;
   readControls(); drawMap(); refresh();
 });

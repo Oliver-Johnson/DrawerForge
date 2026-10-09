@@ -274,6 +274,63 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   read 2 to 4 edges used four times. The audit probes every hole's centre down to the
   floor and the block beside the first one, so a block with its holes left solid, or no
   block, fails there however watertight it is.
+- **Finger slots** in the top of a wall are not cut either: they are built the way a
+  lowered wall is (`fingerSlots`). Each slot's profile points go into the shared split
+  lists of the wall's straights, so the outer and inner rings still pair index for index,
+  and the top of the wall is lowered at those points after `edgeHeights` has set it. The
+  profile is the slot on the wall's inner face, where a finger goes: sides at 70 degrees,
+  under the 75 the audit holds every wall's top edge to. Both rings take the same
+  fractions of their straights, and past a 3.35 mm wall the outer straight is the longer,
+  so on the outer face the slot is that much wider and less steep; up to 3.35 mm the
+  rings share their corners' centres and the slot is worked out as it always was. A slot
+  takes the lip as a lowered wall does. There is one per compartment, between the
+  dividers as built (`dividersBuilt`, none on a bin with holes), clear of a removable
+  one's rails and the gap between them. A slot on the back takes the label shelf's place.
+  A slot on the front holds the scoop under its bottom. The slots stop over the block of
+  holes across the floor. With a back slot those holes are laid out as with no shelf
+  (`floorPlan` asked with no label) when that builds the back slot, a slot in every other
+  wall the shelf's layout puts one in (wall by wall, not slot by slot: a wall left with
+  fewer counts as kept), and no fewer holes (past `HOLES_MAX` it builds none). Otherwise
+  they keep where they are with the shelf (`holesGaveWay`, which says why), and the slots
+  are whatever builds over them, as before: if the block is too high for the back one
+  even then, the shelf stays. Either way it is one more `floorPlan`, not a loop.
+  With removable plates the front and back walls are settled first, on their own
+  (`fingerWall`): only the dividers across meet them, and those are counted without the
+  ones along. So `plateLayout` cuts the plates across to the scoop a front slot holds,
+  the smaller of that and the plates' own cap, stands the plates along on it and counts
+  them on it, and `railedLimit` keeps no plates along in front of a shelf a back slot
+  takes away, notches and all. With holes across the floor there are no dividers, so the
+  whole plan is settled at once, over the holes as built, and the wall is the one built
+  over them, or none; `floorPlan` works out a bin without its dividers with none given,
+  so that does not ask itself. Not quite always: with a back slot over a shelf, whether
+  the holes take the shelf's room can turn on whether the dividers they would leave
+  allow a slot in another wall, mostly a lowered front, which a plan settled without any
+  does not know, so on a few such bins it finds the shelf kept and no holes where the
+  bin is built with them. That only moves the field for plates along, on a bin built
+  with none, and as it was before. Whether a bin has any slot at all is settled between
+  the dividers it counts, and a slotted bin builds no lip, so no notches:
+  `dividersBuilt` counts the plates with the lip's rule and without it, and takes the
+  count without it where a slot is still built between those plates (settled with them,
+  `fingerSlotPlan` given the count), and otherwise keeps the lip and its count. Counted
+  so, the bin is marked `lipTaken`, which only the lip's rule reads (`lipNotched`): it
+  keeps its lip as asked for all else, and above all for its holes, which are laid out
+  clear of the lip before the slots are settled over them. Asked as a bin with `lip`
+  false, its holes had room it does not give them, and a row that is not built held its
+  back wall too low for a slot. Checks and the fields go by the bin counted without its
+  lip then (`countedAs`), so neither names a lip it does not have, and each field is
+  held with the count the other asks for, as a plate along can close a side slot and a
+  plate across a front one.
+  The lip's rule only binds on plates packed a few millimetres apart, with no room for a
+  slot between them, so the walls their ends meet have no slot either way, and the slots
+  in the others stay where they were, as do the rails beside them.
+  `fingerSlots` hands its answer to `buildBin` and `insertPlan` (`floor`), so the page
+  counts the holes that are built, and to `binVolume`, which weighs the bin from it: no
+  lip, the dips (`area`, the mean of the wall's two faces, times the wall) off the walls,
+  the shelf left off with a back slot, and the holes where the plan has them. The scoop
+  both build and weigh is `scoopBuilt`'s, which holds it under a front slot. A bin with
+  no slots built gets the same split lists and holes it always had, so it is byte for
+  byte what it was, and weighs what it did. The audit reads every slot's bottom and sides
+  off both faces of the mesh, and weighs slotted bins against what their meshes enclose.
 - Every rounded square in a bin shares the corner-arc centre **17.00 mm**
   (`41.5/2 − 3.75`). That constant is what makes clearance uniform around the perimeter
   instead of binding at the corners. See [socket-clearance.md](socket-clearance.md) for
@@ -624,7 +681,10 @@ currently installed):
   estimate.spec and by the bin audit: its own cases and 40 bins drawn at random from a
   fixed seed, walls 0.4 to 10 mm. Over 3157 bins swept, whole, half and carved, walls to
   10 mm, edges lowered and open, it came to 0.995 to 1.005 of it, and the carved ones
-  to 1.000.
+  to 1.000. Over 1100 bins with finger slots, every combination of walls, lowered and
+  thick walls, scoops, shelves and notes, holes, removable plates and half sizes, it
+  came to 0.998 to 1.001, the lowest those whose shelf has a note raised on it, whose
+  letters it leaves out.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the
