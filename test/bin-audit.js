@@ -3621,8 +3621,6 @@ console.log('\nfinger slots');
     if (faults.length) bad++;
   }
 
-  /* Opt-in, and only where one can be built: every other bin is built to the byte as it
-     was, whatever its slot settings say, and its plates are counted as they were. Each row
   /* A bin counted without its lip, as one with a slot built in it is (countedAs), is built
      with that count, never the one its lip would allow: the lip only stops plates standing
      a few millimetres apart, where the walls they meet have no room for a slot either way,
@@ -3664,6 +3662,8 @@ console.log('\nfinger slots');
     if (off.length || bound < 100) bad++;
   }
 
+  /* Opt-in, and only where one can be built: every other bin is built to the byte as it
+     was, whatever its slot settings say, and its plates are counted as they were. Each row
      is a bin that has to come out the same as without them, and the reason fingerSlotPlan
      gives the page for building none. */
   const stl = (cfg) => Buffer.from(G.stlBinary(buildBin(G, cfg).polys, 'b')).toString('base64');
