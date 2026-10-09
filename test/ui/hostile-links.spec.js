@@ -1059,6 +1059,34 @@ for (const tool of ['plates', 'bins']) {
   });
 }
 
+/* However early the boot stops, Start fresh also ends the record of an edit a pasted link
+   set aside (see the paste tests above). The record's key is declared with the save's: declared
+   where the record is read, further on, it was not there yet for a boot stopped before
+   that, and the record stayed. The page is made to throw just after the button is wired. */
+for (const tool of ['plates', 'bins']) {
+  test(`Start fresh on ${tool} ends the pasted-link record when the boot stops early`, async ({ page }) => {
+    const url = tool === 'bins' ? binsUrl() : platesUrl();
+    const key = (tool === 'bins' ? BINS : PLATES) + ':pasted';
+    await arrive(page, url);
+    await page.evaluate((k) => sessionStorage.setItem(k, JSON.stringify({ save: 'a', at: 'b' })), key);
+    const wired = "$('startFresh').addEventListener('click', startFresh);";
+    await page.route((u) => u.href === url, async (route) => {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, body: (await res.text()).replace(wired,
+        (m) => m + " if (/(^|&)boom=/.test(location.hash)) throw new Error('boom');") });
+    });
+    const thrown = [];
+    page.on('pageerror', (e) => thrown.push(String(e)));
+    await arrive(page, url + '#w=345&d=444&boom=1&v=2');
+    expect(thrown.join(), 'the boot threw').toContain('boom');
+    await Promise.all([page.waitForEvent('load'),
+      page.evaluate(() => document.getElementById('startFresh').click())]);
+    await ready(page);
+    expect(await page.evaluate((k) => sessionStorage.getItem(k), key), 'the record').toBeNull();
+    expect(thrown.filter((e) => !/boom/.test(e))).toEqual([]);
+  });
+}
+
 /* And it ends the offer of an edit a pasted link set aside (see the paste tests above). The
    edit was offered on Back, and left; then a bare visit, and Start fresh there. The record
    of the edit's save stayed, and the fresh page is at the address it names: another link
@@ -1098,6 +1126,35 @@ for (const tool of ['plates', 'bins']) {
     await ready(page);
     expect(await page.inputValue('#drawerW'), 'the fresh page').not.toBe('355');
     await expect(page.locator('#setAside'), 'nothing is offered').toBeHidden();
+    expect(errors).toEqual([]);
+  });
+}
+
+/* Start fresh stops the page's saves as it goes, and a browser that keeps the page in its
+   back-forward cache can show it again on Back. Shown again, it is a page of yours, and its
+   changes save, as they did before Start fresh and as they do when it is loaded again.
+   Chromium does not keep it, so here the page is stopped before the fresh one arrives and
+   shown again as the cache would. Both pages are covered. */
+for (const tool of ['plates', 'bins']) {
+  test(`a ${tool} page left by Start fresh and shown again from the cache saves again`, async ({ page }) => {
+    const errors = watch(page);
+    const url = tool === 'bins' ? binsUrl() : platesUrl();
+    await arrive(page, url);
+    await H.setField(page, 'drawerW', '451');
+    await saved(page);
+    await arrive(page, url);                       // a bare visit, restoring it, which offers Start fresh
+    await page.route((u) => u.href === url, async (route) => {
+      await new Promise((r) => setTimeout(r, 5000));
+      await route.continue().catch(() => {});
+    });
+    await page.evaluate(() => {
+      document.getElementById('startFresh').click();
+      window.stop();                               // the fresh page never arrives
+      dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    await H.setField(page, 'drawerW', '377');
+    await saved(page);
+    expect(await stored(page, tool === 'bins' ? BINS : PLATES)).toMatch(/(^|&)w=377(&|$)/);
     expect(errors).toEqual([]);
   });
 }

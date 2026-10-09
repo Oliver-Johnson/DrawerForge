@@ -1207,6 +1207,88 @@ for (const tool of ['plates', 'bins']) {
   });
 }
 
+/* A refused size handed over is saved on the other page once there is room, and then set
+   back there, before Back to the page that made it. That page's address still says the
+   size was refused, counted from the size the drawer has again, so it took the size for a
+   change still to save, and its first save wrote it over the one set back, with nothing
+   done on it. The refusal has landed since, so the page is a page of yours come back, and
+   catches up with the drawer. The room comes, and the size is saved:
+   - on the other page, by setting it back;
+   - there, by a change of that page's own, before it is set back;
+   - as the other page arrives, by the save it makes then;
+   - before the hand-over, by the hand-over's own save. */
+for (const tool of ['plates', 'bins']) {
+  for (const [room, saved] of [['set back', 'as it is set back'], ['a change first', 'by a change there first'],
+    ['arriving', 'as that page arrives'], ['before the hand-over', 'by the hand-over']]) {
+    test(`Back to a ${tool} page whose refused size was saved on the other page and set back there ` +
+      `is the size set back, saved ${saved}`, async ({ page }) => {
+      const there = tool === 'plates' ? 'bins' : 'plates';
+      await page.addInitScript(fullStorage);
+      // room from the next page's first line, before it saves on arriving
+      await page.addInitScript(() => {
+        if (sessionStorage.getItem('roomNext') !== '1') return;
+        sessionStorage.removeItem('roomNext');
+        sessionStorage.setItem('full', '0');
+      });
+      const errors = await kitchenOn(page, tool);
+      await refuseSize(page);
+      if (room === 'before the hand-over') await page.evaluate(() => sessionStorage.setItem('full', '0'));
+      if (room === 'arriving') await page.evaluate(() => sessionStorage.setItem('roomNext', '1'));
+      await page.click(there === 'bins' ? '#navBins' : '#navPlates');
+      await (there === 'bins' ? binsReady : platesReady)(page);
+      expect(await page.inputValue('#drawerW'), 'handed over').toBe('410');
+      await page.evaluate(() => sessionStorage.setItem('full', '0'));
+      if (room === 'a change first') await changeOwn(page, there);
+      if (room !== 'set back') {
+        await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+          { message: 'the size saved', timeout: 20000 }).toBe('410');
+      }
+      await H.setField(page, 'drawerW', '400');
+      await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+        { message: 'set back there', timeout: 20000 }).toBe('400');
+      await settle(page);
+
+      await page.goBack();
+      await expect.poll(() => page.inputValue('#drawerW').catch(() => ''),
+        { message: 'Back, caught up', timeout: 20000 }).toBe('400');
+      await (tool === 'bins' ? binsReady : platesReady)(page);
+      await settle(page);
+      expect((await stored(page)).Kitchen.w, 'the size set back stays').toBe('400');
+      await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+      expect(errors).toEqual([]);
+    });
+  }
+}
+
+/* A catch-up for a size the page already has: another tab set the size this page holds
+   refused. Nothing on the page changes, so it is not reloaded, and the size is the
+   drawer's from then on, not a change still to save. */
+for (const tool of ['plates', 'bins']) {
+  test(`a ${tool} page holding a refused size another tab has saved since is not reloaded to catch up`,
+    async ({ page, context }) => {
+      const there = tool === 'plates' ? 'bins' : 'plates';
+      await page.addInitScript(fullStorage);
+      const errors = await kitchenOn(page, tool);
+      await refuseSize(page);
+      await inOtherTab(context, there, errors, (other) => H.setField(other, 'drawerW', '410'));
+      const stayed = await page.evaluate(() => {
+        window.notReloaded = true;
+        dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+        return !!(history.state && history.state.drawerforge);   // catching up clears it to reload
+      });
+      expect(stayed, 'shown again from the cache, it stays').toBe(true);
+      await settle(page);
+      expect(await page.evaluate(() => window.notReloaded === true), 'not reloaded').toBe(true);
+      await page.evaluate(() => sessionStorage.setItem('full', '0'));
+      await changeOwn(page, tool);
+      const [, v, key] = ownChange(tool);
+      await expect.poll(() => stored(page).then((s) => s.Kitchen),
+        { message: 'with room again, the next change saves', timeout: 20000 })
+        .toMatchObject({ w: '410', [key]: v });
+      expect(errors).toEqual([]);
+    });
+}
+
 /* Each page saves its whole half of the drawer, so one whose half is older than the
    drawer's would write it back: a reload of a tab after another tab of the same tool
    changed the drawer, or Back to a page of yours that a later page has moved on. Both

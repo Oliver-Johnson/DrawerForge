@@ -2200,6 +2200,8 @@ function parseHash(h) {
  * stops that being your problem.
  */
 let hashSaveT = 0, hashReady = false;
+// saves were on when Start fresh left the page (see startFresh)
+let freshLeft = false;
 /* Kept on this browser, so the work survives arriving without a link.
  *
  * The address bar already carries the design and a refresh already restores it. What it
@@ -2220,6 +2222,8 @@ let hashSaveT = 0, hashReady = false;
  * when it has done one and offers a way back.
  */
 const SAVE_KEY = 'drawerforge:plates:v1';
+// this tab's record of a save a pasted link set aside (see pastedFrom), declared here for Start fresh
+const PASTED_KEY = SAVE_KEY + ':pasted';
 const saveLocal = (h) => {
   try { localStorage.setItem(SAVE_KEY, h); }
   catch (err) { /* private mode, or the quota is full — losing the save is not worth
@@ -2233,6 +2237,7 @@ const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
   forgetPasted();
+  freshLeft = hashReady;
   /* Left as Put back leaves, by leaveFor: the page runs on until the bare one arrives, and
      a change that landed in between was saved after the clearing, and came back with the
      note that it had been restored. */
@@ -2242,6 +2247,12 @@ function startFresh() {
    also take away the button that gets you out of it, or stop the next link working. What
    leaveFor stops, hashReady and hashSaveT, is declared above, so it works from here too. */
 $('startFresh').addEventListener('click', startFresh);
+/* Left by Start fresh and shown again from the back-forward cache, as Back from the fresh
+   page can be in some browsers: the page is yours again, and saves as it did before, as it
+   does loaded. Not after Put back or Try anyway, which leave by leaveFor too: loaded, that
+   page is a link again and sets your layout aside first, and from the cache its first save
+   would go over the layout just put back. */
+addEventListener('pageshow', (e) => { if (e.persisted && freshLeft) { hashReady = true; freshLeft = false; } });
 /* A hash this page did not write means someone navigated to a link — pasted a share URL
    into the address bar, or picked a bookmark — and changing only the fragment is a
    same-document navigation, so nothing re-reads it and the drawer on screen stays put.
@@ -2433,7 +2444,6 @@ const pastedOver = () => ownHash !== null && location.hash !== ownHash &&
 /* That save, and the address it left as it was, by fingerprint, for this tab: the layout
    the link sets aside is the save, and it is later than the address, which never had the
    change. Back to the address offers it, and only it (see `later` below). */
-const PASTED_KEY = SAVE_KEY + ':pasted';
 const pastedFrom = (prev) => {
   try {
     const r = JSON.parse(sessionStorage.getItem(PASTED_KEY) || 'null');
@@ -2443,8 +2453,8 @@ const pastedFrom = (prev) => {
 };
 /* Start fresh and Put back each leave that save behind, and the record goes with them.
    Kept past Start fresh, Back to a page at the same address offered the save as the later
-   layout, though Start fresh came after it. Either button can be pressed when the boot
-   stopped short of this line, so whatever goes wrong here is let go. */
+   layout, though Start fresh came after it. Start fresh works from before the boot reads a
+   link, so PASTED_KEY is declared with SAVE_KEY, above it. */
 function forgetPasted() {
   try { sessionStorage.removeItem(PASTED_KEY); } catch (err) { /* nothing kept to forget */ }
 }
