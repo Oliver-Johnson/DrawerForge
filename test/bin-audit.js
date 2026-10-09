@@ -482,6 +482,16 @@ const CASES = [
     fingerSlots: { f: true }, slots: { f: 1 } },
   { name: '2x1x3-slot-f-plates-1x32', u: 2, v: 1, hUnits: 3, wall: 0.4, divX: 1, divY: 32, divRemovable: true,
     fingerSlots: { f: true }, slots: { f: 2 } },
+  /* Counted without the lip's rule, the bin keeps its lip for the holes, which are laid
+     out clear of it (#58-SF-C). None fit in front of the shelf, and spread into its room
+     they would stand too high for the back slot, so the slot is built, the shelf goes, and
+     the plates along are as many as fit with none: 2 and 4. Counted as a bin with no lip at
+     all, a row of AAA cells and one of hex bits fitted in front of the shelf, held the back
+     wall too low for a slot, and kept 1 plate in front of a shelf that is not built. */
+  { name: '1x0.5x2-slot-b-aaa-L8-note-plates', u: 1, v: 0.5, hUnits: 2, wall: 0.4, insert: 2, label: 8, labelMode: 1,
+    note: 'AA cells', divY: 2, divRemovable: true, fingerSlots: { b: true }, slots: { b: 1 }, gave: 'high:b' },
+  { name: '2.5x0.5x2-slot-fbr-hex-L14-plates', u: 2.5, v: 0.5, hUnits: 2, scoop: 20, insert: 4, holeClr: 1, label: 14,
+    divY: 8, divRemovable: true, fingerSlots: { f: true, b: true, r: true }, slots: { f: 1, b: 1 }, gave: 'high:fb' },
 ];
 
 /* Removable plates with a note raised on the label shelf: plates across, along and both,
@@ -3580,8 +3590,9 @@ console.log('\nfinger slots');
     if (shelved >= built.divY) faults.push(`fixture: ${shelved} plates along in front of the shelf, no fewer`);
     /* No lip, so counted as the bin with none, and Checks puts the count down to something
        it has: never to the lip's notches. With its lip, the same bin is counted by their
-       rule. */
-    const lipless = dividersBuilt(Object.assign({}, cs, { lip: false }));
+       rule. Asked for holes, a bin asked for no lip lays them out with more room, so it is
+       another bin: there it is this one counted without the lip's rule (lipTaken). */
+    const lipless = dividersBuilt(Object.assign({}, cs, cs.insert ? { lipTaken: true } : { lip: false }));
     if (built.divX !== lipless.divX || built.divY !== lipless.divY)
       faults.push(`${built.divX} across and ${built.divY} along, where ${lipless.divX} and ${lipless.divY} fit with no lip`);
     const why = dividersWhy(cs);

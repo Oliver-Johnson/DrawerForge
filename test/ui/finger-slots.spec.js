@@ -306,6 +306,29 @@ test('the across field offers as many plates as are built with the plates along 
   await expect(checks(page)).not.toContainText('removable dividers across, not');
 });
 
+/* The reviewer's link (#58-SF-C): a 1x0.5x2 with a 0.4 mm wall asking for AAA cells, none
+   of which fit, an 8 mm shelf with a note raised on it, a back slot and 2 plates along.
+   The slot is built and takes the shelf, so both plates go in, and up to 4 could. Counted
+   without the lip's rule as a bin with no lip at all, a row of the cells fitted, left the
+   back wall no room for its slot, and kept the plates in front of the shelf: it was built
+   with 1, the field went up to 1, and Checks said so beside saying the shelf is left off. */
+test('a slotted bin asking for holes that do not fit counts its plates without them', async ({ page }) => {
+  await page.goto('about:blank');
+  await page.goto(H.BINS_URL + '#bl=0-0-1-0.5-2-0.4-1.2-0-2-0-1-1-1-1-0-8-0-0-1-0-15-16-1-2-0&bnotes=' +
+    encodeURIComponent(JSON.stringify([['AA cells']])) + '&w=400&d=400&bw=400&bd=400');
+  await page.waitForFunction(() => !!document.getElementById('fillmap'));
+  await settle(page);
+  await H.clickCell(page, 0, 0);
+  await settle(page);
+  expect(await page.evaluate(() => {
+    const b = B()[0], m = geomFor(b).meta;
+    return { asked: b.divY, note: b.note, built: builtDivs(b), lip: m.hasLip, slots: m.fingerWalls, holes: (holesIn(b) || { n: 0 }).n };
+  })).toEqual({ asked: 2, note: 'AA cells', built: { divX: 0, divY: 2 }, lip: false, slots: 'b', holes: 0 });
+  await expect(page.locator('#divY')).toHaveAttribute('max', '4');
+  await expect(checks(page)).toContainText('so its label shelf is left off');
+  await expect(checks(page)).not.toContainText('in front of the label shelf');
+});
+
 test('a drawer of slotted bins hears each note once, and a bin cannot stand on one', async ({ page }) => {
   if (await page.locator('#s-bin.closed').count()) await page.locator('#s-bin > h2 > button').click();
   await H.setField(page, 'scoop', 12);                    // the new bins' settings

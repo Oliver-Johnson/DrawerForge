@@ -1307,7 +1307,7 @@ function setDividerLimit(id, cfg) {
   if (cfg.divRemovable) {
     const by = countedAs(cfg);
     most = Math.min(most, railedMost(by, axis));
-    if (axis === 'y' || by.lip !== Object.assign({}, BIN_DEFAULTS, cfg).lip)
+    if (axis === 'y' || by.lipTaken)
       most = dividersBuilt(Object.assign({}, cfg, { [id]: most }))[id];
   }
   $(id).max = most;
