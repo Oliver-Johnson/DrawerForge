@@ -692,6 +692,15 @@ currently installed):
   thick walls, scoops, shelves and notes, holes, removable plates and half sizes, it
   came to 0.998 to 1.001, the lowest those whose shelf has a note raised on it, whose
   letters it leaves out.
+- **A mounting pocket's size is the size across its flats.** Every bore is a polygon, 14
+  sides for a magnet and a counterbore and 12 for a shank, and one with its corners on
+  the size asked is narrower than that across its flats: the default 6 mm counterbore was
+  5.85 mm, the 3 mm shank 2.90, a 10 mm magnet's pocket 9.94 even with its 0.1 mm press
+  fit at the corners. So `fastenerCutter` stands the corners 1/cos(π/n) of the radius out
+  and the flats on it, and the magnet keeps its 0.1 at the corners where that is further,
+  up to 7.77 mm. A screw gets no allowance on top: its head drops into the counterbore,
+  which the field already sizes with room round it. `mountLimits` measures every room to
+  the corners, so the largest size it takes is that room times cos(π/n).
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the
@@ -799,9 +808,10 @@ currently installed):
   the cell's side where it crosses it, and that side stands on the same plane as the
   neighbour's, so a split that lands on a corner of the neighbour's region is that
   corner's edge in both shells (a 21.7 mm magnet from beneath at 55 mm, 0.03 microns off;
-  a 22.2 mm screw shank at 56.5 mm, on main too). With pockets on the piece, every cell
-  and margin is checked against the shells built beside it (`settle`), and the pockets of
-  one or the other are cut again moved 1.7 microns, turned a 28th of a turn, or both. The
+  a screw shank 22.2 mm across its corners at 56.5 mm, on main too). With pockets on the
+  piece, every cell and margin is checked against the shells built beside it (`settle`),
+  and the pockets of one or the other are cut again moved 1.7 microns, turned a 28th of a
+  turn, or both. The
   cut kept is the one that shares the fewest edges with every shell beside it: keeping one
   that touched fewer shells, as `settle` first did, left a cell built later sharing an edge
   nothing cleared (10.1 to 11.1 mm magnets at 47.91 to 50.05 mm, clean on main). And once

@@ -1945,12 +1945,14 @@ console.log('\nthe other limits, built at their ends:');
      half a MOUNT_WALL short of the line halfway to the one beside it, so its corners stop
      at holeOffset less 0.5 and the wall between two pockets is at least 1 mm. A magnet
      pocket's corners are at the larger of 0.1 over the magnet's radius and
-     the radius over cos(π/14) (its flats on the magnet); a screw's bores have their corners
-     on its size. At 55 and 60 mm, each way in: the widest the page takes has to build
-     watertight, and the first tenth past the rule has to be refused. */
+     the radius over cos(π/14) (its flats on the magnet); a screw's bores have their flats
+     on its size too, so their corners are its radius over cos(π/12) for the 12-sided shank
+     and cos(π/14) for the 14-sided head. At 55 and 60 mm, each way in: the widest the page
+     takes has to build watertight, and the first tenth past the rule has to be refused. */
   const reach = G.DEFAULTS.holeOffset - 0.5;
   const corner = { magnetD: (d) => Math.max(d / 2 + 0.1, d / 2 / Math.cos(Math.PI / 14)),
-                   screwHoleD: (d) => d / 2, screwHeadD: (d) => d / 2 };
+                   screwHoleD: (d) => d / 2 / Math.cos(Math.PI / 12),
+                   screwHeadD: (d) => d / 2 / Math.cos(Math.PI / 14) };
   const firstPast = (f) => { let d = 1; while (corner[f](d) <= reach + 1e-9) d = Math.round(d * 10 + 1) / 10; return d; };
   const WIDE = [
     ['magnet from below', { magnets: true }, 'magnetD'],
@@ -1988,9 +1990,12 @@ console.log('\nthe other limits, built at their ends:');
      sliver of the socket floor by a corner 4.7 microns from one of the floor's spokes:
      11.1 mm at 48.55, 24 open edges on d9442d4. Main's pocket has a corner 1.0 micron
      from the same spoke and none open, so it is how the cut falls, not how near. A cell
-     open at the floor's height has its floor fanned again (fanCentre). */
+     open at the floor's height has its floor fanned again (fanCentre).
+     The shank is the pocket it was then, 22.2 mm across its corners: since a screw's
+     bores stand their flats on the size asked, that is the shank a 21.44 mm hole cuts. */
+  const shank222 = 22.2 * Math.cos(Math.PI / 12);
   for (const [nm, o] of [['21.7 mm magnet at 55 mm', { pitch: 55, magnets: true, magnetD: 21.7 }],
-                         ['22.2 mm screw shank at 56.5', { pitch: 56.5, screws: true, screwHoleD: 22.2, screwHeadD: 22.2 }],
+                         ['22.2 mm screw shank at 56.5', { pitch: 56.5, screws: true, screwHoleD: shank222, screwHeadD: shank222 }],
                          ['10.1 mm magnet above, 47.91', { pitch: 47.91, magnets: true, magnetD: 10.1, magnetSide: 'top' }],
                          ['10.6 mm magnet below, 48.98', { pitch: 48.98, magnets: true, magnetD: 10.6 }],
                          ['11.1 mm magnet above, 48.55', { pitch: 48.55, magnets: true, magnetD: 11.1, magnetSide: 'top' }]]) {
@@ -2468,9 +2473,10 @@ console.log('\nplates without half cells build the same bytes:');
       alignX: 'end', alignY: 'end', connector: 'none' }, '37b5f305cc4da6dd'],
     // fanCentre moved four of its nine cells' bottom caps off a spoke a few thousandths from
     // a cutter's corner: the same bottom face fanned from another point, its area and the
-    // volume unchanged
+    // volume unchanged. Then the screw's bores went out until their flats stood on the
+    // sizes asked, the counterbore and the shank wider by design
     ['126 x 126, magnets and screws', { drawerW: 126, drawerD: 126, marginMode: 'custom',
-      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, '5b339b75bd8c513e'],
+      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, '7eaec017027d5a46'],
     ['140 x 140, corner pockets', { drawerW: 140, drawerD: 140, marginMode: 'auto',
       magnets: true, baseMode: 'bosses' }, '7088f24def428095'],
     ['168 x 180, skeleton', { drawerW: 168, drawerD: 180, marginMode: 'auto',

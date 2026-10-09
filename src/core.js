@@ -846,10 +846,18 @@ function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
     add(cfg.magnetSide === 'top'
       ? cylinder(0, 0, magnetR, magZ0, magZ1, 14)
       : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, 14));
+  /* A screw's two bores had their corners on the size asked, so their flats came inside
+     it at every size: the 14-sided counterbore cos(π/14) of the head and the 12-sided
+     shank cos(π/12) of the hole, 5.85 mm across the flats for the default 6 mm head and
+     2.90 for the 3 mm shank. Their corners go out the same way, so the flats stand on the
+     radius and neither bore is narrower anywhere than the size typed. And no more than
+     that: the magnet's 0.1 is a press fit, and a screw head is not pressed in. It drops
+     into its counterbore, which the field already sizes with room round it (6 mm for an
+     M3's 5.5 mm head), and the shank is a clearance hole. */
   if (cfg.screws) {
     if (cfg.screwHeadD > cfg.screwHoleD)
-      add(cylinder(0, 0, cfg.screwHeadD/2, -0.5, cfg.screwHeadDepth, 14));
-    add(cylinder(0, 0, cfg.screwHoleD/2, -0.5, shankTop, 12));
+      add(cylinder(0, 0, cfg.screwHeadD/2 / Math.cos(Math.PI/14), -0.5, cfg.screwHeadDepth, 14));
+    add(cylinder(0, 0, cfg.screwHoleD/2 / Math.cos(Math.PI/12), -0.5, shankTop, 12));
   }
   return cut;
 }
@@ -865,13 +873,15 @@ function movePolys(polys, dx, dy) {
   }));
 }
 
-// counterbore: hole cylinder full height + wider recess from chosen face
+// counterbore: hole cylinder full height + wider recess from chosen face, each with its
+// flats on its size as fastenerCutter cuts them
 function screwCutter(cx, cy, holeD, headD, z0, z1, headDepth, fromTop) {
-  let polys = cylinder(cx, cy, holeD/2, z0 - 0.5, z1 + 0.5, 12);
+  let polys = cylinder(cx, cy, holeD/2 / Math.cos(Math.PI/12), z0 - 0.5, z1 + 0.5, 12);
   if (headD > holeD) {
+    const headR = headD/2 / Math.cos(Math.PI/14);
     const rec = fromTop
-      ? cylinder(cx, cy, headD/2, z1 - headDepth, z1 + 0.5, 14)
-      : cylinder(cx, cy, headD/2, z0 - 0.5, z0 + headDepth, 14);
+      ? cylinder(cx, cy, headR, z1 - headDepth, z1 + 0.5, 14)
+      : cylinder(cx, cy, headR, z0 - 0.5, z0 + headDepth, 14);
     polys = csgUnion(polys, rec);
   }
   return polys;
@@ -2483,9 +2493,10 @@ function mountLimits(cfg, layout) {
     // a magnet pocket's corners are 0.1 mm over the magnet's radius, or out to where its
     // flats stand on that radius if that is further (fastenerCutter)
     magnetD: r10(2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14))),
-    // a screw's bores have their corners on its size
-    screwHoleD: r10(2 * Math.min(fit(top), below)),
-    screwHeadD: r10(2 * Math.min(fit(under), below)),
+    // a screw's bores have their flats on its size, so their corners stand 1/cos(π/n) of
+    // it out: the shank's 12 sides and the counterbore's 14 (fastenerCutter)
+    screwHoleD: r10(2 * Math.min(fit(top), below) * Math.cos(Math.PI / 12)),
+    screwHeadD: r10(2 * Math.min(fit(under), below) * Math.cos(Math.PI / 14)),
     // in the solid floor the pad grows to suit, so only a boss caps the depth
     depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
     // which of the sizes the cut beside it stops, rather than the floor, cell or boss
@@ -3111,9 +3122,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * A 21.7 mm magnet from beneath at a 55 mm pitch did it: a flat of the pocket in the
    * cell at the back left, on the magnet's radius, crosses that cell's front side 0.03
    * microns from the corner of the cell at the back right. A 22.2 mm screw shank at 56.5
-   * mm did it twice over, from the cell at the back right as well, on main too. Each shell
-   * is closed on its own, so the pockets' own retries never see it, and it comes and goes
-   * with the size and the pitch.
+   * mm (22.2 across its corners, as shanks were cut then) did it twice over, from the cell
+   * at the back right as well, on main too. Each shell is closed on its own, so the
+   * pockets' own retries never see it, and it comes and goes with the size and the pitch.
    *
    * So with mounting pockets on the piece, every shell the cells and margins make is
    * checked against those built before it beside it, as jointed cells are above. One that

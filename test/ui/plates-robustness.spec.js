@@ -97,10 +97,10 @@ test.describe('ranges on the geometry fields', () => {
     ['#pi=55&w=110&d=110&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=400&bd=400&mg=1&md=25.4', 'errMagnet',
       /Magnet Ø must be 24\.3 mm or less at a 55 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a cell's four holes have to stay clear of each other/],
     ['#pi=60&w=120&d=120&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=400&bd=400&sc=1&sd=26', 'errScrew',
-      /Screw head Ø must be 25 mm or less at a 60 mm pitch — .* a cell's four holes have to stay clear of each other/],
+      /Screw head Ø must be 24\.3 mm or less at a 60 mm pitch — .* a cell's four holes have to stay clear of each other/],
     ['#mg=1&bm=bosses&mh=3', 'errMagnet', /Magnet depth must be 2\.4 mm or less with corner pockets/],
-    ['#sc=1&sh=20', 'errScrew', /Screw hole Ø must be 8\.3 mm or less/],
-    ['#cn=none&sc=1&sd=30', 'errScrew', /Screw head Ø must be 14 mm or less/],
+    ['#sc=1&sh=20', 'errScrew', /Screw hole Ø must be 8 mm or less/],
+    ['#cn=none&sc=1&sd=30', 'errScrew', /Screw head Ø must be 13\.6 mm or less/],
     ['#sc=1&se=50', 'errScrew', /Screw head depth must be 10 mm or less/],
     ['#cl=1', 'errConnClr', /Fit clearance must be 0\.3 mm or less — any looser and a dovetail pocket/],
     ['#cn=bowtie&cl=5', 'errConnClr', /Fit clearance must be 1 mm or less — check the figure is in millimetres/],
@@ -114,7 +114,7 @@ test.describe('ranges on the geometry fields', () => {
     [`${BOWTIE_42}&mg=1&ms=top&md=8`, 'errMagnet',
       /Magnet Ø must be 7\.6 mm or less at a 42 mm pitch — .* the recesses the bowtie keys fit into/],
     [`${BOWTIE_42.replace('cn=bowtie', 'cn=snap')}&sc=1&sd=10`, 'errScrew',
-      /Screw head Ø must be 7\.8 mm or less at a 42 mm pitch — .* the recesses the snap clips fit into/],
+      /Screw head Ø must be 7\.6 mm or less at a 42 mm pitch — .* the recesses the snap clips fit into/],
     ['#mg=1&md=20', 'errMagnet',
       /Magnet Ø must be 12\.3 mm or less at a 42 mm pitch — .* the notches the dovetail tabs fit into/],
   ];
@@ -385,12 +385,13 @@ test.describe('limits no tighter than the geometry', () => {
     expect(s.built).toBeCloseTo(7.05, 9);
   });
 
-  /* The 34 mm case takes no joint: the default dovetail's notches hold its 6 mm screw head
-     to 3.8 mm there, which is a field error of its own. The puzzle tabs' are what leave
-     a magnet no room at 36 mm, where the cell alone would take 7.7. */
+  /* The 34.5 mm case takes no joint: the default dovetail's notches hold its 6 mm screw
+     head to 4.1 mm there, which is a field error of its own. Nor 34 mm, where the head's
+     flats on its size leave the cell room for 5.8. The puzzle tabs' are what leave a
+     magnet no room at 36 mm, where the cell alone would take 7.7. */
   for (const [hash, id, errId, carried, msg] of [
-    ['#cn=none&sc=1&pi=34', 'screwHoleD', 'errScrew', 3,
-     /Screw hole Ø: there is no room for one at a 34 mm pitch.*Use a larger pitch, or turn off screw holes\./],
+    ['#cn=none&sc=1&pi=34.5', 'screwHoleD', 'errScrew', 3,
+     /Screw hole Ø: there is no room for one at a 34\.5 mm pitch.*Use a larger pitch, or turn off screw holes\./],
     ['#mg=1&pi=20', 'magnetD', 'errMagnet', 6,
      /Magnet Ø: there is no room for one at a 20 mm pitch.*Use a larger pitch, or turn off magnet pockets\./],
     ['#cn=puzzle&mg=1&pi=36', 'magnetD', 'errMagnet', 6,
