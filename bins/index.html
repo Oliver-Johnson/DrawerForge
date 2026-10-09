@@ -5355,6 +5355,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
       return b;
     };
     const cutBoxes = fromBelow.map(flatBox);
+    const cutTops = fromBelow.map((polys) => Math.max(...polys.flatMap((p) => p.verts.map((v) => v[2]))));
     const meets = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
     // whole cells only: a half cell has no mounting sites (see the fastener cut above)
     const all = [];
@@ -5439,12 +5440,26 @@ function buildPiece(cfg, layout, piece, onStatus) {
          bytes of its own to keep. A boss cut short of the piece's edge draws their lottery
          at other pitches: four one-cell pieces with dovetails, whose notches reach the
          bosses from 34 to 36.4 mm, left it at 34.64 and 34.72 mm, where the whole boss had
-         built closed. */
+         built closed.
+       *
+         A boss whose top stands level with the ceiling of a cut that reaches it came out
+         open there, the cut's ceiling and its top in one plane: a dovetail's notch is
+         2.4 mm tall, an H-clip's recess 2.3 and a wall key's 2.0, and a boss is its
+         pocket's depth and 0.8 (a magnet) or 1.0 (a screw head), up to 2.6. A 1.6 mm
+         magnet or a 1.4 mm head beside a dovetail left 4 to 9 open edges a piece at every
+         pitch the notch reaches a boss; 0.01 mm off the level either way, none. So such a
+         boss stands MOUNT_LEVEL over the ceiling, as one with a deeper pocket does, and a
+         pocket from above is cut from that top. mountLimits measures it from bossHeight,
+         which can only refuse sooner, and a pocket from above that the cut reaches is
+         refused at either height. */
+      const level = ks.filter((k) => Math.abs(cutTops[k] - bossH) < MOUNT_LEVEL);
+      const top = level.length ? Math.max(...level.map((k) => cutTops[k])) + MOUNT_LEVEL : bossH;
+      const fastener = top === bossH ? bossFastener : fastenerCutter(cfg, top - cfg.magnetH, top + 0.5, top + 0.5);
       for (const { outline, sites } of solids) {
-        let boss = extrudePoly(outline, 0, bossH);
-        if (bossFastener) {
+        let boss = extrudePoly(outline, 0, top);
+        if (fastener) {
           const pockets = [].concat(...sites.map((bs) =>
-            movePolys(bossFastener, bs.ccx + bs.sx*off, bs.ccy + bs.sy*off)));
+            movePolys(fastener, bs.ccx + bs.sx*off, bs.ccy + bs.sy*off)));
           boss = cutAgain(boss, pockets, csgSubtract(boss, pockets));
         }
         const b = flatBox(boss), cut = [];
