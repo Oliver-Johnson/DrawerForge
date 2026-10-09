@@ -4011,7 +4011,7 @@ function mountLimits(cfg, layout, known) {
   const inBoss = Math.min(roomIn(BOSS_W, BOSS_R, s), s) - MOUNT_WALL;
   const bosses = cfg.baseMode === 'bosses';
   const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
-  const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // the fields step in tenths
+  const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // a cap is given in tenths, rounded down
   /* A cell's four sites are 2 × holeOffset apart, 26 mm, so past a pitch of about 50 mm
      the room above lets a cut reach the one beside it before it reaches anything else:
      two 1-inch magnet pockets met at a 55 mm pitch and left 52 open edges. Each cut stops
@@ -4120,7 +4120,9 @@ function mountLimits(cfg, layout, known) {
       const part = plan.kind === 'recess' ? keyHalf(plan.shape, edge, 0, 0, plan.prm, 0)
         : cfg.connector === 'puzzle' ? puzzleShape(OPP[edge], 0, 0, cfg.puzzle, 0, false)
         : tabFootprint(OPP[edge], 0, 0, cfg.tab.wr, cfg.tab.wt, cfg.tab.dp, 0.8);
-      return (shapes[edge] = { segs, bb, ceiling, part: ring(part) });
+      // the ceiling to the micron: a notch's is 2.2 + 0.2, 2.4000000000000004 as summed
+      const roof = Math.round(ceiling * 1e6) / 1e6;
+      return (shapes[edge] = { segs, bb, ceiling: roof, part: ring(part) });
     };
     // how far a point is from the footprint, less than none inside it
     const from = (segs, x, y) => {
@@ -4193,7 +4195,12 @@ function mountLimits(cfg, layout, known) {
     for (const c of jointCuts) {
       // a pocket from above clears a cut whose ceiling it leaves a layer of floor over
       if (above && !(c.top + MOUNT_SKIN > pad - cfg.magnetH + 1e-6)) continue;
-      const stop = above ? 'floor' : !notch ? 'cut' : Math.abs(ceiling - c.top) < MOUNT_LEVEL ? 'level' : 'part';
+      /* Level within MOUNT_LEVEL, measured to the micron, so a pocket that far above the
+         notch's ceiling and one that far below it are taken alike: 2.35 and 2.45 mm deep
+         against a notch 2.4 mm high, which both build clean. Unrounded, 2.45 counted as
+         level, and with the ceiling alone rounded 2.35 would. */
+      const level = Math.round(Math.abs(ceiling - c.top) * 1e6) / 1e6 < MOUNT_LEVEL;
+      const stop = above ? 'floor' : !notch ? 'cut' : level ? 'level' : 'part';
       for (const s of c.sites) {
         const short = fits(s.bore[sides] - MOUNT_SEAM);
         const size = stop === 'part' ? 2 * s.body : short;
@@ -4208,11 +4215,13 @@ function mountLimits(cfg, layout, known) {
     const cell = BORE[f].fits(own[f]), J = jointFor(f);
     let size = r10(Math.min(cell, J.cap));
     joint[f] = J.cap < cell && J.why;
-    /* The sizes `near` refuses, out to the tenths either side, as the cap is: each gap is
-       [from, to], both taken. One that reaches the cap brings it down to where it starts. */
+    /* The sizes `near` refuses, out to the hundredths either side, since the field takes
+       hundredths: each gap is [from, to], both taken. A window is about 0.02 mm wide, so
+       rounded out to the tenths as the cap is, it refused up to a tenth that builds clean
+       (5.51 to 5.69 at 36 mm). One that reaches the cap brings it down to where it starts. */
     const out = [];
     for (const [a, b] of J.near.sort((x, y) => x[0] - y[0])) {
-      const from = r10(a), to = (Math.floor(b * 10 + 1e-9) + 1) / 10;
+      const from = Math.floor(a * 100 + 1e-9) / 100, to = (Math.floor(b * 100 + 1e-9) + 1) / 100;
       if (to <= 0) continue;
       if (out.length && from < out[out.length - 1][1]) out[out.length - 1][1] = Math.max(out[out.length - 1][1], to);
       else out.push([from, to]);
