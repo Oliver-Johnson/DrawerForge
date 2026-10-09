@@ -4012,6 +4012,10 @@ const MOUNT_WALL = 1.0;
    level, and how near its walls may come to any joint's cut without breaking into it.
    See mountLimits. */
 const MOUNT_LEVEL = 0.05, MOUNT_SEAM = 0.01;
+/* How far a cut is moved, 1.7 microns along each axis, when it is taken again for coming
+   out open or with a face turned over (cutAgain, in buildPiece). A corner boss's cut from
+   beneath is moved two of them along each axis, off where the cell's stands. */
+const NUDGE = 0.0017;
 /* How far a mounting bore about (x, y) can grow before it meets any of `segs`, as the
    radius of the circle through its corners: the polygon cylinder() cuts, `sides` flats
    with a corner at every 2πk/sides from +x. A point is in that polygon when it stands no
@@ -4260,6 +4264,17 @@ function mountLimits(cfg, layout, known) {
   const own = { magnetD: fit(cfg.magnetSide === 'top' ? top : under), screwHoleD: fit(top), screwHeadD: fit(under) };
   // a dovetail's notch takes a pocket from beneath that breaks into it; every other cut does not
   const notch = cfg.connector === 'dovetail';
+  /* The cuts are measured where they stand in the cells, and a corner boss's stands two
+     NUDGEs along each axis off that (buildPiece), up to 2·NUDGE·√2 (4.8 microns) nearer a
+     pocket: one MOUNT_SEAM short of the cell's cut was 0.0051 to 0.0055 mm short of an
+     H-clip's recess in the boss, and 0.0057 to 0.0070 of a key's in the walls. So in a
+     boss a pocket stops that much further off, MOUNT_SEAM short of the boss's cut as
+     well. Counting a design's magnet, screw hole and screw head apart, at every 0.01 mm
+     of pitch from 30 to 60 with the five joints that reach the bosses, it lowers 2,676
+     of the 33,430 caps a joint sets (8%), all by a tenth but 6 of a dovetail's by a
+     hundredth, and starts a dovetail's refused sizes (`near`) a hundredth lower in 5,392
+     of its 24,008. Without corner bosses nothing moves. */
+  const seam = MOUNT_SEAM + (bosses ? 2 * NUDGE * Math.SQRT2 : 0);
   /* What the joint's cuts leave one size, as { cap, why, near }: the largest size, and what
      stops it: 'cut', a pocket that would break into a key's recess or a puzzle tab's notch;
      'floor', one from above that leaves no layer of floor over a cut; 'level', one from
@@ -4285,7 +4300,7 @@ function mountLimits(cfg, layout, known) {
       const level = Math.round(Math.abs(ceiling - c.top) * 1e6) / 1e6 < MOUNT_LEVEL;
       const stop = above ? 'floor' : !notch ? 'cut' : level ? 'level' : 'part';
       for (const s of c.sites) {
-        const short = fits(s.bore[sides] - MOUNT_SEAM);
+        const short = fits(s.bore[sides] - seam);
         const size = stop === 'part' ? 2 * s.body : short;
         if (size < cap) { cap = size; why = stop; }
         if (stop === 'part') near.push([short, fits(s.bore[sides])]);
@@ -4790,13 +4805,12 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * So the cut is taken again as the pockets' is, as other trees over the same solids:
    * the cutters in the other order, the solid's faces in the other order, the faces
    * started a third and two thirds of the way round (which puts another of its planes at
-   * the root), the cutters moved 1.7 microns, the jitter the notch cutters already
+   * the root), the cutters moved 1.7 microns (NUDGE), the jitter the notch cutters already
    * carry, two ways, and last each cutter on its own, one after another, since two in
    * one cut split each other's faces and lose a sliver the same way. The first result
    * that is closed and has nothing turned over is kept; a cut that comes out right first
    * time, which is nearly every one, is built exactly as before. A try that throws is
    * passed over. */
-  const NUDGE = 0.0017;
   // the cutters in a cut, each solid on its own (polygons that share a corner go together)
   const apart = (cut) => {
     const up = cut.map((_, i) => i), at = new Map();
@@ -5404,7 +5418,12 @@ function buildPiece(cfg, layout, piece, onStatus) {
        out open (cutAgain), the cell's and the boss's alike: moved one NUDGE, the boss's
        could come back to where the cell's stood, or go where the cell's had gone, and a
        wall puzzle key at 36.13 mm with screws and a margin had 52 more edges used four
-       times than the base. None of that touches a boss no housing reaches. */
+       times than the base. Two keep them a NUDGE apart or more along each axis while at
+       most one of the two is taken again. That is all they promise: with both taken
+       again, a wall square to x can stand where the cell's does (cutAgain's nudges both
+       go up y, so one square to y cannot), and a wall that runs along the diagonal the cut
+       is moved on is not moved off the cell's at all. None of that touches a boss no
+       housing reaches. */
     const fromBelow = [...notches, ...pnotches].map((nb) => tabNotch(cfg, nb, pad));
     if (keyKind === 'recess')
       for (const bo of keyed)
@@ -5509,13 +5528,22 @@ function buildPiece(cfg, layout, piece, onStatus) {
          A boss whose top stands level with the ceiling of a cut that reaches it came out
          open there, the cut's ceiling and its top in one plane: a dovetail's notch is
          2.4 mm tall, an H-clip's recess 2.3 and a wall key's 2.0, and a boss is its
-         pocket's depth and 0.8 (a magnet) or 1.0 (a screw head), up to 2.6. A 1.6 mm
-         magnet or a 1.4 mm head beside a dovetail left 4 to 9 open edges a piece at every
-         pitch the notch reaches a boss; 0.01 mm off the level either way, none. So such a
+         pocket's depth and 0.8 (a magnet) or 1.0 (a screw head), up to 2.6. Level, a
+         boss left open edges at every pitch the cut reaches it: 4 to 13 a piece beside a
+         dovetail (a 1.6 mm magnet or a 1.4 mm head), 9 to 30 beside an H-clip, and 4 to
+         8, 9 to 18 and 25 to 74 beside a bowtie, a snap clip and a puzzle key in the
+         walls; beside the dovetail, 0.01 mm off the level either way, none. So such a
          boss stands MOUNT_LEVEL over the ceiling, as one with a deeper pocket does, and a
          pocket from above is cut from that top. mountLimits measures it from bossHeight,
          which can only refuse sooner, and a pocket from above that the cut reaches is
-         refused at either height. */
+         refused at either height.
+       *
+         Level here is not rounded to the micron, as mountLimits' is: exactly MOUNT_LEVEL
+         off, a boss is raised or not as the difference comes out in floating point, a
+         2.25 mm one under an H-clip's 2.3 and a 2.45 mm one over a dovetail's 2.4 raised,
+         a 2.35 mm one under the dovetail's not. Both ways build clean. Rounded, the bosses
+         raised now at exactly MOUNT_LEVEL would not be, and their bytes would change: 2.25
+         mm beside an H-clip, 2.05 beside a key in the walls, 2.45 beside a dovetail. */
       const level = ks.filter((k) => Math.abs(cutTops[k] - bossH) < MOUNT_LEVEL);
       const top = level.length ? Math.max(...level.map((k) => cutTops[k])) + MOUNT_LEVEL : bossH;
       const fastener = top === bossH ? bossFastener : fastenerCutter(cfg, top - cfg.magnetH, top + 0.5, top + 0.5);
@@ -5526,10 +5554,34 @@ function buildPiece(cfg, layout, piece, onStatus) {
             movePolys(fastener, bs.ccx + bs.sx*off, bs.ccy + bs.sy*off)));
           boss = cutAgain(boss, pockets, csgSubtract(boss, pockets));
         }
-        const b = flatBox(boss), cut = [];
-        for (const k of ks)
-          if (meets(cutBoxes[k], b)) cut.push(...movePolys(fromBelow[k], -2*sx*NUDGE, -2*sy*NUDGE));
-        if (cut.length) boss = cutAgain(boss, cut, csgSubtract(boss, cut));
+        /* cutAgain's tries are not always enough here. A wall puzzle key at 36.92 mm with
+           screws (a 2 mm hole, a 7.1 x 0.8 head), four cells square, kept a cut with a
+           face turned over in the pair of bosses by the front edge's key, of A2 and of B2,
+           after every try: three folds on the bed a piece, about one build in 3,600 of
+           bosses a joint reaches. Moved two NUDGEs the other way along y it came out
+           clean. So a cut that every try leaves open or turned is taken again moved two
+           NUDGEs the other way along one axis, then the other, then both, and the first
+           that comes out closed with nothing turned over is kept; if none does, the first
+           stands. Two NUDGEs, not more: each stands as far from the cell's walls as the
+           first, and none nearer the pockets (see mountLimits). A cut that comes out right
+           is built exactly as before. */
+        const b = flatBox(boss);
+        const cutAt = (a, c) => ks.flatMap((k) =>
+          meets(cutBoxes[k], b) ? movePolys(fromBelow[k], -a*sx*NUDGE, -c*sy*NUDGE) : []);
+        const cut = cutAt(2, 2);
+        if (cut.length) {
+          const solid = boss;
+          boss = cutAgain(solid, cut, csgSubtract(solid, cut));
+          for (const [a, c] of [[2, -2], [-2, 2], [-2, -2]]) {
+            if (!boss.open && !boss.turned) break;
+            let again;
+            try {
+              const alt = cutAt(a, c);
+              again = cutAgain(solid, alt, csgSubtract(solid, alt));
+            } catch (e) { continue; }   // the first cut stands
+            if (!again.open && !again.turned) boss = again;
+          }
+        }
         shells.push(boss);
       }
     }
