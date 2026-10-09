@@ -3736,6 +3736,43 @@ function platePad(cfg) {
    facets graze the floor's own triangulation — screws at a 36 mm pitch leaked 192 edges
    with 0.65 mm to spare. */
 const MOUNT_WALL = 1.0;
+/* How near a pocket's ceiling may come to a dovetail notch's before the two count as
+   level, and how near its walls may come to any joint's cut without breaking into it.
+   See mountLimits. */
+const MOUNT_LEVEL = 0.05, MOUNT_SEAM = 0.01;
+/* How far a mounting bore about (x, y) can grow before it meets any of `segs`, as the
+   radius of the circle through its corners: the polygon cylinder() cuts, `sides` flats
+   with a corner at every 2πk/sides from +x. A point is in that polygon when it stands no
+   further out along any flat's normal than R cos(π/sides), so along one segment the
+   least R that takes a point of it in is at an end, or where the segment crosses the
+   line out through a corner, on which a point's R is its distance. */
+function boreReach(sides, segs, x, y) {
+  const step = 2 * Math.PI / sides, h = Math.cos(step / 2);
+  const cx = [], cy = [], nx = [], ny = [];
+  for (let k = 0; k < sides; k++) {
+    cx.push(Math.cos(k * step)); cy.push(Math.sin(k * step));
+    nx.push(Math.cos((k + 0.5) * step)); ny.push(Math.sin((k + 0.5) * step));
+  }
+  const at = (dx, dy) => {
+    let m = -Infinity;
+    for (let k = 0; k < sides; k++) m = Math.max(m, dx * nx[k] + dy * ny[k]);
+    return m / h;
+  };
+  let r = Infinity;
+  for (const [a, b] of segs) {
+    const ax = a[0] - x, ay = a[1] - y, ex = b[0] - a[0], ey = b[1] - a[1];
+    r = Math.min(r, at(ax, ay), at(ax + ex, ay + ey));
+    for (let k = 0; k < sides; k++) {
+      const den = ex * cy[k] - ey * cx[k];
+      if (Math.abs(den) < 1e-12) continue;
+      const t = (ay * cx[k] - ax * cy[k]) / den;
+      if (t < 0 || t > 1) continue;
+      const s = (ax + t * ex) * cx[k] + (ay + t * ey) * cy[k];
+      if (s >= 0) r = Math.min(r, s);
+    }
+  }
+  return r;
+}
 /* The largest mounting cuts this configuration has room for, as diameters and depths in
    the units the page's fields use. Magnets and screws sit holeOffset (13 mm, the spec's)
    from each cell centre at ANY pitch, so the room round them shrinks with the pitch:
@@ -3751,14 +3788,20 @@ const MOUNT_WALL = 1.0;
  *     and does not grow with the pocket, so it also caps the depth.
  *
  * And whichever way it opens, it must stay out of a joint's cut in the floor beside it:
- * a key's recess, or the notch a tab fits into. That one needs `layout`, which says
+ * a key's recess, or the notch a tab fits into, where a dovetail's lets a pocket from
+ * beneath in only so far as its tab leaves room. That one needs `layout`, which says
  * where the seams are; without it no joint is counted.
  *
  * These are measurements, not field ranges, and can come out below the field's minimum
  * or negative — a screw shank at a 34 mm pitch has −0.1 mm. That means no cut of any size
  * fits there; the page turns it into a check on the design rather than a range for the
- * field (src/ui.js readNumber), since no number typed into the field could fix it. */
-function mountLimits(cfg, layout) {
+ * field (src/ui.js readNumber), since no number typed into the field could fix it.
+ *
+ * `known` is the `cuts` of an earlier answer for the same design on the same layout,
+ * with only the mounting sizes changed since: the joint's cuts are not measured again
+ * unless the floor has moved, which moves their ceilings. The page reads the magnet's
+ * size last and asks again for it, after the screws' sizes have settled the floor. */
+function mountLimits(cfg, layout, known) {
   const half = cfg.pitch / 2, off = cfg.holeOffset;
   const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
   // distance from a point at (s, s) to the edge of a rounded square of half-size h,
@@ -3776,7 +3819,7 @@ function mountLimits(cfg, layout) {
   const inBoss = Math.min(roomIn(BOSS_W, BOSS_R, s), s) - MOUNT_WALL;
   const bosses = cornerBosses(cfg);
   const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
-  const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // the fields step in tenths
+  const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // a cap is given in tenths, rounded down
   /* A cell's four sites are 2 × holeOffset apart, 26 mm, so past a pitch of about 50 mm
      the room above lets a cut reach the one beside it before it reaches anything else:
      two 1-inch magnet pockets met at a 55 mm pitch and left 52 open edges. Each cut stops
@@ -3806,30 +3849,66 @@ function mountLimits(cfg, layout) {
      to 86 with the spec's 6.5 × 2.4 magnet. The pocket had run into the cut with its
      ceiling level with the cut's: a 2 mm magnet or the default counterbore with a key's
      2 mm recess, a 2.4 mm magnet with a tab's notch. The two ceilings then share a face
-     that two subtractions split their own ways. Of 768 pockets 0.1 to 1.25 mm into a
-     key's recess, the 96 level with it went bad 74 times and the 672 at seven other
-     depths never, as near as 0.01 mm either side. So it is the pocket breaking in that
-     is refused here, not the depth that shows it: the magnet and the key, or the shank
-     and the other piece's tab, would want the same place.
+     that two subtractions split their own ways. All 86 pockets tried level with a cut
+     went bad; moved 0.001 mm up or down, 3 of them did, and 0.003 mm or more, none.
+     MOUNT_LEVEL counts 0.05 mm as level.
 
-     No wall is left between them, where MOUNT_WALL leaves 1 mm everywhere else, and that
-     was measured too: of 10,882 designs across seven keyed joints, 71 pitches and five
-     cuts, none of the 7,823 that stopped short of the cut built a bad edge, and the first
-     went bad 0.035 mm into it. A wall of 1 mm would refuse the 6 mm magnet from beneath
-     with a bowtie at 42 mm, which has 0.84 mm to spare and always built clean. */
-  const jointCuts = [];   // { room, top }: the nearest a site comes to one cut, its ceiling
+     Off the level, what a pocket may do depends on the cut, measured on random designs
+     past where a pocket first meets one: keys and tabs, magnets from both sides, screw
+     heads and shanks, halves and margins, pitches that are not round numbers.
+       - A key's recess, an H-clip's or a puzzle tab's notch takes no pocket at all ('cut').
+         One a sliver in has gone bad off the level: 0.019 mm into a snap key's recess at
+         36.52 mm, with a 0.5 mm fit clearance, at four depths on main. Let in wherever
+         the magnet or screw stayed clear of the key or tab, 7 of 2,519 such pockets at
+         the default fit or tighter went bad, 0.02 to 0.14 mm in, and 8 of 1,151 at
+         looser fits, 0.2 to 0.65 mm in.
+       - A dovetail's notch takes a pocket from beneath, a sliver or deep, unless it is
+         level with the notch ('level') or the magnet or screw in it would reach the other
+         piece's tab, which stands the fit clearance inside the notch ('part'). None of
+         3,699 such designs went bad, 1,086 of them on the page's design at 40.5 to
+         44.5 mm. So a 12.7 mm magnet at 42 mm, 2 or 3 mm thick, is taken: its pocket is
+         0.04 to 0.09 mm into the notch and the magnet 0.24 mm clear of the tab.
+       - A pocket from above meets any of them unless its floor stands a layer over the
+         cut's ceiling ('floor').
+     The pocket is measured as fastenerCutter cuts it, as a polygon (boreReach), not by the
+     circle through its corners, which kept sizes out that came a flat's width short.
+
+     A pocket that stops short of a cut stops MOUNT_SEAM short. The weld in healCsgSeams
+     takes points VTOL apart for one, and a thinner wall than a few of those can come out
+     welded through: 4 of 715 pockets less than 0.005 mm short went bad, and none of 1,941
+     from 0.005 to 0.03 mm. Under a dovetail's notch that leaves a gap of refused sizes
+     below the largest (`gaps`), between the one that stops MOUNT_SEAM short and the one
+     that breaks in. Past the weld's reach there is still the lottery the room measured
+     here does not see, about one design in a thousand, single sizes with clean ones on
+     either side, and it needs the pocket and the cut together: a 14.1 mm counterbore 2.4
+     to 3 mm deep, 0.09 mm short of a dovetail's notch at 43.17 mm, loose, folds an edge
+     at the notch's corner, byte for byte as on main, and is clean at 2.35 mm deep, at
+     14.075 and 14.125 mm across, at every size from there into the notch, and with no
+     counterbore. A guard out that far would refuse sizes that build clean on both sides
+     of it and still miss the next, 0.1 mm off. A wall of 1 mm would refuse the 6 mm
+     magnet from beneath with a bowtie at 42 mm, which has 0.84 mm to spare and always
+     built clean. */
+  const pad = platePad(cfg), again = !!known && known.pad === pad;
+  /* Each cut as { top, sites }: its ceiling, and each site in reach of it as how far a
+     bore's corner circle (`room`) and the bores themselves (`bore`, by their sides) can
+     grow before they meet the cut, and a magnet or screw (`body`) before it meets the
+     part in it. */
+  const jointCuts = again ? known.list : [];
   /* Room past the most the cell or the floor leaves cannot stop a size, so nothing
      further off than that is measured, and nothing at all where neither leaves any. A
      plate the page will build has at most 900 cells; at 30 × 30 with puzzle tabs this
      is a few milliseconds, on every redraw. */
   const reach = Math.max(fit(top), fit(under));
-  if (layout && cfg.connector !== 'none' && reach > 0) {
-    const plan = keyPlan(cfg), pad = platePad(cfg), H = pad + cfg.plateHeight;
+  if (layout && !again && cfg.connector !== 'none' && reach > 0) {
+    const plan = keyPlan(cfg), H = pad + cfg.plateHeight;
     /* A cut's footprint, as the segments its walls stand on, its extent and its ceiling,
-       for each seam it can be cut from. Every cut from one seam is the same solid moved
-       along it (keyHalf, puzzleShape, tabNotch), so it is worked out at the origin once
-       and each site is moved the other way instead. */
+       for each seam it can be cut from, and the part's that goes in it: the key's half,
+       or the tab of the piece across the seam, as buildPiece stands it there, the fit
+       clearance inside the cut. Every cut from one seam is the same solid moved along it
+       (keyHalf, puzzleShape, tabNotch), so it is worked out at the origin once and each
+       site is moved the other way instead. */
     const shapes = {};
+    const ring = (pts) => pts.map((p, i) => [p, pts[(i + 1) % pts.length]]);
     const shapeOf = (edge) => {
       if (shapes[edge]) return shapes[edge];
       const at = { edge, e: 0, s: 0 };
@@ -3848,7 +3927,12 @@ function mountLimits(cfg, layout) {
         const a = p.verts[0], b = p.verts.find((v) => Math.hypot(v[0] - a[0], v[1] - a[1]) > 1e-9);
         if (b) segs.push([a, b]);
       }
-      return (shapes[edge] = { segs, bb, ceiling });
+      const part = plan.kind === 'recess' ? keyHalf(plan.shape, edge, 0, 0, plan.prm, 0)
+        : cfg.connector === 'puzzle' ? puzzleShape(OPP[edge], 0, 0, cfg.puzzle, 0, false)
+        : tabFootprint(OPP[edge], 0, 0, cfg.tab.wr, cfg.tab.wt, cfg.tab.dp, 0.8);
+      // the ceiling to the micron: a notch's is 2.2 + 0.2, 2.4000000000000004 as summed
+      const roof = Math.round(ceiling * 1e6) / 1e6;
+      return (shapes[edge] = { segs, bb, ceiling: roof, part: ring(part) });
     };
     // how far a point is from the footprint, less than none inside it
     const from = (segs, x, y) => {
@@ -3867,7 +3951,7 @@ function mountLimits(cfg, layout) {
       const cuts = [...conn.notches, ...conn.pnotches, ...(plan.kind !== 'recess' ? []
         : conn.keyed.filter((bo) => !(plan.junction && offJunction(bo, cfg.pitch, piece))))];
       for (const bo of cuts) {
-        const { segs, bb, ceiling } = shapeOf(bo.edge);
+        const { segs, bb, ceiling, part } = shapeOf(bo.edge);
         const across = bo.edge === '+x' || bo.edge === '-x';
         const ox = across ? bo.e : bo.s, oy = across ? bo.s : bo.e;
         // the whole cells with a site in reach of it (a half cell has none; see buildPiece)
@@ -3875,40 +3959,108 @@ function mountLimits(cfg, layout) {
                                           Math.min(n - 1, Math.ceil((hi + reach + off - half - m) / cfg.pitch))];
         const [i0, i1] = cells(bb[0] + ox, bb[2] + ox, piece.mL, piece.nx);
         const [j0, j1] = cells(bb[1] + oy, bb[3] + oy, piece.mF, piece.ny);
-        let room = Infinity;
+        const sites = [];
         for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++)
           for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
             const x = piece.mL + i*cfg.pitch + half + sx*off - ox;
             const y = piece.mF + j*cfg.pitch + half + sy*off - oy;
             if (x < bb[0] - reach || x > bb[2] + reach || y < bb[1] - reach || y > bb[3] + reach) continue;
-            room = Math.min(room, from(segs, x, y));
+            // the bores and the part stand further off than the corner circle, or as far
+            const room = from(segs, x, y);
+            if (room >= reach) continue;
+            const bore = (n) => room > 0 ? boreReach(n, segs, x, y) : room;
+            sites.push({ room, body: from(part, x, y), bore: { 12: bore(12), 14: bore(14) } });
           }
-        jointCuts.push({ room, top: ceiling });
+        if (sites.length) jointCuts.push({ top: ceiling, sites });
       }
     }
   }
-  // the nearest the cuts come that a pocket with its floor at z meets
-  const jointRoom = (z) => jointCuts.reduce((m, c) =>
-    c.top + MOUNT_SKIN > z + 1e-6 ? Math.min(m, c.room) : m, Infinity);
-  const below = jointRoom(-Infinity);   // a magnet from beneath, a counterbore, a shank
-  const magnetJoint = cfg.magnetSide === 'top' && jointCuts.length
-    ? jointRoom((bosses ? bossHeight(cfg) : platePad(cfg)) - cfg.magnetH) : below;
-  const own = fit(cfg.magnetSide === 'top' ? top : under);
-  const room = Math.min(own, magnetJoint);
+  /* The bores as fastenerCutter cuts them, in one place: how many sides, and the largest
+     size whose corners stay inside a radius. A magnet's corners are 0.1 mm over its
+     radius, or out to where its flats stand on that radius if that is further; a screw's
+     bores have their corners on its size. */
+  const BORE = {
+    magnetD: { sides: 14, fits: (r) => 2 * Math.min(r - 0.1, r * Math.cos(Math.PI / 14)) },
+    screwHeadD: { sides: 14, fits: (r) => 2 * r },
+    screwHoleD: { sides: 12, fits: (r) => 2 * r },
+  };
+  // the room the cell, the floor or a boss leaves, and the hole beside
+  const own = { magnetD: fit(cfg.magnetSide === 'top' ? top : under), screwHoleD: fit(top), screwHeadD: fit(under) };
+  // a dovetail's notch takes a pocket from beneath that breaks into it; every other cut does not
+  const notch = cfg.connector === 'dovetail';
+  /* What the joint's cuts leave one size, as { cap, why, near }: the largest size, and what
+     stops it: 'cut', a pocket that would break into a key's recess or a puzzle tab's notch;
+     'floor', one from above that leaves no layer of floor over a cut; 'level', one from
+     beneath as deep as a dovetail's notch; 'part', a magnet or screw that would reach the
+     tab in one. Each stops MOUNT_SEAM short of the cut. `near` is where that leaves sizes
+     under the cap refused, as [from, to]: a dovetail's notch, which a pocket may break
+     into, but not stop just short of. */
+  const jointFor = (f) => {
+    const { sides, fits } = BORE[f];
+    const above = f === 'magnetD' && cfg.magnetSide === 'top';
+    // how high a pocket from beneath goes; a shank goes through
+    const ceiling = f === 'magnetD' ? cfg.magnetH : f === 'screwHeadD' ? cfg.screwHeadDepth : Infinity;
+    let cap = Infinity, why = false;
+    const near = [];
+    for (const c of jointCuts) {
+      /* a pocket from above clears a cut whose ceiling it leaves a layer of floor over; in
+         a corner boss its floor is the pocket's depth under the boss's top */
+      if (above && !(c.top + MOUNT_SKIN > (bosses ? bossHeight(cfg) : pad) - cfg.magnetH + 1e-6)) continue;
+      /* Level within MOUNT_LEVEL, measured to the micron, so a pocket that far above the
+         notch's ceiling and one that far below it are taken alike: 2.35 and 2.45 mm deep
+         against a notch 2.4 mm high, which both build clean. Unrounded, 2.45 counted as
+         level, and with the ceiling alone rounded 2.35 would. */
+      const level = Math.round(Math.abs(ceiling - c.top) * 1e6) / 1e6 < MOUNT_LEVEL;
+      const stop = above ? 'floor' : !notch ? 'cut' : level ? 'level' : 'part';
+      for (const s of c.sites) {
+        const short = fits(s.bore[sides] - MOUNT_SEAM);
+        const size = stop === 'part' ? 2 * s.body : short;
+        if (size < cap) { cap = size; why = stop; }
+        if (stop === 'part') near.push([short, fits(s.bore[sides])]);
+      }
+    }
+    return { cap, why, near };
+  };
+  const sizes = {}, joint = {}, gaps = {};
+  for (const f of ['magnetD', 'screwHoleD', 'screwHeadD']) {
+    const cell = BORE[f].fits(own[f]), J = jointFor(f);
+    let size = r10(Math.min(cell, J.cap));
+    joint[f] = J.cap < cell && J.why;
+    /* The sizes `near` refuses, out to the hundredths either side, since the field takes
+       hundredths: each gap is [from, to], both taken. A window is about 0.02 mm wide, so
+       rounded out to the tenths as the cap is, it refused up to a tenth that builds clean
+       (5.51 to 5.69 at 36 mm). One that reaches the cap brings it down to where it starts. */
+    const out = [];
+    for (const [a, b] of J.near.sort((x, y) => x[0] - y[0])) {
+      const from = Math.floor(a * 100 + 1e-9) / 100, to = (Math.floor(b * 100 + 1e-9) + 1) / 100;
+      if (to <= 0) continue;
+      if (out.length && from < out[out.length - 1][1]) out[out.length - 1][1] = Math.max(out[out.length - 1][1], to);
+      else out.push([from, to]);
+    }
+    gaps[f] = [];
+    for (const [from, to] of out) {
+      if (from >= size) break;
+      if (to > size) { size = from; joint[f] = 'near'; break; }
+      gaps[f].push([from, to]);
+    }
+    sizes[f] = size;
+  }
   return {
-    // a magnet pocket's corners are 0.1 mm over the magnet's radius, or out to where its
-    // flats stand on that radius if that is further (fastenerCutter)
-    magnetD: r10(2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14))),
-    // a screw's bores have their corners on its size
-    screwHoleD: r10(2 * Math.min(fit(top), below)),
-    screwHeadD: r10(2 * Math.min(fit(under), below)),
+    magnetD: sizes.magnetD,
+    screwHoleD: sizes.screwHoleD,
+    screwHeadD: sizes.screwHeadD,
     // in the solid floor the pad grows to suit, so only a boss caps the depth
     depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
     // which of the sizes the cut beside it stops, rather than the floor, cell or boss
-    beside: { magnetD: room === beside, screwHoleD: top >= beside && below >= beside,
-              screwHeadD: under >= beside && below >= beside },
-    // and which a joint's cut stops, before any of those
-    joint: { magnetD: magnetJoint < own, screwHoleD: below < fit(top), screwHeadD: below < fit(under) },
+    beside: { magnetD: own.magnetD === beside && !joint.magnetD,
+              screwHoleD: own.screwHoleD === beside && !joint.screwHoleD,
+              screwHeadD: own.screwHeadD === beside && !joint.screwHeadD },
+    // and which a joint's cut stops, before any of those, and how (jointFor)
+    joint,
+    // sizes under the largest refused all the same, as [from, to] with both ends taken
+    gaps,
+    // what was measured of the joint's cuts, for `known`
+    cuts: { pad, list: jointCuts },
   };
 }
 
@@ -7534,28 +7686,55 @@ const MOUNT_LAST = ['magnetH', 'screwHeadDepth', 'screwHoleD', 'screwHeadD', 'ma
  * off, nor margins outside Custom, because a complaint about a field you cannot see is
  * one you cannot act on. `why` finishes the too-big message where "check the figure is
  * in millimetres" would be the wrong advice, and `off` names the switch that drops a cut
- * the pitch has no room for. */
+ * the pitch has no room for. `gaps` are sizes under `max` refused all the same, as
+ * [from, to] with both ends taken. */
 const RANGES = PLATE_RANGES;
 const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
 /* The sizes a joint's cut in the floor leaves room for depend on where the seams are and
    on the clearance, so mountLimits takes the layout, and readControls reads the mounting
-   sizes after everything that moves either. One answer per size it reads, kept here
-   meanwhile: the layout and the cuts are measured once, not once for the range and
-   again for the reason. */
-let mountNow = null;
-const mount = () => mountNow || (mountNow = mountLimits(state, computeLayout(state)));
+   sizes after everything that moves either. The layout is worked out once for a read, the
+   first time a size needs it, and recomputeLayout keeps that one rather than working it
+   out again: none of the mounting sizes moves it. In Fewest plates mode one is a search,
+   about 100 ms, and with magnets on a keystroke ran three. The answer is kept meanwhile,
+   for the range and the reason alike. */
+let mountNow = null, mountLayout = null;
+const mount = () => mountNow ||
+  (mountNow = mountLimits(state, mountLayout || (mountLayout = computeLayout(state))));
+// how deep a pocket goes: only a corner boss caps it, which needs no layout
+const mountDepth = () => mountLimits(state).depth;
 // "an 18 mm pitch", "an 80 mm pitch": the article goes by how the number is said
 const atPitch = () => `at ${/^(8|1[18](\.|$))/.test(String(state.pitch)) ? 'an' : 'a'} ` +
   `${state.pitch} mm pitch`;
-const mountWhy = (opens, field) => `${atPitch()} — mounting holes sit ` +
-  `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
-  (mount().joint[field] ? `a hole has to stay out of the ` +
-    `${['dovetail', 'puzzle'].includes(state.connector) ? 'notches' : 'recesses'} the ` +
-    `${CONNECTOR_NAMES[state.connector]} fit into`
-    : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
-    : cornerBosses(state) ? 'a pocket has to stay inside its corner boss'
-    : opens ? 'a cut open to the socket has to stay on the socket floor'
-    : 'a pocket under the floor has to stay inside its cell');
+// a joint's cut in the floor, as the messages name it: "the notches the dovetail tabs fit into"
+const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'notches' : 'recesses'} the ` +
+  `${CONNECTOR_NAMES[state.connector]} fit into`;
+/* Why `field` stops where it does. A joint's cut stops it in one of the ways mountLimits'
+   `joint` names: a pocket from beneath as deep as a dovetail's notch, a magnet or screw
+   that would reach the tab in one, a pocket any wider coming too near the notch's edge,
+   or any other hole breaking into the cut. The hint about keys put in from above is not
+   given with corner pockets: there is no solid floor under them, and such a key's cup
+   stands into a boss's pocket (#75). */
+const mountWhy = (opens, field) => {
+  const joint = mount().joint[field];
+  const cuts = cutsNamed();
+  return `${atPitch()} — mounting holes sit ` +
+    `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
+    (joint === 'level' ? `a pocket ${field === 'magnetD' ? state.magnetH : state.screwHeadDepth} mm deep, ` +
+        `as deep as the ${cuts}, has to stay out of them`
+      : joint === 'part' ? `${{ magnetD: 'a magnet', screwHeadD: 'a screw head', screwHoleD: 'a screw' }[field]} ` +
+        `has to stay clear of the ${CONNECTOR_NAMES[state.connector]} in the notches beside it`
+      : joint === 'near' ? `a pocket any wider would come too near the edge of the ${cuts} to cut cleanly`
+      : joint ? `a hole has to stay out of the ${cuts}`
+      : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
+      : cornerBosses(state) ? 'a pocket has to stay inside its corner boss'
+      : opens ? 'a cut open to the socket has to stay on the socket floor'
+      : 'a pocket under the floor has to stay inside its cell') +
+    (joint && KEYED.includes(state.connector) && !keyFromTop() && !cornerBosses(state)
+      ? `; keys ${keyInWall() ? '' : 'housed inside the walls and '}put in from above ` +
+        'keep out of the solid floor under these pockets' : '');
+};
+// why a size under the largest is refused (mountLimits' `gaps`)
+const nearWhy = () => `${atPitch()} — its pocket would come too near the edge of the ${cutsNamed()} to cut cleanly`;
 // corner bosses only where they stand: over a floor the pockets are the floor's (cornerBosses)
 const bossDepth = () => cornerBosses(state)
   ? 'with corner pockets — a boss is 2.6 mm tall, while the solid floor grows to suit' : '';
@@ -7583,14 +7762,17 @@ const LIMITS = {
     tooSmall: 'at 0 the rim between sockets is a face with no width, and the plate comes out open',
     why: () => '— past that a spec bin rides on the rim instead of seating in its socket' },
   magnetD: { ...RANGES.magnetD, max: () => mount().magnetD, label: 'Magnet Ø', when: () => state.magnets,
-    why: () => mountWhy(state.magnetSide === 'top', 'magnetD'), off: 'magnet pockets' },
-  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mount().depth), label: 'Magnet depth',
+    why: () => mountWhy(state.magnetSide === 'top', 'magnetD'), off: 'magnet pockets',
+    gaps: () => mount().gaps.magnetD },
+  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mountDepth()), label: 'Magnet depth',
     when: () => state.magnets, why: bossDepth },
   screwHoleD: { ...RANGES.screwHoleD, max: () => mount().screwHoleD, label: 'Screw hole Ø',
-    when: () => state.screws, why: () => mountWhy(true, 'screwHoleD'), off: 'screw holes' },
+    when: () => state.screws, why: () => mountWhy(true, 'screwHoleD'), off: 'screw holes',
+    gaps: () => mount().gaps.screwHoleD },
   screwHeadD: { ...RANGES.screwHeadD, max: () => mount().screwHeadD, label: 'Screw head Ø',
-    when: () => state.screws, why: () => mountWhy(false, 'screwHeadD'), off: 'screw holes' },
-  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mount().depth),
+    when: () => state.screws, why: () => mountWhy(false, 'screwHeadD'), off: 'screw holes',
+    gaps: () => mount().gaps.screwHeadD },
+  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mountDepth()),
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
   // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
   connClr: { min: RANGES.connClr.min, max: () => connClrCeiling(state).max, label: 'Fit clearance',
@@ -7696,6 +7878,27 @@ function readNumber(id) {
         (why ? `${why}.` : `— check the figure is in ${unitName}.`));
     return hi;
   }
+  /* A size under the largest can be refused as well, where its pocket would come too near
+     the edge of a dovetail's notch (mountLimits' `gaps`); the sizes either side are taken.
+     Two gaps can meet at one taken size, so the advice names the sizes taken round the
+     run of gaps the size is in, inside the field's range: "Use 11.89 mm or less, 11.92 mm,
+     or 11.95 mm or more" at 41.49 mm, never a size in the next gap, under the field's least
+     or over its largest. */
+  const gaps = inPlay && lim.gaps ? lim.gaps() : [];
+  const at = gaps.findIndex(([a, b]) => v > a && v < b);
+  if (at >= 0) {
+    let i = at, j = at;
+    while (i > 0 && gaps[i - 1][1] >= gaps[i][0] - 1e-9) i--;
+    while (j < gaps.length - 1 && gaps[j + 1][0] <= gaps[j][1] + 1e-9) j++;
+    const ok = [];
+    if (gaps[i][0] > lo) ok.push(`${both(gaps[i][0])} or less`);
+    else if (gaps[i][0] === lo) ok.push(both(lo));
+    for (let k = i; k < j; k++) if (gaps[k][1] >= lo) ok.push(both(gaps[k][1]));
+    ok.push(gaps[j][1] < hi ? `${both(gaps[j][1])} or more` : both(gaps[j][1]));
+    say(`${lim.label} of ${both(v)} is refused ${nearWhy()}. Use ` +
+        (ok.length > 1 ? `${ok.slice(0, -1).join(', ')}, or ${ok[ok.length - 1]}` : ok[0]) + '.');
+    return gaps[at][0] >= lo ? gaps[at][0] : gaps[at][1];
+  }
   return v;
 }
 /* The invalid state is set on the element rather than through a class, because the
@@ -7763,10 +7966,11 @@ function readControls() {
   /* The mounting sizes last, since a joint's cut beside the sites moves with the margins,
      the split and the clearance (see mount). The magnet's is the very last, and measured
      again: a pocket from above meets a cut by how thick the floor is, which the screws
-     and the magnet's own depth set. */
-  mountNow = null;
+     and the magnet's own depth set. Only that step is taken again, on the same layout
+     and the cuts already measured, unless the floor has moved (mountLimits' `known`). */
+  mountNow = mountLayout = null;
   for (const id of MOUNT_LAST) {
-    if (id === 'magnetD') mountNow = null;
+    if (id === 'magnetD' && mountNow) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
     state[id] = readNumber(id);
   }
   // and Checks says what is wrong in the panel's order, not the order it was read in
@@ -7841,7 +8045,7 @@ function plateStyleHint() {
    nothing, and each of those is a discrete edit. */
 function recomputeLayout(ev) {
   readControls();
-  layout = computeLayout(state);
+  layout = mountLayout || computeLayout(state);   // the one the sizes were read against, if any
   // clamp stored manual cuts to the current grid
   if (state.splitMode === 'manual') {
     state.rowCuts = layout.rowCuts.slice();
