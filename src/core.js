@@ -2994,18 +2994,20 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const settle = (cell, polys) => {
     const beside = builtBeside(cell.box);
     const first = polys;
-    let now = sharedAll(polys, cell.box, beside);
+    // the edges shared with each shell beside it, and in all
+    const shares = (p) => beside.map((c) => sharedWith(p, cell.box, c));
+    let each = shares(polys), now = each.reduce((n, x) => n + x, 0);
     for (let k = 0; now && cell.recut && k < POCKET_TRIES; k++) {
       let again;
       try { again = cell.recut(cell.alt, k); } catch (e) { continue; }
       if (!again || worse(again, polys)) continue;
-      const n = sharedAll(again, cell.box, beside);
-      if (n < now) { polys = again; cell.pocket = k; now = n; }
+      const e = shares(again), n = e.reduce((s, x) => s + x, 0);
+      if (n < now) { polys = again; cell.pocket = k; now = n; each = e; }
     }
     if (polys !== first) before.set(cell.i, first);
     const mine = { box: cell.box, polys };
-    for (const c of beside) {
-      if (!c.recut || !sharedWith(polys, cell.box, c)) continue;   // a margin or half cell has no pockets
+    for (const [j, c] of beside.entries()) {
+      if (!c.recut || !each[j]) continue;   // a margin or half cell has no pockets
       const near = builtBeside(c.box).filter((d) => d !== c).concat([mine]);
       let best = shells[c.i], most = sharedAll(best, c.box, near), pick = c.pocket;
       for (let k = -1; most && k < POCKET_TRIES; k++) {
