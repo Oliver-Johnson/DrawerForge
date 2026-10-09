@@ -76,7 +76,8 @@ const MOUNT_LAST = ['magnetH', 'screwHeadDepth', 'screwHoleD', 'screwHeadD', 'ma
  * off, nor margins outside Custom, because a complaint about a field you cannot see is
  * one you cannot act on. `why` finishes the too-big message where "check the figure is
  * in millimetres" would be the wrong advice, and `off` names the switch that drops a cut
- * the pitch has no room for. */
+ * the pitch has no room for. `gaps` are sizes under `max` refused all the same, as
+ * [from, to] with both ends taken. */
 const RANGES = PLATE_RANGES;
 const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
 /* The sizes a joint's cut in the floor leaves room for depend on where the seams are and
@@ -94,15 +95,33 @@ const mountDepth = () => mountLimits(state).depth;
 // "an 18 mm pitch", "an 80 mm pitch": the article goes by how the number is said
 const atPitch = () => `at ${/^(8|1[18](\.|$))/.test(String(state.pitch)) ? 'an' : 'a'} ` +
   `${state.pitch} mm pitch`;
-const mountWhy = (opens, field) => `${atPitch()} — mounting holes sit ` +
-  `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
-  (mount().joint[field] ? `a hole has to stay out of the ` +
-    `${['dovetail', 'puzzle'].includes(state.connector) ? 'notches' : 'recesses'} the ` +
-    `${CONNECTOR_NAMES[state.connector]} fit into`
-    : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
-    : state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
-    : opens ? 'a cut open to the socket has to stay on the socket floor'
-    : 'a pocket under the floor has to stay inside its cell');
+// a joint's cut in the floor, as the messages name it: "the notches the dovetail tabs fit into"
+const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'notches' : 'recesses'} the ` +
+  `${CONNECTOR_NAMES[state.connector]} fit into`;
+/* Why `field` stops where it does. A joint's cut stops it in one of the ways mountLimits'
+   `joint` names: a pocket from beneath as deep as a dovetail's notch, a magnet or screw
+   that would reach the tab in one, a pocket any wider coming too near the notch's edge,
+   or any other hole breaking into the cut. */
+const mountWhy = (opens, field) => {
+  const joint = mount().joint[field];
+  const cuts = cutsNamed();
+  return `${atPitch()} — mounting holes sit ` +
+    `${state.holeOffset} mm from each cell centre, where the Gridfinity spec puts them, and ` +
+    (joint === 'level' ? `a pocket ${field === 'magnetD' ? state.magnetH : state.screwHeadDepth} mm deep, ` +
+        `as deep as the ${cuts}, has to stay out of them`
+      : joint === 'part' ? `${{ magnetD: 'a magnet', screwHeadD: 'a screw head', screwHoleD: 'a screw' }[field]} ` +
+        `has to stay clear of the ${CONNECTOR_NAMES[state.connector]} in the notches beside it`
+      : joint === 'near' ? `a pocket any wider would come too near the edge of the ${cuts} to cut cleanly`
+      : joint ? `a hole has to stay out of the ${cuts}`
+      : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
+      : state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
+      : opens ? 'a cut open to the socket has to stay on the socket floor'
+      : 'a pocket under the floor has to stay inside its cell') +
+    (joint && KEYED.includes(state.connector) && !keyFromTop()
+      ? `; keys ${keyInWall() ? '' : 'housed inside the walls and '}put in from above leave the floor clear` : '');
+};
+// why a size under the largest is refused (mountLimits' `gaps`)
+const nearWhy = () => `${atPitch()} — its pocket would come too near the edge of the ${cutsNamed()} to cut cleanly`;
 const bossDepth = () => state.baseMode === 'bosses'
   ? 'with corner pockets — a boss is 2.6 mm tall, while the solid floor grows to suit' : '';
 const LIMITS = {
@@ -129,13 +148,16 @@ const LIMITS = {
     tooSmall: 'at 0 the rim between sockets is a face with no width, and the plate comes out open',
     why: () => '— past that a spec bin rides on the rim instead of seating in its socket' },
   magnetD: { ...RANGES.magnetD, max: () => mount().magnetD, label: 'Magnet Ø', when: () => state.magnets,
-    why: () => mountWhy(state.magnetSide === 'top', 'magnetD'), off: 'magnet pockets' },
+    why: () => mountWhy(state.magnetSide === 'top', 'magnetD'), off: 'magnet pockets',
+    gaps: () => mount().gaps.magnetD },
   magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mountDepth()), label: 'Magnet depth',
     when: () => state.magnets, why: bossDepth },
   screwHoleD: { ...RANGES.screwHoleD, max: () => mount().screwHoleD, label: 'Screw hole Ø',
-    when: () => state.screws, why: () => mountWhy(true, 'screwHoleD'), off: 'screw holes' },
+    when: () => state.screws, why: () => mountWhy(true, 'screwHoleD'), off: 'screw holes',
+    gaps: () => mount().gaps.screwHoleD },
   screwHeadD: { ...RANGES.screwHeadD, max: () => mount().screwHeadD, label: 'Screw head Ø',
-    when: () => state.screws, why: () => mountWhy(false, 'screwHeadD'), off: 'screw holes' },
+    when: () => state.screws, why: () => mountWhy(false, 'screwHeadD'), off: 'screw holes',
+    gaps: () => mount().gaps.screwHeadD },
   screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mountDepth()),
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
   // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
@@ -241,6 +263,14 @@ function readNumber(id) {
     say(`${lim.label} must be ${both(roundMm(hi))} or less ` +
         (why ? `${why}.` : `— check the figure is in ${unitName}.`));
     return hi;
+  }
+  /* A size under the largest can be refused as well, where its pocket would come too near
+     the edge of a dovetail's notch (mountLimits' `gaps`); the sizes either side are taken. */
+  const gap = inPlay && lim.gaps && lim.gaps().find(([a, b]) => v > a && v < b);
+  if (gap) {
+    say(`${lim.label} of ${both(v)} is refused ${nearWhy()}. Use ${both(gap[0])} or less, ` +
+        `or ${both(gap[1])} or more.`);
+    return gap[0];
   }
   return v;
 }
