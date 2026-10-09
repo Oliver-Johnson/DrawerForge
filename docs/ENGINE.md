@@ -668,7 +668,12 @@ currently installed):
   designs with a solid floor, the first three tries left 6 open and all of them leave
   4, none worse. A try that throws (the turned cutters there reach `healCsgSeams`'
   T-junction pass limit) is passed over and the first cut stands, where it used to fail
-  the whole build.
+  the whole build. The socket floor is a fan too, from the cell's centre, and a pocket
+  from above or a screw's shank stands on it: an 11.1 mm magnet from above at 48.55 mm put
+  a corner 3 microns off one of its spokes, six open edges in every cell that no try
+  closed. A cell still open after its tries has that floor fanned again by `fanCentre`,
+  clear of those corners, and every cut taken again on it. Only then: a 6 mm magnet from
+  above at 42 mm has a spoke 2.3 microns from a corner in every cell and is closed.
 - **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
   straight walls run only 2.5 mm either side of a cell's middle at 13.5 mm, so every
   housing, notch and clip pocket crosses its corner arcs and cones, at points that move
@@ -700,7 +705,13 @@ currently installed):
   corner's edge in both shells (a 21.7 mm magnet from beneath at 55 mm, 0.03 microns off;
   a 22.2 mm screw shank at 56.5 mm, on main too). With pockets on the piece, every cell
   and margin is checked against the shells built beside it (`settle`), and the pockets of
-  one or the other are cut again moved 1.7 microns or turned a 28th of a turn. Two cups put in
+  one or the other are cut again moved 1.7 microns, turned a 28th of a turn, or both. The
+  cut kept is the one that shares the fewest edges with every shell beside it: keeping one
+  that touched fewer shells, as `settle` first did, left a cell built later sharing an edge
+  nothing cleared (10.1 to 11.1 mm magnets at 47.91 to 50.05 mm, clean on main). And once
+  the cells are built, if the shells `settle` cut again have more bad edges with those
+  beside them than they started with, or more open or turned over, they all go back to
+  their first cut. Two cups put in
   from above from each side of a piece one cell deep meet face to face at 14.44 mm (twice a
   cup's reach), and there they are built as one solid with `csgUnion`.
 - **A face that is nothing but a straight line has no middle.** A weld that closes a

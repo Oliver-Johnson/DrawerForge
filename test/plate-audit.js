@@ -1941,9 +1941,10 @@ console.log('\nthe other limits, built at their ends:');
   /* A cell's four sites are 2 × holeOffset apart, so past a pitch of about 50 mm it is the
      site beside a pocket, not the cell edge or the socket floor, that stops it. A 1-inch
      magnet from beneath at 55 mm met the pocket beside it and left 52 edges open, with
-     Download on. The rule, worked out here rather than read from the engine: a cut keeps
-     half of a 1 mm MOUNT_WALL to the one beside it, so its corners stop at holeOffset less
-     0.5. A magnet pocket's corners are at the larger of 0.1 over the magnet's radius and
+     Download on. The rule, worked out here rather than read from the engine: a cut stops
+     half a MOUNT_WALL short of the line halfway to the one beside it, so its corners stop
+     at holeOffset less 0.5 and the wall between two pockets is at least 1 mm. A magnet
+     pocket's corners are at the larger of 0.1 over the magnet's radius and
      the radius over cos(π/14) (its flats on the magnet); a screw's bores have their corners
      on its size. At 55 and 60 mm, each way in: the widest the page takes has to build
      watertight, and the first tenth past the rule has to be refused. */
@@ -1977,9 +1978,20 @@ console.log('\nthe other limits, built at their ends:');
      it stands on that side: each shell closed, the corner's edge used four times. The
      magnet built clean on main and not on 0bb9e4d; the screw shank, twice over, on
      neither. A cell now checks the shells built beside it and cuts the pockets again,
-     its own or the other's (settle in core.js), so both have to build watertight. */
+     its own or the other's (settle in core.js), so both have to build watertight.
+     settle's first way of doing that kept a try that touched fewer shells, and left a
+     shell built later sharing an edge no try cleared: 10.1 to 11.1 mm magnets at 47.91,
+     48.55, 48.98 and 50.05 mm, clean on main, with 2 or 3 edges used four times on
+     d9442d4. It counts the edges shared now, and the two below are two of those, one
+     each way in.
+     And the pocket that stands on the magnet's radius moved a pocket's corner from above
+     onto a spoke of the socket floor's fan: 11.1 mm at 48.55, 24 open edges on d9442d4
+     and none on main. A cell that comes out open has its floor fanned again (fanCentre). */
   for (const [nm, o] of [['21.7 mm magnet at 55 mm', { pitch: 55, magnets: true, magnetD: 21.7 }],
-                         ['22.2 mm screw shank at 56.5', { pitch: 56.5, screws: true, screwHoleD: 22.2, screwHeadD: 22.2 }]]) {
+                         ['22.2 mm screw shank at 56.5', { pitch: 56.5, screws: true, screwHoleD: 22.2, screwHeadD: 22.2 }],
+                         ['10.1 mm magnet above, 47.91', { pitch: 47.91, magnets: true, magnetD: 10.1, magnetSide: 'top' }],
+                         ['10.6 mm magnet below, 48.98', { pitch: 48.98, magnets: true, magnetD: 10.6 }],
+                         ['11.1 mm magnet above, 48.55', { pitch: 48.55, magnets: true, magnetD: 11.1, magnetSide: 'top' }]]) {
     const r = buildAll({ drawerW: 2 * o.pitch, drawerD: 2 * o.pitch, ...o });
     console.log(`  ${nm.padEnd(28)} ${leakText(r)}`);
     if (r.bad) bad++;
