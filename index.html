@@ -3736,8 +3736,13 @@ const MOUNT_WALL = 1.0;
  * These are measurements, not field ranges, and can come out below the field's minimum
  * or negative — a screw shank at a 34 mm pitch has −0.1 mm. That means no cut of any size
  * fits there; the page turns it into a check on the design rather than a range for the
- * field (src/ui.js readNumber), since no number typed into the field could fix it. */
-function mountLimits(cfg, layout) {
+ * field (src/ui.js readNumber), since no number typed into the field could fix it.
+ *
+ * `known` is the `cuts` of an earlier answer for the same design on the same layout,
+ * with only the mounting sizes changed since: the joint's cuts are not measured again
+ * unless the floor has moved, which moves their ceilings. The page reads the magnet's
+ * size last and asks again for it, after the screws' sizes have settled the floor. */
+function mountLimits(cfg, layout, known) {
   const half = cfg.pitch / 2, off = cfg.holeOffset;
   const tol = cfg.tolerance === 'tight' ? +0.1 : cfg.tolerance === 'loose' ? -0.1 : 0;
   // distance from a point at (s, s) to the edge of a rounded square of half-size h,
@@ -3785,23 +3790,35 @@ function mountLimits(cfg, layout) {
      2 mm recess, a 2.4 mm magnet with a tab's notch. The two ceilings then share a face
      that two subtractions split their own ways. Of 768 pockets 0.1 to 1.25 mm into a
      key's recess, the 96 level with it went bad 74 times and the 672 at seven other
-     depths never, as near as 0.01 mm either side. So it is the pocket breaking in that
-     is refused here, not the depth that shows it: the magnet and the key, or the shank
-     and the other piece's tab, would want the same place.
+     depths never, as near as 0.01 mm either side. Never there; a pocket only a sliver
+     into a cut has gone bad at other depths too (a review found one 0.019 mm into a snap
+     key's recess at 36.52 mm, bad at four depths on main). So any pocket breaking in is
+     refused here, not only the depth that shows it. That is safe, and more than the
+     parts need: the pocket is measured by the circle through its corners, and it can
+     break into the cut with the magnet or screw in it still clear of the key or the tab,
+     which stand the fit clearance inside the cut. A 12.7 mm magnet at 42 mm is clear of
+     a dovetail's tab by about 0.24 mm, with its pocket 0.09 mm into the notch.
 
      No wall is left between them, where MOUNT_WALL leaves 1 mm everywhere else, and that
      was measured too: of 10,882 designs across seven keyed joints, 71 pitches and five
      cuts, none of the 7,823 that stopped short of the cut built a bad edge, and the first
-     went bad 0.035 mm into it. A wall of 1 mm would refuse the 6 mm magnet from beneath
-     with a bowtie at 42 mm, which has 0.84 mm to spare and always built clean. */
-  const jointCuts = [];   // { room, top }: the nearest a site comes to one cut, its ceiling
+     went bad 0.035 mm into it. That is a sample, not a promise: a 14.1 mm counterbore
+     2.4 mm deep, 0.05 mm clear of a dovetail's notch at 43.17 mm, loose, folds a face
+     over at the notch's corner and uses an edge four times, on main as here, byte for
+     byte, and not at 43.16 or 43.18 mm, 14 mm across or 2.35 deep. That is the joint
+     cut's own lottery (see cutAgain in buildPiece), not the pocket's. A wall of 1 mm
+     would refuse the 6 mm magnet from beneath with a bowtie at 42 mm, which has 0.84 mm
+     to spare and always built clean. */
+  const pad = platePad(cfg), again = !!known && known.pad === pad;
+  // { room, top }: the nearest a site comes to one cut, its ceiling
+  const jointCuts = again ? known.list : [];
   /* Room past the most the cell or the floor leaves cannot stop a size, so nothing
      further off than that is measured, and nothing at all where neither leaves any. A
      plate the page will build has at most 900 cells; at 30 × 30 with puzzle tabs this
      is a few milliseconds, on every redraw. */
   const reach = Math.max(fit(top), fit(under));
-  if (layout && !bosses && cfg.connector !== 'none' && reach > 0) {
-    const plan = keyPlan(cfg), pad = platePad(cfg), H = pad + cfg.plateHeight;
+  if (layout && !again && !bosses && cfg.connector !== 'none' && reach > 0) {
+    const plan = keyPlan(cfg), H = pad + cfg.plateHeight;
     /* A cut's footprint, as the segments its walls stand on, its extent and its ceiling,
        for each seam it can be cut from. Every cut from one seam is the same solid moved
        along it (keyHalf, puzzleShape, tabNotch), so it is worked out at the origin once
@@ -3869,7 +3886,7 @@ function mountLimits(cfg, layout) {
     c.top + MOUNT_SKIN > z + 1e-6 ? Math.min(m, c.room) : m, Infinity);
   const below = jointRoom(-Infinity);   // a magnet from beneath, a counterbore, a shank
   const magnetJoint = cfg.magnetSide === 'top' && jointCuts.length
-    ? jointRoom(platePad(cfg) - cfg.magnetH) : below;
+    ? jointRoom(pad - cfg.magnetH) : below;
   const own = fit(cfg.magnetSide === 'top' ? top : under);
   const room = Math.min(own, magnetJoint);
   return {
@@ -3886,6 +3903,8 @@ function mountLimits(cfg, layout) {
               screwHeadD: under >= beside && below >= beside },
     // and which a joint's cut stops, before any of those
     joint: { magnetD: magnetJoint < own, screwHoleD: below < fit(top), screwHeadD: below < fit(under) },
+    // what was measured of the joint's cuts, for `known`
+    cuts: { pad, list: jointCuts },
   };
 }
 
@@ -7405,11 +7424,16 @@ const RANGES = PLATE_RANGES;
 const customMargins = () => state.marginMode === 'custom' && !state.noMargin;
 /* The sizes a joint's cut in the floor leaves room for depend on where the seams are and
    on the clearance, so mountLimits takes the layout, and readControls reads the mounting
-   sizes after everything that moves either. One answer per size it reads, kept here
-   meanwhile: the layout and the cuts are measured once, not once for the range and
-   again for the reason. */
-let mountNow = null;
-const mount = () => mountNow || (mountNow = mountLimits(state, computeLayout(state)));
+   sizes after everything that moves either. The layout is worked out once for a read, the
+   first time a size needs it, and recomputeLayout keeps that one rather than working it
+   out again: none of the mounting sizes moves it. In Fewest plates mode one is a search,
+   about 100 ms, and with magnets on a keystroke ran three. The answer is kept meanwhile,
+   for the range and the reason alike. */
+let mountNow = null, mountLayout = null;
+const mount = () => mountNow ||
+  (mountNow = mountLimits(state, mountLayout || (mountLayout = computeLayout(state))));
+// how deep a pocket goes: only a corner boss caps it, which needs no layout
+const mountDepth = () => mountLimits(state).depth;
 // "an 18 mm pitch", "an 80 mm pitch": the article goes by how the number is said
 const atPitch = () => `at ${/^(8|1[18](\.|$))/.test(String(state.pitch)) ? 'an' : 'a'} ` +
   `${state.pitch} mm pitch`;
@@ -7449,13 +7473,13 @@ const LIMITS = {
     why: () => '— past that a spec bin rides on the rim instead of seating in its socket' },
   magnetD: { ...RANGES.magnetD, max: () => mount().magnetD, label: 'Magnet Ø', when: () => state.magnets,
     why: () => mountWhy(state.magnetSide === 'top', 'magnetD'), off: 'magnet pockets' },
-  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mount().depth), label: 'Magnet depth',
+  magnetH: { ...RANGES.magnetH, max: () => Math.min(RANGES.magnetH.max, mountDepth()), label: 'Magnet depth',
     when: () => state.magnets, why: bossDepth },
   screwHoleD: { ...RANGES.screwHoleD, max: () => mount().screwHoleD, label: 'Screw hole Ø',
     when: () => state.screws, why: () => mountWhy(true, 'screwHoleD'), off: 'screw holes' },
   screwHeadD: { ...RANGES.screwHeadD, max: () => mount().screwHeadD, label: 'Screw head Ø',
     when: () => state.screws, why: () => mountWhy(false, 'screwHeadD'), off: 'screw holes' },
-  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mount().depth),
+  screwHeadDepth: { ...RANGES.screwHeadDepth, max: () => Math.min(RANGES.screwHeadDepth.max, mountDepth()),
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
   // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
   connClr: { min: RANGES.connClr.min, max: () => connClrCeiling(state).max, label: 'Fit clearance',
@@ -7628,10 +7652,11 @@ function readControls() {
   /* The mounting sizes last, since a joint's cut beside the sites moves with the margins,
      the split and the clearance (see mount). The magnet's is the very last, and measured
      again: a pocket from above meets a cut by how thick the floor is, which the screws
-     and the magnet's own depth set. */
-  mountNow = null;
+     and the magnet's own depth set. Only that step is taken again, on the same layout
+     and the cuts already measured, unless the floor has moved (mountLimits' `known`). */
+  mountNow = mountLayout = null;
   for (const id of MOUNT_LAST) {
-    if (id === 'magnetD') mountNow = null;
+    if (id === 'magnetD' && mountNow) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
     state[id] = readNumber(id);
   }
   // and Checks says what is wrong in the panel's order, not the order it was read in
@@ -7706,7 +7731,7 @@ function plateStyleHint() {
    nothing, and each of those is a discrete edit. */
 function recomputeLayout(ev) {
   readControls();
-  layout = computeLayout(state);
+  layout = mountLayout || computeLayout(state);   // the one the sizes were read against, if any
   // clamp stored manual cuts to the current grid
   if (state.splitMode === 'manual') {
     state.rowCuts = layout.rowCuts.slice();
