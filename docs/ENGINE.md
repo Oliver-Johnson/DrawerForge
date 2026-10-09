@@ -754,21 +754,30 @@ currently installed):
 - **A pocket that reaches a joint's cut goes bad where the two ceilings are level.** A
   key's recess, an H-clip's and a tab's notch are all cut up from under the plate, as a
   magnet pocket from beneath and a counterbore are. Run into one, the pocket comes out
-  closed at any depth but one: the recess's 2 mm (a 2 mm magnet, the default counterbore)
+  closed at nearly any depth but one: the recess's 2 mm (a 2 mm magnet, the default counterbore)
   or the notch's 2.4 (the spec's 6.5 × 2.4 magnet), where the two ceilings share a face
   that two subtractions each split their own way. A bowtie in the floor at 42 mm left 12
   edges open at 7.9 mm and 19 at 10; puzzle tabs at 36 to 40 mm left 26 to 86 with the
   spec's magnet. Over 768 such pockets 0.1 to 1.25 mm into a key's recess, magnets from
   beneath and screw heads, four keys at four pitches, the 96 level with it went bad 74
-  times, and the 672 at seven other depths, as near as 0.01 mm either side, never. It is
-  not mended, it is refused: the pocket has broken into the space the key or the other
-  piece's tab fills, and a magnet there would sit against it.
+  times, and the 672 at seven other depths, as near as 0.01 mm either side, never. Not
+  never anywhere: a pocket only a sliver into a cut can go bad at another depth, as one
+  0.019 mm into a snap key's recess at 36.52 mm did on main at four depths. It is not
+  mended, it is refused, any pocket that breaks into the cut at all. That is safe rather
+  than exact. The pocket is measured by the circle through its corners, and the key or
+  the other piece's tab stands the fit clearance inside the cut, so a pocket can break in
+  with the magnet or screw in it still clear of the part: a 12.7 mm magnet at 42 mm is
+  about 0.24 mm clear of a dovetail's tab, its pocket 0.09 mm into the notch.
   `mountLimits` measures every mounting site of a whole cell against each cut on the
   layout and holds every size to the room, with no wall: of 10,882 designs over seven keyed
   joints, 71 pitches and five cuts, none that stopped short of the cut built a bad edge,
-  and the first went bad 0.035 mm into it. A pocket from above meets a cut unless its
-  floor stands a layer over the cut's ceiling. The housings a key is dropped into from
-  above start 1.3 mm over the socket floor and nothing reaches them, and a pocket in a
+  and the first went bad 0.035 mm into it. That is a sample, not a promise: a 14.1 mm
+  counterbore 2.4 mm deep, 0.05 mm clear of a dovetail's notch at 43.17 mm, loose, turns
+  a face over at the notch's corner, byte for byte as main does, and builds clean at
+  43.16 and 43.18 mm; that is the joint cut's own lottery (the next item), not the
+  pocket's. A pocket from above meets a cut unless its floor stands a layer over the
+  cut's ceiling. The housings a key is dropped into from above start 1.3 mm over the
+  socket floor and nothing reaches them, and a pocket in a
   corner boss is left out: the boss is a shell of its own, and no joint is cut from it.
 - **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
   straight walls run only 2.5 mm either side of a cell's middle at 13.5 mm, so every

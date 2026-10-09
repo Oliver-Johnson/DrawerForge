@@ -2006,13 +2006,14 @@ console.log('\nthe other limits, built at their ends:');
      has to come out watertight, and the first tenth past it, and a size main took that
      reaches the cut (the first that leaked, where one did), have to be refused. Two
      pieces side by side, so the seam between them is cut. The bands are #61's, where its
-     wider pocket brought the leak 0.1 to 0.4 mm lower. From above, an 8 mm magnet meets
-     the recess under it without a bad edge, and would sit on the key; in the wall, main's
-     widest leaked. The 38.13 mm link is the one #61 left for later: its
-     6.5 mm counterbore stood 0.7 mm into a puzzle key's recess. The last two are the
-     spec's 6.5 × 2.4 magnet beside a tab, whose notch stops 2.4 mm up as well. And the
-     same bowtie in four pieces with strips of half cells and margins round them, whose
-     whole cells are the ones measured. */
+     wider pocket brought the leak 0.1 to 0.4 mm lower. From above, an 8 mm magnet's
+     pocket breaks into the recess under it without a bad edge, the magnet itself about
+     0.13 mm clear of the key: refused all the same, as every pocket that breaks into a
+     cut is (see mountLimits). In the wall, main's widest leaked. The 38.13 mm link is
+     the one #61 left for later: its 6.5 mm counterbore stood 0.7 mm into a puzzle key's
+     recess. The last two are the spec's 6.5 × 2.4 magnet beside a tab, whose notch stops
+     2.4 mm up as well. And the same bowtie in four pieces with strips of half cells and
+     margins round them, whose whole cells are the ones measured. */
   const pair = (p, o) => ({ pitch: p, drawerW: 4 * p, drawerD: 2 * p, bedW: 2 * p + 16, bedD: 400, ...o });
   const JOINTED = [   // [what, design, field, a size main took into the cut]
     ['bowtie, magnet below, 42', pair(42, { connector: 'bowtie', magnets: true }), 'magnetD', 7.9],

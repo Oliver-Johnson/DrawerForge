@@ -2397,15 +2397,25 @@ function mountLimits(cfg, layout, known) {
      2 mm recess, a 2.4 mm magnet with a tab's notch. The two ceilings then share a face
      that two subtractions split their own ways. Of 768 pockets 0.1 to 1.25 mm into a
      key's recess, the 96 level with it went bad 74 times and the 672 at seven other
-     depths never, as near as 0.01 mm either side. So it is the pocket breaking in that
-     is refused here, not the depth that shows it: the magnet and the key, or the shank
-     and the other piece's tab, would want the same place.
+     depths never, as near as 0.01 mm either side. Never there; a pocket only a sliver
+     into a cut has gone bad at other depths too (a review found one 0.019 mm into a snap
+     key's recess at 36.52 mm, bad at four depths on main). So any pocket breaking in is
+     refused here, not only the depth that shows it. That is safe, and more than the
+     parts need: the pocket is measured by the circle through its corners, and it can
+     break into the cut with the magnet or screw in it still clear of the key or the tab,
+     which stand the fit clearance inside the cut. A 12.7 mm magnet at 42 mm is clear of
+     a dovetail's tab by about 0.24 mm, with its pocket 0.09 mm into the notch.
 
      No wall is left between them, where MOUNT_WALL leaves 1 mm everywhere else, and that
      was measured too: of 10,882 designs across seven keyed joints, 71 pitches and five
      cuts, none of the 7,823 that stopped short of the cut built a bad edge, and the first
-     went bad 0.035 mm into it. A wall of 1 mm would refuse the 6 mm magnet from beneath
-     with a bowtie at 42 mm, which has 0.84 mm to spare and always built clean. */
+     went bad 0.035 mm into it. That is a sample, not a promise: a 14.1 mm counterbore
+     2.4 mm deep, 0.05 mm clear of a dovetail's notch at 43.17 mm, loose, folds a face
+     over at the notch's corner and uses an edge four times, on main as here, byte for
+     byte, and not at 43.16 or 43.18 mm, 14 mm across or 2.35 deep. That is the joint
+     cut's own lottery (see cutAgain in buildPiece), not the pocket's. A wall of 1 mm
+     would refuse the 6 mm magnet from beneath with a bowtie at 42 mm, which has 0.84 mm
+     to spare and always built clean. */
   const pad = platePad(cfg), again = !!known && known.pad === pad;
   // { room, top }: the nearest a site comes to one cut, its ceiling
   const jointCuts = again ? known.list : [];
