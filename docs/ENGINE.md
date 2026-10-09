@@ -385,6 +385,56 @@ the cell boundary instead of overlapping by `BLOAT`, so every shared face is cou
 twice, and no edge is ever used once. Bloating the bosses would fix it, at the cost of
 changing their footprint. Far better than it was (2964 and 8332), still not fixed.
 
+Corner bosses are built only on an open underside (`cornerBosses`). A floor under the
+sockets, a key housed in the floor (2.8 mm), the puzzle's lobes (2.6) or Extra floor,
+stood round the 2.6 mm bosses and sealed their pockets in it (#70); with one, the plate is
+built as a solid floor builds it, pockets and the floor's growth included, and Checks says
+so. A joint cut from beneath where four cells meet (a wall key's recess, an H-clip's or a
+dovetail's notch; the puzzle's lobes always have their floor, so no boss stands by them)
+is taken out of the bosses as well as the cells, after their pockets; the bosses used to
+stand in the whole housing. Cut plainly, the housing's outline went into the boss and
+into the cell it shares faces with, and into both of two bosses meeting across a cell
+edge: an H-clip at 42 mm went from 40 edges used four times a piece to 59 and 68. So a
+boss a housing reaches stops a `BLOAT` short of the piece's edge, the two either side of
+one housing are built as one solid, and the cut is moved two `NUDGE`s into its own boss,
+so its walls stand off the cell's. (One `NUDGE` is not enough: a cut that comes out open
+is taken again a `NUDGE` along a diagonal, the cell's and the boss's alike, and that could
+put the boss's walls back on the cell's: 52 more four-use edges in a piece, on a wall
+puzzle key at 36.13 mm.) That leaves fewer four-use edges than before (31 a piece for that
+H-clip) and none used once. Two `NUDGE`s keep the walls a `NUDGE` apart or more along
+each axis while at most one of the two cuts is taken again, and that is all they promise:
+with both taken again, a wall square to x can stand where the cell's does (both of
+`cutAgain`'s nudges go up y, so one square to y cannot), and a wall that runs along the
+diagonal the cut is moved on is not moved off the cell's at all. A boss is its pocket's
+depth and 0.8 mm (a magnet) or 1.0 (a screw head) tall, up to 2.6, and one whose top
+stood level with the ceiling of the cut that reaches it (a dovetail's notch 2.4 mm, an
+H-clip's recess 2.3, a wall key's 2.0) came out open there, at every pitch the cut
+reaches it: 4 to 13 open edges a piece beside a dovetail (a 1.6 mm magnet or a 1.4 mm
+head), 9 to 30 beside an H-clip, and 4 to 8, 9 to 18 and 25 to 74 beside a bowtie, a snap
+clip and a puzzle key in the walls. Beside the dovetail, 0.01 mm off the level either way,
+none did. Such a boss stands `MOUNT_LEVEL` over the ceiling, with a pocket from above
+cut from that top.
+
+A boss's pocket is a lottery of its own: default screws in a one-cell piece left 3 to 6
+open edges on a boss's underside at 22 of the 901 pitches from 34 to 60 mm that take
+them, and a 9.1 mm magnet at 39.46 mm 12 a piece, with no joint at all. So every boss's
+pockets are cut again (`cutAgain`) when they come out open. A boss no housing reaches is
+cut again only then, and is otherwise built byte for byte as it was: a pocket that comes
+out closed with a face turned over (13 more of those pitches) has the fold
+`unfoldFinished` lays out again, and every one of those pieces was watertight and
+oriented. A boss a housing reaches is new, and is cut again when a pocket comes out
+turned over too, as the joint's cut is; the shorter boss draws the lottery at other
+pitches (34.64 and 34.72 mm, in four one-cell pieces with dovetails).
+
+The joint's cut in a boss is a lottery too, and `cutAgain` does not always win it: a wall
+puzzle key at 36.92 mm with screws (a 2 mm hole, a 7.1 × 0.8 mm head), four cells
+square, kept a cut with a face turned over in two of its four pieces after every try,
+three folds on the bed a piece, about one build in 3,600 of bosses a joint reaches. So
+such a cut is taken again moved two `NUDGE`s the other way along one axis, then the
+other, then both, and the first that comes out clean is kept; if none does, the first
+stands. Each stands as far off the cell's walls as the first, and none nearer the
+pockets.
+
 `connector: 'puzzle'` used to be listed here as the first kind, and it is **no longer
 open anywhere**. It is worth reading how, because it needed two unrelated fixes and the
 lesson generalises: **an even count and an odd count on the same case are two separate
@@ -776,8 +826,11 @@ currently installed):
     0.24 mm clear of the tab. 2.4 mm thick it is level, built 96 bad edges, and is refused.
   - **A pocket from above** meets any of them unless its floor stands a layer over the
     cut's ceiling. The housings a key is dropped into from above start 1.3 mm over the
-    socket floor and nothing reaches them, and a pocket in a corner boss is left out: the
-    boss is a shell of its own, and no joint is cut from it.
+    socket floor and nothing reaches them.
+  - **A pocket in a corner boss counts the same way**, since the joint is cut from the
+    boss too (#70), and from above its floor is measured from the boss's top: wall keys
+    and the dovetail reach a boss's pocket up to about 39 mm, the H-clip up to about 34.5,
+    and nothing at 42.
 
   A pocket that stops short of a cut stops 0.01 mm short (`MOUNT_SEAM`): the weld in
   `healCsgSeams` takes points `VTOL` apart for one, and a thinner wall can come out welded
@@ -787,7 +840,14 @@ currently installed):
   that breaks in, about 0.02 mm wide and rounded out to the hundredth either side, as the
   field takes them: at 36 mm on the page's design 5.59, 5.6, 5.73 and 5.74 mm are refused,
   and 5.58, 5.61, 5.72 and 5.75 are taken. The page says so at the field and names the
-  sizes taken either side. Past the weld's reach there is still the
+  sizes taken either side. A corner boss's cut stands two `NUDGE`s along each axis off the
+  cell's, up to 4.8 microns nearer a pocket (one 0.01 mm short of the cell's was 0.0051 to
+  0.0070 mm short of the boss's), so in a boss a pocket stops that much further off.
+  Counting a design's magnet, screw hole and screw head apart, at every 0.01 mm of pitch
+  from 30 to 60 with the five joints that reach the bosses, that lowers 2,676 of the
+  33,430 caps a joint sets (8%), all by a tenth but 6 of a dovetail's by a hundredth, and
+  starts a dovetail's refused sizes a hundredth lower in 5,392 of its 24,008; nothing
+  without corner bosses moves. Past the weld's reach there is still the
   lottery the room cannot see, about one design in a thousand, single sizes with clean
   ones on either side, and it needs the pocket and the cut together: a 14.1 mm
   counterbore 2.4 to 3 mm deep, 0.09 mm short of a dovetail's notch at 43.17 mm, loose,
