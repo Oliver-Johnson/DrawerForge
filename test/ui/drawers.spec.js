@@ -311,17 +311,21 @@ function fullStorage() {
 }
 /* The same race with the storage full for everything, so the later change cannot be set
    aside either. The page said it was, with a Put back that did nothing, and its first save
-   wrote over this browser's save, the one copy of that change left. */
-for (const tool of ['bins', 'plates']) {
+   wrote over this browser's save, the one copy of that change left. On Bins also with an
+   Extra floor that makes the plates 5 mm tall: Baseplates hands that over as "5.00" and
+   Bins writes it "5", which is still no change. `ph` is the plate height Bins is then
+   given, the same length as the one it has. */
+for (const [tool, floor, ph] of [['bins', '0', '4.35'], ['bins', '0.75', '6'], ['plates', '0']]) {
   const ready = tool === 'bins' ? binsReady : platesReady;
   // each change the same length or shorter, so this browser's own save of it still fits
   const [field, key, before, refused, raced, next] = tool === 'bins' ? ['gap', 'bgap', '6', '4', '7', '5']
     : ['connector', 'cn', 'dovetail', 'puzzle', 'bowtie', 'hclip'];
   test(`with storage full, a ${tool} page reloaded as a change's save lands sets nothing aside ` +
-    'it cannot keep', async ({ page }) => {
+    'it cannot keep' + (floor === '0' ? '' : `, ${floor} mm of extra floor`), async ({ page }) => {
     await page.addInitScript(fullStorage);
     const errors = await openPlates(page);
     await H.setField(page, 'drawerW', '400');
+    if (floor !== '0') await H.setField(page, 'bottomPad', floor);
     await saveAs(page, 'Kitchen');
     if (tool === 'bins') { await toBins(page); await H.setField(page, field, before); }
     /* Baseplates by way of Bins, so its save already carries the Bins settings a hand-over
@@ -363,7 +367,8 @@ for (const tool of ['bins', 'plates']) {
        count as a change of the design, the plate height alone: held back until a change it
        counted, that was never saved at all. */
     if (tool === 'bins') {
-      const ph = (+await page.inputValue('#plateH') + 0.1).toFixed(2);
+      expect(await local(), 'the plate height as Bins writes it').toContain(
+        `ph=${floor === '0' ? '4.25' : '5'}&`);
       await H.setField(page, 'plateH', ph);
       await expect.poll(local, { message: 'the plate height is saved', timeout: 20000 })
         .toContain(`ph=${ph}`);
