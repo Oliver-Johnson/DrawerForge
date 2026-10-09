@@ -398,7 +398,11 @@ a piece to 59 and 68. So a boss a housing reaches stops a `BLOAT` short of the p
 edge, the two either side of one housing are built as one solid, and the cut is moved
 `NUDGE` into its own boss, so its walls stand 1.7 microns from the cell's. That leaves
 fewer four-use edges than before (31 a piece for that H-clip) and none used once, and a
-boss no housing reaches is built byte for byte as it was.
+boss no housing reaches is built byte for byte as it was. A boss a housing reaches has
+its pockets cut again (`cutAgain`) if they come out open: a boss's pocket is a lottery of
+its own (default screws in a one-cell piece leave 3 to 6 open edges on a boss's underside
+at 22 of the 901 pitches from 34 to 60 mm that take them, in bosses no housing reaches),
+and the shorter boss draws it again at other pitches.
 
 `connector: 'puzzle'` used to be listed here as the first kind, and it is **no longer
 open anywhere**. It is worth reading how, because it needed two unrelated fixes and the

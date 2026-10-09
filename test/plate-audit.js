@@ -2210,6 +2210,18 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
                   `${leakText(r)}${r.bad ? `, ${plain.bad} with no joint` : ''}${good ? '' : '   FAIL'}`);
       if (!good) bad++;
     }
+  /* A boss a housing reaches stops short of the piece's edge, and its pockets are a
+     lottery of their own: four one-cell pieces with dovetails, whose notches reach the
+     bosses from 34 to 36.4 mm, left 3 open edges under a boss with default screws at
+     these two pitches, where the whole boss had built closed, until the pockets were cut
+     again where they come out open (buildPiece). */
+  for (const p of [34.64, 34.72]) {
+    const r = buildAll({ pitch: p, drawerW: 2 * p, drawerD: 2 * p, bedW: p + 5, bedD: p + 5,
+                         baseMode: 'bosses', screws: true });
+    console.log(`  ${`dovetail, one-cell pieces at ${p} mm, screws`.padEnd(36)} ${r.L.pieces.length} pieces; ${leakText(r)}` +
+                `${r.bad ? '   FAIL' : ''}`);
+    if (r.bad) bad++;
+  }
 }
 
 /* The fit clearance at its ceiling, for every joint and every pitch band.
