@@ -385,6 +385,21 @@ the cell boundary instead of overlapping by `BLOAT`, so every shared face is cou
 twice, and no edge is ever used once. Bloating the bosses would fix it, at the cost of
 changing their footprint. Far better than it was (2964 and 8332), still not fixed.
 
+Corner bosses are built only on an open underside (`cornerBosses`). A floor under the
+sockets, a key housed in the floor (2.8 mm), the puzzle's lobes (2.6) or Extra floor,
+stood round the 2.6 mm bosses and sealed their pockets in it (#70); with one, the plate is
+built as a solid floor builds it, pockets and the floor's growth included, and Checks says
+so. A joint cut from beneath where four cells meet (a wall key's recess, an H-clip's, a
+dovetail's or a puzzle's notch) is taken out of the bosses as well as the cells, after
+their pockets; the bosses used to stand in the whole housing. Cut plainly, the housing's
+outline went into the boss and into the cell it shares faces with, and into both of two
+bosses meeting across a cell edge: an H-clip at 42 mm went from 40 edges used four times
+a piece to 59 and 68. So a boss a housing reaches stops a `BLOAT` short of the piece's
+edge, the two either side of one housing are built as one solid, and the cut is moved
+`NUDGE` into its own boss, so its walls stand 1.7 microns from the cell's. That leaves
+fewer four-use edges than before (31 a piece for that H-clip) and none used once, and a
+boss no housing reaches is built byte for byte as it was.
+
 `connector: 'puzzle'` used to be listed here as the first kind, and it is **no longer
 open anywhere**. It is worth reading how, because it needed two unrelated fixes and the
 lesson generalises: **an even count and an odd count on the same case are two separate
@@ -768,8 +783,10 @@ currently installed):
   joints, 71 pitches and five cuts, none that stopped short of the cut built a bad edge,
   and the first went bad 0.035 mm into it. A pocket from above meets a cut unless its
   floor stands a layer over the cut's ceiling. The housings a key is dropped into from
-  above start 1.3 mm over the socket floor and nothing reaches them, and a pocket in a
-  corner boss is left out: the boss is a shell of its own, and no joint is cut from it.
+  above start 1.3 mm over the socket floor and nothing reaches them. A pocket in a corner
+  boss counts the same way, since the joint is cut from the boss too (#70), and from
+  above its floor is measured from the boss's top: wall keys and the dovetail reach a
+  boss's pocket up to about 39 mm, the H-clip up to about 34.5, and nothing at 42.
 - **A joint's cut is the same lottery, and below 16 mm it comes up often.** The socket's
   straight walls run only 2.5 mm either side of a cell's middle at 13.5 mm, so every
   housing, notch and clip pocket crosses its corner arcs and cones, at points that move

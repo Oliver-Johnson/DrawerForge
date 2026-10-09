@@ -2095,6 +2095,123 @@ console.log('\nthe other limits, built at their ends:');
   bad += open.length + (holds ? 0 : 1);
 }
 
+/* Corner bosses beside a joint cut from beneath (#70). A boss stands where four cells
+   meet, and so does a wall key's recess, an H-clip's, and the notch a dovetail's or a
+   puzzle's tab goes into from the next piece. The joint was cut from the cells and not
+   from the bosses, so they stood in the whole of each housing and nothing could go in,
+   with Download on: a housing filled in is watertight, and the bosses' own edges were
+   there already. And a joint that houses itself in a floor, keys at 2.8 mm and the
+   puzzle's lobes at 2.6, stood that floor round the 2.6 mm bosses and sealed their
+   pockets in it, as an extra floor did.
+ *
+   So each is built two pieces side by side at 42 mm, with magnets from beneath, from
+   above and screws, and read along vertical lines 0.3 mm apart. The housing is what the
+   joint takes out of the plate without its mountings (solid with no joint, empty with
+   one), and none of it may be solid with the bosses on, and solid 5 microns round: a
+   boss's cut stands NUDGE off the cell's (see buildPiece), and the sliver of boss that
+   leaves in a housing, 1.7 microns thick, is not a fill. Every pocket has to be empty
+   from its mouth to its floor. And the edges two bosses share where they meet, used four
+   times (quarantined above), may not be more than the same plate has with no joint. */
+console.log('\ncorner bosses beside a joint cut from beneath:');
+{
+  // along a vertical line, the faces above a height, each counted by which way it faces,
+  // add up to how many shells that height is inside
+  const columns = (polys) => {
+    const cells = new Map(), key = (i, j) => i * 100003 + j;
+    for (const t of G.polysToTriangles(polys)) {
+      const xs = t.map((v) => v[0]), ys = t.map((v) => v[1]);
+      for (let i = Math.floor(Math.min(...xs)); i <= Math.floor(Math.max(...xs)); i++)
+        for (let j = Math.floor(Math.min(...ys)); j <= Math.floor(Math.max(...ys)); j++) {
+          if (!cells.has(key(i, j))) cells.set(key(i, j), []);
+          cells.get(key(i, j)).push(t);
+        }
+    }
+    return (x, y) => {
+      const cross = [];
+      for (const [a, b, c] of cells.get(key(Math.floor(x), Math.floor(y))) || []) {
+        const n = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        if (Math.abs(n) < 1e-12) continue;
+        const d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+        const l1 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / d;
+        const l2 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / d;
+        if (l1 < 0 || l2 < 0 || l1 + l2 > 1) continue;
+        cross.push([l1 * a[2] + l2 * b[2] + (1 - l1 - l2) * c[2], Math.sign(n)]);
+      }
+      return (z) => cross.reduce((w, [zc, s]) => zc > z ? w + s : w, 0);
+    };
+  };
+  const h = 0.3, dz = 0.1;
+  const zs = Array.from({ length: 40 }, (_, k) => (k + 0.5) * dz);
+  const at = { pitch: 42, drawerW: 168, drawerD: 84, bedW: 100, bedD: 400 };
+  const JOINTS = [
+    ['keys in the floor', { connector: 'bowtie' }],
+    ['keys in the wall', { connector: 'bowtie', keyMount: 'wall' }],
+    ['H-clip', { connector: 'hclip' }],
+    ['dovetail', { connector: 'dovetail' }],
+    ['puzzle tabs', { connector: 'puzzle' }],
+    ['extra floor, no joint', { connector: 'none', bottomPad: 1 }],
+  ];
+  const MOUNTS = [
+    ['magnets below', { magnets: true }],
+    ['magnets above', { magnets: true, magnetSide: 'top' }],
+    ['screws', { screws: true }],
+  ];
+  for (const [jn, j] of JOINTS)
+    for (const [mn, m] of MOUNTS) {
+      const r = buildAll({ ...at, baseMode: 'bosses', ...j, ...m });
+      const cfg = r.cfg, pad = G.platePad(cfg);
+      const plain = buildAll({ ...at, baseMode: 'bosses', ...j, ...m, connector: 'none', bottomPad: 0 });
+      const without = buildAll({ ...at, ...j, bottomPad: pad });
+      const solidBefore = buildAll({ ...at, ...j, connector: 'none', bottomPad: pad });
+      let housing = 0, filled = 0, pts = 0, buried = 0;
+      r.pieces.forEach((polys, pi) => {
+        const pc = r.L.pieces[pi];
+        const A = columns(polys), B = columns(without.pieces[pi]), C = columns(solidBefore.pieces[pi]);
+        if (cfg.connector !== 'none') {
+          const W = pc.mL + pc.nx * cfg.pitch + pc.mR, D = pc.mF + pc.ny * cfg.pitch + pc.mB;
+          for (let x = h / 2 + 0.000731; x < W; x += h)
+            for (let y = h / 2 + 0.000419; y < D; y += h) {
+              const a = A(x, y), b = B(x, y), c = C(x, y);
+              let round = null;
+              for (const z of zs)
+                if (c(z) >= 1 && b(z) <= 0) {
+                  housing++;
+                  if (a(z) < 1) continue;
+                  round = round || [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([u, v]) => A(x + u * 0.005, y + v * 0.005));
+                  if (round.every((f) => f(z) >= 1)) filled++;
+                }
+            }
+        }
+        // each pocket's sides and middle, from its mouth to its floor: a standing boss's
+        // top is its own height, and a floor's the floor's
+        const top = G.cornerBosses(cfg) ? Math.min(2.6, Math.max(cfg.magnets ? cfg.magnetH + 0.8 : 0,
+          cfg.screws ? cfg.screwHeadDepth + 1 : 0)) : pad;
+        const spans = [];
+        if (cfg.magnets) spans.push(cfg.magnetSide === 'top'
+          ? [cfg.magnetD / 2 - 0.3, top - cfg.magnetH, top] : [cfg.magnetD / 2 - 0.3, 0, cfg.magnetH]);
+        if (cfg.screws) spans.push([cfg.screwHeadD / 2 - 0.3, 0, cfg.screwHeadDepth], [cfg.screwHoleD / 2 - 0.3, 0, top]);
+        for (let i = 0; i < pc.nx; i++) for (let k = 0; k < pc.ny; k++)
+          for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+            const px = pc.mL + (i + 0.5) * cfg.pitch + sx * cfg.holeOffset;
+            const py = pc.mF + (k + 0.5) * cfg.pitch + sy * cfg.holeOffset;
+            for (const [rad, z0, z1] of spans)
+              for (let q = 0; q < 8; q++) for (const rr of [0, rad / 2, rad]) {
+                const col = A(px + rr * Math.cos(q * Math.PI / 4) + 0.000731, py + rr * Math.sin(q * Math.PI / 4) + 0.000419);
+                for (let z = z0 + 0.1; z <= z1 - 0.1 + 1e-9; z += 0.2) { pts++; if (col(z) >= 1) buried++; }
+              }
+          }
+      });
+      const mm3 = (n) => (n * h * h * dz).toFixed(1);
+      const good = !filled && !buried && !r.open && r.bad <= plain.bad && (cfg.connector === 'none' || housing > 0);
+      console.log(`  ${`${jn}, ${mn}`.padEnd(36)} ` +
+                  (cfg.connector === 'none' ? 'no housing' : !housing ? 'NO HOUSING CUT'
+                    : `housing ${mm3(housing)} mm³, ${filled ? `${mm3(filled)} mm³ OF IT FILLED` : 'none filled'}`) +
+                  `; ${buried ? `${buried} of ${pts} pocket points SOLID` : `pockets open (${pts} points)`}; ` +
+                  `${leakText(r)}${r.bad ? `, ${plain.bad} with no joint` : ''}${good ? '' : '   FAIL'}`);
+      if (!good) bad++;
+    }
+}
+
 /* The fit clearance at its ceiling, for every joint and every pitch band.
  *
  * connClrCeiling's answer depends on the joint, which way its key goes in and the pitch,
