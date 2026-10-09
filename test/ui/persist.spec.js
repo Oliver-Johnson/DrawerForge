@@ -40,6 +40,10 @@ async function openBins(page) {
 }
 
 const settle = (page) => page.waitForTimeout(900);   // past the 400 ms debounce
+/* Until this browser holds the save `re` matches. A page still busy drawing the edit
+   comes to its save late, and a fixed wait was now and then too short for it. */
+const savedAs = (page, key, re) =>
+  expect.poll(() => page.evaluate((k) => localStorage.getItem(k), key)).toMatch(re);
 
 test('the baseplates page comes back the way you left it', async ({ page }) => {
   await openPlates(page);
@@ -122,7 +126,7 @@ test('editing does not fill the history with entries', async ({ page }) => {
 test('the baseplates page remembers a drawer with no link to carry it', async ({ page }) => {
   await openPlates(page);
   await H.setField(page, 'drawerW', '444');
-  await settle(page);
+  await savedAs(page, 'drawerforge:plates:v1', /(^|&)w=444(&|$)/);
 
   // arrive again with nothing in the URL at all
   await page.goto(page.url().split('#')[0]);
@@ -136,7 +140,7 @@ test('the baseplates page remembers a drawer with no link to carry it', async ({
 test('the bins page remembers its bins with no link to carry them', async ({ page }) => {
   await openBins(page);
   await H.dragCells(page, [0, 0], [1, 1]);
-  await settle(page);
+  await savedAs(page, 'drawerforge:bins:v1', /(^|&)bl=0-0-2-2-/);
   expect((await H.bins(page)).length).toBe(1);
 
   await page.goto(page.url().split('#')[0]);

@@ -29,17 +29,13 @@ const rest = (page) => page.evaluate(() => {
 const checks = (page) => page.locator('#warnings');
 const tail = (page, i = 0) => page.evaluate((i) => packBin(B()[i]).split('-').slice(21), i);
 /* A fresh page at a link, through about:blank, as half-cells.spec.js opens one: a hash
-   alone does not reload it. The blank page now and then asks for the favicon of the
-   page it replaced, which it may not load from file://, and says so in the console; that
-   line is the hop's, not the page's, and is let go. */
-const BLANK_FAVICON = /^Not allowed to load local resource: file:\S*\/favicon\.svg$/;
+   alone does not reload it. What the blank page says about the favicon is the hop's, not
+   the page's, and H.openBins's listener lets it go (see H.blankFavicon). */
 const arrive = async (page, hash) => {
   await page.goto('about:blank');
   await page.goto(H.BINS_URL + hash);
   await page.waitForFunction(() => typeof THREE !== 'undefined');
   await settle(page);
-  const errors = page.__errors;
-  for (let i = errors.length - 1; i >= 0; i--) if (BLANK_FAVICON.test(errors[i])) errors.splice(i, 1);
 };
 // one bin as a link writes it: at x, y, u by v, h units tall, with holes for `insert`
 const linkBin = (x, y, u, v, h, insert) =>
