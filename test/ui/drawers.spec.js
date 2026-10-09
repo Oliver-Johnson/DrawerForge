@@ -245,7 +245,8 @@ for (const tool of ['bins', 'plates']) {
    and the drawer still has the save before both. The reload took the drawer for newer than
    the page and reopened onto that older save, and the page's next save wrote it over the
    change everywhere. Now it keeps the address, and the later change, which the reload
-   never saw, is set aside. */
+   never saw, is set aside. The change before has a size in it too, which the next save
+   writes: counted from the design the reload took, it was taken for the drawer's. */
 for (const tool of ['bins', 'plates']) {
   const ready = tool === 'bins' ? binsReady : platesReady;
   const [field, key, before, refused, raced] = tool === 'bins' ? ['gap', 'bgap', '6', '4', '7']
@@ -265,6 +266,7 @@ for (const tool of ['bins', 'plates']) {
         return write.apply(this, arguments);
       };
     });
+    await H.setField(page, 'drawerW', '410');
     if (tool === 'bins') await H.setField(page, field, refused);
     else await page.selectOption('#' + field, refused);
     await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
@@ -284,9 +286,10 @@ for (const tool of ['bins', 'plates']) {
     await ready(page);
     await expect(page.locator('#drawerName')).toHaveText('Kitchen');
     await expect(page.locator('#' + field)).toHaveValue(refused);
+    await expect(page.locator('#drawerW')).toHaveValue('410');
     await expect(page.locator('#setAsideMsg')).toHaveText('The layout you had here is set aside.');
     await settle(page);
-    expect((await stored(page)).Kitchen[key], 'the drawer takes it now').toBe(refused);
+    expect((await stored(page)).Kitchen, 'the drawer takes it now').toMatchObject({ [key]: refused, w: '410' });
     await page.click('#putBack');
     await expect.poll(() => page.inputValue('#' + field).catch(() => ''),
       { message: 'and Put back brings the later change', timeout: 20000 }).toBe(raced);
@@ -985,10 +988,12 @@ for (const tool of ['plates', 'bins']) {
 
 // a change to a page's own half alone: the field, the value it is changed to, and its key
 const ownChange = (tool) => (tool === 'bins' ? ['gap', '4', 'bgap'] : ['connector', 'hclip', 'cn']);
-async function changeOwn(page, tool) {
+// and a second, no longer, so the page's own save of it still fits with the storage full
+const ownChange2 = (tool) => (tool === 'bins' ? '5' : 'snap');
+async function changeOwn(page, tool, to) {
   const [field, v] = ownChange(tool);
-  if (tool === 'bins') await H.setField(page, field, v);
-  else await page.selectOption('#' + field, v);
+  if (tool === 'bins') await H.setField(page, field, to || v);
+  else await page.selectOption('#' + field, to || v);
 }
 // Kitchen at 400, with both pages' marks in it, open in this tab on `tool`
 async function kitchenOn(page, tool) {
@@ -1001,17 +1006,30 @@ async function kitchenOn(page, tool) {
   await settle(page);
   return errors;
 }
-// another tab of `tool` on Kitchen moves its size to 420, and changes that page's own half too
-async function moveKitchen(context, tool, errors, own) {
+// another tab of `tool`, on Kitchen, makes `change` to it
+async function inOtherTab(context, tool, errors, change) {
   const other = await context.newPage();
   other.on('pageerror', (e) => errors.push(String(e)));
   await other.goto(base + (tool === 'bins' ? 'bins/' : ''));
   await (tool === 'bins' ? binsReady : platesReady)(other);
   await expect(other.locator('#drawerName')).toHaveText('Kitchen');
-  await H.setField(other, 'drawerW', '420');
-  if (own) await changeOwn(other, tool);
+  await change(other);
   await settle(other);
   await other.close();
+}
+// moves its size to 420, and changes that page's own half too
+async function moveKitchen(context, tool, errors, own) {
+  await inOtherTab(context, tool, errors, async (other) => {
+    await H.setField(other, 'drawerW', '420');
+    if (own) await changeOwn(other, tool);
+  });
+}
+// with the storage full from here on, the page's size changed to 410, which the drawer refuses
+async function refuseSize(page) {
+  await page.evaluate(() => sessionStorage.setItem('full', '1'));
+  await H.setField(page, 'drawerW', '410');
+  await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+  await settle(page);
 }
 
 /* And when the first tab saves a change of its own before it comes back. Its save keeps the
@@ -1070,6 +1088,123 @@ for (const tool of ['plates', 'bins']) {
       }
       expect(errors).toEqual([]);
     });
+}
+
+/* As above, with the storage full by the time the first tab comes back: its save that went
+   through kept the other tab's size, and a change after it was refused, so the address is
+   the one copy of that change. Counted from the drawer's settings, which the page took for
+   its own when it came back, the change took in the old size the page still had, and once
+   there was room it wrote that over the other tab's. It is counted from what the page last
+   saved, and the size the other tab moved on since is caught up: reloaded, and handed over,
+   then the change taken back to the first page. */
+for (const tool of ['plates', 'bins']) for (const how of ['reloaded', 'handed over']) {
+  test(`a ${tool} tab whose save kept another tab's size, then had a change refused, catches up, ${how}`,
+    async ({ page, context }) => {
+      const there = tool === 'plates' ? 'bins' : 'plates';
+      const now = how === 'reloaded' ? tool : there;
+      const [field, v, key] = ownChange(tool);
+      await page.addInitScript(fullStorage);
+      const errors = await kitchenOn(page, tool);
+      await moveKitchen(context, tool, errors, false);
+      await changeOwn(page, tool);
+      await expect.poll(() => stored(page).then((s) => s.Kitchen),
+        { message: 'its change is saved, beside the other tab\'s size', timeout: 20000 })
+        .toMatchObject({ w: '420', [key]: v });
+      await page.evaluate(() => sessionStorage.setItem('full', '1'));
+      await changeOwn(page, tool, ownChange2(tool));
+      await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+      await settle(page);
+
+      if (how === 'reloaded') await page.reload();
+      else await page.click(there === 'bins' ? '#navBins' : '#navPlates');
+      await expect.poll(() => page.inputValue('#drawerW').catch(() => ''),
+        { message: 'caught up with the other tab', timeout: 20000 }).toBe('420');
+      await (now === 'bins' ? binsReady : platesReady)(page);
+      if (how === 'reloaded') {
+        expect(await page.inputValue('#' + field), 'with the change').toBe(ownChange2(tool));
+      }
+      await settle(page);
+      // with room again, the next change saves into the drawer, and keeps the other tab's size
+      await page.evaluate(() => sessionStorage.setItem('full', '0'));
+      const [, first, nowKey] = ownChange(now);
+      const next = now !== tool ? first : tool === 'bins' ? '6' : 'bowtie';
+      await changeOwn(page, now, next);
+      await expect.poll(() => stored(page).then((s) => s.Kitchen),
+        { message: 'the next change is saved', timeout: 20000 }).toMatchObject({ [nowKey]: next });
+      expect((await stored(page)).Kitchen.w, 'the other tab\'s size').toBe('420');
+      await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+      if (how === 'handed over') {
+        await (tool === 'bins' ? toBins : toPlates)(page);
+        expect(await page.inputValue('#' + field), 'the change, back where it was made').toBe(ownChange2(tool));
+        await expect.poll(() => stored(page).then((s) => s.Kitchen),
+          { message: 'and saved there', timeout: 20000 }).toMatchObject({ w: '420', [key]: ownChange2(tool) });
+      }
+      expect(errors).toEqual([]);
+    });
+}
+
+/* With the storage full, a size changed and refused, then another tab on the other page
+   changes the depth, and the page comes back, reloaded or from the back-forward cache. It
+   catches up the depth and keeps the size, still to be saved. Reloaded, the catch-up was
+   counted from the design, so the size was taken for the drawer's and went back; from the
+   cache, the reload it took lost that the size was refused, and the next save kept the
+   drawer's old one. */
+for (const tool of ['plates', 'bins']) for (const how of ['reloaded', 'shown again from the cache']) {
+  test(`with storage full, a size changed on ${tool} outlives catching up another tab's depth, ${how}`,
+    async ({ page, context }) => {
+      const there = tool === 'plates' ? 'bins' : 'plates';
+      await page.addInitScript(fullStorage);
+      const errors = await kitchenOn(page, tool);
+      await refuseSize(page);
+      await inOtherTab(context, there, errors, (other) => H.setField(other, 'drawerD', '555'));
+
+      if (how === 'reloaded') await page.reload();
+      else await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+      await expect.poll(() => page.inputValue('#drawerD').catch(() => ''),
+        { message: 'caught up with the other tab', timeout: 20000 }).toBe('555');
+      await (tool === 'bins' ? binsReady : platesReady)(page);
+      expect(await page.inputValue('#drawerW'), 'with the size changed').toBe('410');
+      await settle(page);
+      await page.evaluate(() => sessionStorage.setItem('full', '0'));
+      await changeOwn(page, tool);
+      const [, v, key] = ownChange(tool);
+      await expect.poll(() => stored(page).then((s) => s.Kitchen),
+        { message: 'with room again, the next change saves the size too', timeout: 20000 })
+        .toMatchObject({ w: '410', d: '555', [key]: v });
+      await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+      expect(errors).toEqual([]);
+    });
+}
+
+/* And handed over, onto a page whose own half another tab has moved on, and nothing else:
+   the page there takes that half from the drawer (restore), and the reload that takes it
+   lost that the size was refused, so the drawer's older size came back over it. */
+for (const tool of ['plates', 'bins']) {
+  test(`with storage full, a size changed on ${tool} is the size on the other page as it takes its half ` +
+    'from the drawer', async ({ page, context }) => {
+    const there = tool === 'plates' ? 'bins' : 'plates';
+    const [field, v, key] = ownChange(there);
+    await page.addInitScript(fullStorage);
+    const errors = await kitchenOn(page, tool);
+    await inOtherTab(context, there, errors, (other) => changeOwn(other, there));
+    await refuseSize(page);
+    await page.click(there === 'bins' ? '#navBins' : '#navPlates');
+    for (const step of ['handed over', 'reloaded']) {
+      if (step === 'reloaded') await page.reload();
+      await expect.poll(() => page.inputValue('#' + field).catch(() => ''),
+        { message: `${step}, with the other tab's change`, timeout: 20000 }).toBe(v);
+      await (there === 'bins' ? binsReady : platesReady)(page);
+      expect(await page.inputValue('#drawerW'), step).toBe('410');
+      await settle(page);
+    }
+    await page.evaluate(() => sessionStorage.setItem('full', '0'));
+    await changeOwn(page, there, ownChange2(there));
+    await expect.poll(() => stored(page).then((s) => s.Kitchen),
+      { message: 'with room again, the next change saves the size too', timeout: 20000 })
+      .toMatchObject({ w: '410', [key]: ownChange2(there) });
+    await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+    expect(errors).toEqual([]);
+  });
 }
 
 /* Each page saves its whole half of the drawer, so one whose half is older than the

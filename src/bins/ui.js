@@ -5357,6 +5357,7 @@ const readLocal = () => { try { return localStorage.getItem(SAVE_KEY) || ''; } c
 const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
+  forgetPasted();
   /* Left as Put back leaves, by leaveFor: the page runs on until the bare one arrives, and
      a change that landed in between was saved after the clearing, and came back with the
      note that it had been restored. */
@@ -5450,6 +5451,7 @@ function putBack() {
   }
   saveLocal(prev);
   writeKey(LINKED_KEY, prevLinked);
+  forgetPasted();
   leaveFor(location.href.split('#')[0]);   // a bare visit restores it, and says so
 }
 function tryAnyway() {
@@ -5544,6 +5546,13 @@ const pastedFrom = (prev) => {
       r.at === DRAWERS.fingerprint(location.hash);
   } catch (err) { return false; }
 };
+/* Start fresh and Put back each leave that save behind, and the record goes with them.
+   Kept past Start fresh, Back to a page at the same address offered the save as the later
+   layout, though Start fresh came after it. Either button can be pressed when the boot
+   stopped short of this line, so whatever goes wrong here is let go. */
+function forgetPasted() {
+  try { sessionStorage.removeItem(PASTED_KEY); } catch (err) { /* nothing kept to forget */ }
+}
 /* A reload takes the address as it stands when it starts, and the page runs on until the
    new one arrives. A save still waiting would land in that gap and record in the saved
    drawer a design the reloaded page did not arrive with, and the page came back unsaved.

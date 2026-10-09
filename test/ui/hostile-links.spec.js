@@ -1058,3 +1058,46 @@ for (const tool of ['plates', 'bins']) {
     expect(thrown.filter((e) => !/boom/.test(e))).toEqual([]);
   });
 }
+
+/* And it ends the offer of an edit a pasted link set aside (see the paste tests above). The
+   edit was offered on Back, and left; then a bare visit, and Start fresh there. The record
+   of the edit's save stayed, and the fresh page is at the address it names: another link
+   pasted over it, then Back to it, offered the edit as the later layout, and Put back
+   brought it, though Start fresh came after it. Both pages are covered. */
+for (const tool of ['plates', 'bins']) {
+  test(`Start fresh on ${tool} ends the offer of an edit a pasted link set aside`, async ({ page }) => {
+    const errors = watch(page);
+    const url = tool === 'bins' ? binsUrl() : platesUrl();
+    await arrive(page, url);
+    await saved(page);
+    const paste = async (h, edit) => {
+      await Promise.all([page.waitForEvent('load'), page.evaluate(([h, edit]) => {
+        if (edit) {
+          const e = document.getElementById('drawerW');
+          e.value = edit;
+          e.dispatchEvent(new Event('input', { bubbles: true }));
+          e.dispatchEvent(new Event('change', { bubbles: true }));
+          if (typeof landEdit === 'function') landEdit();
+        }
+        location.hash = h;
+        if (edit) saveNow();
+      }, [h, edit])]);
+      await ready(page);
+    };
+    await paste('#w=333&d=444&v=2', '412');
+    await page.goBack();
+    await ready(page);
+    await expect(page.locator('#setAsideMsg'))
+      .toHaveText('This page went back to an earlier layout of yours. The later one is set aside.');
+
+    await arrive(page, url);
+    await clickAndLoad(page, '#startFresh');
+    await saved(page);
+    await paste('#w=355&d=466&v=2');
+    await page.goBack();
+    await ready(page);
+    expect(await page.inputValue('#drawerW'), 'the fresh page').not.toBe('355');
+    await expect(page.locator('#setAside'), 'nothing is offered').toBeHidden();
+    expect(errors).toEqual([]);
+  });
+}
