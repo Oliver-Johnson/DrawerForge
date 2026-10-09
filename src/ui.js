@@ -95,10 +95,11 @@ const mountWhy = (opens, field) => `${atPitch()} — mounting holes sit ` +
     `${['dovetail', 'puzzle'].includes(state.connector) ? 'notches' : 'recesses'} the ` +
     `${CONNECTOR_NAMES[state.connector]} fit into`
     : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
-    : state.baseMode === 'bosses' ? 'a pocket has to stay inside its corner boss'
+    : cornerBosses(state) ? 'a pocket has to stay inside its corner boss'
     : opens ? 'a cut open to the socket has to stay on the socket floor'
     : 'a pocket under the floor has to stay inside its cell');
-const bossDepth = () => state.baseMode === 'bosses'
+// corner bosses only where they stand: over a floor the pockets are the floor's (cornerBosses)
+const bossDepth = () => cornerBosses(state)
   ? 'with corner pockets — a boss is 2.6 mm tall, while the solid floor grows to suit' : '';
 const LIMITS = {
   drawerW: { min: 1, max: 2000, label: 'Drawer width' },
@@ -603,6 +604,13 @@ function warningsList() {
       state.connector === 'snap' ? 'the snap clips' : 'the keys';
     out.push({ t: `This joint adds a ${Math.max(state.bottomPad, padV).toFixed(1)} mm solid floor to house ${what}. Prefer no floor? Pick a keyed joint and set Key housing to "Inside the walls".` });
   }
+  /* Corner pockets over a floor. The bosses would stand inside it, their pockets sealed or
+     cut short (#70), so core.js builds the plate as a solid floor builds it (cornerBosses),
+     and says so here: the menu still reads "Corner pockets only". */
+  if (state.baseMode === 'bosses' && (state.magnets || state.screws) && !cornerBosses(state))
+    out.push({ t: `Corner pockets need an open underside, and ${jointFloor(state) > 0
+      ? 'this joint is housed in a floor' : 'Extra floor closes it'}, so the plate is built with a solid floor and the ${
+      state.magnets && state.screws ? 'magnet and screw' : state.magnets ? 'magnet' : 'screw'} pockets are cut into it.` });
   if (keyInWall() &&
       layout.seams.some(s => s.junctions.some(j => Math.abs(j - Math.round(j)) > 0.25)))
     out.push({ t: 'One seam overlaps by a single cell — wall-housed keys need a wall junction, so that seam gets no connector. The neighbouring joints still hold the assembly.' });

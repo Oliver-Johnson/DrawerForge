@@ -117,6 +117,12 @@ test.describe('ranges on the geometry fields', () => {
       /Screw head Ø must be 7\.8 mm or less at a 42 mm pitch — .* the recesses the snap clips fit into/],
     ['#mg=1&md=20', 'errMagnet',
       /Magnet Ø must be 12\.3 mm or less at a 42 mm pitch — .* the notches the dovetail tabs fit into/],
+    /* #70: the joint is cut from the corner bosses now, so a boss's pocket can reach it as
+       a cell's can. A bowtie key in the walls at 36.13 mm took a 7.9 mm magnet, and with
+       the recess cut from the bosses it would have built 19 open edges a piece. */
+    ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie&km=wall&ki=bottom' +
+      '&bm=bosses&mg=1&md=7.9', 'errMagnet',
+      /Magnet Ø must be 6\.1 mm or less at a 36\.13 mm pitch — .* the recesses the bowtie keys fit into/],
   ];
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {
@@ -157,6 +163,35 @@ test.describe('ranges on the geometry fields', () => {
       expect(await exportOff(page)).toBe(false);
       expect(errors).toEqual([]);
     });
+
+  /* #70: corner pockets over a floor. A bowtie housed in the floor stood its 2.8 mm floor
+     round the 2.6 mm bosses and sealed their pockets in it, with Download on, and an extra
+     floor did the same. Such a plate is built as a solid floor builds it now, and Checks
+     says so; the floor grows to suit, so a 3 mm magnet goes in where a boss stops at 2.4.
+     With the key in the walls the underside is open and the bosses stand again. */
+  test('corner pockets over a floor are cut into the floor, and Checks says so', async ({ page }) => {
+    const errors = await openAt(page, `${BOWTIE_42}&bm=bosses&mg=1&mh=3`);
+    const note = /Corner pockets need an open underside, and this joint is housed in a floor, so the plate is built with a solid floor and the magnet pockets are cut into it\./;
+    expect(await text(page, 'warnings')).toMatch(note);
+    expect(await shown(page, 'errMagnet')).toBe(false);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    await page.selectOption('#keyMount', 'wall');
+    await page.waitForFunction((re) => new RegExp(re).test(
+      document.getElementById('pieceTail').textContent), SETTLED.source, { timeout: 30000 });
+    expect(await text(page, 'warnings')).not.toMatch(/Corner pockets need an open underside/);
+    expect(await text(page, 'errMagnet')).toMatch(/Magnet depth must be 2\.4 mm or less with corner pockets/);
+    expect(await exportOff(page)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+  test('corner pockets under an extra floor are cut into it, and Checks says so', async ({ page }) => {
+    const errors = await openAt(page, '#cn=none&bm=bosses&sc=1&bp=1');
+    expect(await text(page, 'warnings')).toMatch(
+      /Corner pockets need an open underside, and Extra floor closes it, so the plate is built with a solid floor and the screw pockets are cut into it\./);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
 
   test('a typed value is held to the same range, and a good one clears it', async ({ page }) => {
     await H.openPlates(page);
