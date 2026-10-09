@@ -27,9 +27,10 @@ test.afterEach(async ({ page }) => {
 });
 
 /* A bins layout small enough to be quick and big enough to need several plates: a
-   4 × 4 drawer of 1×1 bins on a 120 mm bed, which takes four bins a plate. */
-async function binsJob(page) {
-  page.__errors = await H.openBins(page);
+   4 × 4 drawer of 1×1 bins on a 120 mm bed, which takes four bins a plate. `url` for
+   the page served rather than opened from disk. */
+async function binsJob(page, url) {
+  page.__errors = await H.openBins(page, url);
   await H.setField(page, 'drawerW', 168);
   await H.setField(page, 'drawerD', 168);
   await H.setField(page, 'bedPreset', 'custom');
@@ -129,18 +130,26 @@ test.describe('the price', () => {
       expect(t, 'money left behind after the price was cleared').not.toMatch(MONEY);
   });
 
+  /* Over HTTP, as the next test is. From file:// this failed once under load and passed
+     when run again; the likeliest cause is the one serveRoot describes, the browser now
+     and then losing from file:// what a page stored before it. */
   test('a price survives a reload, and is kept under one key as JSON', async ({ page }) => {
-    await binsJob(page);
-    await H.setField(page, 'filPrice', '18.99');
-    await H.setField(page, 'filSym', '€');
-    expect(JSON.parse(await page.evaluate((k) => localStorage.getItem(k), KEY)))
-      .toEqual({ price: 18.99, sym: '€', speed: 'auto' });
-    await page.reload();
-    await page.waitForFunction(() => !!document.getElementById('fillmap'));
-    await page.waitForTimeout(400);
-    await expect(page.locator('#filPrice')).toHaveValue('18.99');
-    await expect(page.locator('#filSym')).toHaveValue('€');
-    await expect(page.locator('#totals')).toContainText(/about €\d+\.\d\d/);
+    const srv = await H.serveRoot();
+    try {
+      await binsJob(page, srv.base + 'bins/');
+      await H.setField(page, 'filPrice', '18.99');
+      await H.setField(page, 'filSym', '€');
+      expect(JSON.parse(await page.evaluate((k) => localStorage.getItem(k), KEY)))
+        .toEqual({ price: 18.99, sym: '€', speed: 'auto' });
+      await page.reload();
+      await page.waitForFunction(() => !!document.getElementById('fillmap'));
+      await page.waitForTimeout(400);
+      await expect(page.locator('#filPrice')).toHaveValue('18.99');
+      await expect(page.locator('#filSym')).toHaveValue('€');
+      await expect(page.locator('#totals')).toContainText(/about €\d+\.\d\d/);
+    } finally {
+      await srv.close();
+    }
   });
 
   /* One key, both tools: a price typed on the baseplates page is the bins page's price
