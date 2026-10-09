@@ -110,7 +110,8 @@ const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'n
    pocket stops is stopped whatever the pitch, so that is all it says. */
 const mountWhy = (opens, field) => {
   if (field === 'screwHoleD' && mount().throughMagnet)
-    return `— it runs through the ${state.magnetD} mm magnet's pocket, and has to be narrower than the pocket`;
+    return `— it runs through the ${state.magnetD} mm magnet's pocket, and has to stay inside the pocket's sides ` +
+      'to leave the magnet a ledge to sit on';
   const joint = mount().joint[field];
   const cuts = cutsNamed();
   return `${atPitch()} — mounting holes sit ` +
