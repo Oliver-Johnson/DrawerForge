@@ -2707,8 +2707,9 @@ console.log('\nnotes raised on the label shelf');
      corners laid before it, and noteShells then keeps the one with the most room, which
      nothing holds to NOTE_APART. Kept where it started instead, it left 4 of these with
      two shells' corners under 15 µm apart, two of them 3.5 µm. They are held to 15 µm,
-     the figure noteShells gives: more than the 10 µm that keeps a 10 µm grid from joining
-     two at any offset, and than the 14.2 µm a 10 µm cell spans turned any way. */
+     a figure of this audit's own, as noteShells holds that fallback to none: more than
+     the 10 µm that keeps a 10 µm grid from joining two at any offset, and than the
+     14.2 µm a 10 µm cell spans turned any way. */
   {
     const HELD = 0.015, DRAWN = 6000;
     let seed = 62;
@@ -3322,8 +3323,9 @@ function weldOpen(polys, tol) {
      The removable dividers' row is as the table of links from before the feet holes has
      it: 857e407d on main, 7b838b80 once its rails reached the clearance further (#50),
      and 576daddc since its lip is notched where its plates go in. The 1x1x3's note was
-     e43cbc54 until its letters' shells were laid with no two corners closer than a
-     slicer's weld joins (noteShells), and d3caaa09 since: some of its strokes stop up to
+     e43cbc54 until its letters' shells were laid with each one's corners 0.02 mm clear,
+     in x or in y, of the corners of those before it wherever a move allows that
+     (noteShells, NOTE_APART), and d3caaa09 since: some of its strokes stop up to
      a few hundredths of a millimetre elsewhere, and nothing else in it changed. The 2x1x2
      over screws prints no note (its shelf is too shallow), so it is the same bytes. */
   const crypto = require('crypto');
