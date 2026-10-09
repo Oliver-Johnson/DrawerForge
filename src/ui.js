@@ -518,6 +518,19 @@ function warningsList() {
   // nothing below can — every check after this one is reasoning about the clamped value
   for (const msg of fieldErrors.values()) out.push({ err: true, stop: true, t: msg });
   for (const msg of noRoom.values()) out.push({ err: true, stop: true, t: msg });
+  /* A piece the engine threw on. runBuild stops there, and the piece table, the preview and
+     the Download button's tooltip said so, but the checks, which are where a design is read
+     for what is wrong with it, said nothing: #76's B1 left Download off with no reason
+     under the cut map. Drawn as an error but not flagged `err`, which would stop the next
+     build as well, and the next build, on any change, is what clears it. It says Download
+     is off, not that nothing can be downloaded: the pieces built before it keep their own
+     STL buttons in the piece table. And it promises no size that gets past it: the 41.24 mm
+     jigsaw plate in plate-audit.js fails with a 7.504 mm head and builds with holes at
+     7.502 mm, on main as well. */
+  if (buildFailed)
+    out.push({ failed: true, t: `Piece ${buildFailed} could not be built, so the build stopped ` +
+      'there and Download is off. That is a fault in this tool, not in the design; moving a cut ' +
+      'through the piece or picking another joint may get past it.' });
   if (layout.nx * layout.ny > MAX_CELLS)
     out.push({ err: true, stop: true, t: `A ${layout.nx} × ${layout.ny} grid is ` +
       `${layout.nx * layout.ny} cells, past the ${MAX_CELLS} this tool will build in one ` +
@@ -669,7 +682,7 @@ function warningsList() {
 const hasErrors = () => warningsList().some(w => w.err);
 function drawWarnings() {
   const ws = warningsList();
-  $('warnings').innerHTML = ws.map(w => `<div class="w${w.err ? ' err' : ''}">${w.t}</div>`).join('');
+  $('warnings').innerHTML = ws.map(w => `<div class="w${w.err || w.failed ? ' err' : ''}">${w.t}</div>`).join('');
   /* The Download button stops being the primary action when there is nothing behind it.
      It was enabled through all of this: type -50 into the drawer width and the page
      said "resolve the errors above to generate" and offered you the download in the
