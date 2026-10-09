@@ -2049,10 +2049,11 @@ console.log('\nthe other limits, built at their ends:');
      from beneath that breaks into it, unless the two ceilings are level or the magnet
      reaches the tab: the half-inch magnet on the page's default design at 42 mm, 2 and
      3 mm thick, has to be taken and come out watertight; 2.4 thick, level with the
-     notch, it built 96 bad edges and has to be refused; and 13.2 mm, 2 thick, builds
-     clean but would touch the tab. At 36 mm a 5.6 mm magnet's pocket would stand right
-     on the notch's wall, under MOUNT_SEAM from it, so it is refused there (a gap) and
-     5.7, which breaks in, is taken. Any other cut takes none: the snap clip at 36.52 mm
+     notch, it built 96 bad edges and has to be refused, but 2.45 thick, as far off level
+     as 2.35, is taken; and 13.2 mm, 2 thick, builds clean but would touch the tab. At
+     36 mm a 5.6 mm magnet's pocket would stand right on the notch's wall, under
+     MOUNT_SEAM from it, so it is refused there (a gap), and 5.65 and 5.7, which break in,
+     are taken. Any other cut takes none: the snap clip at 36.52 mm
      is the review's, a 1.5 mm magnet at a fit clearance of 0.5 whose pocket is only
      0.019 mm into the recess, and main built it with 6 bad edges at 2.5 mm deep (and at
      1.9, 2.1 and 2.4). The refused ones are built too, to show what main would have, but
@@ -2065,8 +2066,10 @@ console.log('\nthe other limits, built at their ends:');
     ['dovetail, 12.7 x 2, page', { ...PAGE, magnetH: 2 }, 'magnetD', 12.7, false],
     ['dovetail, 12.7 x 3, page', { ...PAGE, magnetH: 3 }, 'magnetD', 12.7, false],
     ['dovetail, 12.7 x 2.4, page', { ...PAGE, magnetH: 2.4 }, 'magnetD', 12.7, 'level'],
+    ['dovetail, 12.7 x 2.45, page', { ...PAGE, magnetH: 2.45 }, 'magnetD', 12.7, false],
     ['dovetail, 13.2 x 2, page', { ...PAGE, magnetH: 2 }, 'magnetD', 13.2, 'part'],
     ['dovetail, 5.6 x 2, page, 36', { ...PAGE, pitch: 36, magnetH: 2 }, 'magnetD', 5.6, 'gap'],
+    ['dovetail, 5.65 x 2, page, 36', { ...PAGE, pitch: 36, magnetH: 2 }, 'magnetD', 5.65, false],
     ['dovetail, 5.7 x 2, page, 36', { ...PAGE, pitch: 36, magnetH: 2 }, 'magnetD', 5.7, false],
     ['snap, 1.5 x 2.5, 36.52', SNAP, 'magnetD', 1.5, 'cut']]) {
     const cfg = designCfg(sized(o, f, d));

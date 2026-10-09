@@ -118,7 +118,8 @@ const mountWhy = (opens, field) => {
       : opens ? 'a cut open to the socket has to stay on the socket floor'
       : 'a pocket under the floor has to stay inside its cell') +
     (joint && KEYED.includes(state.connector) && !keyFromTop()
-      ? `; keys ${keyInWall() ? '' : 'housed inside the walls and '}put in from above leave the floor clear` : '');
+      ? `; keys ${keyInWall() ? '' : 'housed inside the walls and '}put in from above ` +
+        'keep out of the solid floor under these pockets' : '');
 };
 // why a size under the largest is refused (mountLimits' `gaps`)
 const nearWhy = () => `${atPitch()} — its pocket would come too near the edge of the ${cutsNamed()} to cut cleanly`;
@@ -265,12 +266,25 @@ function readNumber(id) {
     return hi;
   }
   /* A size under the largest can be refused as well, where its pocket would come too near
-     the edge of a dovetail's notch (mountLimits' `gaps`); the sizes either side are taken. */
-  const gap = inPlay && lim.gaps && lim.gaps().find(([a, b]) => v > a && v < b);
-  if (gap) {
-    say(`${lim.label} of ${both(v)} is refused ${nearWhy()}. Use ${both(gap[0])} or less, ` +
-        `or ${both(gap[1])} or more.`);
-    return gap[0];
+     the edge of a dovetail's notch (mountLimits' `gaps`); the sizes either side are taken.
+     Two gaps can meet at one taken size, so the advice names the sizes taken round the
+     run of gaps the size is in, inside the field's range: "Use 11.89 mm or less, 11.92 mm,
+     or 11.95 mm or more" at 41.49 mm, never a size in the next gap, under the field's least
+     or over its largest. */
+  const gaps = inPlay && lim.gaps ? lim.gaps() : [];
+  const at = gaps.findIndex(([a, b]) => v > a && v < b);
+  if (at >= 0) {
+    let i = at, j = at;
+    while (i > 0 && gaps[i - 1][1] >= gaps[i][0] - 1e-9) i--;
+    while (j < gaps.length - 1 && gaps[j + 1][0] <= gaps[j][1] + 1e-9) j++;
+    const ok = [];
+    if (gaps[i][0] > lo) ok.push(`${both(gaps[i][0])} or less`);
+    else if (gaps[i][0] === lo) ok.push(both(lo));
+    for (let k = i; k < j; k++) if (gaps[k][1] >= lo) ok.push(both(gaps[k][1]));
+    ok.push(gaps[j][1] < hi ? `${both(gaps[j][1])} or more` : both(gaps[j][1]));
+    say(`${lim.label} of ${both(v)} is refused ${nearWhy()}. Use ` +
+        (ok.length > 1 ? `${ok.slice(0, -1).join(', ')}, or ${ok[ok.length - 1]}` : ok[0]) + '.');
+    return gaps[at][0] >= lo ? gaps[at][0] : gaps[at][1];
   }
   return v;
 }

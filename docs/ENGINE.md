@@ -768,7 +768,8 @@ currently installed):
     clear of the key or tab, 7 of 2,519 such pockets at the default fit or tighter went bad
     (0.02 to 0.14 mm in), and 8 of 1,151 at looser fits (0.2 to 0.65 mm in).
   - **A dovetail's notch takes a pocket from beneath**, a sliver or deep, unless it is
-    level with the notch or the magnet or screw in it would reach the other piece's tab,
+    level with the notch (within 0.05 mm either way, `MOUNT_LEVEL`, measured to the
+    micron) or the magnet or screw in it would reach the other piece's tab,
     which stands the fit clearance inside the notch. None of 3,699 such designs went bad,
     1,086 of them on the page's design at 40.5 to 44.5 mm. A 12.7 mm magnet at 42 mm, 2 or
     3 mm thick, is taken: its pocket is 0.04 to 0.09 mm into the notch and the magnet
@@ -783,7 +784,10 @@ currently installed):
   through. 4 of 715 pockets less than 0.005 mm short went bad, and none of 1,941 from 0.005
   to 0.03 mm. Under a dovetail's notch that leaves a few hundredths of a millimetre of
   refused sizes below the largest, between the pocket that stops 0.01 mm short and the one
-  that breaks in; the page says so at the field. Past the weld's reach there is still the
+  that breaks in, about 0.02 mm wide and rounded out to the hundredth either side, as the
+  field takes them: at 36 mm on the page's design 5.59, 5.6, 5.73 and 5.74 mm are refused,
+  and 5.58, 5.61, 5.72 and 5.75 are taken. The page says so at the field and names the
+  sizes taken either side. Past the weld's reach there is still the
   lottery the room cannot see, about one design in a thousand, single sizes with clean
   ones on either side, and it needs the pocket and the cut together: a 14.1 mm
   counterbore 2.4 to 3 mm deep, 0.09 mm short of a dovetail's notch at 43.17 mm, loose,

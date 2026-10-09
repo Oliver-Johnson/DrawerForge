@@ -110,7 +110,7 @@ test.describe('ranges on the geometry fields', () => {
        beneath reached a bowtie's recess at 42 mm, and the plate built with 19 bad edges a
        piece and Download on; from above, an 8 mm one stood over the key. */
     [`${BOWTIE_42}&mg=1&md=10`, 'errMagnet',
-      /Magnet Ø must be 7\.6 mm or less at a 42 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a hole has to stay out of the recesses the bowtie keys fit into; keys housed inside the walls and put in from above leave the floor clear\./],
+      /Magnet Ø must be 7\.6 mm or less at a 42 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a hole has to stay out of the recesses the bowtie keys fit into; keys housed inside the walls and put in from above keep out of the solid floor under these pockets\./],
     [`${BOWTIE_42}&mg=1&ms=top&md=8`, 'errMagnet',
       /Magnet Ø must be 7\.6 mm or less at a 42 mm pitch — .* the recesses the bowtie keys fit into/],
     [`${BOWTIE_42.replace('cn=bowtie', 'cn=snap')}&sc=1&sd=10`, 'errScrew',
@@ -123,7 +123,13 @@ test.describe('ranges on the geometry fields', () => {
     ['#mg=1&mh=2.4&md=13', 'errMagnet',
       /Magnet Ø must be 12\.5 mm or less at a 42 mm pitch — .* a pocket 2\.4 mm deep, as deep as the notches the dovetail tabs fit into, has to stay out of them\./],
     ['#pi=36&mg=1&md=5.6', 'errMagnet',
-      /Magnet Ø of 5\.6 mm is refused at a 36 mm pitch — its pocket would come too near the edge of the notches the dovetail tabs fit into to cut cleanly\. Use 5\.5 mm or less, or 5\.7 mm or more\./],
+      /Magnet Ø of 5\.6 mm is refused at a 36 mm pitch — its pocket would come too near the edge of the notches the dovetail tabs fit into to cut cleanly\. Use 5\.58 mm or less, or 5\.61 mm or more\./],
+    /* Two gaps can meet at one size, taken between them, and the advice names it rather
+       than pointing into the next gap; nor does it name a size under the field's least. */
+    ['#pi=41.49&mg=1&md=11.93', 'errMagnet',
+      /Magnet Ø of 11\.93 mm is refused at a 41\.49 mm pitch — .* Use 11\.89 mm or less, 11\.92 mm, or 11\.95 mm or more\./],
+    ['#pi=31&cl=0&mg=1&md=1', 'errMagnet',
+      /Magnet Ø of 1 mm is refused at a 31 mm pitch — .* Use 1\.01 mm, or 1\.04 mm or more\./],
   ];
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {
