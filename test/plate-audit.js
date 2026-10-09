@@ -1474,7 +1474,15 @@ function sectionArea(polys, z, dy) {
  * in the STL. A second run that comes out open throws now, so the plate fails to build, as
  * it did before, and the checks say so. These two rows are built as the page builds them
  * (its clearances and margins), and hold "threw in the seam repair, or watertight and
- * oriented": whatever builds them later has to build them whole. */
+ * oriented": whatever builds them later has to build them whole.
+ *
+ * With a bore's flats on its size, the same link cuts a counterbore 0.19 mm and a shank
+ * 0.1 mm wider, a cut the seam repair settles. It came out open instead, 26 edges a piece
+ * in the socket floor, and so did 38 of the 41 heads from 7.3 to 7.7 mm: a corner of the
+ * magnet's pocket stood 0.4 microns off the plane of a flat of the shank. The shank is
+ * turned for that now (MOUNT_BORE.hole.turn), so both rows build whole here, and so does
+ * the third, a 7.4 mm head, which main builds whole as well. Of those heads only 7.31 mm
+ * still leaks, its corners 0.001 mm inside the magnet's (#77). */
 console.log('\na counterbore whose ceiling three cut lines cross at one point (#76):');
 {
   const PLATE = { pitch: 39.07, drawerW: 170, drawerD: 90, bedW: 100, bedD: 400, marginMode: 'auto',
@@ -1508,7 +1516,8 @@ console.log('\na counterbore whose ceiling three cut lines cross at one point (#
                    connector: 'puzzle', clr: 0.2, screws: true, screwHoleD: 3, screwHeadDepth: 3.126,
                    screwHeadD: 7.504, magnets: true, magnetSide: 'top', magnetD: 7.3, magnetH: 2.25 };
   for (const [label, over] of [['41.24 mm jigsaw: 55 bad edges a piece', {}],
-                               ['2.264 mm magnet: folded twice', { magnetH: 2.264 }]]) {
+                               ['2.264 mm magnet: folded twice', { magnetH: 2.264 }],
+                               ['7.4 mm head', { screwHeadD: 7.4 }]]) {
     const b = build({ ...JIGSAW, ...over });
     const held = b.whole || /^healCsgSeams/.test(b.err || '');
     console.log(`  ${label.padEnd(38)} ${b.text}${held ? '' : '  NEITHER THREW NOR BUILT WHOLE'}`);

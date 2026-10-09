@@ -708,16 +708,18 @@ currently installed):
   cuts' walls weave round the hole, and here and there a cell leaked by the hundred (#73:
   2.03 mm over 2 with the corners on the sizes, 2.046 over 2 and 1.034 over 1 with the
   flats). Such a head is cut as none, as one no wider than the hole always was. And the
-  shank is turned π/84 about its axis where one of the counterbore's corners would
-  otherwise stand within 0.005 mm of a flat's plane carried on past the shank
-  (`MOUNT_BORE.hole.turn`): the BSP splits a magnet pocket's floor or roof along that
-  whole plane, the weld pulled the corner onto the split, and the plate came out open by
-  the dozen round every site (#74: 136 edges a piece for 1.0353 mm under 1.0873 with a
-  magnet from above at 42 mm, on main). The magnet pocket's corners stand on the same
-  rays, so where π/84 would bring one of those within 0.005 mm of a flat instead, the
-  shank takes the step of the 24 across those 30/7° that keeps both furthest off. Turned,
-  no corner of either comes within 0.0039 mm of a flat, and a shank no corner of the
-  counterbore's came near is cut as before. `MOUNT_BORE.screw` says whether a design's
+  shank is turned π/84 about its axis where one of the counterbore's corners, or one of
+  the magnet pocket's, would otherwise stand within 0.005 mm of a flat's plane carried on
+  past the shank (`MOUNT_BORE.hole.turn`): the BSP splits a magnet pocket's floor or roof
+  along that whole plane, the weld pulled the corner onto the split, and the plate came
+  out open by the dozen round every site (#74: 136 edges a piece for 1.0353 mm under
+  1.0873 with a magnet from above at 42 mm, on main; and 26 a piece at 41.24 mm for a 3 mm
+  shank under a 7.3 mm magnet from above, whose corner stood 0.4 microns off a flat). The
+  two pockets' corners stand on the same rays, so where π/84 would bring one within 0.005
+  mm of a flat, the shank takes the step of the 24 across those 30/7° that keeps both
+  furthest off. Turned, no corner of either comes within 0.0039 mm of a flat where the
+  magnet stands 0.3 mm or more outside the shank's corners, and a shank no corner of
+  either came near is cut as before. `MOUNT_BORE.screw` says whether a design's
   counterbore is cut and how far its shank is turned, for the cutter and for
   `mountLimits`, which measures that shank turned.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not

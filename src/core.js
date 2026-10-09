@@ -926,21 +926,30 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * it was. A magnet pocket's corners stand on the same rays as the counterbore's, and π/84
  * could bring one of those onto a flat instead: 4.85 mm under 7.246 with a 6 mm magnet
  * from above left 35 edges in the socket floor at 49.02 mm, and 5.773 under 12.053 25 at
- * 55 mm, where the flats unturned miss them by 0.07 and 0.04 (unturned shanks meet them at
- * other sizes: 4.9911 under 7.246 leaves 44 at 49.02 mm, with no turn). So where π/84
- * leaves a corner of either nearer than 0.005 mm, the turn is the one of 24 steps across
- * those 30/7° that keeps them furthest off. Wherever the counterbore's corners call for a
- * turn, no corner of either then comes within 0.0039 mm of a flat (6 and 8 mm magnets,
- * heads up to 2.2 times the shank). Half a facet, π/12, clears the corners as well, but
- * it squares two flats to the cell's edges, and at 37.67 mm those folded the socket floor
- * beside the pocket. Measured on 3,846 one-cell plates with a magnet from above, 37.67 to
- * 55 mm, shanks 1 to 5 mm and heads up to 1.15 times them, every 0.001 mm round these
- * sizes: 546 open before, and 1 now, a size the turn leaves alone; none came out worse.
- * On 1,800 random designs the turn moves, every kind of mount: 90 open before, 24 now. It
- * closed 83 and opened 17: 14 at 42 mm with a magnet from beneath under a deeper
- * counterbore, where one size in nine leaks unturned too, by the same slivers at the
- * magnet pocket's corners in the underside, and 3 in corner bosses, each at that one size
- * alone. */
+ * 55 mm, where the flats unturned miss them by 0.07 and 0.04. So where π/84 leaves a
+ * corner of either nearer than 0.005 mm, the turn is the one of 24 steps across those
+ * 30/7° that keeps them furthest off. Wherever the counterbore's corners call for a turn,
+ * no corner of either then comes within 0.0039 mm of a flat (6 and 8 mm magnets, heads up
+ * to 2.2 times the shank). And the magnet's corners call for one as the counterbore's do,
+ * since a shank no counterbore corner comes near can have a magnet's corner on a flat
+ * all the same: at 41.24 mm a 3 mm shank under a 7.3 mm magnet from above, a corner 0.4
+ * microns off a flat, left 26 edges a piece in the socket floor whatever the head, and
+ * 4.9911 under 7.246 with a 6 mm one left 44 at 49.02 mm. Wherever the magnet's
+ * corners stand 0.3 mm or more outside the shank's, none then comes within 0.0045 mm of
+ * a flat (magnets of 3 to 13 mm, heads up to 2.4 times the shank). Half a facet, π/12,
+ * clears the corners as well, but it squares two flats to the cell's edges, and at 37.67
+ * mm those folded the socket floor beside the pocket. Measured on 3,846 one-cell plates
+ * with a magnet from above, 37.67 to 55 mm, shanks 1 to 5 mm and heads up to 1.15 times
+ * them, every 0.001 mm round these sizes: 546 open before, and 1 now, a size the turn
+ * leaves alone; none came out worse. On 1,800 random designs the turn moves, every kind
+ * of mount: 90 open before, 24 now. It closed 83 and opened 17: 14 at 42 mm with a magnet
+ * from beneath under a deeper counterbore, where one size in nine leaks unturned too, by
+ * the same slivers at the magnet pocket's corners in the underside, and 3 in corner
+ * bosses, each at that one size alone. The magnet's corners change the turn of none of
+ * those. On 1,500 random page designs that only a magnet's corner turns (34 to 56 mm;
+ * one cell, 2 x 2, and two pieces joined by dovetails or jigsaws; magnets of 3 to 12.7 mm
+ * either way up; a fifth on corner bosses): 66 bad before, 13 now. It closed 54 and
+ * opened 1, at that one size alone; of the 12 still bad, 10 are on corner bosses. */
 const MOUNT_BORE = {
   magnet: { sides: 14, r: (d) => Math.max(d/2 + 0.1, d/2 / Math.cos(Math.PI/14)),
             fits: (room) => 2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14)) },
@@ -953,7 +962,8 @@ const MOUNT_BORE = {
           // how far to turn the shank under a counterbore headD across, in a magnet pocket
           // magnetR out at its corners or none (see above)
           turn: (d, headD, magnetR) => {
-            const { head, hole } = MOUNT_BORE, rs = [head.r(headD)];
+            // the magnet pocket's corners stand on the same rays as the counterbore's
+            const { head, hole } = MOUNT_BORE, rs = magnetR ? [head.r(headD), magnetR] : [head.r(headD)];
             const clear = (t) => {   // the nearest a corner comes to one of the flats' planes
               let g = Infinity;
               for (const R of rs) for (let k = 0; k < head.sides; k++) for (let m = 0; m < hole.sides; m++)
@@ -961,7 +971,6 @@ const MOUNT_BORE = {
               return g;
             };
             if (clear(0) >= 0.005) return 0;
-            if (magnetR) rs.push(magnetR);   // the magnet pocket's corners stand on the same rays
             let best = Math.PI / 84, most = clear(best);
             if (most < 0.005) for (let j = 1; j < 24; j++) {
               const t = (Math.PI / 42) * j / 24, g = clear(t);
