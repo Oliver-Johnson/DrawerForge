@@ -2206,6 +2206,36 @@ function cylinder(cx, cy, r, z0, z1, seg) {
   return polys;
 }
 
+/* The polygon each mounting bore is cut as: how many sides, and how far out its corners
+ * stand for a size typed (`r`), and back the other way, the largest size whose corners
+ * stay inside a room (`fits`). fastenerCutter and screwCutter cut these and mountLimits
+ * holds the sizes to them, so a bore's shape is decided here and nowhere else. Each is
+ * cylinder's polygon about the site, a corner at every 2πk/sides from +x.
+ *
+ * Every bore stands its flats on the size asked, so its corners are 1/cos(π/sides) of the
+ * radius out and it is no narrower anywhere than the size typed.
+ *   - magnet: 14 sides, cut 0.1 mm over the magnet's radius at its corners: 0.2 over the
+ *     diameter, the press fit bins/bin.js keeps as well ("the plate's rule"). Its flats
+ *     are cos(π/14) of that, and past a 7.78 mm magnet they came inside the magnet
+ *     itself: 4.972 mm for a 10 mm one, a pocket narrower than what goes in it, where
+ *     bins/bin.js's 16 sides keep their flats outside every magnet its field takes. So
+ *     the corners go out as far as it takes for the flats to stand on the magnet's
+ *     radius. For a magnet up to 7.77 mm, the 6 mm default among them, nothing moves.
+ *   - head, the counterbore: 14 sides, and hole, the shank: 12. Both had their corners on
+ *     the size asked, so their flats came inside it at every size, 5.85 mm across for the
+ *     default 6 mm head and 2.90 for the 3 mm hole. Now their corners go out the same
+ *     way, and no further: the magnet's 0.1 is a press fit, and a screw head is not
+ *     pressed in. It drops into its counterbore, which the field already sizes with room
+ *     round it (6 mm for an M3's 5.5 mm head), and the shank is a clearance hole. */
+const MOUNT_BORE = {
+  magnet: { sides: 14, r: (d) => Math.max(d/2 + 0.1, d/2 / Math.cos(Math.PI/14)),
+            fits: (room) => 2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14)) },
+  head: { sides: 14, r: (d) => d/2 / Math.cos(Math.PI/14),
+          fits: (room) => 2 * room * Math.cos(Math.PI / 14) },
+  hole: { sides: 12, r: (d) => d/2 / Math.cos(Math.PI/12),
+          fits: (room) => 2 * room * Math.cos(Math.PI / 12) },
+};
+
 /* Everything removed at one mounting site, as ONE solid.
  *
  * Up to three cylinders share this axis: a magnet pocket, a screw shank, and the head's
@@ -2227,22 +2257,17 @@ function cylinder(cx, cy, r, z0, z1, seg) {
 function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
   let cut = null;
   const add = (c) => { cut = cut ? csgUnion(cut, c) : c; };
-  /* A magnet's pocket is 14-sided, cut 0.1 mm over the magnet's radius at its corners:
-     0.2 over the diameter, the press fit bins/bin.js keeps as well ("the plate's rule").
-     Its flats are cos(π/14) of that, and past a 7.78 mm magnet they came inside the
-     magnet itself: 4.972 mm for a 10 mm one, a pocket narrower than what goes in it,
-     where bins/bin.js's 16 sides keep their flats outside every magnet its field takes.
-     So the corners go out as far as it takes for the flats to stand on the magnet's
-     radius. For a magnet up to 7.77 mm, the 6 mm default among them, nothing moves. */
-  const magnetR = Math.max(cfg.magnetD/2 + 0.1, cfg.magnetD/2 / Math.cos(Math.PI/14));
+  // each bore as MOUNT_BORE shapes it
+  const { magnet, head, hole } = MOUNT_BORE;
+  const magnetR = magnet.r(cfg.magnetD);
   if (cfg.magnets)
     add(cfg.magnetSide === 'top'
-      ? cylinder(0, 0, magnetR, magZ0, magZ1, 14)
-      : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, 14));
+      ? cylinder(0, 0, magnetR, magZ0, magZ1, magnet.sides)
+      : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, magnet.sides));
   if (cfg.screws) {
     if (cfg.screwHeadD > cfg.screwHoleD)
-      add(cylinder(0, 0, cfg.screwHeadD/2, -0.5, cfg.screwHeadDepth, 14));
-    add(cylinder(0, 0, cfg.screwHoleD/2, -0.5, shankTop, 12));
+      add(cylinder(0, 0, head.r(cfg.screwHeadD), -0.5, cfg.screwHeadDepth, head.sides));
+    add(cylinder(0, 0, hole.r(cfg.screwHoleD), -0.5, shankTop, hole.sides));
   }
   return cut;
 }
@@ -2258,13 +2283,15 @@ function movePolys(polys, dx, dy) {
   }));
 }
 
-// counterbore: hole cylinder full height + wider recess from chosen face
+// counterbore: hole cylinder full height + wider recess from chosen face, each bore as
+// MOUNT_BORE shapes it
 function screwCutter(cx, cy, holeD, headD, z0, z1, headDepth, fromTop) {
-  let polys = cylinder(cx, cy, holeD/2, z0 - 0.5, z1 + 0.5, 12);
+  const { head, hole } = MOUNT_BORE;
+  let polys = cylinder(cx, cy, hole.r(holeD), z0 - 0.5, z1 + 0.5, hole.sides);
   if (headD > holeD) {
     const rec = fromTop
-      ? cylinder(cx, cy, headD/2, z1 - headDepth, z1 + 0.5, 14)
-      : cylinder(cx, cy, headD/2, z0 - 0.5, z0 + headDepth, 14);
+      ? cylinder(cx, cy, head.r(headD), z1 - headDepth, z1 + 0.5, head.sides)
+      : cylinder(cx, cy, head.r(headD), z0 - 0.5, z0 + headDepth, head.sides);
     polys = csgUnion(polys, rec);
   }
   return polys;
@@ -2387,13 +2414,23 @@ function fitClearances(field) {
  * for everything but the dovetail let a snap clip's housing into the next piece and let
  * small pitches leak.
  *
- * Measured on 2 × 2 and 1-cell pieces from 13.5 to 60 mm, every 0.5 mm of pitch — at
- * every 0.05 of clearance for the puzzle, the bowtie and the puzzle key, at six for the
- * rest — and at every 0.01 of clearance at 20, 25, 30, 35, 42 and 60:
+ * Measured first on 2 × 2 and 1-cell pieces from 13.5 to 60 mm, every 0.5 mm of pitch —
+ * at every 0.05 of clearance for the puzzle, the bowtie and the puzzle key, at six for
+ * the rest — and at every 0.01 of clearance at 20, 25, 30, 35, 42 and 60. What leaked
+ * there was the sliver class, and buildPiece now cuts a joint again when its cut comes
+ * out open (cutAgain), so each ceiling was swept again on both layouts: every 0.01 mm of
+ * pitch over the band it governs (13.5 to 60 mm for the dovetail), every 0.05 of the
+ * field past it, and every 0.01 near anything that leaked. A ceiling goes up a step only
+ * where the field builds clean to the step after that one, which is then its step to
+ * spare; anything that leaks within two steps of a ceiling earns it.
  *
- *   dovetail  0.3. Past it the pocket, cut 1.9 mm + this into the piece, breaks through
- *             the 2.15 mm socket wall and crosses the chamfer cone; it leaked from 0.34.
- *             The hint's own advice stops at 0.25.
+ *   dovetail  0.3, earned. The pocket, cut 1.9 mm + this into the piece, breaks through
+ *             the 2.15 mm socket wall from 0.25 and crosses the chamfer cone. It leaked
+ *             from 0.34, and cutAgain closes most of that, but one step past, 0.35 still
+ *             leaves edges open at 42.35 mm on both layouts. Past that two cells' shells
+ *             share an edge from 0.39, where the notch's wide end stands on the edge of
+ *             the band they share (22.64 mm, and 22.65 at 0.4), and more leak or fold at
+ *             0.55, 0.75 and 0.8. The hint's own advice stops at 0.25.
  *   snaptop   0.3, in either housing. The clip's slot puts its seam-side wall
  *             0.3 − (the key's clearance) from the seam, so past a field of 0.35 that
  *             wall stands in the next piece — by 0.65 mm at 1 — and two pieces that print
@@ -2404,15 +2441,23 @@ function fitClearances(field) {
  *             pair did the same for any field from 0.3 up. 0.3 holds the wall one BLOAT,
  *             0.05, inside the piece, the overlap the cell regions keep; the coupon's
  *             slackest pair is this ceiling cut the key's way, so it stops there too.
- *   pitch     0.3 below 20 mm, for the three housings the field cuts that leaked there:
- *             the puzzle, and the bowtie and puzzle key in the floor. Past 0.3 they left
- *             holes from 13.5 to 19 mm — a puzzle key at 14 from 0.4, a bowtie at 18 at
- *             1, a puzzle at 19 from 0.35 — and from the default 0.2 to 0.3 none did. The
- *             puzzle's lobe also needs room in its cell: it opens the plate once its
- *             clearance passes half the pitch less 6.475 mm, so it stops at half the pitch
- *             less 6.5 — 0.25 at 13.5, and 0.3 from 13.6.
- *   joint     0.8 for a puzzle key in the floor from 20 mm up: between 0.82 and 0.96 its
- *             recess leaked at every pitch measured, 20 to 60.
+ *   pitch     0.3 below 20 mm for the puzzle and a puzzle key in the floor, earned. Past
+ *             it they left holes from 13.5 to 19 mm — a puzzle key at 14 from 0.4, a
+ *             puzzle at 19 from 0.35 — which cutAgain closes, and 0.35 builds clean at
+ *             every pitch; but on 1-cell pieces a line across the pitch that climbs with
+ *             the field puts the cut on the edge of the band two cells share, and the
+ *             shells share it: a puzzle key from 0.37 (at 18.07 mm), a puzzle tab from
+ *             0.38 (at 18.54). The puzzle's lobe also needs room in its cell: it opens the
+ *             plate once its clearance passes half the pitch less 6.475 mm, so it stops at
+ *             half the pitch less 6.5 — 0.25 at 13.5, and 0.3 from 13.6. A bowtie in the
+ *             floor was held here too, for holes at 18 mm at 1. It builds clean at every
+ *             0.01 mm from 13.5 to 20 and every 0.05 up to 1.05, on both layouts, and
+ *             loose and tight at every 0.1 mm, so it takes the plain 1 mm.
+ *   joint     0.8 for a puzzle key in the floor from 20 mm up, earned. Its recess leaked
+ *             between 0.82 and 0.96 at every pitch measured, 20 to 60, until cutAgain;
+ *             at 0.85 it now stands on the edge of the band two cells share at 29.74 mm
+ *             on 1-cell pieces, and at 0.86 at 29.79, though nowhere else from 20 to
+ *             51.7 at 0.85 or 0.9.
  *   slip      1 for the rest. A key in the walls is cut to keySlim's own clearance, which
  *             the field does not move. The snap and the H-clip did not leak above 0.3 at
  *             any pitch measured but in one band — an H-clip dropped in from above leaks
@@ -2421,19 +2466,21 @@ function fitClearances(field) {
  *             0.39–0.4 at 21 and 32.5–35 mm and here and there from 0.52 to 0.87. That is
  *             the sliver class again, not a ceiling — no limit short of 0.38 misses them,
  *             and the same class turns up under the default too: a snap at 20 mm at 0.29,
- *             a bowtie at 17 mm at 0.15 and under.
+ *             a bowtie at 17 mm at 0.15 and under. One is not isolated: on 2 × 2 pieces
+ *             a puzzle at 0.35 exactly, and not 0.34 or 0.36, has two shells sharing an
+ *             edge at every pitch from 31.6 to 52.2 mm, where a corner of a notch's lobe,
+ *             centred on the line between two cells, stands on the edge of the band they
+ *             share. That wants mending in the cut; no ceiling misses a single value.
  *
- * The leaks that set the pitch and joint ceilings, and the dovetail's at 0.34, were that
- * class as well: buildPiece now cuts a joint again when its cut comes out open
- * (cutAgain), and the step past each that test/plate-audit.js builds is closed, as is the
- * H-clip from above at 0.74. The ceilings stay where they are until a sweep as fine as
- * the one that found the small-pitch leaks says how far each can go. */
+ * test/plate-audit.js builds the step that earns each ceiling, which has to leak or cross
+ * the seam and be refused, and the bowtie's step to spare, which has to build closed and
+ * be refused. */
 function connClrCeiling(cfg) {
   const R = PLATE_RANGES.connClr;
   const kind = jointKind(cfg.connector, cfg.keyMount, cfg.keyInsert);
   if (kind === 'dovetail') return { max: R.dovetail, by: 'dovetail' };
   if (kind === 'snaptop') return { max: R.snapTop, by: 'snaptop' };
-  const floorKey = ['bowtie', 'puzzlekey'].includes(cfg.connector) && cfg.keyMount !== 'wall';
+  const floorKey = cfg.connector === 'puzzlekey' && cfg.keyMount !== 'wall';
   if (cfg.connector !== 'puzzle' && !floorKey) return { max: R.max, by: 'slip' };
   if (cfg.pitch < R.smallPitch) {
     const room = cfg.connector === 'puzzle'
@@ -3873,12 +3920,10 @@ function mountLimits(cfg, layout) {
   const own = fit(cfg.magnetSide === 'top' ? top : under);
   const room = Math.min(own, magnetJoint);
   return {
-    // a magnet pocket's corners are 0.1 mm over the magnet's radius, or out to where its
-    // flats stand on that radius if that is further (fastenerCutter)
-    magnetD: r10(2 * Math.min(room - 0.1, room * Math.cos(Math.PI / 14))),
-    // a screw's bores have their corners on its size
-    screwHoleD: r10(2 * Math.min(fit(top), below)),
-    screwHeadD: r10(2 * Math.min(fit(under), below)),
+    // every room above is to a bore's corners, which stand out past its size (MOUNT_BORE)
+    magnetD: r10(MOUNT_BORE.magnet.fits(room)),
+    screwHoleD: r10(MOUNT_BORE.hole.fits(Math.min(fit(top), below))),
+    screwHeadD: r10(MOUNT_BORE.head.fits(Math.min(fit(under), below))),
     // in the solid floor the pad grows to suit, so only a boss caps the depth
     depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
     // which of the sizes the cut beside it stops, rather than the floor, cell or boss
@@ -4504,9 +4549,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
    * A 21.7 mm magnet from beneath at a 55 mm pitch did it: a flat of the pocket in the
    * cell at the back left, on the magnet's radius, crosses that cell's front side 0.03
    * microns from the corner of the cell at the back right. A 22.2 mm screw shank at 56.5
-   * mm did it twice over, from the cell at the back right as well, on main too. Each shell
-   * is closed on its own, so the pockets' own retries never see it, and it comes and goes
-   * with the size and the pitch.
+   * mm (22.2 across its corners, as shanks were cut then) did it twice over, from the cell
+   * at the back right as well, on main too. Each shell is closed on its own, so the
+   * pockets' own retries never see it, and it comes and goes with the size and the pitch.
    *
    * So with mounting pockets on the piece, every shell the cells and margins make is
    * checked against those built before it beside it, as jointed cells are above. One that
@@ -7464,15 +7509,21 @@ const LIMITS = {
 /* What sets the clearance's ceiling, in words: core.js connClrCeiling decides it and says
    which reason applies. A ceiling that moves with the pitch names the pitch, as the mount
    sizes do, because that is the number to change; 'slip' is the plain 1 mm and keeps the
-   millimetres advice. */
-const CLR_JOINT = { puzzle: 'puzzle tab', bowtie: 'bowtie key', puzzlekey: 'puzzle key' };
+   millimetres advice. The puzzle and the puzzle key said they opened holes in the plate,
+   as they did until a joint's cut was taken again when it came out open (cutAgain in
+   core.js); past each ceiling now two cells' shells share an edge at some pitches, which
+   is not watertight either but is no hole. The dovetail said its pocket broke through
+   into the socket beside it, which it does from 0.25, under its ceiling. */
+const CLR_JOINT = { puzzle: 'puzzle tab', puzzlekey: 'puzzle key' };
 const clrWhy = (by) => ({
-  dovetail: '— any looser and a dovetail pocket breaks through into the socket beside it',
+  dovetail: '— any looser and a dovetail pocket leaves the plate not watertight at some ' +
+    'pitches',
   snaptop: '— any looser and the housing of a snap clip dropped in from above runs up to ' +
     'the seam and on into the next piece',
   pitch: `${atPitch()} — on cells under ${RANGES.connClr.smallPitch} mm a ` +
-    `looser ${CLR_JOINT[state.connector]} opens holes in the plate`,
-  joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess opens holes in the plate`,
+    `looser ${CLR_JOINT[state.connector]} leaves the plate not watertight`,
+  joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess leaves the plate not ` +
+    'watertight at some pitches',
 })[by] || '';
 /* id -> the message that goes under it. Rebuilt from scratch on every read, so a field
    that has come good stops complaining without anything having to remember it once did. */
