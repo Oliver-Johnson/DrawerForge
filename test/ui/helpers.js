@@ -18,11 +18,26 @@ const BINS_URL = pathToFileURL(path.join(ROOT, 'bins', 'index.html')).href;
 const PLATES_URL = pathToFileURL(path.join(ROOT, 'index.html')).href;
 const CELL = 40;   // the map's own viewBox units per grid cell
 
+/* A test that opens a link goes through about:blank, so the link is a real load of the
+   page rather than a hash change. That blank page now and then asks for the favicon of
+   the page it replaced, and Chrome says in the console that it could not: from file://
+   it may not load it, and from the test server its origin is null and the server is on
+   loopback, so the request is blocked and the failed load said too. Those lines are the
+   hop's, not the page's, and only those are let go. */
+function blankFavicon(m) {
+  const t = m.text();
+  if (/^Not allowed to load local resource: file:\S*\/favicon\.svg$/.test(t)) return true;
+  if (/^Access to resource at '[^']*\/favicon\.svg' from origin 'null' has been blocked by CORS /
+    .test(t)) return true;
+  return t === 'Failed to load resource: net::ERR_FAILED' &&
+    /\/favicon\.svg$/.test((m.location() || {}).url || '');
+}
+
 // `url` for the page served elsewhere than from disk, as by serveRoot below
 async function openBins(page, url = BINS_URL) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !blankFavicon(m)) errors.push(m.text()); });
   await page.goto(url);
   await page.waitForFunction(() => !!document.getElementById('fillmap'));
   await page.waitForTimeout(200);
@@ -36,7 +51,7 @@ async function openBins(page, url = BINS_URL) {
 async function openPlates(page, url = PLATES_URL) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !blankFavicon(m)) errors.push(m.text()); });
   await page.goto(url);
   await page.waitForFunction(() => {
     const t = document.getElementById('pieceTail');
@@ -201,5 +216,5 @@ async function serveRoot() {
   return site;
 }
 
-module.exports = { openBins, openPlates, mapInView, cellPoint, dragCells, clickCell, bins, setField,
+module.exports = { openBins, openPlates, blankFavicon, mapInView, cellPoint, dragCells, clickCell, bins, setField,
                    forgetSaved, serveRoot, SAVE_KEYS, BINS_URL, PLATES_URL, CELL, ROOT };
