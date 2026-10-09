@@ -205,6 +205,26 @@ test('room above the baseplate too short for a 1-unit bin is said to be too litt
     .toHaveText('Grid: 5 × 5 cells · 5.8 mm above the baseplate · too little for even a 1-unit bin (7 mm + lip)');
 });
 
+/* With room for a 1-unit bin and no taller, the panel said "tallest single bin 1 units";
+   a 1-unit bin's tooltips on the map and in the preview, and the preview's label with it
+   on its own, said "1 units" as well. Each says one unit. */
+test('one unit is said as one, in the panel, the tooltips and the preview', async ({ page }) => {
+  await Promise.all([page.waitForEvent('load'),
+    page.goto(H.BINS_URL + '#w=230&d=230&dh=18&ph=4.25&bl=0-0-1-1-1-1.2-1.2-0-0-0-1-1-1-1-0-0-0-0-0-0-15')]);
+  await page.waitForFunction(() => !!document.getElementById('fillmap') && B().length === 1);
+  await expect(page.locator('#gridSummary')).toHaveText('Grid: 5 × 5 cells · 13.8 mm above the baseplate · ' +
+    'tallest single bin 1 unit (7 mm + lip), limited by the drawer');
+  const tips = await page.evaluate(() => {
+    showTip({ clientX: 100, clientY: 100 }, B()[0]);
+    return [[...document.querySelectorAll('#fillmap title')].map((t) => t.textContent).join(' | '),
+            document.getElementById('tip').textContent];
+  });
+  for (const t of tips) expect(t).toContain('1×1, 1 unit (7 mm)');
+  await H.clickCell(page, 0, 0);
+  await page.locator('#focusBin').click();
+  await expect(page.locator('#three')).toHaveAttribute('aria-label', /^3D preview: one 1 by 1 bin, 1 unit tall, /);
+});
+
 /* The layout travels in the URL hash; a carved shape has to survive that like
    anything else, or sharing a link quietly changes what people print. */
 test('a carved layout survives a round trip through the url', async ({ page }) => {

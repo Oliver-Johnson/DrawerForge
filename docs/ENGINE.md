@@ -312,7 +312,12 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   `dividersBuilt` counts the plates with the lip's rule and without it, and takes the
   count without it where a slot is still built between those plates (settled with them,
   `fingerSlotPlan` given the count), and otherwise keeps the lip and its count. Counted
-  so, the bin is marked `lipTaken`, which only the lip's rule reads (`lipNotched`): it
+  so, the bin is marked `lipTaken`. In the engine only `lipNotched` reads it, which
+  drops the lip's rule and its corners for that bin wherever they are asked: in the
+  count, and in the reasons Checks gives, as `dividersWhy` asks `railedLimit` and
+  `plateLayout` of the marked bin. On the page `setDividerLimit` reads it as well, and
+  holds the field for the plates across to `dividersBuilt`'s count, as the one along
+  always is, since more plates across can leave no slot and bring the lip back. The bin
   keeps its lip as asked for all else, and above all for its holes, which are laid out
   clear of the lip before the slots are settled over them. Asked as a bin with `lip`
   false, its holes had room it does not give them, and a row that is not built held its
@@ -322,7 +327,9 @@ construction plus overlapping shells, so none of §2 is reachable. Keep it that 
   plate across a front one.
   The lip's rule only binds on plates packed a few millimetres apart, with no room for a
   slot between them, so the walls their ends meet have no slot either way, and the slots
-  in the others stay where they were, as do the rails beside them.
+  in the others stay where they were, as do the rails beside them. So a bin with a slot
+  between the plates its lip allows has one between the plates without its lip as well,
+  and is built with those: Checks never has a slot to blame for fewer plates.
   `fingerSlots` hands its answer to `buildBin` and `insertPlan` (`floor`), so the page
   counts the holes that are built, and to `binVolume`, which weighs the bin from it: no
   lip, the dips (`area`, the mean of the wall's two faces, times the wall) off the walls,
