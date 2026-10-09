@@ -2284,6 +2284,21 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
     console.log(`  ${'wall puzzle keys at 36.13 mm, screws'.padEnd(36)} ${leakText(r)}, ${plain.bad} with no joint${good ? '' : '   FAIL'}`);
     if (!good) bad++;
   }
+  /* A boss is its pocket's depth and 0.8 (a magnet) or 1.0 (a screw head) tall, and one
+     whose top stood level with the ceiling of the cut that reaches it came out open there:
+     a dovetail's notch is 2.4 mm tall, an H-clip's recess 2.3 and a wall key's 2.0. These
+     left 4 to 13 open edges a piece until such a boss stood MOUNT_LEVEL over the ceiling
+     (buildPiece). */
+  for (const [name, over] of [
+    ['dovetail at 36.13 mm, 1.6 mm magnet', { pitch: 36.13, connector: 'dovetail', magnets: true, magnetH: 1.6 }],
+    ['dovetail at 34.04 mm, 1.4 mm head', { pitch: 34.04, connector: 'dovetail', screws: true, screwHeadD: 4, screwHeadDepth: 1.4 }],
+    ['H-clip at 33.5 mm, 1.5 mm magnet', { pitch: 33.5, connector: 'hclip', magnets: true, magnetD: 4, magnetH: 1.5 }],
+    ['wall bowtie at 36.13 mm, 1 mm head', { pitch: 36.13, connector: 'bowtie', keyMount: 'wall', screws: true, screwHeadDepth: 1 }]]) {
+    const p = over.pitch;
+    const r = buildAll({ drawerW: 4 * p, drawerD: 2 * p, bedW: 2 * p + 16, bedD: 400, baseMode: 'bosses', ...over });
+    console.log(`  ${name.padEnd(36)} ${leakText(r)}${r.open ? '   FAIL' : ''}`);
+    if (r.open) bad++;
+  }
 }
 
 /* The fit clearance at its ceiling, for every joint and every pitch band.

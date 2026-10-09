@@ -400,7 +400,13 @@ two `NUDGE`s into its own boss, so its walls stand 3.4 microns from the cell's. 
 `NUDGE` is not enough: a cut that comes out open is taken again a `NUDGE` along a
 diagonal, the cell's and the boss's alike, and that could put the boss's walls back on
 the cell's: 52 more four-use edges in a piece, on a wall puzzle key at 36.13 mm.) That leaves
-fewer four-use edges than before (31 a piece for that H-clip) and none used once.
+fewer four-use edges than before (31 a piece for that H-clip) and none used once. A boss
+is its pocket's depth and 0.8 mm (a magnet) or 1.0 (a screw head) tall, up to 2.6, and
+one whose top stood level with the ceiling of the cut that reaches it (a dovetail's notch
+2.4 mm, an H-clip's recess 2.3, a wall key's 2.0) came out open there: a 1.6 mm magnet or
+a 1.4 mm head beside a dovetail, 4 to 13 open edges a piece. 0.01 mm off the level either
+way, none did. Such a boss stands `MOUNT_LEVEL` over the ceiling, with a pocket from above
+cut from that top.
 
 A boss's pocket is a lottery of its own: default screws in a one-cell piece left 3 to 6
 open edges on a boss's underside at 22 of the 901 pitches from 34 to 60 mm that take
