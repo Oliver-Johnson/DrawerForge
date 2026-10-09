@@ -2379,14 +2379,19 @@ const wallEdge = (c, k) => (c.edges && c.edges[k] !== undefined ? c.edges[k] : 1
 /* Whether a bin's stacking lip is the one notched at its slots, for removable dividers:
    a lip, over a wall thinner than its base (lipLevels). Over a wall as thick as the
    base the lip stands on the wall and nowhere over the cavity, so a plate clears it.
-   None on a bin counted as one whose finger slot takes its lip away (`lipTaken`,
-   dividersBuilt and countedAs), which keeps its lip as asked for everything else: its
-   holes across the floor are laid out clear of the lip (holeLayout) before the slots
-   are settled over them, and so built. Counted with `lip` false, they were laid out
-   with room the bin does not give them: a 1x0.5x2 with a 0.4 mm wall asking for AAA
-   cells, none of which fit, was counted as if a row of 3 did, which leaves its back
-   wall no room for the slot it is built with, and so as if it had the label shelf that
-   slot takes away: it was built with 1 plate along, not 2. */
+   None on a bin counted as one whose finger slot takes its lip away (`lipTaken`, set by
+   dividersBuilt and countedAs). This is where the engine reads that, and so what drops
+   the lip's rule from railedLimit and its corners from plateLayout for such a bin, and
+   from the reasons dividersWhy gives, which asks both of the bin countedAs marks. The
+   page reads it too (setDividerLimit): a bin so marked has its field for the plates
+   across held to dividersBuilt's count, as the one along always is, since more plates
+   across could leave it no slot, and so its lip back. It keeps its lip as asked for
+   everything else: its holes across the floor are laid out clear of the lip (holeLayout)
+   before the slots are settled over them, and so built. Counted with `lip` false, they
+   were laid out with room the bin does not give them: a 1x0.5x2 with a 0.4 mm wall
+   asking for AAA cells, none of which fit, was counted as if a row of 3 did, which
+   leaves its back wall no room for the slot it is built with, and so as if it had the
+   label shelf that slot takes away: it was built with 1 plate along, not 2. */
 const lipNotched = (c) => !!c.lip && !c.lipTaken && !c.solid && ['f', 'b', 'l', 'r'].every((k) => wallEdge(c, k) >= 1) &&
   LIP[0][1] - c.wall >= BLOAT;
 /* The scoop's radius as buildBin builds it, 0 for none: no taller than the front wall it
@@ -2563,14 +2568,16 @@ function dividersBuilt(cfg) {
   const out = dividersCounted(c);
   /* A finger slot takes the lip away, as a lowered wall does (buildBin), and the notches
      with it, which railedLimit and plateLayout keep clear of the lip's corners. So a bin
-     asking for slots is counted without that rule as well (`lipTaken`, which only the
-     rule reads: its holes are laid out clear of its lip all the same, as they are built,
-     lipNotched), and built with that count where a slot is still built between the
-     plates it gives, which can be narrower or stand elsewhere: settled between those
-     plates (fingerSlotPlan), as buildBin then settles them. Where none would be, the bin
-     keeps its lip and the count the lip allows. Counted with the lip's rule, a 1x1x3 with
-     a 0.4 mm wall and a slot in the front was built with 10 plates along where 11 fit,
-     and Checks put it down to a lip it does not have. */
+     asking for slots is counted without that rule as well (`lipTaken`: lipNotched reads
+     it and drops the rule and the corners, for this count and for dividersWhy's reasons,
+     and the page's field for the plates across reads it, to be held to what this builds;
+     its holes are laid out clear of its lip all the same, as they are built), and built
+     with that count where a slot is still built between the plates it gives, which can
+     be narrower or stand elsewhere: settled between those plates (fingerSlotPlan), as
+     buildBin then settles them. Where none would be, the bin keeps its lip and the count
+     the lip allows. Counted with the lip's rule, a 1x1x3 with a 0.4 mm wall and a slot in
+     the front was built with 10 plates along where 11 fit, and Checks put it down to a
+     lip it does not have. */
   if (c.divRemovable && c.lip && slotsAsked(c)) {
     const free = dividersCounted(Object.assign({}, c, { lipTaken: true }));
     if ((free.divX !== out.divX || free.divY !== out.divY) && fingerSlotPlan(c, free).n) return free;
@@ -2599,7 +2606,10 @@ function dividersCounted(c) {
    in it, which leaves it no lip, the same bin counted without one (`lipTaken`,
    dividersBuilt). What Checks says stopped the count (dividersWhy) and how many the
    fields let a bin ask for go by it, so neither says or stops at the lip of a bin that
-   has none. */
+   has none: dividersWhy asks railedLimit and plateLayout of it, which lipNotched then
+   keeps from the lip's rule and corners, and setDividerLimit holds the fields to
+   railedMost of it and, where it is marked, the one for the plates across to
+   dividersBuilt's count too. */
 function countedAs(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg);
   return c.divRemovable && c.lip && slotsAsked(c) && fingerSlotPlan(c).n ? Object.assign(c, { lipTaken: true }) : c;
@@ -2622,11 +2632,21 @@ function binDividers(cfg) {
    and 'crossCorners' when both would. It was asked of as many as the rails allow, and
    named the plates' keep wherever both went wrong there, whichever stopped one more.
    A bin with a finger slot built in it has no lip, and is said by the rules it is counted
-   by without one (countedAs), never the lip's; 'slot' where it is built with the count
-   its lip would allow all the same, because between more plates no slot would be built,
-   and it would have its lip. That is a fallback no bin swept has reached: the lip's rule
-   binds only on plates packed too close for a slot between them, so more of them move no
-   slot (dividersBuilt).
+   by without one (countedAs), never the lip's, and it is always built with that count.
+   The lip stops only plates that would stand under 6 mm apart, so the ones it keeps
+   stand under 9: its rule and its corners bind where the last plate stands within half
+   a plate, its clearance and 3.4 mm of the cavity's wall, and the rails let plates stand
+   that close only where half a plate and its clearance are under 2.2 mm. A finger slot
+   needs 15 mm between two plates' rails, or a rail and the wall's corner, so the walls
+   those plates meet have no slot with the lip's count or without it. And all else a
+   slot is settled by is the same with either: the plates the other way, unless the lip
+   stopped those as well, which leaves no wall a slot; the scoop; and the shelf, as no
+   note prints between plates that close. So where a slot is built between
+   the plates the lip allows, one is built between the plates without it, and the bin is
+   built with those (dividersBuilt). This had 'slot' for a bin built with the lip's count
+   all the same, as between more plates no slot would be built, and none of 900,000
+   random bins nor of a million aimed at the lip reached it; the audit holds bins to
+   that ("counted with no lip").
    Null where it is built with all it asks for, and where it has no rails at all: a
    carved shape, a solid block or a floor that fills the bin (plateLayout's railed), or
    holes across its floor (binDividers). Those are built with none whatever they ask for,
@@ -2635,13 +2655,12 @@ function binDividers(cfg) {
 function dividersWhy(cfg) {
   const c = Object.assign({}, BIN_DEFAULTS, cfg), built = dividersBuilt(c), out = { divX: null, divY: null };
   if (!c.divRemovable || !plateLayout(c, built).railed || (insertOf(c) && insertPlan(c).n)) return out;
-  const by = countedAs(c), free = by.lipTaken ? dividersCounted(by) : null;
+  const by = countedAs(c);
   for (const [key, axis] of [['divX', 'x'], ['divY', 'y']]) {
     const asked = c[key] || 0;
     if (built[key] >= asked) continue;
     const L = railedLimit(by, axis);
     if (built[key] >= Math.min(asked, L.most)) { out[key] = L.by; continue; }
-    if (free && built[key] < free[key]) { out[key] = 'slot'; continue; }
     const P = plateLayout(by, Object.assign({}, built, { [key]: built[key] + 1 }));
     out[key] = !P.fitsY && !P.corners ? 'crossCorners' : !P.fitsY ? 'cross' : 'lipCorners';
   }
