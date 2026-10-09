@@ -2909,7 +2909,8 @@ function mountLimits(cfg, layout, known) {
     const { sides, fits } = BORE[f];
     /* the room a bore has, measured again for a shank turned under its counterbore, and
        kept on the site by its turn: the page asks again on the same cuts (`known`) once
-       the head and the magnet are read, and on a 30 x 30 puzzle plate that took 3.6 ms */
+       the head and the magnet are read, and measuring every site again was nearly all
+       that asking again cost */
     const turn = f === 'screwHoleD' ? shankTurn : 0;
     const reach = (c, s) => {
       if (!turn) return s.bore[sides];
