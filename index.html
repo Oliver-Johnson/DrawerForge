@@ -5054,11 +5054,21 @@ function buildPiece(cfg, layout, piece, onStatus) {
           solids.push({ outline: pts.map(([u, v]) => [bs.cxr - bs.sx*u, bs.cyr - bs.sy*v]), sites: [bs] });
         }
       }
+      /* The pockets are cut again (cutAgain) if they come out open. A boss's pocket is a
+         lottery of its own: default screws in one-cell pieces leave 3 to 6 open edges on
+         a boss's underside at 22 of the 901 pitches from 34 to 60 mm that take them, in
+         bosses no housing reaches, which are built as before. A boss cut short of the
+         piece's edge draws the lottery again at other pitches: four one-cell pieces with
+         dovetails, whose notches reach the bosses from 34 to 36.4 mm, left it at 34.64
+         and 34.72 mm, where the whole boss had built closed. Cut again, no boss a housing
+         reaches leaks at any of those pitches. */
       for (const { outline, sites } of solids) {
         let boss = extrudePoly(outline, 0, bossH);
-        if (bossFastener)
-          boss = csgSubtract(boss, [].concat(...sites.map((bs) =>
-            movePolys(bossFastener, bs.ccx + bs.sx*off, bs.ccy + bs.sy*off))));
+        if (bossFastener) {
+          const pockets = [].concat(...sites.map((bs) =>
+            movePolys(bossFastener, bs.ccx + bs.sx*off, bs.ccy + bs.sy*off)));
+          boss = cutAgain(boss, pockets, csgSubtract(boss, pockets));
+        }
         const b = flatBox(boss), cut = [];
         for (const k of ks)
           if (meets(cutBoxes[k], b)) cut.push(...movePolys(fromBelow[k], -sx*NUDGE, -sy*NUDGE));
