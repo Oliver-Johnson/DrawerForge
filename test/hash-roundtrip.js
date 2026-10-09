@@ -510,7 +510,7 @@ console.log('\nmalformed hashes fall back instead of throwing');
      four times over, 5.1 to 5.7 s idle and 6.5 to 8.9 s beside them. So 4 s: a build four
      times slower fails it, busy or not; one twice as slow passes it idle but can fail it
      under load; and the 50 x 50 itself has come within 0.8 s of it beside 20 jobs.
-   - process.cpuUsage, without it (Node 20, which CI runs): the whole process's, which
+   - process.cpuUsage, without it (Node before 22.19): the whole process's, which
      also counts V8's garbage collector working on threads of its own beside the build,
      as much again as the build on the 50 x 50 and more on one that makes more garbage:
      2.5 s idle and up to 5.0 s beside 20 jobs; twice over, 5.7 to 6.1 s; four times
