@@ -2217,7 +2217,7 @@ function drawMap() {
     // what makes it safe for the labels to shorten or drop a line in a small bin
     const tip = document.createElementNS(SVGNS, 'title');
     tip.textContent = (b.note ? b.note + ' — ' : '') +
-      `${b.u}×${b.v}, ${b.hUnits} units (${b.hUnits * SPEC.unitH} mm)`;
+      `${b.u}×${b.v}, ${plural(b.hUnits, 'unit')} (${b.hUnits * SPEC.unitH} mm)`;
     r.appendChild(tip);
     if (issues.length) {
       const warn = el('text', { class: 'bwarn', x: b.x * S + 13, y: sy(b.y, b.v) + 20 });
@@ -3754,11 +3754,12 @@ function refresh() {
     (inch ? ` (${gw} × ${gd} mm, ${FIELDS.inchText(gw)} × ${FIELDS.inchText(gd)} in)` : '') +
     /* With no room there is no tallest bin either, nor with room under a 1-unit bin and
        its lip: capUnits is never under 1, and it said "tallest single bin 1 units" there
-       while Checks said no 1-unit bin fits. */
+       while Checks said no 1-unit bin fits. Where one unit is the tallest, it is "1 unit",
+       as Checks says it: it said "1 units" there too. */
     (noRoomAbove(g) ? ` · no room above the baseplate, as ${whyNoRoom(also)}` :
     ` · ${g.avail.toFixed(1)} mm${also(g.avail)} above the baseplate · ` + (unitsUnder(g.avail) < 1
       ? `too little for even a 1-unit bin (${SPEC.unitH} mm${also(SPEC.unitH)} + lip)`
-      : `tallest single bin ${capUnits} units (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`));
+      : `tallest single bin ${plural(capUnits, 'unit')} (${capUnits * SPEC.unitH} mm${also(capUnits * SPEC.unitH)} + lip), limited by ${capBy}`));
   // and the half cell under the size fields, which said 21 mm whatever the drawer was in
   $('halfCellLen').textContent = `${SPEC.pitch / 2} mm${also(SPEC.pitch / 2)}`;
   const src = scratch || (selected >= 0 && B()[selected] ? B()[selected] : state);
@@ -4422,7 +4423,7 @@ function drawScene() {
 function sceneLabel(empty, shell, g) {
   if (fBin()) {
     const b = fBin();
-    return `3D preview: one ${b.u} by ${b.v} bin, ${b.hUnits} units tall, ` +
+    return `3D preview: one ${b.u} by ${b.v} bin, ${plural(b.hUnits, 'unit')} tall, ` +
            'on a baseplate of its own size.';
   }
   if (empty && !shell)
@@ -4506,7 +4507,7 @@ function render() {
 function showTip(e, b, k) {
   const el = $('tip');
   el.textContent = (b.note ? b.note + ' — ' : '') +
-    `${b.u}×${b.v}, ${b.hUnits} units (${b.hUnits * SPEC.unitH} mm)` +
+    `${b.u}×${b.v}, ${plural(b.hUnits, 'unit')} (${b.hUnits * SPEC.unitH} mm)` +
     (k !== undefined && layers.length > 1 ? ` · layer ${k + 1}` : '');
   el.style.display = 'block';
   const pad = 14;
