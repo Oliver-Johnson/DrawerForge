@@ -876,8 +876,8 @@ function cylinder(cx, cy, r, z0, z1, seg) {
 
 /* The polygon each mounting bore is cut as: how many sides, and how far out its corners
  * stand for a size typed (`r`), and back the other way, the largest size whose corners
- * stay inside a room (`fits`). fastenerCutter and screwCutter cut these and mountLimits
- * holds the sizes to them, so a bore's shape is decided here and nowhere else. Each is
+ * stay inside a room (`fits`). fastenerCutter cuts these and mountLimits holds the sizes
+ * to them, so a bore's shape is decided here and nowhere else. Each is
  * cylinder's polygon about the site, a corner at every 2πk/sides from +x, but for a shank
  * that `turn` moves (below).
  *
@@ -1118,20 +1118,6 @@ function movePolys(polys, dx, dy) {
     // n copied, not shared: BspNode.invert replaces a plane's normal, and the template is reused
     plane: { n: p.plane.n.slice(), w: p.plane.w + p.plane.n[0]*dx + p.plane.n[1]*dy },
   }));
-}
-
-// counterbore: hole cylinder full height + wider recess from chosen face, each bore as
-// MOUNT_BORE shapes it
-function screwCutter(cx, cy, holeD, headD, z0, z1, headDepth, fromTop) {
-  const { head, hole } = MOUNT_BORE;
-  let polys = cylinder(cx, cy, hole.r(holeD), z0 - 0.5, z1 + 0.5, hole.sides);
-  if (head.cuts(headD, holeD)) {
-    const rec = fromTop
-      ? cylinder(cx, cy, head.r(headD), z1 - headDepth, z1 + 0.5, head.sides)
-      : cylinder(cx, cy, head.r(headD), z0 - 0.5, z0 + headDepth, head.sides);
-    polys = csgUnion(polys, rec);
-  }
-  return polys;
 }
 
 // dovetail tab footprint (2D); edge: '+x'|'-x'|'+y'|'-y', e = edge coordinate, s = centre along edge
