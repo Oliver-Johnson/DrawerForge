@@ -29,6 +29,14 @@ const platesUrl = () => site.base;
 const binsUrl = () => site.base + 'bins/';
 
 const settle = (page) => page.waitForTimeout(900);   // past the 400 ms save debounce
+/* Until the page's save has landed: no edit still waiting to be read in (the bins page's
+   fields are read in a moment after they change, `timer`), and this browser's save is the
+   design on the page. Going on to another address drops a save still waiting (see
+   dropSave), and a fixed wait for it was now and then too short for a page still drawing. */
+const saved = (page) => expect.poll(() => page.evaluate(() =>
+  (typeof timer === 'undefined' || timer === null) &&
+  localStorage.getItem(SAVE_KEY) === encodeDesc(descriptor())), { message: 'the page has saved' })
+  .toBe(true);
 const PLATES = 'drawerforge:plates:v1';
 const BINS = 'drawerforge:bins:v1';
 
@@ -127,7 +135,7 @@ test('following a link puts the layout it replaced aside, with a way back',
   async ({ page }) => {
     await H.openPlates(page, platesUrl());
     await H.setField(page, 'drawerW', '512');
-    await settle(page);
+    await saved(page);
 
     await arrive(page, platesUrl() + '#w=333');
     expect(await page.inputValue('#drawerW')).toBe('333');   // the link still wins
@@ -141,7 +149,7 @@ test('following a link puts the layout it replaced aside, with a way back',
 
 test('a save nobody has touched is not offered back', async ({ page }) => {
   await H.openPlates(page, platesUrl());
-  await settle(page);                                  // the defaults are saved
+  await saved(page);                                   // the defaults are saved
   await arrive(page, platesUrl() + '#w=333');
   await expect(page.locator('#setAside')).toBeHidden();
   expect(await stored(page, PLATES + ':prev')).toBeNull();
@@ -205,7 +213,7 @@ test('a saved layout that did not finish loading is still declined after a reloa
 test('a second link does not push your own layout out of the backup', async ({ page }) => {
   await H.openPlates(page, platesUrl());
   await H.setField(page, 'drawerW', '512');
-  await settle(page);
+  await saved(page);
   await arrive(page, platesUrl() + '#w=333');
   await arrive(page, platesUrl() + '#w=444');
   await expect(page.locator('#putBack')).toBeVisible();
@@ -220,13 +228,13 @@ test('a second link does not push your own layout out of the backup', async ({ p
 test('changing a linked layout takes the offer to put yours back away', async ({ page }) => {
   await H.openPlates(page, platesUrl());
   await H.setField(page, 'drawerW', '512');
-  await settle(page);
+  await saved(page);
   await arrive(page, platesUrl() + '#w=333');
   await expect(page.locator('#setAside')).toBeVisible();
   await page.waitForTimeout(600);                      // the boot's own save is no edit
   await expect(page.locator('#setAside')).toBeVisible();
   await H.setField(page, 'drawerW', '340');
-  await settle(page);
+  await saved(page);
   await expect(page.locator('#setAside')).toBeHidden();
   // and that edited layout is yours now: the next link sets it aside
   await arrive(page, platesUrl() + '#w=444');
@@ -480,7 +488,7 @@ test('bed, infill and gap survive a trip through baseplates and back', async ({ 
   await H.openBins(page, binsUrl());
   const want = [['bedW', '200'], ['bedD', '210'], ['bedH', '220'], ['infill', '35'], ['gap', '6']];
   for (const [id, v] of want) await H.setField(page, id, v);
-  await settle(page);
+  await saved(page);
 
   // each page's own link, as the page means it
   await arrive(page, await page.evaluate(() => new URL(platesHref(), location.href).href));
@@ -520,7 +528,7 @@ test('following a link puts the bins it replaced aside, with a way back', async 
   await H.openBins(page, binsUrl());
   await H.dragCells(page, [0, 0], [1, 1]);
   await H.dragCells(page, [3, 3], [3, 3]);
-  await settle(page);
+  await saved(page);
 
   await arrive(page, binsUrl() + '#bl=0-0-1-1-3');
   expect(await binsIn(page)).toBe(1);
@@ -635,7 +643,7 @@ test("someone's bins link, edited, carried to baseplates still keeps your drawer
       '&bl=0-0-1-1-3';
     await arrive(page, binsUrl() + '#' + theirs);
     await H.setField(page, 'gap', '6');               // changed, but still their drawer
-    await settle(page);
+    await saved(page);
     await arrive(page, binsUrl());                    // and a reload does not make it yours
 
     await viaButton(page, '#navPlates', platesUrl());
@@ -674,7 +682,7 @@ for (const [id, value] of [['infill', '20'], ['bedH', '200'], ['drawerD', '300']
 test("an edited link put back is still the link's", async ({ page }) => {
   await theirBinsLink(page);
   await H.setField(page, 'gap', '6');
-  await settle(page);
+  await saved(page);
   await arrive(page, binsUrl() + '#bl=2-2-1-1-3');    // sets the edited one aside
   await clickAndLoad(page, '#putBack');
   expect(await page.inputValue('#gap')).toBe('6');
@@ -693,7 +701,7 @@ test("your own layout put back is not the link's, even in the same drawer",
     await viaButton(page, '#navBins', binsUrl());
     await H.dragCells(page, [0, 0], [0, 0]);
     await H.setField(page, 'drawerW', '400');
-    await settle(page);
+    await saved(page);
     const mine = await stored(page, BINS);
     await arrive(page, binsUrl() + '#' + mine.replace(/(^|&)bl=[^&]*/, '$1bl=2-2-1-1-3'));
     await clickAndLoad(page, '#putBack');
@@ -712,7 +720,7 @@ test("your own layout put back is not the link's, even in the same drawer",
 test("someone's drawer changed on baseplates comes back to bins as yours", async ({ page }) => {
   await H.openBins(page, binsUrl());
   await H.dragCells(page, [0, 0], [1, 1]);
-  await settle(page);
+  await saved(page);
   const mine = await stored(page, BINS);
   await arrive(page, binsUrl() + '#w=333&bl=0-0-1-1-3');
   await H.setField(page, 'gap', '6');
@@ -740,7 +748,7 @@ test("your own drawer on someone's link is not recorded as theirs", async ({ pag
   expect(theirs).toContain('bw=220');
   await arrive(page, binsUrl());
   await H.dragCells(page, [0, 0], [1, 1]);            // your own bins
-  await settle(page);
+  await saved(page);
   const mine = await stored(page, BINS);
 
   await arrive(page, binsUrl() + '#' + theirs);
@@ -752,7 +760,7 @@ test("your own drawer on someone's link is not recorded as theirs", async ({ pag
 
   await arrive(page, binsUrl());
   await H.setField(page, 'drawerW', '600');
-  await settle(page);
+  await saved(page);
   await arrive(page, platesUrl());
   await viaButton(page, '#navBins', binsUrl());
   expect(await page.inputValue('#drawerW')).toBe('500');
@@ -771,7 +779,7 @@ for (const reload of [false, true]) {
     await H.setField(page, 'drawerD', '400');
     await H.setField(page, 'bedW', '220');
     await page.selectOption('#connector', 'snap');
-    await settle(page);
+    await saved(page);
     const mine = await stored(page, PLATES);
 
     await arrive(page, binsUrl() + '#w=333&d=333&bw=250&bd=250&bl=0-0-1-1-3');
@@ -798,9 +806,11 @@ test('a page that declined a link goes on from its defaults, not the link', asyn
   await page.evaluate(([k, v]) => localStorage.setItem(k, v), [BINS + ':loading', save]);
   await arrive(page, binsUrl());
   await expect(page.locator('#setAside')).toContainText(/did not finish loading/);
+  expect(await stored(page, BINS + ':linked'), 'declined, the link is still recorded').not.toBeNull();
   await H.dragCells(page, [0, 0], [0, 0]);
   // the edit's save, however long a busy page takes to it
-  await expect.poll(() => stored(page, BINS + ':linked')).toBeNull();
+  await expect.poll(() => stored(page, BINS + ':linked'), { message: 'the edit ends the record' })
+    .toBeNull();
 });
 
 test('the guide passes a layout on without its own anchors in the way', async ({ page }) => {
@@ -815,8 +825,12 @@ test('the guide passes a layout on without its own anchors in the way', async ({
   const layout = await page.evaluate(() => location.hash);
   expect(layout).toMatch(/(^#|&)ph=/);
 
-  // a guide link with an anchor of its own carries the layout, not "#heights#w=…"
-  await page.goto(site.base + 'guide/drawer-sizes/' + layout);
+  // on from the guide to one of its own pages, which carries it too
+  await Promise.all([page.waitForEvent('load'), page.click('a[href="drawer-sizes/"]')]);
+  expect(page.url().split('#')[0]).toBe(site.base + 'guide/drawer-sizes/');
+  expect(await page.evaluate(() => location.hash)).toBe(layout);
+
+  // and a link there with an anchor of its own carries the layout, not "#heights#w=…"
   await Promise.all([page.waitForEvent('load'), page.click('a[href="../#heights"]')]);
   expect(page.url().split('#')[0]).toBe(site.base + 'guide/');
   expect(await page.evaluate(() => location.hash)).toBe(layout);
@@ -830,7 +844,7 @@ test('looking at a linked layout differently is not changing it', async ({ page 
   await H.openBins(page, binsUrl());
   await H.dragCells(page, [0, 0], [1, 1]);
   await H.dragCells(page, [3, 3], [3, 3]);
-  await settle(page);
+  await saved(page);
   await arrive(page, binsUrl() + '#bl=0-0-1-1-3');
   await expect(page.locator('#putBack')).toBeVisible();
 
@@ -850,7 +864,7 @@ test('a link with your bins in a drawer of another size still offers yours back'
   async ({ page }) => {
     await H.openBins(page, binsUrl());
     await H.dragCells(page, [0, 0], [1, 1]);
-    await settle(page);
+    await saved(page);
     const save = await stored(page, BINS);
     await arrive(page, binsUrl() + '#' + save.replace(/(^|&)w=\d+/, '$1w=500'));
     expect(await page.evaluate(() => state.drawerW)).toBe(500);

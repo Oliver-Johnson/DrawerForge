@@ -42,8 +42,8 @@ async function openBins(page) {
 const settle = (page) => page.waitForTimeout(900);   // past the 400 ms debounce
 /* Until this browser holds the save `re` matches. A page still busy drawing the edit
    comes to its save late, and a fixed wait was now and then too short for it. */
-const savedAs = (page, key, re) =>
-  expect.poll(() => page.evaluate((k) => localStorage.getItem(k), key)).toMatch(re);
+const savedAs = (page, key, re) => expect.poll(() =>
+  page.evaluate((k) => localStorage.getItem(k) || '', key), { message: `${key} is saved` }).toMatch(re);
 
 test('the baseplates page comes back the way you left it', async ({ page }) => {
   await openPlates(page);

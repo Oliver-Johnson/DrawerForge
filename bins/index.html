@@ -6162,7 +6162,8 @@ const DRAWERS = (function () {
     function markHere(h, link, note) {
       if ((location.hash || '').replace(/^#/, '') !== h) return;
       try { history.replaceState(stamp(h, link, note), ''); }
-      catch (err) { /* refused on file://: a reload goes by the tab's record instead */ }
+      catch (err) { /* refused, as a browser may when it is called too often: a reload
+                       goes by the tab's record instead */ }
     }
     // the marks for a note: this tool's `mine`, and the other's as this page has it
     const marksFor = (mine) => ({ [o.tool]: mine, [otherTool]: theirs });
