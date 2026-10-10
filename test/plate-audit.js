@@ -2491,6 +2491,30 @@ console.log('\nthe other limits, built at their ends:');
     console.log(`  ${'counterbore at 44.08 mm'.padEnd(28)} ${leakText(r)}`);
     if (r.bad) bad++;
   }
+  /* A pocket's planes beside a housing put in from above, over a solid floor (#85).
+     Nothing of the pocket reaches an H-clip's cup or a snap clip's slot there, 2.2 and
+     2.1 mm of floor between them at 34.5 mm, but its planes split the cell's faces, and
+     the repair can leave a split a few microns off its face, which the housing, cut
+     afterwards, crosses. A 6.3 mm magnet from beneath at 34.5 mm, the field's cap, left
+     4 edges open in A1 with an H-clip from above and 3 with a snap clip in the wall,
+     with Download on: the page's links, so with the clearances cut from the field. A
+     6.25 mm magnet at 37.5 mm, well under its 9.2 mm cap, left 14. Such a cell has its
+     pockets cut again now (the top-insert pass in buildPiece). Each has to be taken by
+     the field and build watertight, with nothing folded, and so does the H-clip at its
+     42 mm cap, which always did. */
+  for (const [nm, o, d] of [
+    ['H-clip above, 6.3 magnet, 34.5', pair(34.5, { connector: 'hclip', keyInsert: 'top' }), 6.3],
+    ['snap clip above, 6.3 magnet, 34.5', pair(34.5, { connector: 'snap', keyMount: 'wall', keyInsert: 'top' }), 6.3],
+    ['H-clip above, 6.25 magnet, 37.5', pair(37.5, { connector: 'hclip', keyInsert: 'top' }), 6.25],
+    ['H-clip above, 13.6 magnet, 42', pair(42, { connector: 'hclip', keyInsert: 'top' }), 13.6]]) {
+    const at = { ...o, clr: 0.2, magnets: true, magnetD: d };
+    const cfg = designCfg(at);
+    const taken = d <= G.mountLimits(cfg, G.computeLayout(cfg)).magnetD + 1e-9;
+    const r = buildAll(at);
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    console.log(`  ${nm.padEnd(34)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (!taken || r.bad || folds) bad++;
+  }
   /* The clearance one step past its end, which leaked, and that was why the end is where
      it is. The joint's cut taken again when it comes out open (cutAgain in core.js)
      closed it at 42 mm, so it waited on a sweep; the sweep connClrCeiling describes found
