@@ -2469,8 +2469,14 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
        field takes with no edge open: the bowtie's for the housing, and the H-clip's for
        the socket's rim. The H-clip's cup stands inside the rim's corner, and a pocket
        from above has to clear the rim over its boss since #83 (below), which it meets
-       first: from 30 to 42 mm no pocket from above reaches an H-clip's or a snap clip's
-       cup that the rim does not stop sooner. */
+       first at any fit clearance up to 0.25 mm, this row's default 0.2 among them,
+       whatever the tolerance and rim cutoff: from 30 to 42 mm no pocket from above then
+       reaches an H-clip's or a snap clip's cup that the rim does not stop sooner. A
+       looser H-clip fit widens the cup until it comes first, and the housing's cap holds
+       the pocket, as it did here before #83: from a fit of 0.26 at loose tolerance and
+       rim cutoff 0.1, where a 2.1 mm magnet from above at 33 mm is refused at 2 for the
+       housing, and from 0.42 at standard tolerance and the default cutoff (ENGINE.md
+       §5). */
     for (const [name, over, d, why] of [
       ['H-clip at 34 mm, 4 mm magnet above', { ...P(34), connector: 'hclip', magnets: true, magnetSide: 'top' }, 4, 'rim'],
       ['wall bowtie at 36.13 mm, 7.9 x 1.45', { ...P(36.13), magnets: true, magnetH: 1.45 }, 7.9, 'housing']]) {

@@ -870,8 +870,17 @@ currently installed):
     the joint than without it. The plate can still come out open there: an H-clip from
     above at 34 mm took a 4 mm magnet from above with 4 edges open where the cavity meets
     the pocket's wall, with Download on. So the cap is held off every housing alike.
-    Since #83 a pocket from above is held clear of the rim over its boss, which it meets
-    first: from 30 to 42 mm no pocket from above reaches an H-clip's or a snap clip's cup.
+    Since #83 a pocket from above is held clear of the rim over its boss, and it meets the
+    rim first at any fit clearance up to 0.25 mm (the default is 0.2), whatever the
+    tolerance and rim cutoff: from 30 to 42 mm no such pocket then reaches an H-clip's or
+    a snap clip's cup. A snap clip's fit stops at 0.3, and the rim comes first at every
+    one. An H-clip's runs to 1 mm, and a looser one widens its cup until the cup comes
+    first, so the housing's cap holds the pocket instead: from a fit of 0.26 at loose
+    tolerance and rim cutoff 0.1 (0.52 at cutoff 1), from 0.42 at standard tolerance and
+    the default cutoff (0.33 to 0.59 as the cutoff goes from 0.1 to 1), and from 0.4 to
+    0.67 at tight. At loose, cutoff 0.1 and fit 0.3 that is a magnet from above from about
+    32.3 to 34 mm and a screw hole from 32.1 to 33.8: at 33 mm a 2.1 mm magnet is refused
+    at 2 for the housing, where the rim alone would take it.
   - **A pocket in a corner boss counts the same way**, since the joint is cut from the
     boss too (#70), and from above its floor is measured from the boss's top: wall keys
     and the dovetail reach a boss's pocket up to about 39 mm, the H-clip up to about 34.5,
