@@ -3508,6 +3508,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
     return polys;
   };
   let done = 0;
+  const rims = new Map();   // a whole cell's shell, by its column and row, for the corner bosses' pockets
   for (let ix = 0; ix < xs.length-1; ix++) {
     for (let iy = 0; iy < ys.length-1; iy++) {
       let x0 = Math.max(0, xs[ix] - BLOAT), x1 = Math.min(W, xs[ix+1] + BLOAT);
@@ -3823,6 +3824,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
         jointCells.push(cell);
       }
       if (cellFastener) region = settle(cell, region);
+      if (!halfX && !halfY) rims.set(ci + ',' + cj, shells.length);
       shells.push(region);
       done++;
       if (onStatus && done % 8 === 0) onStatus(`cells ${done}`);
@@ -4040,6 +4042,86 @@ function buildPiece(cfg, layout, piece, onStatus) {
           }
         }
         shells.push(boss);
+      }
+    }
+    /* The socket's rim, cut away under a boss whose pocket it stands in (#83). With nothing
+       under the sockets a cell is its rim alone, from the bed up: 2.85 mm in from the
+       cell's edges at the bed, 2.15 from 0.7 mm up, and further in at the socket's rounded
+       corner, which is the way every pocket faces. The pockets sit holeOffset from the
+       cell's centre whatever the pitch, so at small pitches they run in under the rim, and
+       a boss's pocket was cut from the boss alone: the rim, a shell of its own, stood in
+       it. A 6 mm magnet from beneath at 34.5 mm had 14.6 mm³ of rim in each pocket, in 41%
+       of its columns, and 1.8 mm³ at 36.13 mm, all with Download on; a solid floor's
+       pockets are cut into the floor under the rim and had none.
+     *
+       So where a boss's pocket runs more than MOUNT_SEAM into its cell's rim, the rim is
+       cut away under the boss: a box from under the bed to a height under the boss's top,
+       two BLOATs in from the cell's edges and from the boss's inner sides. The boss stands
+       round and over all of it, so the plate is the same solid but for the pocket, which
+       is then the boss's own as a solid floor's is the floor's. A box, and not the pocket
+       again: cut along the pocket's own walls and roof, the rim came out split on the same
+       lines as the boss where both stand on the piece's edge, edges used four times (six
+       more at 34.5 mm), and a box's faces stand off every face of the boss's. Up to under
+       the boss's top rather than the pocket's roof, so the rim's foot, below 0.7 mm, where
+       it stands furthest in, goes from under a hole open on the boss's top as well; over
+       the foot mountLimits holds such a hole clear of the rim, since there no boss stands
+       round it and cutting it would cut into the socket's wall. The height is the middle
+       of the widest gap between the planes it could meet, the rim's own rings, the pocket's
+       floors and roofs and a joint's cuts and housings, so it is level with none of them:
+       two cuts level with each other went bad wherever #64 tried them.
+     *
+       Every whole cell's rim is the same ring, so a corner is cut in every cell or in none.
+       A pocket the rim does not reach leaves it as it was, and the plate is built as
+       before. */
+    const ringZ = prof.zs.slice(1, 5), ringD = prof.ds.slice(1, 5);
+    // the rim's ring at height z, as directCellRegion makes it; between two rings, where
+    // their corners have got to, since they move in step
+    const ringAt = (z) => {
+      z = Math.max(ringZ[0], Math.min(ringZ[ringZ.length - 1], z));
+      let k = 0;
+      while (k < ringZ.length - 2 && z > ringZ[k + 1]) k++;
+      const d = ringD[k] + (z - ringZ[k]) / (ringZ[k + 1] - ringZ[k]) * (ringD[k + 1] - ringD[k]);
+      return roundedRectRing(0, 0, half - d, half - d, prof.rTop - (d - ringD[ringD.length - 1]), cfg.arcSegs || 6);
+    };
+    // how far the pocket at the corner (sx, sy) runs into the rim, each of its corners
+    // against the ring at its own height, which the walls straight up from it stand inside
+    const into = (sx, sy) => {
+      let most = -Infinity;
+      for (const p of bossFastener) for (const v of p.verts) {
+        const ring = ringAt(v[2]), x = v[0] + sx*off, y = v[1] + sy*off;
+        ring.forEach((a, i) => {
+          const b = ring[(i + 1) % ring.length], ex = b[0] - a[0], ey = b[1] - a[1];
+          most = Math.max(most, (ey * (x - a[0]) - ex * (y - a[1])) / Math.hypot(ex, ey));
+        });
+      }
+      return most;
+    };
+    const under = [[-1, -1], [-1, 1], [1, -1], [1, 1]].filter(([sx, sy]) => into(sx, sy) > MOUNT_SEAM);
+    if (under.length) {
+      const flats = (polys) => polys.filter((p) => Math.abs(p.plane.n[2]) > 0.999).map((p) => p.verts[0][2]);
+      // over the foot, and over every pocket's roof under the boss's top
+      const lo = Math.max(ringZ[1], ...bossFastener.filter((p) => p.plane.n[2] > 0.999 && p.verts[0][2] < bossH)
+        .map((p) => p.verts[0][2]));
+      const planes = [...ringZ, ...flats(bossFastener), ...fromBelow.flatMap(flats)];
+      const bo = keyKind === 'recess' ? null : keyed.find((b) => !(plan.junction && offJunction(b, pitch, piece)));
+      if (bo) {
+        const op = keySiteOps(keyKind, keyShape, keyPrm, keyClr, bo.edge, bo.e, bo.s, H);
+        planes.push(...flats(op.cut), ...flats(op.add));
+      }
+      const stops = [lo, bossH, ...planes.filter((z) => z > lo && z < bossH)].sort((a, b) => a - b);
+      let rimTop = lo, gap = -1;
+      for (let n = 1; n < stops.length; n++)
+        if (stops[n] - stops[n - 1] > gap) { gap = stops[n] - stops[n - 1]; rimTop = (stops[n] + stops[n - 1]) / 2; }
+      for (let i = 0; i < piece.nx; i++) for (let j = 0; j < piece.ny; j++) {
+        const k = rims.get(i + ',' + j);
+        if (k === undefined) continue;
+        const cut = [].concat(...under.map(([sx, sy]) => {
+          const cxr = gx0 + i*pitch + half + sx*half, cyr = gy0 + j*pitch + half + sy*half;   // the cell's corner
+          const x0 = cxr - sx*2*BLOAT, x1 = cxr - sx*(bossW - 2*BLOAT);
+          const y0 = cyr - sy*2*BLOAT, y1 = cyr - sy*(bossW - 2*BLOAT);
+          return extrudePoly([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], -0.5, rimTop);
+        }));
+        shells[k] = cutAgain(shells[k], cut, csgSubtract(shells[k], cut));
       }
     }
   }
