@@ -1050,6 +1050,19 @@ console.log('\nloose parts and samples, watertight and oriented:');
     drawerW: G.DEFAULTS.pitch, drawerD: G.DEFAULTS.pitch,
     marginMode: 'custom', mLeft: 0, mRight: 0, mFront: 0, mBack: 0 });
   report('test tile', G.buildTestTile(tileCfg).polys);
+  /* The tile with magnets and screws, the page's own sizes. Once a screw's bores stood
+     their flats on the sizes, the 6 mm counterbore's walls stood 0.022 mm inside the 6 mm
+     magnet pocket's from beneath, and the tile left 6 edges open in its underside; a
+     counterbore the magnet pocket holds whole is not cut now (fastenerCutter). A magnet
+     from above is cut from the other face, and that tile is built too. A counterbore
+     deeper than the 2 mm magnet left the same 6 at every depth from 2.25 to 4: it is cut
+     at the pocket's corners now, one prism with it (MOUNT_BORE.head.cut). */
+  for (const side of ['bottom', 'top'])
+    report(`tile, magnets ${side === 'top' ? 'above' : 'below'}, screws`,
+      G.buildTestTile({ ...tileCfg, magnets: true, magnetSide: side, screws: true }).polys);
+  for (const depth of [2.5, 3])
+    report(`tile, below, ${depth} deep`,
+      G.buildTestTile({ ...tileCfg, magnets: true, screws: true, screwHeadDepth: depth }).polys);
 
   for (const conn of CONNECTORS)
     for (const keyInsert of ['bottom', 'top']) {
@@ -1285,10 +1298,11 @@ function designCfg(over) {
   }
   return cfg;
 }
-function buildAll(over) {
+// every piece of a design, or with `tile` the test tile the page would print for it
+function buildAll(over, tile) {
   const cfg = designCfg(over);
   const L = G.computeLayout(cfg);
-  const built = L.pieces.map((pc) => G.buildPiece(cfg, L, pc));
+  const built = tile ? [G.buildTestTile(cfg)] : L.pieces.map((pc) => G.buildPiece(cfg, L, pc));
   const pieces = built.map((r) => r.polys);
   let bad = 0, open = 0, beyond = 0;
   for (const r of built) {
@@ -1474,7 +1488,21 @@ function sectionArea(polys, z, dy) {
  * in the STL. A second run that comes out open throws now, so the plate fails to build, as
  * it did before, and the checks say so. These two rows are built as the page builds them
  * (its clearances and margins), and hold "threw in the seam repair, or watertight and
- * oriented": whatever builds them later has to build them whole. */
+ * oriented": whatever builds them later has to build them whole.
+ *
+ * With a bore's flats on its size, the same link cuts a counterbore 0.19 mm and a shank
+ * 0.1 mm wider, a cut the seam repair settles. It came out open instead, 26 edges a piece
+ * in the socket floor, and so did 38 of the 41 heads from 7.3 to 7.7 mm: a corner of the
+ * magnet's pocket stood 0.4 microns off the plane of a flat of the shank. The shank is
+ * turned for that now (MOUNT_BORE.hole.turn), so both rows build whole here, and so does
+ * the third, a 7.4 mm head, which main builds whole as well. Of those heads only 7.31 mm
+ * still leaks, its corners 0.001 mm inside the magnet's (#77). The fourth cuts main's
+ * bores, the head and shank whose polygons are main's 7.504 and 3 mm ones, 7.504 cos(π/14)
+ * and 3 cos(π/12). That head's corners stand 0.002 mm outside the magnet's, inside the band
+ * where the counterbore is cut as the magnet's pocket (MOUNT_BORE.head.snap), so it builds
+ * whole now. The fifth cuts the same head apart from the pocket, as before the band: it runs
+ * out of passes as on main and throws, so the second run's guard is still tested (without
+ * the guard it builds both pieces with 55 bad edges). */
 console.log('\na counterbore whose ceiling three cut lines cross at one point (#76):');
 {
   const PLATE = { pitch: 39.07, drawerW: 170, drawerD: 90, bedW: 100, bedD: 400, marginMode: 'auto',
@@ -1508,8 +1536,17 @@ console.log('\na counterbore whose ceiling three cut lines cross at one point (#
                    connector: 'puzzle', clr: 0.2, screws: true, screwHoleD: 3, screwHeadDepth: 3.126,
                    screwHeadD: 7.504, magnets: true, magnetSide: 'top', magnetD: 7.3, magnetH: 2.25 };
   for (const [label, over] of [['41.24 mm jigsaw: 55 bad edges a piece', {}],
-                               ['2.264 mm magnet: folded twice', { magnetH: 2.264 }]]) {
-    const b = build({ ...JIGSAW, ...over });
+                               ['2.264 mm magnet: folded twice', { magnetH: 2.264 }],
+                               ['7.4 mm head', { screwHeadD: 7.4 }],
+                               ["main's bores", { screwHeadD: 7.504 * Math.cos(Math.PI / 14),
+                                                  screwHoleD: 3 * Math.cos(Math.PI / 12) }],
+                               ["main's bores, cut apart", { screwHeadD: 7.504 * Math.cos(Math.PI / 14),
+                                                             screwHoleD: 3 * Math.cos(Math.PI / 12),
+                                                             apart: true }]]) {
+    const { apart, ...sizes } = over, snap = G.MOUNT_BORE.head.snap;
+    if (apart) G.MOUNT_BORE.head.snap = 0;
+    let b;
+    try { b = build({ ...JIGSAW, ...sizes }); } finally { G.MOUNT_BORE.head.snap = snap; }
     const held = b.whole || /^healCsgSeams/.test(b.err || '');
     console.log(`  ${label.padEnd(38)} ${b.text}${held ? '' : '  NEITHER THREW NOR BUILT WHOLE'}`);
     if (!held) bad++;
@@ -2024,12 +2061,14 @@ console.log('\nthe other limits, built at their ends:');
      half a MOUNT_WALL short of the line halfway to the one beside it, so its corners stop
      at holeOffset less 0.5 and the wall between two pockets is at least 1 mm. A magnet
      pocket's corners are at the larger of 0.1 over the magnet's radius and
-     the radius over cos(π/14) (its flats on the magnet); a screw's bores have their corners
-     on its size. At 55 and 60 mm, each way in: the widest the page takes has to build
-     watertight, and the first tenth past the rule has to be refused. */
+     the radius over cos(π/14) (its flats on the magnet); a screw's bores have their flats
+     on its size too, so their corners are its radius over cos(π/12) for the 12-sided shank
+     and cos(π/14) for the 14-sided head. At 55 and 60 mm, each way in: the widest the page
+     takes has to build watertight, and the first tenth past the rule has to be refused. */
   const reach = G.DEFAULTS.holeOffset - 0.5;
   const corner = { magnetD: (d) => Math.max(d / 2 + 0.1, d / 2 / Math.cos(Math.PI / 14)),
-                   screwHoleD: (d) => d / 2, screwHeadD: (d) => d / 2 };
+                   screwHoleD: (d) => d / 2 / Math.cos(Math.PI / 12),
+                   screwHeadD: (d) => d / 2 / Math.cos(Math.PI / 14) };
   const firstPast = (f) => { let d = 1; while (corner[f](d) <= reach + 1e-9) d = Math.round(d * 10 + 1) / 10; return d; };
   const WIDE = [
     ['magnet from below', { magnets: true }, 'magnetD'],
@@ -2067,15 +2106,260 @@ console.log('\nthe other limits, built at their ends:');
      sliver of the socket floor by a corner 4.7 microns from one of the floor's spokes:
      11.1 mm at 48.55, 24 open edges on d9442d4. Main's pocket has a corner 1.0 micron
      from the same spoke and none open, so it is how the cut falls, not how near. A cell
-     open at the floor's height has its floor fanned again (fanCentre). */
+     open at the floor's height has its floor fanned again (fanCentre).
+     The shank is the pocket it was then, 22.2 mm across its corners: since a screw's
+     bores stand their flats on the size asked, that is the shank a 21.44 mm hole cuts. */
+  const shank222 = 22.2 * Math.cos(Math.PI / 12);
   for (const [nm, o] of [['21.7 mm magnet at 55 mm', { pitch: 55, magnets: true, magnetD: 21.7 }],
-                         ['22.2 mm screw shank at 56.5', { pitch: 56.5, screws: true, screwHoleD: 22.2, screwHeadD: 22.2 }],
+                         ['22.2 mm screw shank at 56.5', { pitch: 56.5, screws: true, screwHoleD: shank222, screwHeadD: shank222 }],
                          ['10.1 mm magnet above, 47.91', { pitch: 47.91, magnets: true, magnetD: 10.1, magnetSide: 'top' }],
                          ['10.6 mm magnet below, 48.98', { pitch: 48.98, magnets: true, magnetD: 10.6 }],
                          ['11.1 mm magnet above, 48.55', { pitch: 48.55, magnets: true, magnetD: 11.1, magnetSide: 'top' }]]) {
     const r = buildAll({ drawerW: 2 * o.pitch, drawerD: 2 * o.pitch, ...o });
     console.log(`  ${nm.padEnd(28)} ${leakText(r)}`);
     if (r.bad) bad++;
+  }
+  /* A screw head only a hair wider than its shank (#73). The counterbore's 14 flats
+     crossed the shank's 12 corners, and here and there a cell leaked by the hundred: on
+     main, 2.03 mm over 2 left 196 edges a piece at 37.67 mm; with the flats on the sizes,
+     2.046 over 2 left 310 on these four cells and 1.034 over 1 at 42 mm 828. A head is cut
+     as a counterbore only once its flats clear the shank's corners, the hole over
+     cos(π/12) and 0.01 mm more (MOUNT_BORE in core.js), worked out here rather than read
+     from it. Under that it is cut as none: the plate has to be the very one a head no
+     wider than the hole builds, to the byte, a thousandth under the line too. The
+     narrowest head cut, a thousandth past it, has to build watertight and not be that
+     plate. */
+  {
+    const crypto = require('crypto');
+    const digest = (r) => {
+      const h = crypto.createHash('sha256');
+      for (const polys of r.pieces) h.update(Buffer.from(G.stlBinary(polys, 'p')));
+      return h.digest('hex');
+    };
+    const line = (d) => d / Math.cos(Math.PI / 12) + 0.01;
+    const none = new Map();
+    for (const [nm, p, d, h, cut] of [
+      ['2.03 mm head over 2, 37.67', 37.67, 2, 2.03, false],
+      ['2.046 mm head over 2, 37.67', 37.67, 2, 2.046, false],
+      ['1.034 mm head over 1, 42', 42, 1, 1.034, false],
+      ['just under the line, over 2', 37.67, 2, Math.floor(line(2) * 1000) / 1000, false],
+      ['narrowest head over 2', 37.67, 2, Math.ceil(line(2) * 1000) / 1000, true],
+    ]) {
+      const at = { pitch: p, drawerW: 2 * p, drawerD: 2 * p, connector: 'none', screws: true, screwHoleD: d };
+      if (!none.has(`${p} ${d}`)) none.set(`${p} ${d}`, digest(buildAll({ ...at, screwHeadD: d })));
+      const r = buildAll({ ...at, screwHeadD: h });
+      const same = digest(r) === none.get(`${p} ${d}`);
+      console.log(`  ${nm.padEnd(28)} ${h} mm: ${leakText(r)}, ` + (same
+        ? (cut ? 'NO COUNTERBORE CUT' : 'cut as no counterbore')
+        : (cut ? 'a counterbore' : 'A COUNTERBORE CUT')));
+      if (r.bad || same === cut) bad++;
+    }
+  }
+  /* A counterbore with a corner on one of its shank's flats, carried on past the shank
+     (#74). The BSP split the magnet pocket's floor along that flat's plane a micron or
+     two from the corner, the weld moved the corner onto the split, and its wall left its
+     plane: main's 1.0353 mm shank under a 1.0873 head, with a 6 x 2 magnet from above,
+     left 136 edges in each of two pieces at 42 mm, and the same bores here, with their
+     flats on the sizes, are a 1 mm shank under 1.06 (36 a cell). 4.25 over 4 left 26 and
+     3.305 over 3 62; 5.4959 over 3 under an 8 x 3 magnet, a head nearly twice the shank,
+     55; and from beneath, the magnet's roof round a counterbore deeper than it, 1.06 over
+     1 left 12. The shank is turned off the corners now (MOUNT_BORE.hole.turn). The next
+     two are where π/84 alone put a corner of the magnet pocket's on a flat instead (35 and
+     25 edges in the socket floor), so the turn keeps those clear too. A magnet's corner on
+     a flat calls for the turn as a counterbore's does: 4.9911 under 7.246 at 49.02 mm, no
+     counterbore corner near, left 44 unturned. Each has to build closed, with no folds. */
+  for (const [nm, o] of [
+    ['main\'s 1.0353 under 1.0873, 42', { pitch: 42, drawerW: 168, drawerD: 84, bedW: 100, bedD: 400,
+      screwHoleD: 1.0353 * Math.cos(Math.PI / 12), screwHeadD: 1.0873 * Math.cos(Math.PI / 14) }],
+    ['1.06 mm head over 1, 42', { screwHoleD: 1, screwHeadD: 1.06 }],
+    ['4.25 mm head over 4, 42', { screwHoleD: 4, screwHeadD: 4.25 }],
+    ['3.305 mm head over 3, 42', { screwHoleD: 3, screwHeadD: 3.305 }],
+    ['5.4959 over 3, 8 x 3 magnet', { screwHoleD: 3, screwHeadD: 5.4959, magnetD: 8, magnetH: 3 }],
+    ['1.06 over 1, from beneath', { screwHoleD: 1, screwHeadD: 1.06, magnetSide: 'bottom', screwHeadDepth: 3 }],
+    ['4.85 under 7.246, 49.02', { pitch: 49.02, drawerW: 49.02, drawerD: 49.02, screwHoleD: 4.85, screwHeadD: 7.246 }],
+    ['5.773 under 12.053, 55', { pitch: 55, drawerW: 55, drawerD: 55, screwHoleD: 5.773, screwHeadD: 12.053 }],
+    ['4.9911 under 7.246, 49.02', { pitch: 49.02, drawerW: 49.02, drawerD: 49.02, screwHoleD: 4.9911, screwHeadD: 7.246 }],
+  ]) {
+    const r = buildAll({ pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true,
+                         magnetSide: 'top', screws: true, ...o });
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    console.log(`  ${nm.padEnd(30)} ${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (r.bad || folds) bad++;
+  }
+  /* A shank the magnet pocket does not clear as a counterbore has to, its corners at the
+     pocket's flats or through them, is refused (mountLimits' throughMagnet): the walls
+     weave, and no turn kept them closed. 5 mm under a 5.4 mm head and a 5.1 mm magnet, its
+     corners 4.6 microns outside the pocket's flats, built closed unturned and left 47
+     edges turned for the magnet's corners; 3.0177 under 6.557 with a 3 mm magnet at
+     43.43 mm, two pieces with a dovetail, left 58 turned for the shank's corners on the
+     pocket's flats as well; and 5.8561 under 12.053 with a 6 mm magnet at 55 mm left 116
+     unturned (#77). Each is refused, by the magnet's pocket, and builds closed at the
+     widest shank taken. */
+  for (const [nm, o] of [
+    ['5 under 5.4, 5.1 mm magnet', { screwHoleD: 5, screwHeadD: 5.4, magnetD: 5.1 }],
+    ['3.0177 under 6.557, 43.43', { pitch: 43.43, drawerW: 86.86, drawerD: 43.43, bedW: 55.43, bedD: 400,
+      connector: 'dovetail', screwHoleD: 3.0177, screwHeadD: 6.557, screwHeadDepth: 1.5, magnetD: 3, magnetH: 1.5 }],
+    ['5.8561 under 12.053, 55', { pitch: 55, drawerW: 55, drawerD: 55, screwHoleD: 5.8561, screwHeadD: 12.053 }],
+  ]) {
+    const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, magnetSide: 'top',
+                 screws: true, ...o };
+    const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
+    const refused = at.screwHoleD > lim.screwHoleD && lim.throughMagnet;
+    const r = buildAll({ ...at, screwHoleD: lim.screwHoleD });
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    console.log(`  ${nm.padEnd(30)} ${refused ? `refused, by the magnet's pocket, over ${lim.screwHoleD} mm`
+      : `TAKEN up to ${lim.screwHoleD} mm`}; at that, ${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (!refused || r.bad || folds) bad++;
+  }
+  /* A counterbore whose corners come within 0.05 mm of the magnet pocket's, and that
+     reaches the pocket. Both are 14-gons on the same rays, and where one stopped inside
+     the other a hair off it they left a ring that thin. The default 6 mm head's corners
+     stand 0.022 mm inside the 6 mm magnet's, and 3 mm deep under the 6 x 2 magnet from
+     beneath it left 6 edges open at 42 mm; a 6.39 mm head 2 deep broke into a 6.35 x 2
+     magnet pocket from above at 44.46 mm, its corners 0.0018 mm out, and left 248 over
+     two pieces. Main built both closed. Such a counterbore is cut at the pocket's corners
+     now, one prism with it (MOUNT_BORE.head.cut). The shank's turn goes by the counterbore
+     as cut: turned for the 6.02 mm head's corners while it was cut at the magnet's, 3.66
+     under it left 9. And unioned rather than one prism, the two split their shared walls
+     at the pocket's roof, and the jigsaw at 41.76 mm folded twice there. Each is a size
+     the page takes, and has to build closed, with no folds. */
+  for (const [nm, o] of [
+    ['3 under 6, 3 deep, 42', { screwHeadDepth: 3 }],
+    ['4.24 under 6.39, above, 44.46', { pitch: 44.46, drawerW: 88.92, drawerD: 44.46, bedW: 56.46, connector: 'dovetail',
+      magnetD: 6.35, magnetSide: 'top', screwHoleD: 4.24, screwHeadD: 6.39 }],
+    ['3.66 under 6.02, 3 deep, 42', { screwHoleD: 3.66, screwHeadD: 6.02, screwHeadDepth: 3 }],
+    ['41.76 mm jigsaw, 3.742 deep', { pitch: 41.76, drawerW: 83.52, drawerD: 41.76, bedW: 53.76, connector: 'puzzle',
+      screwHoleD: 3.32, screwHeadD: 5.973, screwHeadDepth: 3.742 }],
+  ]) {
+    const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, screws: true, ...o };
+    const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
+    const taken = ['magnetD', 'screwHoleD', 'screwHeadD'].every((f) => cfg[f] <= lim[f] + 1e-9 &&
+      !lim.gaps[f].some(([a, b]) => cfg[f] >= a - 1e-9 && cfg[f] <= b + 1e-9));
+    const r = buildAll(at);
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    console.log(`  ${nm.padEnd(30)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (!taken || r.bad || folds) bad++;
+  }
+  /* A bare magnet pocket, with no counterbore cut, whose corner stands on a flat of the
+     shank carried on past it. The BSP splits the pocket's roof or floor along that plane
+     as it does round a counterbore (#74), and the plate leaks. From beneath, where the
+     pocket holds the counterbore whole: a 4.18 mm shank under a 5 mm magnet and a 5.12 mm
+     head, a corner 0.002 mm off a flat, left 12 edges open at 42 mm, 24 with a 5 x 3
+     magnet over two cells, and 51 under a 5.08 head at 41.14 mm; 1.96 under 4.16 with a
+     4 x 1.5 magnet folded 12 times; and 6.689 under an 8.068 head in an 8.11 x 3 magnet's
+     pocket left 12 at 52.26 mm. From above, under heads too narrow to cut a counterbore:
+     4.18 under a 5 x 2 magnet left 30, 3.296 under a 6 x 3 one 16, and 7.268 under a
+     7.734 x 2.5 one 84 over a 2 x 2 piece. The first four came with the counterbore cut
+     at the pocket's corners, which the pocket from beneath then holds whole and which so
+     no longer turned the shank; the other four leaked before it as well. The shank is
+     turned for the pocket's corners alone now (MOUNT_BORE.screw), and main, whose bores
+     stand elsewhere, builds every one of them closed. Each is a size the page takes, and
+     has to build closed, with no folds. */
+  for (const [nm, o] of [
+    ['4.18 under 5.12, 5 x 2 below, 42', { bedW: 52, magnetD: 5, screwHoleD: 4.18, screwHeadD: 5.12 }],
+    ['4.18 under 5.12, 5 x 3 below, 84 x 42', { drawerW: 84, tolerance: 'tight', magnetD: 5, magnetH: 3,
+      screwHoleD: 4.18, screwHeadD: 5.12, screwHeadDepth: 3 }],
+    ['4.18 under 5.08, 5 x 2 below, 41.14', { pitch: 41.14, drawerW: 82.28, drawerD: 82.28, magnetD: 5,
+      screwHoleD: 4.18, screwHeadD: 5.08 }],
+    ['1.96 under 4.16, 4 x 1.5 below, 42', { drawerW: 84, drawerD: 84, magnetD: 4, magnetH: 1.5,
+      screwHoleD: 1.96, screwHeadD: 4.16, screwHeadDepth: 1 }],
+    ['6.689 under 8.068, 8.11 x 3 below', { pitch: 52.26, drawerW: 52.26, drawerD: 52.26, tolerance: 'loose',
+      magnetD: 8.11, magnetH: 3, screwHoleD: 6.689, screwHeadD: 8.068, screwHeadDepth: 2.747 }],
+    ['4.18 bare, 5 x 2 above, 42', { magnetD: 5, magnetSide: 'top', screwHoleD: 4.18, screwHeadD: 4.19,
+      screwHeadDepth: 1 }],
+    ['3.296 bare, 6 x 3 above, 42', { tolerance: 'tight', magnetD: 6, magnetH: 3, magnetSide: 'top',
+      screwHoleD: 3.296, screwHeadD: 3.335, screwHeadDepth: 2.026 }],
+    ['7.268 bare, 7.734 x 2.5 above, 2 x 2', { drawerW: 84, drawerD: 84, magnetD: 7.734, magnetH: 2.5,
+      magnetSide: 'top', screwHoleD: 7.268, screwHeadD: 7.365, screwHeadDepth: 2.66 }],
+  ]) {
+    const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, screws: true, ...o };
+    const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
+    const taken = ['magnetD', 'screwHoleD', 'screwHeadD'].every((f) => cfg[f] <= lim[f] + 1e-9 &&
+      !lim.gaps[f].some(([a, b]) => cfg[f] > a + 1e-9 && cfg[f] < b - 1e-9));
+    const r = buildAll(at);
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    console.log(`  ${nm.padEnd(38)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (!taken || r.bad || folds) bad++;
+  }
+  /* A counterbore's corner on the plane of one of the magnet pocket's flats. The two are
+     14-gons on the same rays, so a corner of one stands an odd multiple of π/14 off a
+     normal of the other's flats, and at some sizes that puts it on the flat's plane
+     carried on past the pocket. The BSP splits the counterbore along that plane a few
+     thousandths from the corner, and the strip came out folded back on itself: the head
+     at its cap, 13.6 mm at 42 mm, under the default 6 x 2 magnet from above, its corner
+     0.004 mm off the pocket's flat at 5π/14, folded 8 times a cell 1.5 deep and 14 at 1,
+     38 over 2 x 2, 54 over 3 x 2 in two and 160, 120, 128 and 96 over the default plate's
+     four pieces; from beneath, 3 deep, 2. Each is a fold as checkOrientation counts one,
+     two faces with area back to back in the mesh. The head at its cap folded the same way
+     at 40, 43, 44 and 46 mm, each with the one magnet that puts its corner there. Main, its
+     corners on the size, builds these closed (it has the same at 13.95 mm). The
+     counterbore is turned half a facet, π/14, off the pocket now (MOUNT_BORE.head.turn),
+     its corners midway between the pocket's. Two rows hold it to more than a little:
+     turned π/126, the 6.47 x 2 magnet under the head at its cap at 43 mm came out with 2
+     bad edges and a face turned over, and a 4.844 head held whole in a 6 x 3 pocket from
+     beneath, a corner of the pocket 0.002 mm off the plane of one of the counterbore's
+     flats, left 12 edges open a cell, where unturned it left 6 and main none. The plates
+     of several cells are here so that one cell cannot pass for them. Turned π/252, a
+     13.582 head 0.251 deep under a 6 x 3 magnet from above left 12 edges open a cell, 48
+     over 2 x 2. The last five were found among designs drawn near the bound a turn is
+     taken from, 0.01 mm now (head.turn and hole.turn), and main builds each closed. The
+     38.97 mm cell, a corner 0.006 mm off a plane, folded 3 times unturned with the bound
+     at 0.005; on the tile π/252 left a counterbore's corner 0.00502 mm off a shank's flat,
+     the shank unturned, and 15 edges open; and the other three, turned at either bound,
+     π/252 left open by 3 and 12 edges and with two shells touching along 8, split by its
+     planes away from the corners. The last two are a counterbore turned half a facet
+     whose two flats stand square to the cell's x edges: the BSP split one into a strip
+     3.3 microns wide that came out folded, 3 times a cell at 45.16 mm with a dovetail and
+     at 44 mm on one cell, where main builds both closed, until a cell whose pockets come
+     out with a face turned over was cut again (the fastener cut in buildPiece). Each is a
+     size the page takes, and has to build closed, with no folds. */
+  for (const [nm, o, tile] of [
+    ['13.6 head, 6 x 2 above, 42, 1.5 deep', { magnetSide: 'top', screwHeadD: 13.6, screwHeadDepth: 1.5 }],
+    ['13.6 head, 6 x 2 above, 42, 1 deep', { magnetSide: 'top', screwHeadD: 13.6, screwHeadDepth: 1 }],
+    ['13.6 head, 6 x 2 below, 42, 3 deep', { screwHeadD: 13.6, screwHeadDepth: 3 }],
+    ['11.6 head, 5.09 x 2 above, 40', { pitch: 40, drawerW: 40, drawerD: 40, magnetD: 5.09, magnetSide: 'top',
+      screwHeadD: 11.6, screwHeadDepth: 1.5 }],
+    ['14.6 head, 6.46 x 2 above, 43', { pitch: 43, drawerW: 43, drawerD: 43, magnetD: 6.46, magnetSide: 'top',
+      screwHeadD: 14.6, screwHeadDepth: 1.5 }],
+    ['15.5 head, 6.87 x 2 above, 44', { pitch: 44, drawerW: 44, drawerD: 44, magnetD: 6.87, magnetSide: 'top',
+      screwHeadD: 15.5, screwHeadDepth: 1.5 }],
+    ['17.5 head, 7.78 x 2 above, 46', { pitch: 46, drawerW: 46, drawerD: 46, magnetD: 7.78, magnetSide: 'top',
+      screwHeadD: 17.5, screwHeadDepth: 1 }],
+    ['14.6 head, 6.47 x 2 above, 43, 1 deep', { pitch: 43, drawerW: 43, drawerD: 43, magnetD: 6.47,
+      magnetSide: 'top', screwHeadD: 14.6, screwHeadDepth: 1 }],
+    ['4.844 head in a 6 x 3 pocket below, 42', { magnetD: 6, magnetH: 3, screwHoleD: 3.48, screwHeadD: 4.844,
+      screwHeadDepth: 3.408 }],
+    ['13.6 head, 6 x 2 above, 1.5 deep, 2 x 2', { drawerW: 84, drawerD: 84, magnetSide: 'top', screwHeadD: 13.6,
+      screwHeadDepth: 1.5 }],
+    ['13.6 head, 6 x 2 above, 1.5, 3 x 2 in two', { drawerW: 126, drawerD: 84, bedW: 96, magnetSide: 'top',
+      screwHeadD: 13.6, screwHeadDepth: 1.5 }],
+    ['the default plate, 13.6 head, 6 x 2 above', { drawerW: 306, drawerD: 380, marginMode: 'auto',
+      splitMode: 'balanced', magnetSide: 'top', screwHeadD: 13.6, screwHeadDepth: 1.5 }],
+    ['13.582 head, 6 x 3 above, 42, 2 x 2', { drawerW: 84, drawerD: 84, magnetD: 6, magnetH: 3, magnetSide: 'top',
+      screwHoleD: 3.613, screwHeadD: 13.582, screwHeadDepth: 0.251 }],
+    ['3.24 head, 3.96 x 1.5 above, 38.97', { pitch: 38.97, drawerW: 38.97, drawerD: 38.97, magnetD: 3.96,
+      magnetH: 1.5, magnetSide: 'top', screwHoleD: 2.34, screwHeadD: 3.24, screwHeadDepth: 2.5 }],
+    ['tile at 53.72, 1.82 head, 4 x 2 above', { pitch: 53.72, drawerW: 53.72, drawerD: 53.72, tolerance: 'tight',
+      magnetD: 4, magnetSide: 'top', screwHoleD: 1.21, screwHeadD: 1.82, screwHeadDepth: 1 }, true],
+    ['2.69 head, 6 x 1.5 below, 42, tight', { tolerance: 'tight', magnetD: 6, magnetH: 1.5, screwHoleD: 1.41,
+      screwHeadD: 2.69, screwHeadDepth: 2 }],
+    ['13.26 head, 5.85 x 1.5 below, 84 x 42', { drawerW: 84, tolerance: 'tight', magnetD: 5.85, magnetH: 1.5,
+      screwHoleD: 1.06, screwHeadD: 13.26, screwHeadDepth: 3 }],
+    ['5.65 head, 4.44 x 3 below, 42', { magnetD: 4.44, magnetH: 3, screwHoleD: 2.43, screwHeadD: 5.65,
+      screwHeadDepth: 3 }],
+    ['3.89 head, 3 x 2 above, 45.16, dovetail', { pitch: 45.16, drawerW: 90.32, drawerD: 45.16, bedW: 57.16,
+      connector: 'dovetail', magnetD: 3, magnetSide: 'top', screwHoleD: 1.01, screwHeadD: 3.89, screwHeadDepth: 1 }],
+    ['3.89 head, 3 x 2 above, 44', { pitch: 44, drawerW: 44, drawerD: 44, magnetD: 3, magnetSide: 'top',
+      screwHoleD: 1.01, screwHeadD: 3.89, screwHeadDepth: 1 }],
+  ]) {
+    const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, screws: true, ...o };
+    const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
+    const taken = ['magnetD', 'screwHoleD', 'screwHeadD'].every((f) => cfg[f] <= lim[f] + 1e-9 &&
+      !lim.gaps[f].some(([a, b]) => cfg[f] > a + 1e-9 && cfg[f] < b - 1e-9));
+    const r = buildAll(at, tile);
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    console.log(`  ${nm.padEnd(41)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (!taken || r.bad || folds) bad++;
   }
   /* A pocket against a joint's cut in the floor (#64). A bowtie housed in the floor at
      42 mm, with magnets from beneath, built 12 bad edges at 7.9 mm and 19 at 10 with
@@ -2173,17 +2457,16 @@ console.log('\nthe other limits, built at their ends:');
     if (r.bad) bad++;
   }
   /* The clearance one step past its end, which leaked, and that was why the end is where
-     it is. It no longer does: the joint's cut taken again when it comes out open
-     (cutAgain in core.js) closes it, as it closes the steps past the ceilings below. So it
-     has to stay closed, and the field has to go on refusing it: the cap stays where it is
-     until a sweep says how far it can go, the dovetail every 0.01 mm of pitch and every
-     0.05 of the field past 0.3, on both piece layouts, clean up to the new cap. */
-  const past = buildAll({ ...split, connector: 'dovetail', clr: 0.35 });
+     it is. The joint's cut taken again when it comes out open (cutAgain in core.js)
+     closed it at 42 mm, so it waited on a sweep; the sweep connClrCeiling describes found
+     0.35 open still at 42.35 mm, on two of the four pieces, so the cap is earned. It has
+     to leak still, or the cap can go up, and the field has to go on refusing it. */
+  const past = buildAll({ pitch: 42.35, ...PIECE_LAYOUTS['2x2 pieces'](42.35), connector: 'dovetail', clr: 0.35 });
   const capped = 0.35 > G.connClrCeiling({ ...G.DEFAULTS, connector: 'dovetail' }).max + 1e-9;
-  console.log(`  ${'dovetail at 0.35 clearance'.padEnd(28)} ${leakText(past)}` +
-              (!capped ? '   THE FIELD TAKES IT' : past.bad ? '   OPEN AGAIN — cutAgain no longer closes it'
-                : ' — closed, and the cap waits on a sweep'));
-  if (!capped || past.bad) bad++;
+  console.log(`  ${'dovetail, 0.35 at 42.35 mm'.padEnd(28)} ${leakText(past)}` +
+              (!capped ? '   THE FIELD TAKES IT' : !past.bad ? '   NOW CLEAN — the cap can go up'
+                : ' — the cap is earned'));
+  if (!capped || !past.bad) bad++;
 
   /* A corner boss is 2.6 mm tall and does not grow, so the pocket in it is capped — at
      what leaves a layer over it, which takes the spec's 6.5 × 2.4 magnet. Built at every
@@ -2547,12 +2830,12 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
  * pitches between. Each has to come back closed and inside its own width: nothing past
  * its footprint but the tabs and lobes buildPiece declares.
  *
- * Then the step past each ceiling that set it, which has to be open or across the seam
- * still: if the engine closes one, this says that ceiling can go up (four are closed, and
- * wait on a sweep to say how far; see PAST below). It has to be past the
- * ceiling as well, refused by the field. A puzzle key in the floor loosened to 0.9 built
- * clean at 20, 30 and 42 and its step past, 0.82, leaked as before, so a ceiling moved
- * over the very number that earned it passed; now the field taking that number fails.
+ * Then the step that earns each ceiling, which has to be open, touching or across the
+ * seam still: if the engine closes one, this says that ceiling can go up (see PAST
+ * below). It has to be past the ceiling as well, refused by the field. A puzzle key in
+ * the floor loosened to 0.9 built clean at 20, 30 and 42 and its step past, 0.82, leaked
+ * as before, so a ceiling moved over the very number that earned it passed; now the
+ * field taking that number fails.
  * And the fit coupon at each ceiling, which is the same joint at four clearances up to
  * it — its pairs have to stay at or under the ceiling, and a housing must not reach into
  * the gap between a pair's two tiles, where it meets the other tile's.
@@ -2666,25 +2949,35 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
     ? `HELD TO IT: ${held.join(', ')}` : `every other joint but the snap from above, at its own ${C.snapTop}`));
   if (held.length) bad++;
 
-  /* The puzzle key in the floor's step is 0.82, the first clearance that leaked at every
-     pitch measured from 20 to 60; a ceiling at or over it lets the field take it.
-
-     The last four were earned by open edges alone, and the joint's cut taken again when
-     it comes out open (cutAgain in core.js) closes all four. Those ceilings stay where
-     they are until a sweep as fine as the one that found the small-pitch leaks says how
-     far each can go: the joint every 0.01 mm over its pitch band and every 0.05 of the
-     field past its ceiling, on both piece layouts, clean up to the new one. `waits` marks
-     such a step: it has to stay closed, or cutAgain has lost ground, and the field still
-     has to refuse it. */
+  /* The snap from above and the puzzle's lobe are earned by their geometry, above. The
+     rest were earned by open edges — a puzzle at 19 and a bowtie at 15 at 0.35, a puzzle
+     key at 14 at 0.4 and at 42 at 0.82, the dovetail from 0.34 — and the joint's cut taken
+     again when it comes out open (cutAgain in core.js) closes every one. So each was swept
+     as connClrCeiling says: every 0.01 mm of pitch over its band and every 0.05 of the
+     field past it, on both piece layouts, and every 0.01 near anything that leaked. The
+     dovetail's step is open still, and is built with the other ends, above. Three more
+     have a leak within two steps, two cells' shells sharing an edge in the band they
+     overlap in, and the first is their row: it has to leak still, or that ceiling can go
+     up. The puzzle's leak runs on past 20 mm as a line, and its band with it to 20.7.
+     The line's first leak past 20 is a row, with the step under it, which has to build
+     closed so the row stays on the line; so is the field's own 1 mm on the line, which
+     the band has to reach past. The bowtie in the floor below 20 mm leaked nowhere up to
+     1.05 and takes the plain 1 mm; its step to spare has to build closed, or cutAgain
+     has lost ground. A row that has to build closed says why. Each has to be refused by
+     the field. */
   const PAST = [
     ['snap from above, 0.35 at 42', { connector: 'snap', keyInsert: 'top', pitch: 42, clr: 0.35 }, '2x2 pieces'],
     ['puzzle, 0.3 at 13.5', { connector: 'puzzle', pitch: 13.5, clr: 0.3 }, '1-cell pieces'],
-    ['puzzle, 0.35 at 19', { connector: 'puzzle', pitch: 19, clr: 0.35 }, '2x2 pieces', 'waits'],
-    ['bowtie, 0.35 at 15', { connector: 'bowtie', pitch: 15, clr: 0.35 }, '2x2 pieces', 'waits'],
-    ['puzzle key, 0.4 at 14', { connector: 'puzzlekey', pitch: 14, clr: 0.4 }, '2x2 pieces', 'waits'],
-    ['puzzle key, 0.82 at 42', { connector: 'puzzlekey', pitch: 42, clr: 0.82 }, '2x2 pieces', 'waits'],
+    ['puzzle, 0.38 at 18.54', { connector: 'puzzle', pitch: 18.54, clr: 0.38 }, '1-cell pieces'],
+    ['puzzle, 0.85 at 20.05', { connector: 'puzzle', pitch: 20.05, clr: 0.85 }, '1-cell pieces'],
+    ['puzzle, 0.8 at 20.05', { connector: 'puzzle', pitch: 20.05, clr: 0.8 }, '1-cell pieces',
+      'the step under the line'],
+    ['puzzle, 1 at 20.53', { connector: 'puzzle', pitch: 20.53, clr: 1 }, '1-cell pieces'],
+    ['puzzle key, 0.37 at 18.07', { connector: 'puzzlekey', pitch: 18.07, clr: 0.37 }, '1-cell pieces'],
+    ['puzzle key, 0.85 at 29.74', { connector: 'puzzlekey', pitch: 29.74, clr: 0.85 }, '1-cell pieces'],
+    ['bowtie, 1.05 at 18', { connector: 'bowtie', pitch: 18, clr: 1.05 }, '2x2 pieces', 'a step to spare'],
   ];
-  for (const [what, o, ln, waits] of PAST) {
+  for (const [what, o, ln, closed] of PAST) {
     const r = buildAll({ ...PIECE_LAYOUTS[ln](o.pitch), ...o });
     /* A snap from above earns its ceiling in the seam face, before anything crosses the
        seam: one step past, its slot's wall is nearer the face than a BLOAT. */
@@ -2695,16 +2988,15 @@ console.log('\nthe fit clearance at its ceiling, every joint and pitch band:');
         r.L.pieces[i]).keyed.map((st) => ({ ...st, clr: r.cfg.key.clr })), H));
     }
     const inFace = face.sites > 0 && face.near < BLOAT - 1e-6;
-    const still = r.open > 0 || r.beyond > OVER || inFace;
+    const still = r.bad > 0 || r.beyond > OVER || inFace;
     const most = G.connClrCeiling(r.cfg).max, refused = o.clr > most + 1e-9;
     console.log(`  ${what.padEnd(28)} ${r.beyond > OVER ? `${r.beyond} mm into the next piece`
       : inFace ? `its slot ${(Math.round(face.near * 1e4) / 1e4 + 0).toFixed(3)} mm off the seam face`
       : leakText(r)}` +
                 (!refused ? `   THE FIELD TAKES IT: the ceiling went up to ${most}`
-                  : waits ? (still ? '   OPEN AGAIN — cutAgain no longer closes it'
-                                   : ' — closed, and the ceiling waits on a sweep')
+                  : closed ? (still ? `   OPEN — no longer ${closed}` : ` — closed, ${closed}`)
                   : still ? ' — the ceiling is earned' : '   NOW CLEAN — that ceiling can go up'));
-    if (!refused || (waits ? still : !still)) bad++;
+    if (!refused || (closed ? still : !still)) bad++;
   }
 
   /* activeJoint in src/ui.js, with the field at the ceiling — a fixture, as in the coupon
@@ -2905,9 +3197,12 @@ console.log('\nplates without half cells build the same bytes:');
       alignX: 'end', alignY: 'end', connector: 'none' }, '37b5f305cc4da6dd'],
     // fanCentre moved four of its nine cells' bottom caps off a spoke a few thousandths from
     // a cutter's corner: the same bottom face fanned from another point, its area and the
-    // volume unchanged
+    // volume unchanged. Then the screw's bores went out until their flats stood on the
+    // sizes asked, the counterbore and the shank wider by design; then the counterbore the
+    // magnet pocket from beneath holds whole was left out of the cut, the same pocket with
+    // its faces no longer split by the head's walls (54138.661 mm³ to 54138.679)
     ['126 x 126, magnets and screws', { drawerW: 126, drawerD: 126, marginMode: 'custom',
-      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, '5b339b75bd8c513e'],
+      mLeft: 0, mRight: 0, mFront: 0, mBack: 0, magnets: true, screws: true }, 'e964beefa8b378bf'],
     ['140 x 140, corner pockets', { drawerW: 140, drawerD: 140, marginMode: 'auto',
       magnets: true, baseMode: 'bosses' }, '7088f24def428095'],
     ['168 x 180, skeleton', { drawerW: 168, drawerD: 180, marginMode: 'auto',

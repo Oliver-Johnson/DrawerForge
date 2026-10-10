@@ -97,10 +97,10 @@ test.describe('ranges on the geometry fields', () => {
     ['#pi=55&w=110&d=110&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=400&bd=400&mg=1&md=25.4', 'errMagnet',
       /Magnet Ø must be 24\.3 mm or less at a 55 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a cell's four holes have to stay clear of each other/],
     ['#pi=60&w=120&d=120&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=400&bd=400&sc=1&sd=26', 'errScrew',
-      /Screw head Ø must be 25 mm or less at a 60 mm pitch — .* a cell's four holes have to stay clear of each other/],
+      /Screw head Ø must be 24\.3 mm or less at a 60 mm pitch — .* a cell's four holes have to stay clear of each other/],
     ['#mg=1&bm=bosses&mh=3', 'errMagnet', /Magnet depth must be 2\.4 mm or less with corner pockets/],
-    ['#sc=1&sh=20', 'errScrew', /Screw hole Ø must be 8\.3 mm or less/],
-    ['#cn=none&sc=1&sd=30', 'errScrew', /Screw head Ø must be 14 mm or less/],
+    ['#sc=1&sh=20', 'errScrew', /Screw hole Ø must be 8 mm or less/],
+    ['#cn=none&sc=1&sd=30', 'errScrew', /Screw head Ø must be 13\.6 mm or less/],
     ['#sc=1&se=50', 'errScrew', /Screw head depth must be 10 mm or less/],
     ['#cl=1', 'errConnClr', /Fit clearance must be 0\.3 mm or less — any looser and a dovetail pocket/],
     ['#cn=bowtie&cl=5', 'errConnClr', /Fit clearance must be 1 mm or less — check the figure is in millimetres/],
@@ -114,7 +114,7 @@ test.describe('ranges on the geometry fields', () => {
     [`${BOWTIE_42}&mg=1&ms=top&md=8`, 'errMagnet',
       /Magnet Ø must be 7\.6 mm or less at a 42 mm pitch — .* the recesses the bowtie keys fit into/],
     [`${BOWTIE_42.replace('cn=bowtie', 'cn=snap')}&sc=1&sd=10`, 'errScrew',
-      /Screw head Ø must be 7\.8 mm or less at a 42 mm pitch — .* the recesses the snap clips fit into/],
+      /Screw head Ø must be 7\.6 mm or less at a 42 mm pitch — .* the recesses the snap clips fit into/],
     /* A dovetail's notch lets a pocket from beneath in (#69's review, option c), so long
        as the magnet stays clear of the tab and the pocket is not as deep as the notch,
        and does not stop just short of its edge; each refusal says which it is. */
@@ -153,6 +153,11 @@ test.describe('ranges on the geometry fields', () => {
     ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie&km=wall&ki=bottom' +
       '&bm=bosses&mg=1&md=7.9', 'errMagnet',
       /Magnet Ø must be 6\.1 mm or less at a 36\.13 mm pitch — .* the recesses the bowtie keys fit into/],
+    /* #81: a shank has to clear the magnet pocket it runs up the middle of, as it would a
+       counterbore. 5 mm under a 5.1 mm magnet and a 5.4 mm head built 47 open edges at
+       42 mm. */
+    ['#cn=none&mg=1&md=5.1&ms=top&sc=1&sh=5&sd=5.4', 'errScrew',
+      /Screw hole Ø must be 4\.9 mm or less — it runs through the 5\.1 mm magnet's pocket, and has to stay inside the pocket's sides to leave a ledge round it that holds the magnet\./],
   ];
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {
@@ -193,6 +198,161 @@ test.describe('ranges on the geometry fields', () => {
       expect(await exportOff(page)).toBe(false);
       expect(errors).toEqual([]);
     });
+
+  /* The shank's cap moves with the magnet typed after it, on the one read: the shank is
+     read again after the head and the magnet (readControls). Pasted in, one input event
+     and no change, 5.1 was measured against the 6 mm magnet before it, and built. */
+  test('a screw hole is held inside the magnet pocket typed after it', async ({ page }) => {
+    const errors = await openAt(page, '#cn=none&mg=1&ms=top&sc=1&sh=5&sd=5.4');
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    await page.evaluate(() => {
+      const e = document.getElementById('magnetD');
+      e.value = '5.1';
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+    expect(await text(page, 'errScrew'))
+      .toMatch(/Screw hole Ø must be 4\.9 mm or less — it runs through the 5\.1 mm magnet's pocket/);
+    expect(await text(page, 'pieceTail')).toMatch(/not building/);
+    expect(await exportOff(page)).toBe(true);
+    await H.setField(page, 'magnetD', '6');
+    await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
+                               null, { timeout: 30000 });
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
+
+  // one input event and no change, as a paste is
+  const paste = (page, id, value) => page.evaluate(({ id, value }) => {
+    const e = document.getElementById(id);
+    e.value = value;
+    e.dispatchEvent(new Event('input', { bubbles: true }));
+  }, { id, value });
+  const settled = (page) => page.waitForFunction((re) => new RegExp(re).test(
+    document.getElementById('pieceTail').textContent), SETTLED.source, { timeout: 30000 });
+
+  /* #81: a counterbore that turns off the magnet pocket's flats is measured turned, so the
+     head's cap goes by the head typed, and the head is read again on its own (readControls).
+     At 46.45 mm with a jigsaw and a 6.2 mm magnet from beneath, a 14.05 mm head turns and
+     stops at 14, where the 6 before it goes to 14.1. Pasted in, it was read against the 6's
+     cap and built with Download on; and 14.1 pasted over a 14, which turns, was held to the
+     14's cap and refused, at every read after as well. */
+  test('a screw head is held to its own cap, not the one of the head before it', async ({ page }) => {
+    const errors = await openAt(page, '#pi=46.45&w=92.9&d=92.9&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=58.45&bd=256' +
+                                      '&cn=puzzle&mg=1&md=6.2&mh=2.4&ms=bottom&sc=1&sd=6');
+    const max = () => page.evaluate(() => document.getElementById('screwHeadD').max);
+    const refused = /Screw head Ø must be 14 mm or less at a 46\.45 mm pitch — .* a hole has to stay out of the notches the puzzle tabs fit into\./;
+    expect(await max()).toBe('14.1');
+    expect(await exportOff(page)).toBe(false);
+    await paste(page, 'screwHeadD', '14.05');
+    await page.waitForTimeout(250);
+    expect(await max()).toBe('14');
+    expect(await text(page, 'errScrew')).toMatch(refused);
+    expect(await text(page, 'warnings'), 'the checks under the map say the same thing').toMatch(refused);
+    expect(await text(page, 'pieceTail')).toMatch(/not building/);
+    expect(await exportOff(page)).toBe(true);
+    await H.setField(page, 'screwHeadD', '14');
+    await settled(page);
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await exportOff(page)).toBe(false);
+    await paste(page, 'screwHeadD', '14.1');
+    await page.waitForTimeout(250);
+    await settled(page);
+    expect(await max()).toBe('14.1');
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await text(page, 'warnings')).not.toMatch(/Screw head Ø/);
+    expect(await page.evaluate(() => state.screwHeadD)).toBe(14.1);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
+
+  /* And the shank after it, measured on the head as held. At 41.86 mm with a jigsaw, loose,
+     a 7.8 mm hole is turned a little under an 8.3 mm head's corners (MOUNT_BORE.hole.turn),
+     which stops it at 7.7, and not at all under the 7.9 mm the head is held to, which takes
+     it. Pasted at 8.3, the head is refused and the hole is not. */
+  test('a screw hole is measured under the head as held, not as typed', async ({ page }) => {
+    const errors = await openAt(page, '#pi=41.86&w=83.72&d=83.72&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=53.86&bd=256' +
+                                      '&cn=puzzle&to=loose&sc=1&sh=7.8&sd=6');
+    const max = () => page.evaluate(() => document.getElementById('screwHoleD').max);
+    expect(await max()).toBe('7.8');
+    expect(await exportOff(page)).toBe(false);
+    await paste(page, 'screwHeadD', '8.3');
+    await page.waitForTimeout(250);
+    expect(await text(page, 'errScrew')).toMatch(/Screw head Ø must be 7\.9 mm or less at a 41\.86 mm pitch/);
+    expect(await text(page, 'errScrew')).not.toMatch(/Screw hole Ø/);
+    expect(await text(page, 'warnings')).not.toMatch(/Screw hole Ø/);
+    expect(await max()).toBe('7.8');
+    expect(await page.evaluate(() => [state.screwHeadD, state.screwHoleD])).toEqual([7.9, 7.8]);
+    expect(await exportOff(page)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  /* A head held to its cap is held again on its own limits until it holds, and the page
+     names that size. At 42 mm with snap clips in the floor and a 3.85 mm magnet from
+     beneath, an 8.86 mm head turns and stops at 7.8, but 7.8 does not turn and stops at 7.6:
+     the page said 7.8, and then refused 7.8 for 7.6. */
+  test('a screw head held to its cap is named where it holds', async ({ page }) => {
+    const at = '#pi=42&w=84&d=84&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=54&bd=400&cn=snap&km=floor&ki=bottom' +
+               '&mg=1&md=3.85&mh=3&ms=bottom&sc=1&sh=2.64&se=2.5';
+    const errors = await openAt(page, `${at}&sd=8.86`);
+    const max = () => page.evaluate(() => document.getElementById('screwHeadD').max);
+    const refused = /Screw head Ø must be 7\.6 mm or less at a 42 mm pitch — .* a hole has to stay out of the recesses the snap clips fit into/;
+    expect(await text(page, 'errScrew')).toMatch(refused);
+    expect(await text(page, 'warnings'), 'the checks under the map say the same thing').toMatch(refused);
+    expect(await max()).toBe('7.6');
+    expect(await page.evaluate(() => state.screwHeadD)).toBe(7.6);
+    expect(await exportOff(page)).toBe(true);
+    await H.setField(page, 'screwHeadD', '7.8');
+    expect(await text(page, 'errScrew')).toMatch(refused);
+    await H.setField(page, 'screwHeadD', '7.6');
+    await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
+                               null, { timeout: 30000 });
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
+
+  /* And the head on the hole as held, since the hole is read last. At 42 mm with a jigsaw, a
+     7.97 mm head over a 7.71 mm hole and an 8.1 mm magnet from beneath builds. Paste a 6.35 mm
+     magnet over it and the hole is held to 6.1, the most the pocket leaves a ledge for, where
+     the head's cap on a 6.1 mm hole is 7.9: the head had been read against the 7.71, stayed at
+     7.97 with Download off, and Checks named the hole alone, so setting the hole to 6.1 raised
+     a refusal of the head that nothing had said. */
+  test('a screw head is measured on the hole as held, not as typed', async ({ page }) => {
+    const errors = await openAt(page, '#pi=42&w=84&d=84&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=54&bd=400' +
+                                      '&cn=puzzle&mg=1&md=8.1&mh=3&ms=bottom&sc=1&sh=7.71&sd=7.97&se=3');
+    const max = (id) => page.evaluate((i) => document.getElementById(i).max, id);
+    const hole = /Screw hole Ø must be 6\.1 mm or less — it runs through the 6\.35 mm magnet's pocket/;
+    const head = /Screw head Ø must be 7\.9 mm or less at a 42 mm pitch — .* a hole has to stay out of the notches the puzzle tabs fit into\./;
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    await paste(page, 'magnetD', '6.35');
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => [state.screwHeadD, state.screwHoleD])).toEqual([7.9, 6.1]);
+    expect(await text(page, 'errScrew')).toMatch(hole);
+    expect(await text(page, 'errScrew')).toMatch(head);
+    expect(await text(page, 'warnings'), 'the checks under the map say the same thing').toMatch(hole);
+    expect(await text(page, 'warnings')).toMatch(head);
+    expect(await max('screwHoleD')).toBe('6.1');
+    expect(await max('screwHeadD')).toBe('7.9');
+    expect(await text(page, 'pieceTail')).toMatch(/not building/);
+    expect(await exportOff(page)).toBe(true);
+    // the sizes it named are the sizes it takes: nothing new is raised once the hole is set to them
+    await H.setField(page, 'screwHoleD', '6.1');
+    expect(await shown(page, 'errScrew')).toBe(true);
+    expect(await text(page, 'errScrew')).not.toMatch(/Screw hole Ø/);
+    expect(await text(page, 'errScrew')).toMatch(head);
+    expect(await page.evaluate(() => [state.screwHeadD, state.screwHoleD])).toEqual([7.9, 6.1]);
+    await H.setField(page, 'screwHeadD', '7.9');
+    await settled(page);
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
 
   /* #70: corner pockets over a floor. A bowtie housed in the floor stood its 2.8 mm floor
      round the 2.6 mm bosses and sealed their pockets in it, with Download on, and an extra
@@ -476,7 +636,7 @@ test.describe('limits no tighter than the geometry', () => {
                                           // whose slot stands a BLOAT off the seam face
                                           [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.3`, 0.25, 0.25],
                                           [`${SEAM}&cn=puzzlekey&cl=0.8`, 0.75, 0.75],
-                                          [`${seamAt(18)}&cn=bowtie&cl=0.3`, 0.25, 0.25],
+                                          [`${seamAt(18)}&cn=puzzlekey&cl=0.3`, 0.25, 0.25],
                                           [`${seamAt(13.5)}&cn=puzzle&cl=0.25`, 0.25, 0.25]])
     test(`the fit sample stays inside the range: ${hash}`, async ({ page }) => {
       const errors = await openAt(page, hash);
@@ -508,12 +668,15 @@ test.describe('limits no tighter than the geometry', () => {
     expect(s.built).toBeCloseTo(7.05, 9);
   });
 
-  /* The 34 mm case takes no joint: the default dovetail's tabs hold its 6 mm screw head
-     to 4.2 mm there, which is a field error of its own. The puzzle tabs' are what leave
-     a magnet no room at 36 mm, where the cell alone would take 7.7. */
+  /* The 34.5 mm case takes no joint: the default dovetail's tabs hold its 6 mm screw
+     head to 4.7 mm there, which is a field error of its own. It was 34 mm until a head
+     was cut with its flats on its size; at 34 the cell now has room for a 5.8 mm head,
+     so the 6 mm one would be a field error too, and 34.5 still has no room for a shank.
+     The puzzle tabs' are what leave a magnet no room at 36 mm, where the cell alone
+     would take 7.7. */
   for (const [hash, id, errId, carried, msg] of [
-    ['#cn=none&sc=1&pi=34', 'screwHoleD', 'errScrew', 3,
-     /Screw hole Ø: there is no room for one at a 34 mm pitch.*Use a larger pitch, or turn off screw holes\./],
+    ['#cn=none&sc=1&pi=34.5', 'screwHoleD', 'errScrew', 3,
+     /Screw hole Ø: there is no room for one at a 34\.5 mm pitch.*Use a larger pitch, or turn off screw holes\./],
     ['#mg=1&pi=20', 'magnetD', 'errMagnet', 6,
      /Magnet Ø: there is no room for one at a 20 mm pitch.*Use a larger pitch, or turn off magnet pockets\./],
     ['#cn=puzzle&mg=1&pi=36', 'magnetD', 'errMagnet', 6,
@@ -544,24 +707,27 @@ test.describe('limits no tighter than the geometry', () => {
    clip dropped in from above is housed in a slot whose seam-side wall stands 0.3 mm less
    the clearance from the seam, so at 0.35 on the field the wall lies in the seam face and
    past it in the next piece — the field stops at 0.3, a BLOAT short of the face;
-   and under 20 mm the puzzle, the bowtie and the puzzle key leave holes in the plate at
-   clearances that build closed at 42. Each case is refused at the field, clamped to the
-   ceiling in the state a link loads into, and says which joint and which pitch — the
-   pitch is the number to change. A joint that builds closed at a small pitch is not held
-   to the others' reason. */
+   and under 20 mm (20.7 for the puzzle) the puzzle and the puzzle key leave plates that
+   are not watertight at clearances that build closed at 42. Each case is refused at the
+   field, clamped to the ceiling in the state a link loads into, and says which joint and
+   which pitch — the pitch is the number to change. A joint that builds closed at a small
+   pitch is not held to the others' reason: the bowtie in the floor was, until a sweep
+   built it closed from 13.5 to 20 mm at every clearance to 1. */
 test.describe('the clearance ceiling is the joint\'s and the pitch\'s', () => {
   const SEAM = '#w=168&d=84&sp=manual&rc=&cc=2';
   for (const [hash, ceiling, msg] of [
     [`${SEAM}&cn=snap&km=wall&ki=top&cl=0.35`, 0.3,
      /Fit clearance must be 0\.3 mm or less — any looser and the housing of a snap clip dropped in from above runs up to the seam and on into the next piece\./],
-    ['#pi=18&cn=bowtie&cl=1', 0.3,
-     /Fit clearance must be 0\.3 mm or less at an 18 mm pitch — on cells under 20 mm a looser bowtie key opens holes in the plate\./],
+    ['#pi=18&cn=puzzle&cl=1', 0.3,
+     /Fit clearance must be 0\.3 mm or less at an 18 mm pitch — on cells under 20\.7 mm a looser puzzle tab leaves the plate not watertight\./],
     ['#pi=14&cn=puzzlekey&cl=0.5', 0.3,
-     /Fit clearance must be 0\.3 mm or less at a 14 mm pitch — on cells under 20 mm a looser puzzle key opens holes in the plate\./],
+     /Fit clearance must be 0\.3 mm or less at a 14 mm pitch — on cells under 20 mm a looser puzzle key leaves the plate not watertight\./],
     ['#pi=13.5&cn=puzzle&cl=0.3', 0.25,
-     /Fit clearance must be 0\.25 mm or less at a 13\.5 mm pitch — on cells under 20 mm a looser puzzle tab opens holes in the plate\./],
+     /Fit clearance must be 0\.25 mm or less at a 13\.5 mm pitch — on cells under 20\.7 mm a looser puzzle tab leaves the plate not watertight\./],
+    ['#pi=20.3&cn=puzzle&cl=0.9', 0.3,
+     /Fit clearance must be 0\.3 mm or less at a 20\.3 mm pitch — on cells under 20\.7 mm a looser puzzle tab leaves the plate not watertight\./],
     ['#cn=puzzlekey&cl=0.85', 0.8,
-     /Fit clearance must be 0\.8 mm or less — any looser and a puzzle key's recess opens holes in the plate\./],
+     /Fit clearance must be 0\.8 mm or less — any looser and a puzzle key's recess leaves the plate not watertight at some pitches\./],
   ])
     test(`${hash} is held to ${ceiling}, and says why`, async ({ page }) => {
       const errors = await openAt(page, hash);
@@ -577,9 +743,10 @@ test.describe('the clearance ceiling is the joint\'s and the pitch\'s', () => {
       expect(errors).toEqual([]);
     });
 
-  // the snap and the H-clip built closed at every clearance and pitch measured
+  // the snap, the H-clip and the bowtie built closed at every clearance and pitch measured
   for (const hash of ['#pi=16&w=64&d=32&sp=manual&rc=&cc=2&cn=hclip&cl=1',
-                      '#pi=16&w=64&d=32&sp=manual&rc=&cc=2&cn=snap&cl=1'])
+                      '#pi=16&w=64&d=32&sp=manual&rc=&cc=2&cn=snap&cl=1',
+                      '#pi=16&w=64&d=32&sp=manual&rc=&cc=2&cn=bowtie&cl=1'])
     test(`${hash} builds — the small-pitch hold is not every joint's`, async ({ page }) => {
       const errors = await openAt(page, hash);
       expect(await shown(page, 'errConnClr')).toBe(false);
@@ -589,12 +756,58 @@ test.describe('the clearance ceiling is the joint\'s and the pitch\'s', () => {
     });
 });
 
+/* ---- #73: a screw head only a hair wider than its shank ---------------------------- */
+/* Its counterbore's 14 flats crossed the shank's 12 corners, and the plate leaked by the
+   hundred with nothing said and Download on: on main, a 2.03 mm head over a 2 mm shank
+   left 196 edges in each of two pieces at 37.67 mm. A head that does not clear the shank's
+   corners is cut as none now, as one no wider than the hole always was (MOUNT_BORE in
+   core.js): within 3.5% of the hole it is no seat for a screw head. So the link builds
+   with Download on and nothing in Checks, and the README says there is no counterbore
+   and from what size there would be one, as does a line under the fields. 2.1 mm clears a
+   2 mm hole and is cut; 2 mm is no wider than the hole, and needs no word. */
+test.describe('a screw head that does not clear its shank is cut as none', () => {
+  const AT = '#pi=37.67&w=150.68&d=75.34&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=91.34&bd=400' +
+    '&sc=1&sh=2&cn=none';
+  for (const [sd, says, hint] of [
+    ['2.03', 'Screws: 2 mm holes, no counterbore (a head clears a 2 mm hole from 2.09 mm)',
+      'A 2.03 mm head does not clear the corners of a 2 mm hole, so no counterbore is cut. ' +
+      'One is from 2.09 mm.'],
+    ['2.1', 'Screws: 2 mm holes, 2.1 mm counterbore', null],
+    ['2', 'Screws: 2 mm holes, no counterbore', null],
+  ])
+    test(`a ${sd} mm head over a 2 mm shank builds, and the README says what was cut`,
+      async ({ page }) => {
+        const errors = await openAt(page, `${AT}&sd=${sd}`);
+        expect(await text(page, 'pieceTail')).toMatch(/ready/);
+        expect(await shown(page, 'errScrew')).toBe(false);
+        expect(await exportOff(page)).toBe(false);
+        const readme = (await page.evaluate(() => readmeText())).split('\n');
+        expect(readme).toContain(says);
+        expect(await shown(page, 'screwHeadHint')).toBe(!!hint);
+        if (hint) expect(await text(page, 'screwHeadHint')).toBe(hint);
+        expect(errors).toEqual([]);
+      });
+  /* The line names a size the field takes, or says none fits: a bowtie in the floor at
+     42 mm holds the head to 7.6 mm, and over a 7.5 mm hole a counterbore is cut only
+     from 7.78. It is read with the field. */
+  test('where no counterbore fits, the line says so rather than naming one the field refuses',
+    async ({ page }) => {
+      const errors = await openAt(page, '#cn=bowtie&sc=1&sh=7.5&sd=7.55');
+      expect(await shown(page, 'errScrew')).toBe(false);
+      expect(await text(page, 'screwHeadHint')).toBe('A 7.55 mm head does not clear the corners of ' +
+        'a 7.5 mm hole, so no counterbore is cut. None fits here: one is from 7.78 mm, and the ' +
+        'head stops at 7.6 mm.');
+      expect(await page.getAttribute('#screwHeadD', 'aria-describedby')).toContain('screwHeadHint');
+      expect(errors).toEqual([]);
+    });
+});
+
 /* The checks name the piece as well (#76). The table, the preview and Download's tooltip
    said so already, but the list under the cut map, where a design is read for what is
    wrong with it, was empty, so Download was off with no reason given there. The failure is
    forced rather than taken from a design that fails, which would tie this test to an engine
-   bug a later fix should remove: #76's plate builds now (below), and the 41.24 mm jigsaw
-   plate in plate-audit.js still fails in the seam repair, as it does on main. */
+   bug a later fix should remove: #76's plate builds now (below), and so does the 41.24 mm
+   jigsaw plate in plate-audit.js, which failed in the seam repair on main. */
 test('a failed build says so in the checks, the table and the dialog, and Download goes off',
   async ({ page }) => {
     const pageErrors = [];
