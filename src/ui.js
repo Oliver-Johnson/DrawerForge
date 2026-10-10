@@ -411,22 +411,41 @@ function readControls() {
      read last, on the head as held: under an 8.3 mm head held to 7.9 at 41.86 mm with a
      jigsaw, loose, a 7.8 mm hole measured on the 8.3 would be turned and refused. Read
      before them only, a 5 mm hole stood under a 5.1 mm magnet typed in after it, refused
-     only at the next keystroke. */
+     only at the next keystroke.
+     The hole is read after the head, and its read can move it: to the ledge the magnet pocket
+     leaves it, or to the cap the head as held leaves it. A head's cap goes by the hole it is
+     measured on, since a head only a hair wider than its hole is cut as no counterbore and
+     is not turned (MOUNT_BORE.screw): a 7.97 mm head over a 7.71 mm hole at 42 mm with a
+     jigsaw and an 8.1 mm magnet from beneath takes up to 8.1, but a 6.35 mm magnet pasted in
+     held the hole to 6.1, where the head is cut and turned and stops at 7.9, and the head
+     stayed at 7.97, with Checks naming the hole alone. So a hole the read has moved is
+     another hole to read the head on: the head is read again from what was typed, measured
+     on the hole as held, and the hole again on that head, until the hole stays where it was.
+     That settles on a head taken by its own limits measured on the hole it ends on, and a
+     hole taken by its own limits measured on that head, which a second read leaves as they
+     are. Of 43,536 heads, magnets and holes pasted near their caps over random screw designs
+     on the page, 16,006 took a second round, none a third, and four are allowed, as four
+     passes are for the head. */
   if (state.screws && mountNow) {
     const typed = parseFloat($('screwHeadD').value.trim());
-    let on = isFinite(typed) ? typed : state.screwHeadD;
-    fieldErrors.delete('screwHeadD'); noRoom.delete('screwHeadD');
-    for (let pass = 0; ; pass++) {
-      mountNow = mountLimits({ ...state, screwHeadD: on }, mountLayout, mountNow.cuts);
-      // a head held already that its own limits take keeps the reason it was held for
-      if (pass && on <= mountNow.screwHeadD && !mountNow.gaps.screwHeadD.some(([a, b]) => on > a && on < b)) break;
-      state.screwHeadD = readNumber('screwHeadD', pass ? on : undefined);
-      if (state.screwHeadD === on || pass === 3) break;
-      on = state.screwHeadD;
+    const asTyped = isFinite(typed) ? typed : state.screwHeadD;
+    for (let round = 0; ; round++) {
+      let on = asTyped;
+      fieldErrors.delete('screwHeadD'); noRoom.delete('screwHeadD');
+      for (let pass = 0; ; pass++) {
+        mountNow = mountLimits({ ...state, screwHeadD: on }, mountLayout, mountNow.cuts);
+        // a head held already that its own limits take keeps the reason it was held for
+        if (pass && on <= mountNow.screwHeadD && !mountNow.gaps.screwHeadD.some(([a, b]) => on > a && on < b)) break;
+        state.screwHeadD = readNumber('screwHeadD', pass ? on : undefined);
+        if (state.screwHeadD === on || pass === 3) break;
+        on = state.screwHeadD;
+      }
+      if (state.screwHeadD !== on) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
+      fieldErrors.delete('screwHoleD'); noRoom.delete('screwHoleD');
+      const measuredOn = state.screwHoleD;
+      state.screwHoleD = readNumber('screwHoleD');
+      if (state.screwHoleD === measuredOn || round === 3) break;
     }
-    if (state.screwHeadD !== on) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
-    fieldErrors.delete('screwHoleD'); noRoom.delete('screwHoleD');
-    state.screwHoleD = readNumber('screwHoleD');
   }
   // and Checks says what is wrong in the panel's order, not the order it was read in
   for (const m of [fieldErrors, noRoom]) {

@@ -315,6 +315,45 @@ test.describe('ranges on the geometry fields', () => {
     expect(errors).toEqual([]);
   });
 
+  /* And the head on the hole as held, since the hole is read last. At 42 mm with a jigsaw, a
+     7.97 mm head over a 7.71 mm hole and an 8.1 mm magnet from beneath builds. Paste a 6.35 mm
+     magnet over it and the hole is held to 6.1, the most the pocket leaves a ledge for, where
+     the head's cap on a 6.1 mm hole is 7.9: the head had been read against the 7.71, stayed at
+     7.97 with Download off, and Checks named the hole alone, so setting the hole to 6.1 raised
+     a refusal of the head that nothing had said. */
+  test('a screw head is measured on the hole as held, not as typed', async ({ page }) => {
+    const errors = await openAt(page, '#pi=42&w=84&d=84&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=54&bd=400' +
+                                      '&cn=puzzle&mg=1&md=8.1&mh=3&ms=bottom&sc=1&sh=7.71&sd=7.97&se=3');
+    const max = (id) => page.evaluate((i) => document.getElementById(i).max, id);
+    const hole = /Screw hole Ø must be 6\.1 mm or less — it runs through the 6\.35 mm magnet's pocket/;
+    const head = /Screw head Ø must be 7\.9 mm or less at a 42 mm pitch — .* a hole has to stay out of the notches the puzzle tabs fit into\./;
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    await paste(page, 'magnetD', '6.35');
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => [state.screwHeadD, state.screwHoleD])).toEqual([7.9, 6.1]);
+    expect(await text(page, 'errScrew')).toMatch(hole);
+    expect(await text(page, 'errScrew')).toMatch(head);
+    expect(await text(page, 'warnings'), 'the checks under the map say the same thing').toMatch(hole);
+    expect(await text(page, 'warnings')).toMatch(head);
+    expect(await max('screwHoleD')).toBe('6.1');
+    expect(await max('screwHeadD')).toBe('7.9');
+    expect(await text(page, 'pieceTail')).toMatch(/not building/);
+    expect(await exportOff(page)).toBe(true);
+    // the sizes it named are the sizes it takes: nothing new is raised once the hole is set to them
+    await H.setField(page, 'screwHoleD', '6.1');
+    expect(await shown(page, 'errScrew')).toBe(true);
+    expect(await text(page, 'errScrew')).not.toMatch(/Screw hole Ø/);
+    expect(await text(page, 'errScrew')).toMatch(head);
+    expect(await page.evaluate(() => [state.screwHeadD, state.screwHoleD])).toEqual([7.9, 6.1]);
+    await H.setField(page, 'screwHeadD', '7.9');
+    await settled(page);
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
+
   /* #70: corner pockets over a floor. A bowtie housed in the floor stood its 2.8 mm floor
      round the 2.6 mm bosses and sealed their pockets in it, with Download on, and an extra
      floor did the same. Such a plate is built as a solid floor builds it now, and Checks
