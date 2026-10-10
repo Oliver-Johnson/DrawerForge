@@ -2465,21 +2465,23 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
        does not see: an H-clip from above at 34 mm took a 4 mm magnet from above with 4
        edges open in A1, where the cavity meets the pocket's wall, and a wall bowtie at
        36.13 mm a 7.9 mm magnet 1.45 mm deep, level with the cavity's floor, with 13 open
-       a piece, both with Download on. The H-clip's pocket has no less room than with no
-       joint, since the rim's corner stands where the cup does (#83), and it is refused
-       all the same. Each has to be refused for the housing, and built at the size the
-       field takes with no edge open. */
-    for (const [name, over, d] of [
-      ['H-clip at 34 mm, 4 mm magnet above', { ...P(34), connector: 'hclip', magnets: true, magnetSide: 'top' }, 4],
-      ['wall bowtie at 36.13 mm, 7.9 x 1.45', { ...P(36.13), magnets: true, magnetH: 1.45 }, 7.9]]) {
+       a piece, both with Download on. Each has to be refused, and built at the size the
+       field takes with no edge open: the bowtie's for the housing, and the H-clip's for
+       the socket's rim. The H-clip's cup stands inside the rim's corner, and a pocket
+       from above has to clear the rim over its boss since #83 (below), which it meets
+       first: from 30 to 42 mm no pocket from above reaches an H-clip's or a snap clip's
+       cup that the rim does not stop sooner. */
+    for (const [name, over, d, why] of [
+      ['H-clip at 34 mm, 4 mm magnet above', { ...P(34), connector: 'hclip', magnets: true, magnetSide: 'top' }, 4, 'rim'],
+      ['wall bowtie at 36.13 mm, 7.9 x 1.45', { ...P(36.13), magnets: true, magnetH: 1.45 }, 7.9, 'housing']]) {
       const asked = designCfg({ ...over, magnetD: d });
       const lims = G.mountLimits(asked, G.computeLayout(asked));
-      const refused = d > lims.magnetD + 1e-9 && lims.joint.magnetD;
+      const refused = d > lims.magnetD + 1e-9 && (lims.rim.magnetD ? 'rim' : lims.joint.magnetD);
       const size = Math.min(d, lims.magnetD);
       const r = buildAll({ ...over, magnetD: size });
-      const good = refused === 'housing' && !r.open;
+      const good = refused === why && !r.open;
       console.log(`  ${name.padEnd(38)} ${refused ? `refused (${refused}), built at ${size}` : 'TAKEN'}; ${leakText(r)}` +
-                  `${good ? '' : `   FAIL${refused === 'housing' ? '' : ': has to be refused for the housing'}`}`);
+                  `${good ? '' : `   FAIL${refused === why ? '' : `: has to be refused for the ${why}`}`}`);
       if (!good) bad++;
     }
     /* And the socket's rim, with no joint at all (#83). With nothing under the sockets a
@@ -2487,10 +2489,13 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
        pocket was cut from the boss and not from the rim, which stood in it: a 6 mm magnet
        from beneath at 34.5 mm had 14.6 mm³ of rim in each pocket, and 1.8 mm³ at 36.13
        mm, a 7.9 mm one there 20.2, and the default screw's head 13.2 at 34.5 mm, all
-       taken with Download on. The rim is cut away under a boss whose pocket it reaches
-       now. So each of these has to be taken, and every pocket has to be open through its
-       whole volume, mouth to floor. And at 42 mm, where the rim reaches no pocket, they
-       have to be taken and open as before. */
+       taken with Download on. A pocket from above, and a shank, that the rim stood over
+       were taken too. The rim is cut away under a boss whose pocket it reaches now, and a
+       hole that opens on the boss's top is held clear of the rim over it (mountLimits'
+       `rim`). So each of these, asked at the size that met the rim, has to be taken or
+       refused for the rim as listed, and built at the size the field takes, where every
+       pocket has to be open through its whole volume, mouth to floor. And at 42 mm, where
+       the rim reaches no pocket, they have to be taken and open as before. */
     console.log('\ncorner pockets under the socket\'s rim:');
     const Q = (p) => ({ pitch: p, drawerW: 4 * p, drawerD: 2 * p, bedW: 2 * p + 16, bedD: 400, baseMode: 'bosses',
                         connector: 'none' });
@@ -2499,12 +2504,14 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
       ['36.13 mm, 6 mm magnet', { ...Q(36.13), magnets: true }, 'magnetD', 6, false],
       ['36.13 mm, 7.9 mm magnet', { ...Q(36.13), magnets: true }, 'magnetD', 7.9, false],
       ['34.5 mm, screws', { ...Q(34.5), screws: true }, 'screwHoleD', 3, false],
+      ['36.13 mm, 6 mm magnet above', { ...Q(36.13), magnets: true, magnetSide: 'top' }, 'magnetD', 6, 'rim'],
+      ['34.5 mm, 4.5 mm screw hole', { ...Q(34.5), screws: true }, 'screwHoleD', 4.5, 'rim'],
       ['42 mm, 6 mm magnet', { ...Q(42), magnets: true }, 'magnetD', 6, false],
       ['42 mm, 6 mm magnet above', { ...Q(42), magnets: true, magnetSide: 'top' }, 'magnetD', 6, false],
       ['42 mm, screws', { ...Q(42), screws: true }, 'screwHoleD', 3, false]]) {
       const asked = designCfg({ ...over, [f]: d });
       const lims = G.mountLimits(asked, G.computeLayout(asked));
-      const refused = d > lims[f] + 1e-9 && 'its cap';
+      const refused = d > lims[f] + 1e-9 && (lims.rim[f] ? 'rim' : 'another cap');
       const size = Math.min(d, lims[f]);
       const r = buildAll({ ...over, [f]: size });
       const got = room(r), all = room(r, true);

@@ -143,6 +143,15 @@ test.describe('ranges on the geometry fields', () => {
     ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie&km=wall&ki=bottom' +
       '&bm=bosses&mg=1&md=7.9', 'errMagnet',
       /Magnet Ø must be 6\.1 mm or less at a 36\.13 mm pitch — .* the recesses the bowtie keys fit into/],
+    /* #83: with corner pockets a cell is its socket's rim alone, and over a boss the rim
+       is the socket's wall, so a hole that opens on the boss's top has to clear it. A
+       6 mm magnet from above at 36.13 mm stood 0.26 mm under the rim, and a 4.5 mm screw
+       hole at 34.5 mm under it too, both with Download on. */
+    ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=none&bm=bosses&mg=1&ms=top',
+      'errMagnet',
+      /Magnet Ø must be 5\.4 mm or less at a 36\.13 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a magnet put in from above has to clear the socket's rim over its corner boss\./],
+    ['#pi=34.5&w=138&d=69&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=85&bd=400&cn=none&bm=bosses&sc=1&sh=4.5', 'errScrew',
+      /Screw hole Ø must be 4 mm or less at a 34\.5 mm pitch — .* a screw has to clear the socket's rim over its corner boss\./],
   ];
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {

@@ -2464,7 +2464,8 @@ function boreReach(sides, segs, x, y) {
  *     floor, or it crosses the floor's chamfer cone — see ENGINE.md §2;
  *   - under the floor (a magnet from below, the counterbore): it must stay in its cell;
  *   - in a corner boss: it must stay in the boss, which is shorter than the solid floor
- *     and does not grow with the pocket, so it also caps the depth.
+ *     and does not grow with the pocket, so it also caps the depth; and one that opens on
+ *     the boss's top must clear the socket's rim over it (#83).
  *
  * And whichever way it opens, it must stay out of a joint's cut in the floor beside it:
  * a key's recess, or the notch a tab fits into, where a dovetail's lets a pocket from
@@ -2496,8 +2497,28 @@ function mountLimits(cfg, layout, known) {
   const inCell = half - off - MOUNT_WALL;
   const s = half - off;              // the site's distance in from the cell's edges
   const inBoss = Math.min(roomIn(BOSS_W, BOSS_R, s), s) - MOUNT_WALL;
+  /* A corner boss's hole that opens on its top, a magnet put in from above or a screw's
+     shank, has the socket's rim to pass on the way in or out, as one in a solid floor has
+     the edge of the socket floor; and over the boss the rim is the socket's wall, which
+     is not cut (buildPiece cuts the rim away under a boss, up to just under its top;
+     #83). From 0.7 mm up it stands 2.15 mm in from the cell's edges, and further in at
+     the socket's rounded corner, which is the way each site faces. Measured on the ring
+     buildPiece's profile makes (directCellRegion), polygon and all, from each of the four
+     sites, since its corners are not mirror images of one another, and MOUNT_SEAM short.
+     The boss alone took a 6 mm magnet from above at 36.13 mm with the rim 0.26 mm over
+     its pocket, and the default 3 mm screw at 33 mm with the rim 0.53 mm over its hole,
+     with Download on. */
+  const dMid = 2.15 + tol;
+  const rim = roundedRectRing(0, 0, half - dMid, half - dMid, cfg.socketRadius - (dMid - cfg.topCutoff),
+                              cfg.arcSegs || 6);
+  let onRim = Infinity;
+  for (const [x, y] of [[off, off], [-off, off], [-off, -off], [off, -off]])
+    rim.forEach((a, i) => {
+      const b = rim[(i + 1) % rim.length], ex = b[0] - a[0], ey = b[1] - a[1];
+      onRim = Math.min(onRim, (ex * (y - a[1]) - ey * (x - a[0])) / Math.hypot(ex, ey) - MOUNT_SEAM);
+    });
   const bosses = cornerBosses(cfg);
-  const top = bosses ? inBoss : onFloor, under = bosses ? inBoss : inCell;
+  const top = bosses ? Math.min(inBoss, onRim) : onFloor, under = bosses ? inBoss : inCell;
   const r10 = (x) => Math.floor(x * 10 + 1e-9) / 10;   // a cap is given in tenths, rounded down
   /* A cell's four sites are 2 × holeOffset apart, 26 mm, so past a pitch of about 50 mm
      the room above lets a cut reach the one beside it before it reaches anything else:
@@ -2772,6 +2793,9 @@ function mountLimits(cfg, layout, known) {
     beside: { magnetD: own.magnetD === beside && !joint.magnetD,
               screwHoleD: own.screwHoleD === beside && !joint.screwHoleD,
               screwHeadD: own.screwHeadD === beside && !joint.screwHeadD },
+    // which the socket's rim over a corner boss stops (#83)
+    rim: { magnetD: bosses && cfg.magnetSide === 'top' && own.magnetD === onRim && !joint.magnetD,
+           screwHoleD: bosses && own.screwHoleD === onRim && !joint.screwHoleD },
     // and which a joint's cut stops, before any of those, and how (jointFor)
     joint,
     // sizes under the largest refused all the same, as [from, to] with both ends taken
