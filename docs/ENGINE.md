@@ -871,8 +871,29 @@ currently installed):
     3 mm thick, is taken: its pocket is 0.04 to 0.09 mm into the notch and the magnet
     0.24 mm clear of the tab. 2.4 mm thick it is level, built 96 bad edges, and is refused.
   - **A pocket from above** meets any of them unless its floor stands a layer over the
-    cut's ceiling. The housings a key is dropped into from above start 1.3 mm over the
-    socket floor and nothing reaches them.
+    cut's ceiling.
+  - **The housing a key is put into from above is cut, then built** (`keySiteOps`' cup
+    and snap slot): a cavity is cut and a cup stood in it, a floor 0.6 mm thick under the
+    key, its underside 1.4 mm over the socket floor (1.3 for a snap clip), and walls from
+    there up, at a corner where four cells meet. Over a solid floor nothing reaches it. A
+    corner boss's pockets do, and the housing is made after them, so it stood in them
+    with Download on (#75): a wall bowtie at 36.13 mm left 1.3 mm³ in the four 6 mm
+    magnet pockets beside the seam, in the top 0.6 mm of each, and a 7.9 mm magnet there
+    1.45 mm deep, level with the cavity's floor, left 13 edges open a piece. `mountLimits`
+    counts it as a cut from its underside up (`housing`), as wide as all it cuts or
+    builds: a pocket from beneath clears it by stopping `MOUNT_LEVEL` under that, and a
+    pocket from above or a shank, which go in through it, meets any it reaches. Of 17,820
+    designs (every joint, both floors, magnets from both sides and screws, three layouts,
+    54 pitches from 30 to 52.2 mm) that changes the limits of 1,280, every one with
+    corner bosses and a key put in from above: wall keys up to 40 mm, the H-clip up to
+    38.5 and a snap clip in the wall up to 35. Of the 1,771 caps it lowers, 1,573 stop a
+    tenth or two short of the first size that meets the housing, and no size taken meets
+    one. Where an H-clip's or a snap clip's housing reaches a pocket, the room it takes is
+    inside the socket rim's corner, which stands in that pocket already with no joint at
+    all (a boss's pocket may run under the rim, #83), so the pocket has no less room with
+    the joint than without it. The plate can still come out open there: an H-clip from
+    above at 34 mm took a 4 mm magnet from above with 4 edges open where the cavity meets
+    the pocket's wall, with Download on. So the cap is held off every housing alike.
   - **A pocket in a corner boss counts the same way**, since the joint is cut from the
     boss too (#70), and from above its floor is measured from the boss's top: wall keys
     and the dovetail reach a boss's pocket up to about 39 mm, the H-clip up to about 34.5,
@@ -925,7 +946,17 @@ currently installed):
   `touchesBuilt` compares the two shells' edges inside the band, and a jointed cell that
   shares one with a jointed cell built before it is cut again (`TOUCH_TRIES`: each cutter
   on its own, the cutters reversed, the faces reversed, the cutters one at a time from the
-  last), or else the earlier cell is; the top-insert pass does the same. Mounting pockets
+  last), or else the earlier cell is; the top-insert pass does the same. Those only reorder
+  the cut, and a split that comes from a plane of the cell's own can land in the same
+  place every time, so a jointed cell that still shares an edge after both has its joint
+  cut again with the cutters moved a `NUDGE` along one diagonal and then the other (#72).
+  Puzzle tabs at a 0.35 mm fit clearance, four pieces meeting, left one edge used four
+  times in two of them at every pitch from 31.6 to 52.2 mm: the plane of a socket wall's
+  facet at a cell's corner crossed the notch lobe's face beside its pole 0.3 microns from
+  where the side of the region across the junction crosses it. The lobe moves with the
+  clearance and the facet with the rim cutoff and the tolerance, so it is one clearance
+  for each: 0.349 and 0.35 at the defaults, 0.608 and 0.609 tight, 0.843 and 0.844 with a
+  1 mm rim cutoff, and 0.102, 0.103 and 0.279 to 0.281 with 0.1. Mounting pockets
   do it with no joint at all: a pocket's wall, carried across its cell as a plane, splits
   the cell's side where it crosses it, and that side stands on the same plane as the
   neighbour's, so a split that lands on a corner of the neighbour's region is that
