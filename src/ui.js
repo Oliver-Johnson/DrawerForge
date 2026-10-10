@@ -112,7 +112,7 @@ const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'n
 const mountWhy = (opens, field) => {
   if (field === 'screwHoleD' && mount().throughMagnet)
     return `— it runs through the ${state.magnetD} mm magnet's pocket, and has to stay inside the pocket's sides ` +
-      'to leave the magnet a ledge to sit on';
+      'to leave a ledge round it that holds the magnet';
   const joint = mount().joint[field];
   const cuts = cutsNamed();
   return `${atPitch()} — mounting holes sit ` +

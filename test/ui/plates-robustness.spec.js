@@ -147,7 +147,7 @@ test.describe('ranges on the geometry fields', () => {
        counterbore. 5 mm under a 5.1 mm magnet and a 5.4 mm head built 47 open edges at
        42 mm. */
     ['#cn=none&mg=1&md=5.1&ms=top&sc=1&sh=5&sd=5.4', 'errScrew',
-      /Screw hole Ø must be 4\.9 mm or less — it runs through the 5\.1 mm magnet's pocket, and has to stay inside the pocket's sides to leave the magnet a ledge to sit on\./],
+      /Screw hole Ø must be 4\.9 mm or less — it runs through the 5\.1 mm magnet's pocket, and has to stay inside the pocket's sides to leave a ledge round it that holds the magnet\./],
   ];
   for (const [hash, errId, msg] of CASES) {
     test(`${hash} is refused at the field`, async ({ page }) => {
