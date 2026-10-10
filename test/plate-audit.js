@@ -2675,21 +2675,25 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
      these is asked at the size that met it, which has to be refused for the housing, and
      built at the size the field takes, where every pocket has to be as open as in the
      same plate with no joint, read on vertical lines 0.1 mm apart every 0.05 mm up its
-     depth. With no joint, not the pocket's whole volume: at these pitches the socket's
-     rim stands in part of a 6 mm pocket already, joint or not. And a pocket the cup does
-     not reach, at 42 mm, has to be taken as before. */
+     depth. With no joint, which is the pocket's whole volume since #83 (below): before
+     it the socket's rim stood in part of a 6 mm pocket at these pitches, joint or not.
+     And a pocket the cup does not reach, at 42 mm, has to be taken as before. */
   {
     const h = 0.1, dz = 0.05;
-    // the open room in each pocket of a design, in mm³, mouth to floor
-    const room = (r) => {
+    /* the open room in each pocket of a design, in mm³, mouth to floor; or, `whole`, all
+       of it, open or not. A screw's head and shank are cut with their corners on the
+       size, 14 and 12 sides, so they are read inside their flats; a magnet's pocket
+       has its flats on the magnet (fastenerCutter). */
+    const room = (r, whole) => {
       const cfg = r.cfg, out = [];
       const top = Math.min(2.6, Math.max(cfg.magnets ? cfg.magnetH + 0.8 : 0, cfg.screws ? cfg.screwHeadDepth + 1 : 0));
       const spans = [];
       if (cfg.magnets) spans.push(cfg.magnetSide === 'top'
         ? [cfg.magnetD / 2, top - cfg.magnetH, top] : [cfg.magnetD / 2, 0, cfg.magnetH]);
-      if (cfg.screws) spans.push([cfg.screwHeadD / 2, 0, cfg.screwHeadDepth], [cfg.screwHoleD / 2, 0, top]);
+      if (cfg.screws) spans.push([cfg.screwHeadD / 2 * Math.cos(Math.PI / 14), 0, cfg.screwHeadDepth],
+                                 [cfg.screwHoleD / 2 * Math.cos(Math.PI / 12), 0, top]);
       r.pieces.forEach((polys, pi) => {
-        const pc = r.L.pieces[pi], A = columns(polys);
+        const pc = r.L.pieces[pi], A = whole ? null : columns(polys);
         for (let i = 0; i < pc.nx; i++) for (let k = 0; k < pc.ny; k++)
           for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
             const px = pc.mL + (i + 0.5) * cfg.pitch + sx * cfg.holeOffset;
@@ -2698,7 +2702,7 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
             for (const [rad, z0, z1] of spans)
               for (let x = -rad; x <= rad; x += h) for (let y = -rad; y <= rad; y += h) {
                 if (Math.hypot(x, y) > rad - 0.02) continue;
-                const col = A(px + x + 0.000731, py + y + 0.000419);
+                const col = whole ? () => 0 : A(px + x + 0.000731, py + y + 0.000419);
                 for (let z = z0 + dz / 2; z < z1; z += dz) if (col(z) < 1) v += h * h * dz;
               }
             out.push(v);
@@ -2733,21 +2737,68 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
        does not see: an H-clip from above at 34 mm took a 4 mm magnet from above with 4
        edges open in A1, where the cavity meets the pocket's wall, and a wall bowtie at
        36.13 mm a 7.9 mm magnet 1.45 mm deep, level with the cavity's floor, with 13 open
-       a piece, both with Download on. The H-clip's pocket has no less room than with no
-       joint, since the rim's corner stands where the cup does (#83), and it is refused
-       all the same. Each has to be refused for the housing, and built at the size the
-       field takes with no edge open. */
-    for (const [name, over, d] of [
-      ['H-clip at 34 mm, 4 mm magnet above', { ...P(34), connector: 'hclip', magnets: true, magnetSide: 'top' }, 4],
-      ['wall bowtie at 36.13 mm, 7.9 x 1.45', { ...P(36.13), magnets: true, magnetH: 1.45 }, 7.9]]) {
+       a piece, both with Download on. Each has to be refused, and built at the size the
+       field takes with no edge open: the bowtie's for the housing, and the H-clip's for
+       the socket's rim. The H-clip's cup stands inside the rim's corner, and a pocket
+       from above has to clear the rim over its boss since #83 (below), which it meets
+       first at any fit clearance up to 0.25 mm, this row's default 0.2 among them,
+       whatever the tolerance and rim cutoff: from 30 to 42 mm no pocket from above then
+       reaches an H-clip's or a snap clip's cup that the rim does not stop sooner. A
+       looser H-clip fit widens the cup until it comes first, and the housing's cap holds
+       the pocket, as it did here before #83: from a fit of 0.26 at loose tolerance and
+       rim cutoff 0.1, where a 2.1 mm magnet from above at 33 mm is refused at 2 for the
+       housing, and from 0.42 at standard tolerance and the default cutoff (ENGINE.md
+       §5). */
+    for (const [name, over, d, why] of [
+      ['H-clip at 34 mm, 4 mm magnet above', { ...P(34), connector: 'hclip', magnets: true, magnetSide: 'top' }, 4, 'rim'],
+      ['wall bowtie at 36.13 mm, 7.9 x 1.45', { ...P(36.13), magnets: true, magnetH: 1.45 }, 7.9, 'housing']]) {
       const asked = designCfg({ ...over, magnetD: d });
       const lims = G.mountLimits(asked, G.computeLayout(asked));
-      const refused = d > lims.magnetD + 1e-9 && lims.joint.magnetD;
+      const refused = d > lims.magnetD + 1e-9 && (lims.rim.magnetD ? 'rim' : lims.joint.magnetD);
       const size = Math.min(d, lims.magnetD);
       const r = buildAll({ ...over, magnetD: size });
-      const good = refused === 'housing' && !r.open;
+      const good = refused === why && !r.open;
       console.log(`  ${name.padEnd(38)} ${refused ? `refused (${refused}), built at ${size}` : 'TAKEN'}; ${leakText(r)}` +
-                  `${good ? '' : `   FAIL${refused === 'housing' ? '' : ': has to be refused for the housing'}`}`);
+                  `${good ? '' : `   FAIL${refused === why ? '' : `: has to be refused for the ${why}`}`}`);
+      if (!good) bad++;
+    }
+    /* And the socket's rim, with no joint at all (#83). With nothing under the sockets a
+       cell is its rim alone, and at small pitches a boss's pocket runs in under it; the
+       pocket was cut from the boss and not from the rim, which stood in it: a 6 mm magnet
+       from beneath at 34.5 mm had 14.6 mm³ of rim in each pocket, and 1.8 mm³ at 36.13
+       mm, a 7.9 mm one there 20.2, and the default screw's head 13.2 at 34.5 mm, all
+       taken with Download on. A pocket from above, and a shank, that the rim stood over
+       were taken too. The rim is cut away under a boss whose pocket it reaches now, and a
+       hole that opens on the boss's top is held clear of the rim over it (mountLimits'
+       `rim`). So each of these, asked at the size that met the rim, has to be taken or
+       refused for the rim as listed, and built at the size the field takes, where every
+       pocket has to be open through its whole volume, mouth to floor. And at 42 mm, where
+       the rim reaches no pocket, they have to be taken and open as before. */
+    console.log('\ncorner pockets under the socket\'s rim:');
+    const Q = (p) => ({ pitch: p, drawerW: 4 * p, drawerD: 2 * p, bedW: 2 * p + 16, bedD: 400, baseMode: 'bosses',
+                        connector: 'none' });
+    for (const [name, over, f, d, why] of [
+      ['34.5 mm, 6 mm magnet', { ...Q(34.5), magnets: true }, 'magnetD', 6, false],
+      ['36.13 mm, 6 mm magnet', { ...Q(36.13), magnets: true }, 'magnetD', 6, false],
+      ['36.13 mm, 7.9 mm magnet', { ...Q(36.13), magnets: true }, 'magnetD', 7.9, false],
+      ['34.5 mm, screws', { ...Q(34.5), screws: true }, 'screwHoleD', 3, false],
+      ['36.13 mm, 6 mm magnet above', { ...Q(36.13), magnets: true, magnetSide: 'top' }, 'magnetD', 6, 'rim'],
+      ['34.5 mm, 4.5 mm screw hole', { ...Q(34.5), screws: true }, 'screwHoleD', 4.5, 'rim'],
+      ['42 mm, 6 mm magnet', { ...Q(42), magnets: true }, 'magnetD', 6, false],
+      ['42 mm, 6 mm magnet above', { ...Q(42), magnets: true, magnetSide: 'top' }, 'magnetD', 6, false],
+      ['42 mm, screws', { ...Q(42), screws: true }, 'screwHoleD', 3, false]]) {
+      const asked = designCfg({ ...over, [f]: d });
+      const lims = G.mountLimits(asked, G.computeLayout(asked));
+      const refused = d > lims[f] + 1e-9 && (lims.rim[f] ? 'rim' : 'another cap');
+      const size = Math.min(d, lims[f]);
+      const r = buildAll({ ...over, [f]: size });
+      const got = room(r), all = room(r, true);
+      const short = got.map((v, k) => all[k] - v).filter((v) => v > 0.005);
+      const good = refused === why && !short.length && !r.open;
+      console.log(`  ${name.padEnd(38)} ${refused ? `refused (${refused}), built at ${size}` : 'taken'}; ` +
+                  (short.length ? `${short.length} of ${got.length} pockets SHORT of their whole room, ` +
+                    `${short.reduce((s, v) => s + v, 0).toFixed(2)} mm³ solid` : `${got.length} pockets open through`) +
+                  `; ${leakText(r)}${good ? '' : `   FAIL${refused === why ? '' : why ? `: has to be refused for the ${why}` : ': has to be taken'}`}`);
       if (!good) bad++;
     }
   }

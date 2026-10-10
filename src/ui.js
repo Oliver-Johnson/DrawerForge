@@ -102,7 +102,9 @@ const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'n
    `joint` names: a pocket from beneath as deep as a dovetail's notch, a magnet or screw
    that would reach the tab in one, a pocket any wider coming too near the notch's edge,
    a hole that would meet the housing of a key put in from above ('housing'),
-   or any other hole breaking into the cut. The hint about keys put in from above is not
+   or any other hole breaking into the cut. With no joint in the way, a hole that opens on
+   a corner boss's top, a magnet put in from above or a screw's shank, can stop at the
+   socket's rim over the boss (`rim`, #83). The hint about keys put in from above is not
    given with corner pockets: there is no solid floor under them, and such a key's cup
    reaches a boss's pocket (#75). Nor where the bosses are buried in the floor a
    joint needs (cornerBosses): a key put in from above, in the walls, needs none, so
@@ -129,6 +131,8 @@ const mountWhy = (opens, field) => {
           : `; put in from beneath, the ${CONNECTOR_NAMES[state.connector]} leave more room`)
       : joint ? `a hole has to stay out of the ${cuts}`
       : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
+      : mount().rim[field] ? `${field === 'magnetD' ? 'a magnet put in from above' : 'a screw'} has to ` +
+        'clear the socket\'s rim over its corner boss'
       : cornerBosses(state) ? 'a pocket has to stay inside its corner boss'
       : opens ? 'a cut open to the socket has to stay on the socket floor'
       : 'a pocket under the floor has to stay inside its cell') +
