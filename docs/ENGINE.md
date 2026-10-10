@@ -964,6 +964,32 @@ currently installed):
     0.67 at tight. At loose, cutoff 0.1 and fit 0.3 that is a magnet from above from about
     32.3 to 34 mm and a screw hole from 32.1 to 33.8: at 33 mm a 2.1 mm magnet is refused
     at 2 for the housing, where the rim alone would take it.
+    Over a solid floor, where nothing reaches the housing, the plate could still come out
+    open beside it, and no cap was to blame (#85): a 6.3 mm magnet from beneath at 34.5
+    mm, the cap there, left 4 edges open in A1 with an H-clip from above and 3 with a
+    snap clip in the wall, with Download on, and a 6.25 mm magnet at 37.5 mm, well under
+    its 9.2 mm cap, left 14. The pocket stops 2.2 mm under the cup (2.1 under the snap
+    clip's slot); its planes do not stop. They split the cell's faces where they cross
+    them, the weld can leave a split a few microns off its face, and the housing, cut out
+    of the cell afterwards, crosses that face and comes out open. At 34.5 mm the pocket's
+    flat nearest the junction crosses the side of the cell's region that stands a `BLOAT`
+    inside the next cell 0.019 mm from the seam face, beside the corner the region's top
+    is fanned from; the spokes are microns apart there, and the weld, which chains, put
+    the side's top corner 3.4 microns off its plane, where the cavity's end wall, cut on
+    the plane, missed it by 1.9 to 2.5 microns. The sizes that came out open follow that
+    flat, not the cap: on the issue's layout, sizes 0.05 mm apart, 36 came out open, and
+    33 of them, from 6.3 mm at 34.5 to 15 mm at 46, H-clip or snap clip, have that flat
+    within 0.02 mm of the corner; they meet the cap at 34.5 mm only, and the other 3,
+    H-clips, are other planes falling as badly. Moving the housing, as `cutAgain` does,
+    leaves the face where it is. So a whole cell whose housing still comes out open has
+    its pockets cut again the ways `settle` takes them, and the housing out of each, and
+    keeps the first that comes out closed with nothing turned over and no more edges
+    shared with the shells beside it. Of 38,013 designs the field takes from 30 to 46 mm
+    (the H-clip and both snap clips put in from above or beneath, wall keys from above, a
+    solid floor or corner bosses, three tolerances, two pieces to four and half cells), 176
+    came out open, 1,072 edges, every one with its joint put in from above, and 7 of them
+    folded too; all 176 come out closed with nothing folded, and no other design taken
+    builds other bytes. No cap moves, so the ranges above stand.
   - **A pocket in a corner boss counts the same way**, since the joint is cut from the
     boss too (#70), and from above its floor is measured from the boss's top: wall keys
     and the dovetail reach a boss's pocket up to about 39 mm, the H-clip up to about 34.5,
