@@ -8670,12 +8670,25 @@ function readControls() {
     if (id === 'magnetD' && mountNow) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
     state[id] = readNumber(id);
   }
-  /* And the shank once more, on the sizes just read: how far it is turned goes by the head
-     and the magnet (MOUNT_BORE.screw), and the magnet pocket it runs through caps it
-     (mountLimits' throughMagnet), both read after it. Read before them only, a 5 mm hole
-     stood under a 5.1 mm magnet typed in after it, refused only at the next keystroke. */
+  /* And the head and the shank once more, on the sizes just read. How far the counterbore is
+     turned goes by the head and the magnet (MOUNT_BORE.screw), and it is measured turned, so
+     the head's own size moves its cap and gaps: read against the head before it, a 14.05 mm
+     head pasted over a 6 at 46.45 mm with a jigsaw and a 6.2 mm magnet from beneath took the
+     6's 14.1 and built, where its own turn stops it at 14, and 14.1 over a 14 was held to
+     the 14's cap at every read after. So the head is measured as typed. The shank's turn
+     goes by the head's, and the magnet pocket it runs through caps it (mountLimits'
+     throughMagnet), so it is read last, on the head as read, measured again where that is
+     not the head typed: one held to its cap or a gap's end. Under an 8.3 mm head held to 7.9
+     at 41.86 mm with a jigsaw, loose, a 7.8 mm hole measured on the 8.3 would be turned and
+     refused. Read before them only, a 5 mm hole stood under a 5.1 mm magnet typed in after
+     it, refused only at the next keystroke. */
   if (state.screws && mountNow) {
-    mountNow = mountLimits(state, mountLayout, mountNow.cuts);
+    const typed = parseFloat($('screwHeadD').value.trim());
+    mountNow = mountLimits(isFinite(typed) ? { ...state, screwHeadD: typed } : state,
+                           mountLayout, mountNow.cuts);
+    fieldErrors.delete('screwHeadD'); noRoom.delete('screwHeadD');
+    state.screwHeadD = readNumber('screwHeadD');
+    if (state.screwHeadD !== typed) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
     fieldErrors.delete('screwHoleD'); noRoom.delete('screwHoleD');
     state.screwHoleD = readNumber('screwHoleD');
   }
