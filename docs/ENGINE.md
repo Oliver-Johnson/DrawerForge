@@ -435,6 +435,28 @@ other, then both, and the first that comes out clean is kept; if none does, the 
 stands. Each stands as far off the cell's walls as the first, and none nearer the
 pockets.
 
+With nothing under the sockets a cell is its rim alone, from the bed up, and at small
+pitches a boss's pocket runs in under it: the rim stands 2.85 mm in from the cell's edges
+at the bed and 2.15 from 0.7 mm up, and further in at the socket's rounded corner, which
+is the way every pocket faces, while the pockets sit `holeOffset` from the cell's centre
+whatever the pitch. The pocket was cut from the boss alone, and the rim, a shell of its
+own, stood in it: a 6 mm magnet from beneath at 34.5 mm had 14.6 mm³ of rim in each
+pocket, in 41% of its columns, 1.8 mm³ at 36.13 mm, and the default screw's head 13.2
+mm³ at 34.5, all with Download on (#83). So where a pocket runs more than `MOUNT_SEAM`
+into the rim, the rim is cut away under that corner's boss in every whole cell: a box
+from under the bed to under the boss's top, two `BLOAT`s in from the cell's edges and
+the boss's inner sides, whose faces stand off every face of the boss's. Cut along the
+pocket's own walls instead, the rim split on the boss's lines where both stand on the
+piece's edge: six more four-use edges at 34.5 mm. The box's top is the middle of the
+widest gap between the planes it could meet (the rim's rings, the pockets' floors and
+roofs, a joint's cuts and housings), level with none. Over the boss the rim is the
+socket's wall, and is not cut: a hole that opens on the boss's top, a magnet from above
+or a screw's shank, is held `MOUNT_SEAM` clear of it by `mountLimits` (`rim`), as a solid
+floor's is held to its socket floor. That takes 2.5 mm off the cap of a magnet from above
+and of a screw's hole at 34.5 mm (6.3 to 3.8, 6.5 to 4) and 2.4 at 38 (9.7 to 7.3); from
+40 mm the boss is the tighter cap. A magnet from beneath and a screw's head lose nothing,
+and a pocket the rim does not reach is built as it was, byte for byte.
+
 `connector: 'puzzle'` used to be listed here as the first kind, and it is **no longer
 open anywhere**. It is worth reading how, because it needed two unrelated fixes and the
 lesson generalises: **an even count and an odd count on the same case are two separate
@@ -843,11 +865,22 @@ currently installed):
     38.5 and a snap clip in the wall up to 35. Of the 1,771 caps it lowers, 1,573 stop a
     tenth or two short of the first size that meets the housing, and no size taken meets
     one. Where an H-clip's or a snap clip's housing reaches a pocket, the room it takes is
-    inside the socket rim's corner, which stands in that pocket already with no joint at
-    all (a boss's pocket may run under the rim, #83), so the pocket has no less room with
+    inside the socket rim's corner, which stood in that pocket already with no joint at
+    all (a boss's pocket may run under the rim, #83), so the pocket had no less room with
     the joint than without it. The plate can still come out open there: an H-clip from
     above at 34 mm took a 4 mm magnet from above with 4 edges open where the cavity meets
     the pocket's wall, with Download on. So the cap is held off every housing alike.
+    Since #83 a pocket from above is held clear of the rim over its boss, and it meets the
+    rim first at any fit clearance up to 0.25 mm (the default is 0.2), whatever the
+    tolerance and rim cutoff: from 30 to 42 mm no such pocket then reaches an H-clip's or
+    a snap clip's cup. A snap clip's fit stops at 0.3, and the rim comes first at every
+    one. An H-clip's runs to 1 mm, and a looser one widens its cup until the cup comes
+    first, so the housing's cap holds the pocket instead: from a fit of 0.26 at loose
+    tolerance and rim cutoff 0.1 (0.52 at cutoff 1), from 0.42 at standard tolerance and
+    the default cutoff (0.33 to 0.59 as the cutoff goes from 0.1 to 1), and from 0.4 to
+    0.67 at tight. At loose, cutoff 0.1 and fit 0.3 that is a magnet from above from about
+    32.3 to 34 mm and a screw hole from 32.1 to 33.8: at 33 mm a 2.1 mm magnet is refused
+    at 2 for the housing, where the rim alone would take it.
   - **A pocket in a corner boss counts the same way**, since the joint is cut from the
     boss too (#70), and from above its floor is measured from the boss's top: wall keys
     and the dovetail reach a boss's pocket up to about 39 mm, the H-clip up to about 34.5,
