@@ -29,6 +29,14 @@ const platesUrl = () => site.base;
 const binsUrl = () => site.base + 'bins/';
 
 const settle = (page) => page.waitForTimeout(900);   // past the 400 ms save debounce
+/* Until the page's save has landed: no edit still waiting to be read in (the bins page's
+   fields are read in a moment after they change, `timer`), and this browser's save is the
+   design on the page. Going on to another address drops a save still waiting (see
+   dropSave), and a fixed wait for it was now and then too short for a page still drawing. */
+const saved = (page) => expect.poll(() => page.evaluate(() =>
+  (typeof timer === 'undefined' || timer === null) &&
+  localStorage.getItem(SAVE_KEY) === encodeDesc(descriptor())), { message: 'the page has saved' })
+  .toBe(true);
 const PLATES = 'drawerforge:plates:v1';
 const BINS = 'drawerforge:bins:v1';
 
@@ -127,7 +135,7 @@ test('following a link puts the layout it replaced aside, with a way back',
   async ({ page }) => {
     await H.openPlates(page, platesUrl());
     await H.setField(page, 'drawerW', '512');
-    await settle(page);
+    await saved(page);
 
     await arrive(page, platesUrl() + '#w=333');
     expect(await page.inputValue('#drawerW')).toBe('333');   // the link still wins
@@ -141,7 +149,7 @@ test('following a link puts the layout it replaced aside, with a way back',
 
 test('a save nobody has touched is not offered back', async ({ page }) => {
   await H.openPlates(page, platesUrl());
-  await settle(page);                                  // the defaults are saved
+  await saved(page);                                   // the defaults are saved
   await arrive(page, platesUrl() + '#w=333');
   await expect(page.locator('#setAside')).toBeHidden();
   expect(await stored(page, PLATES + ':prev')).toBeNull();
@@ -205,7 +213,7 @@ test('a saved layout that did not finish loading is still declined after a reloa
 test('a second link does not push your own layout out of the backup', async ({ page }) => {
   await H.openPlates(page, platesUrl());
   await H.setField(page, 'drawerW', '512');
-  await settle(page);
+  await saved(page);
   await arrive(page, platesUrl() + '#w=333');
   await arrive(page, platesUrl() + '#w=444');
   await expect(page.locator('#putBack')).toBeVisible();
@@ -220,13 +228,13 @@ test('a second link does not push your own layout out of the backup', async ({ p
 test('changing a linked layout takes the offer to put yours back away', async ({ page }) => {
   await H.openPlates(page, platesUrl());
   await H.setField(page, 'drawerW', '512');
-  await settle(page);
+  await saved(page);
   await arrive(page, platesUrl() + '#w=333');
   await expect(page.locator('#setAside')).toBeVisible();
   await page.waitForTimeout(600);                      // the boot's own save is no edit
   await expect(page.locator('#setAside')).toBeVisible();
   await H.setField(page, 'drawerW', '340');
-  await settle(page);
+  await saved(page);
   await expect(page.locator('#setAside')).toBeHidden();
   // and that edited layout is yours now: the next link sets it aside
   await arrive(page, platesUrl() + '#w=444');
@@ -480,7 +488,7 @@ test('bed, infill and gap survive a trip through baseplates and back', async ({ 
   await H.openBins(page, binsUrl());
   const want = [['bedW', '200'], ['bedD', '210'], ['bedH', '220'], ['infill', '35'], ['gap', '6']];
   for (const [id, v] of want) await H.setField(page, id, v);
-  await settle(page);
+  await saved(page);
 
   // each page's own link, as the page means it
   await arrive(page, await page.evaluate(() => new URL(platesHref(), location.href).href));
@@ -520,7 +528,7 @@ test('following a link puts the bins it replaced aside, with a way back', async 
   await H.openBins(page, binsUrl());
   await H.dragCells(page, [0, 0], [1, 1]);
   await H.dragCells(page, [3, 3], [3, 3]);
-  await settle(page);
+  await saved(page);
 
   await arrive(page, binsUrl() + '#bl=0-0-1-1-3');
   expect(await binsIn(page)).toBe(1);
@@ -635,7 +643,7 @@ test("someone's bins link, edited, carried to baseplates still keeps your drawer
       '&bl=0-0-1-1-3';
     await arrive(page, binsUrl() + '#' + theirs);
     await H.setField(page, 'gap', '6');               // changed, but still their drawer
-    await settle(page);
+    await saved(page);
     await arrive(page, binsUrl());                    // and a reload does not make it yours
 
     await viaButton(page, '#navPlates', platesUrl());
@@ -674,7 +682,7 @@ for (const [id, value] of [['infill', '20'], ['bedH', '200'], ['drawerD', '300']
 test("an edited link put back is still the link's", async ({ page }) => {
   await theirBinsLink(page);
   await H.setField(page, 'gap', '6');
-  await settle(page);
+  await saved(page);
   await arrive(page, binsUrl() + '#bl=2-2-1-1-3');    // sets the edited one aside
   await clickAndLoad(page, '#putBack');
   expect(await page.inputValue('#gap')).toBe('6');
@@ -693,7 +701,7 @@ test("your own layout put back is not the link's, even in the same drawer",
     await viaButton(page, '#navBins', binsUrl());
     await H.dragCells(page, [0, 0], [0, 0]);
     await H.setField(page, 'drawerW', '400');
-    await settle(page);
+    await saved(page);
     const mine = await stored(page, BINS);
     await arrive(page, binsUrl() + '#' + mine.replace(/(^|&)bl=[^&]*/, '$1bl=2-2-1-1-3'));
     await clickAndLoad(page, '#putBack');
@@ -712,7 +720,7 @@ test("your own layout put back is not the link's, even in the same drawer",
 test("someone's drawer changed on baseplates comes back to bins as yours", async ({ page }) => {
   await H.openBins(page, binsUrl());
   await H.dragCells(page, [0, 0], [1, 1]);
-  await settle(page);
+  await saved(page);
   const mine = await stored(page, BINS);
   await arrive(page, binsUrl() + '#w=333&bl=0-0-1-1-3');
   await H.setField(page, 'gap', '6');
@@ -740,7 +748,7 @@ test("your own drawer on someone's link is not recorded as theirs", async ({ pag
   expect(theirs).toContain('bw=220');
   await arrive(page, binsUrl());
   await H.dragCells(page, [0, 0], [1, 1]);            // your own bins
-  await settle(page);
+  await saved(page);
   const mine = await stored(page, BINS);
 
   await arrive(page, binsUrl() + '#' + theirs);
@@ -752,7 +760,7 @@ test("your own drawer on someone's link is not recorded as theirs", async ({ pag
 
   await arrive(page, binsUrl());
   await H.setField(page, 'drawerW', '600');
-  await settle(page);
+  await saved(page);
   await arrive(page, platesUrl());
   await viaButton(page, '#navBins', binsUrl());
   expect(await page.inputValue('#drawerW')).toBe('500');
@@ -771,7 +779,7 @@ for (const reload of [false, true]) {
     await H.setField(page, 'drawerD', '400');
     await H.setField(page, 'bedW', '220');
     await page.selectOption('#connector', 'snap');
-    await settle(page);
+    await saved(page);
     const mine = await stored(page, PLATES);
 
     await arrive(page, binsUrl() + '#w=333&d=333&bw=250&bd=250&bl=0-0-1-1-3');
@@ -798,9 +806,11 @@ test('a page that declined a link goes on from its defaults, not the link', asyn
   await page.evaluate(([k, v]) => localStorage.setItem(k, v), [BINS + ':loading', save]);
   await arrive(page, binsUrl());
   await expect(page.locator('#setAside')).toContainText(/did not finish loading/);
+  expect(await stored(page, BINS + ':linked'), 'declined, the link is still recorded').not.toBeNull();
   await H.dragCells(page, [0, 0], [0, 0]);
   // the edit's save, however long a busy page takes to it
-  await expect.poll(() => stored(page, BINS + ':linked')).toBeNull();
+  await expect.poll(() => stored(page, BINS + ':linked'), { message: 'the edit ends the record' })
+    .toBeNull();
 });
 
 test('the guide passes a layout on without its own anchors in the way', async ({ page }) => {
@@ -815,8 +825,12 @@ test('the guide passes a layout on without its own anchors in the way', async ({
   const layout = await page.evaluate(() => location.hash);
   expect(layout).toMatch(/(^#|&)ph=/);
 
-  // a guide link with an anchor of its own carries the layout, not "#heights#w=…"
-  await page.goto(site.base + 'guide/drawer-sizes/' + layout);
+  // on from the guide to one of its own pages, which carries it too
+  await Promise.all([page.waitForEvent('load'), page.click('a[href="drawer-sizes/"]')]);
+  expect(page.url().split('#')[0]).toBe(site.base + 'guide/drawer-sizes/');
+  expect(await page.evaluate(() => location.hash)).toBe(layout);
+
+  // and a link there with an anchor of its own carries the layout, not "#heights#w=…"
   await Promise.all([page.waitForEvent('load'), page.click('a[href="../#heights"]')]);
   expect(page.url().split('#')[0]).toBe(site.base + 'guide/');
   expect(await page.evaluate(() => location.hash)).toBe(layout);
@@ -830,7 +844,7 @@ test('looking at a linked layout differently is not changing it', async ({ page 
   await H.openBins(page, binsUrl());
   await H.dragCells(page, [0, 0], [1, 1]);
   await H.dragCells(page, [3, 3], [3, 3]);
-  await settle(page);
+  await saved(page);
   await arrive(page, binsUrl() + '#bl=0-0-1-1-3');
   await expect(page.locator('#putBack')).toBeVisible();
 
@@ -850,7 +864,7 @@ test('a link with your bins in a drawer of another size still offers yours back'
   async ({ page }) => {
     await H.openBins(page, binsUrl());
     await H.dragCells(page, [0, 0], [1, 1]);
-    await settle(page);
+    await saved(page);
     const save = await stored(page, BINS);
     await arrive(page, binsUrl() + '#' + save.replace(/(^|&)w=\d+/, '$1w=500'));
     expect(await page.evaluate(() => state.drawerW)).toBe(500);
@@ -902,3 +916,280 @@ test('a layout that will not write is not saved as something else', async ({ pag
   await settle(page);
   expect(await stored(page, BINS)).toBe(save);
 });
+
+/* A link pasted over the page as an edit's save comes due. The paste puts the link in the
+   address at once and its hashchange, which reloads onto it, comes after; a page still
+   drawing the edit comes to the waiting save first. That save wrote the page's own design
+   back over the link, the hashchange then found that and reloaded it, and the link was
+   gone, with nothing said. Here the save runs in the same task as the paste, as it did. */
+for (const [tool, key] of [['plates', PLATES], ['bins', BINS]]) {
+  test(`a link pasted over ${tool} as an edit's save comes due is the link`, async ({ page }) => {
+    const errors = watch(page);
+    await arrive(page, tool === 'bins' ? binsUrl() : platesUrl());
+    const before = await page.inputValue('#drawerW');
+    // the edit, its save still waiting when the paste lands, all in one task
+    await Promise.all([page.waitForEvent('load'), page.evaluate(() => {
+      const e = document.getElementById('drawerW');
+      e.value = '412';
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+      e.dispatchEvent(new Event('change', { bubbles: true }));
+      if (typeof landEdit === 'function') landEdit();  // the edit read in, as a save does
+      location.hash = '#w=333&d=444&v=2';
+      saveNow();
+    })]);
+    await ready(page);
+    expect(await page.inputValue('#drawerW')).toBe('333');
+    await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
+    // the edit was saved, and is what the link set aside
+    expect(await stored(page, key + ':prev')).toMatch(/(^|&)w=412(&|$)/);
+
+    /* Back goes to the address before the paste, which never had the edit: it is aside, and
+       in no earlier address, so it is offered there too. */
+    await page.goBack();
+    await ready(page);
+    expect(await page.inputValue('#drawerW')).toBe(before);
+    await expect(page.locator('#setAsideMsg'))
+      .toHaveText('This page went back to an earlier layout of yours. The later one is set aside.');
+    await clickAndLoad(page, '#putBack');
+    expect(await page.inputValue('#drawerW')).toBe('412');
+    expect(errors).toEqual([]);
+  });
+}
+
+/* And only that save. A layout aside for any other reason can be older than the page Back
+   brings: someone's link kept as a drawer of yours, a second link over it, then Back to the
+   first. That offered "the later one", and Put back brought the layout from before the
+   first link, with the second gone from Forward. */
+for (const tool of ['plates', 'bins']) {
+  test(`Back to a link kept as a drawer on ${tool}, over a second link, offers nothing older`,
+    async ({ page }) => {
+      const errors = watch(page);
+      const url = tool === 'bins' ? binsUrl() : platesUrl();
+      await arrive(page, url);
+      await H.setField(page, 'drawerW', '400');
+      await saved(page);
+      const paste = async (h) => {
+        await Promise.all([page.waitForEvent('load'), page.evaluate((x) => { location.hash = x; }, h)]);
+        await ready(page);
+      };
+      await paste('#w=333&d=444&v=2');
+      await page.click('#drawersBtn');
+      await page.fill('#drawersNewName', 'Kit');
+      await page.press('#drawersNewName', 'Enter');
+      await expect(page.locator('#drawersMsg')).toContainText('Saved as “Kit”');
+      await page.click('#drawersClose');
+      await saved(page);
+      await paste('#w=355&d=466&v=2');
+      await expect(page.locator('#setAsideMsg')).toHaveText('This link replaced the layout you had here.');
+
+      await page.goBack();
+      await ready(page);
+      expect(await page.inputValue('#drawerW')).toBe('333');
+      await expect(page.locator('#drawerName')).toHaveText('Kit');
+      await expect(page.locator('#setAside'), 'nothing is offered').toBeHidden();
+      await page.goForward();
+      await ready(page);
+      expect(await page.inputValue('#drawerW'), 'and the second link is still Forward').toBe('355');
+      expect(errors).toEqual([]);
+    });
+}
+
+/* ---------- Start fresh ----------------------------------------------------- */
+
+/* Start fresh clears this browser's save and loads the bare page, and the page runs on
+   until that one arrives. A change that landed in between was saved after the clearing,
+   and the bare page came back with it, saying it had been restored. Here the bare page is
+   slow to come, and the change lands 50 ms after the press: on Baseplates a field's
+   change, on Bins its input, which Bins reads in 180 ms on. Both pages are covered. */
+for (const tool of ['plates', 'bins']) {
+  test(`Start fresh on ${tool} is not undone by a change that lands as the page goes`, async ({ page }) => {
+    const errors = watch(page);
+    const url = tool === 'bins' ? binsUrl() : platesUrl();
+    await arrive(page, url + '#w=333&d=444&v=2');
+    await page.route((u) => u.href === url, async (route) => {
+      await new Promise((r) => setTimeout(r, 1500));
+      await route.continue();
+    });
+    await Promise.all([page.waitForEvent('load'), page.evaluate((ev) => {
+      document.getElementById('startFresh').click();
+      setTimeout(() => {
+        const e = document.getElementById('drawerW');
+        e.value = '345';
+        e.dispatchEvent(new Event(ev, { bubbles: true }));
+      }, 50);
+    }, tool === 'bins' ? 'input' : 'change')]);
+    await ready(page);
+    expect(await page.inputValue('#drawerW')).not.toBe('345');
+    await expect(page.locator('#restored')).toBeHidden();
+    expect(await stored(page, tool === 'bins' ? BINS : PLATES)).not.toMatch(/(^|&)w=345(&|$)/);
+    expect(errors).toEqual([]);
+  });
+}
+
+/* And the button is wired before the boot reads a link, so a link that throws partway
+   through the boot does not take it away: Start fresh still clears the save and loads the
+   bare page with the defaults, though the page never got as far as letting saves start.
+   The links that used to throw no longer do, so the page is made to throw here, after it
+   has read a link carrying `boom`. The note the button sits in is shown later in the
+   boot, so it is pressed from script. */
+for (const tool of ['plates', 'bins']) {
+  test(`Start fresh on ${tool} still clears the save when a link throws in the boot`, async ({ page }) => {
+    const url = tool === 'bins' ? binsUrl() : platesUrl();
+    await arrive(page, url);
+    await H.setField(page, 'drawerW', '451');
+    await saved(page);
+    await page.route((u) => u.href === url, async (route) => {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, body: (await res.text()).replace('loadFromHash(src);',
+        "loadFromHash(src); if (/(^|&)boom=/.test(src)) throw new Error('boom');") });
+    });
+    const thrown = [];
+    page.on('pageerror', (e) => thrown.push(String(e)));
+    await arrive(page, url + '#w=345&d=444&boom=1&v=2');
+    expect(thrown.join(), 'the boot threw').toContain('boom');
+    await Promise.all([page.waitForEvent('load'),
+      page.evaluate(() => document.getElementById('startFresh').click())]);
+    await ready(page);
+    expect(await page.evaluate(() => new URL(performance.getEntriesByType('navigation')[0].name).hash),
+      'the bare page').toBe('');
+    expect(await page.inputValue('#drawerW')).not.toBe('451');
+    expect(await page.inputValue('#drawerW')).not.toBe('345');
+    await expect(page.locator('#restored')).toBeHidden();
+    expect(thrown.filter((e) => !/boom/.test(e))).toEqual([]);
+  });
+}
+
+/* However early the boot stops, Start fresh also ends the record of an edit a pasted link
+   set aside (see the paste tests above). The record's key is declared with the save's: declared
+   where the record is read, further on, it was not there yet for a boot stopped before
+   that, and the record stayed. The page is made to throw just after the button is wired. */
+for (const tool of ['plates', 'bins']) {
+  test(`Start fresh on ${tool} ends the pasted-link record when the boot stops early`, async ({ page }) => {
+    const url = tool === 'bins' ? binsUrl() : platesUrl();
+    const key = (tool === 'bins' ? BINS : PLATES) + ':pasted';
+    await arrive(page, url);
+    await page.evaluate((k) => sessionStorage.setItem(k, JSON.stringify({ save: 'a', at: 'b' })), key);
+    const wired = "$('startFresh').addEventListener('click', startFresh);";
+    await page.route((u) => u.href === url, async (route) => {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, body: (await res.text()).replace(wired,
+        (m) => m + " if (/(^|&)boom=/.test(location.hash)) throw new Error('boom');") });
+    });
+    const thrown = [];
+    page.on('pageerror', (e) => thrown.push(String(e)));
+    await arrive(page, url + '#w=345&d=444&boom=1&v=2');
+    expect(thrown.join(), 'the boot threw').toContain('boom');
+    await Promise.all([page.waitForEvent('load'),
+      page.evaluate(() => document.getElementById('startFresh').click())]);
+    await ready(page);
+    expect(await page.evaluate((k) => sessionStorage.getItem(k), key), 'the record').toBeNull();
+    expect(thrown.filter((e) => !/boom/.test(e))).toEqual([]);
+  });
+}
+
+/* And it ends the offer of an edit a pasted link set aside (see the paste tests above). The
+   edit was offered on Back, and left; then a bare visit, and Start fresh there. The record
+   of the edit's save stayed, and the fresh page is at the address it names: another link
+   pasted over it, then Back to it, offered the edit as the later layout, and Put back
+   brought it, though Start fresh came after it. Both pages are covered. */
+for (const tool of ['plates', 'bins']) {
+  test(`Start fresh on ${tool} ends the offer of an edit a pasted link set aside`, async ({ page }) => {
+    const errors = watch(page);
+    const url = tool === 'bins' ? binsUrl() : platesUrl();
+    await arrive(page, url);
+    await saved(page);
+    const paste = async (h, edit) => {
+      await Promise.all([page.waitForEvent('load'), page.evaluate(([h, edit]) => {
+        if (edit) {
+          const e = document.getElementById('drawerW');
+          e.value = edit;
+          e.dispatchEvent(new Event('input', { bubbles: true }));
+          e.dispatchEvent(new Event('change', { bubbles: true }));
+          if (typeof landEdit === 'function') landEdit();
+        }
+        location.hash = h;
+        if (edit) saveNow();
+      }, [h, edit])]);
+      await ready(page);
+    };
+    await paste('#w=333&d=444&v=2', '412');
+    await page.goBack();
+    await ready(page);
+    await expect(page.locator('#setAsideMsg'))
+      .toHaveText('This page went back to an earlier layout of yours. The later one is set aside.');
+
+    await arrive(page, url);
+    await clickAndLoad(page, '#startFresh');
+    await saved(page);
+    await paste('#w=355&d=466&v=2');
+    await page.goBack();
+    await ready(page);
+    expect(await page.inputValue('#drawerW'), 'the fresh page').not.toBe('355');
+    await expect(page.locator('#setAside'), 'nothing is offered').toBeHidden();
+    expect(errors).toEqual([]);
+  });
+}
+
+/* Start fresh stops the page's saves as it goes, and a browser that keeps the page in its
+   back-forward cache can show it again on Back. Shown again, it is a page of yours, and its
+   changes save, as they did before Start fresh and as they do when it is loaded again.
+   Chromium does not keep it, so here the page is stopped before the fresh one arrives and
+   shown again as the cache would. Both pages are covered, and so is Start fresh pressed twice
+   before the page goes. The second press found saves already stopped by the first, and the
+   page shown again from the cache did not save. */
+for (const tool of ['plates', 'bins']) for (const presses of [1, 2]) {
+  test(`a ${tool} page left by Start fresh${presses === 2 ? ', pressed twice,' : ''} and shown again from ` +
+    'the cache saves again', async ({ page }) => {
+    const errors = watch(page);
+    const url = tool === 'bins' ? binsUrl() : platesUrl();
+    await arrive(page, url);
+    await H.setField(page, 'drawerW', '451');
+    await saved(page);
+    await arrive(page, url);                       // a bare visit, restoring it, which offers Start fresh
+    await page.route((u) => u.href === url, async (route) => {
+      await new Promise((r) => setTimeout(r, 5000));
+      await route.continue().catch(() => {});
+    });
+    await page.evaluate((presses) => {
+      for (let i = 0; i < presses; i += 1) document.getElementById('startFresh').click();
+      window.stop();                               // the fresh page never arrives
+      dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    }, presses);
+    await H.setField(page, 'drawerW', '377');
+    await saved(page);
+    expect(await stored(page, tool === 'bins' ? BINS : PLATES)).toMatch(/(^|&)w=377(&|$)/);
+    expect(errors).toEqual([]);
+  });
+}
+
+/* Not once Put back is pressed after it, before the fresh page arrives: Put back leaves last,
+   and that page, shown again from the cache, would save over the layout just put back. */
+for (const tool of ['plates', 'bins']) {
+  test(`a ${tool} page left by Start fresh, then Put back, and shown again from the cache does not save`,
+    async ({ page }) => {
+      const errors = watch(page);
+      const url = tool === 'bins' ? binsUrl() : platesUrl();
+      const key = tool === 'bins' ? BINS : PLATES;
+      await arrive(page, url);
+      await H.setField(page, 'drawerW', '451');
+      await saved(page);
+      await arrive(page, url + '#w=333&d=444&v=2');   // a link, which sets that layout aside
+      await expect(page.locator('#putBack')).toBeVisible();
+      await page.route((u) => u.href === url, async (route) => {
+        await new Promise((r) => setTimeout(r, 5000));
+        await route.continue().catch(() => {});
+      });
+      await page.evaluate(() => {
+        document.getElementById('startFresh').click();
+        document.getElementById('putBack').click();
+        window.stop();                               // neither page arrives
+        dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+      });
+      const put = await stored(page, key);
+      expect(put, 'the layout put back').toMatch(/(^|&)w=451(&|$)/);
+      await H.setField(page, 'drawerW', '377');
+      await settle(page);
+      expect(await stored(page, key), 'still the layout put back').toBe(put);
+      expect(errors).toEqual([]);
+    });
+}
