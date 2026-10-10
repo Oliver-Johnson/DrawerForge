@@ -933,11 +933,14 @@ currently installed):
   first point every time), which for half the bosses is the cell's corner. A spoke from
   there passed 1.3 microns from a corner of a 2 mm shank opening on the top at 34.32 mm,
   and 5.3 from a corner of a magnet's pocket from above at 34.73 and 38.95 mm, and the
-  sliver went: 3 open edges a cell that none of `cutAgain`'s tries closed. The cap is
-  convex, so any point inside it will do: a boss still open after those tries has its top
+  sliver went: 3 open edges a cell that none of `cutAgain`'s tries closed. The underside
+  is fanned the same way, and a 4.9 mm magnet from beneath at 43.9 mm opened there. The
+  cap is convex, so any point inside it will do: a boss still open after those tries,
+  with an open edge at its top's height or its underside's, has that cap (or both)
   fanned again from the point `fanCentre` picks clear of the corners of its cutter's
-  walls at the top (`refanTop`), the pocket cut again, and the result kept on the same
-  terms as the bottom face's. A boss that comes out closed keeps the fan from its corner.
+  walls at that height (`refanCaps`), the pocket cut again, and the result kept on the
+  same terms as the bottom face's. A boss that comes out closed keeps the fans from its
+  corner.
   Only the bosses no joint reaches are refanned: over 3,824 designs with each joint that
   reaches the bosses, two pieces from 34 to 46.65 mm every 0.05, with screws, a magnet
   from beneath and screws, or a magnet from above, each at its cap, none of the 6,884

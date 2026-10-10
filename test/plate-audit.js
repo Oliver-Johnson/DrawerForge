@@ -2711,12 +2711,13 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
      the top, the sliver between goes (#91): a 2 mm shank at 34.32 mm, 1.3 microns, alone
      or under a 6 mm magnet from beneath, a 4 mm magnet's pocket from above at 34.73 mm
      and a 6 mm one's at 38.95, 5.3 microns, each with the head at the field's cap; and
-     with no screw, a 4.9 mm magnet from above at 43.9 mm, its cap there. Every try of
+     with no screw, a 4.9 mm magnet from above at 43.9 mm, its cap there. Its underside is
+     fanned the same way, and the same magnet from beneath opened there. Every try of
      cutAgain left one boss a cell open, 3 edges, and 6 to 15 over 2 x 2, with Download
-     on, until a boss still open after them had its top fanned again clear of those
-     corners (refanTop in buildPiece). Each has to be taken and build with nothing open
-     and no folds; the 2 x 2 pieces keep the edges their bosses share (quarantined
-     above). */
+     on, until a boss still open after them had the cap it is open on fanned again clear
+     of those corners (refanCaps in buildPiece). Each has to be taken and build with
+     nothing open and no folds; the 2 x 2 pieces keep the edges their bosses share
+     (quarantined above). */
   for (const [name, n, over] of [
     ['34.32 mm, 2 mm hole', 1, { pitch: 34.32, screwHoleD: 2, screwHeadD: 6.1 }],
     ['34.32 mm, 2 mm hole, 6 mm magnet below', 1, { pitch: 34.32, magnets: true, screwHoleD: 2, screwHeadD: 6.1 }],
@@ -2726,11 +2727,13 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
       screwHeadD: 9.7 }],
     ['43.9 mm, 4.9 mm magnet above, no screw', 1, { pitch: 43.9, magnets: true, magnetD: 4.9, magnetSide: 'top',
       screws: false }],
+    ['43.9 mm, 4.9 mm magnet below, no screw', 1, { pitch: 43.9, magnets: true, magnetD: 4.9, screws: false }],
     ['34.32 mm, 2 mm hole, 2 x 2', 2, { pitch: 34.32, screwHoleD: 2, screwHeadD: 6.1 }],
     ['34.73 mm, 4 mm magnet above, 2 x 2', 2, { pitch: 34.73, magnets: true, magnetD: 4, magnetSide: 'top',
       screwHoleD: 2, screwHeadD: 6.5 }],
     ['38.95 mm, 6 mm magnet above, 2 x 2', 2, { pitch: 38.95, magnets: true, magnetSide: 'top', screwHoleD: 3,
-      screwHeadD: 9.7 }]]) {
+      screwHeadD: 9.7 }],
+    ['43.9 mm, 4.9 mm magnet below, 2 x 2', 2, { pitch: 43.9, magnets: true, magnetD: 4.9, screws: false }]]) {
     const at = { drawerW: n * over.pitch, drawerD: n * over.pitch, bedW: 400, bedD: 400, baseMode: 'bosses',
                  connector: 'none', screws: true, ...over };
     const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
