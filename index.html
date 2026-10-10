@@ -7712,11 +7712,14 @@ const DRAWERS = (function () {
        of the refusals it holds (see rids), so that once they land, its records can be told
        apart from one still to save (see land), and each one's base (`bs`, the page's own
        but for a catch-up's). Nothing for any other page, whose base is the design it hands
-       on. */
+       on. The page's first id counts from its own base, in a catch-up's record too: a
+       catch-up that cannot leave its note stays put, with that base. Made with the base
+       caught up, the id took another tab's depth for the drawer's, and a reload then took
+       the page's depth from before for its own change, and saved it over that tab's. */
     const newRid = () => Math.random().toString(36).slice(2, 10) || 'r';
     const carry = (on, b, bs = bases) => {
       if (!(on && b)) return {};
-      if (!rids.length) { rids = [newRid()]; bases = new Map([[rids[0], b]]); }
+      if (!rids.length) { rids = [newRid()]; bases = new Map([[rids[0], base || b]]); }
       return { refused: true, base: [...b], rids: rids.slice(), bases: rids.map((id) => [...(bs.get(id) || b)]) };
     };
     // ids as a record or the tab's note has them, what carry makes and no more
@@ -7775,7 +7778,10 @@ const DRAWERS = (function () {
     }
     /* The refusals `held` ([id, base], oldest first) as the page's own: the last 32, the
        first of them counted from the page's base, which is the first one's, so the changes
-       of those let go are still counted. */
+       of those let go are still counted. Those let go never land, though: a page more than
+       31 hand-overs before one whose save went through holds none of the ids that page
+       did, and Back to it counts its change as still to save. As does any page once the
+       tab has landed 128 ids since its own (see land). */
     function hold(held) {
       const kept = held.slice(-32);
       if (kept.length < held.length) kept[0] = [kept[0][0], base];
