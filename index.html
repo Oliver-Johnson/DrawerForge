@@ -2379,11 +2379,12 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * (34 to 56 mm; 2 x 2 in one piece, 3 x 2 in two, 3 x 3 in four, two pieces with
  * dovetails or jigsaws, 2 x 2 on corner bosses; magnets of 3 to 13 mm, either way up),
  * of the 354 taken 48 were open, folded or had a face turned over unturned, leaving out
- * the edges where corner bosses meet, and 2 now, where π/252 left 1 and main 5 of its
- * 356. One leaks on every one of them; the other, which π/252 and main build closed, is
- * an 8.798 head 0.592 deep under a 7.037 x 2.5 magnet from above at 42 mm, where a
- * sloped plane meets a flat of the counterbore half a micron under its roof and each
- * cell has an edge shared four ways and two folds. On 900 more drawn the same way on one
+ * the edges where corner bosses meet, and 1 now, where π/252 left 1 and main 5 of its
+ * 356; it leaks on every one of them. An 8.798 head 0.592 deep under a 7.037 x 2.5
+ * magnet from above at 42 mm, where a sloped plane meets a flat of the counterbore half a
+ * micron under its roof, had an edge shared four ways and two folds a cell, which
+ * π/252 and main build closed, until a cell whose pockets come out with a face turned
+ * over was cut again (the fastener cut in buildPiece). On 900 more drawn the same way on one
  * cell, the test tile, 2 x 2, corner bosses and two pieces, each held to what the page
  * takes, 56 of 498 were bad unturned and none of 496 now, where π/252 left 2 (the 13.582
  * head among them) and main 2 of its 504. With the head
@@ -2392,7 +2393,7 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * counterbore on a flat's plane, 18 of the 108 taken from above and 8 of the 186 from
  * beneath were bad unturned, and none now or at π/252 (main 6 and 2); on one cell, every
  * 0.5 mm of pitch, 28 of 216 and 14 of 360, and none now or at π/252 (main 21 and 8). In
- * the STL read back, 15 of those designs show a fold here, 30 at π/252 and 114 on main,
+ * the STL read back, 14 of those designs show a fold here, 30 at π/252 and 114 on main,
  * and here and at π/252 every one the mesh does not have is a triangle with no area.
  *
  * The shank is turned a little about its axis (`turn`, #74) where a corner of the
@@ -5487,8 +5488,23 @@ function buildPiece(cfg, layout, piece, onStatus) {
            closed each of those already, so that try is not taken. The nudges and the one
            site at a time came after: of 687 random page designs with a solid floor, the
            three tries left 6 open and these leave 4, none worse; and from 50 to 60 mm,
-           magnets and screws from 15 mm up, they closed six of the nine left open. */
-        if (next.open && next.open <= 24) {
+           magnets and screws from 15 mm up, they closed six of the nine left open.
+
+           With screws, a cell that comes out closed but with a face the repair left turned
+           over (healCsgSeams' `turned`) is cut again the same ways too, and the first try
+           that is closed with nothing turned over is kept. Turned half a facet off the
+           magnet pocket (MOUNT_BORE.head.turn), two of a counterbore's flats can stand
+           square to the cell's x edges, and the BSP split one into a strip 3.3 microns
+           wide that came out folded back: a 3.89 mm head 1 deep over a 1.01 mm shank under
+           a 3 x 2 magnet from above folded 3 times a cell at 45.16 mm with a dovetail and
+           at 44 mm on one cell, where main builds both closed. The cutters turned a 28th
+           more close it. Over 2,366 designs with screws drawn round the counterbore's turn,
+           49 were cut again for it, 47 came out other bytes, 4 that folded build closed
+           (the 8.798 head MOUNT_BORE names among them), none came out worse, and building
+           them all took 1.5% longer. Without screws nothing is cut again for it, and those
+           designs build main's bytes, as they did. */
+        const folded = cfg.screws && !next.open && next.turned;
+        if (next.open && next.open <= 24 || folded) {
           const n4 = cut.length / 4;   // fasteners() lays the four sites' cutters one after another
           const tries = [() => csgSubtract(region, cut.slice().reverse()),
                          () => csgSubtract(region.slice().reverse(), cut),
@@ -5499,7 +5515,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
           for (const t of tries) {
             let again;
             try { again = t(); } catch (e) { continue; }   // the first cut stands
-            if (!again.open) { next = again; break; }
+            if (!again.open && !(folded && again.turned)) { next = again; break; }
           }
         }
         return next;
@@ -8520,10 +8536,11 @@ const halfCellMm = () => Math.ceil(state.pitch / 2 * 100 - 1e-6) / 100;
 const LENGTH_IDS = ['drawerW', 'drawerD', 'mLeft', 'mRight', 'mFront', 'mBack'];
 let unit = 'mm';   // what the length fields are showing; the saved choice is applied at boot
 
-function readNumber(id) {
+// `held`, a size read in place of the field's: the screw head as readControls holds it
+function readNumber(id, held) {
   const lim = LIMITS[id];
   const len = LENGTH_IDS.includes(id);
-  const v = len ? FIELDS.lengthOf($(id), unit) : parseFloat($(id).value.trim());
+  const v = held !== undefined ? held : len ? FIELDS.lengthOf($(id), unit) : parseFloat($(id).value.trim());
   if (!lim) return isFinite(v) ? v : 0;
   /* Out of play, a field keeps its fixed range but not the one the rest of the design
      sets, and does not complain: magnets off at a 30 mm pitch should not quietly shrink
@@ -8675,20 +8692,31 @@ function readControls() {
      the head's own size moves its cap and gaps: read against the head before it, a 14.05 mm
      head pasted over a 6 at 46.45 mm with a jigsaw and a 6.2 mm magnet from beneath took the
      6's 14.1 and built, where its own turn stops it at 14, and 14.1 over a 14 was held to
-     the 14's cap at every read after. So the head is measured as typed. The shank's turn
-     goes by the head's, and the magnet pocket it runs through caps it (mountLimits'
-     throughMagnet), so it is read last, on the head as read, measured again where that is
-     not the head typed: one held to its cap or a gap's end. Under an 8.3 mm head held to 7.9
-     at 41.86 mm with a jigsaw, loose, a 7.8 mm hole measured on the 8.3 would be turned and
-     refused. Read before them only, a 5 mm hole stood under a 5.1 mm magnet typed in after
-     it, refused only at the next keystroke. */
+     the 14's cap at every read after. So the head is measured as typed, and one held to its
+     cap or a gap's end is another head, measured again and held again on its own until it
+     holds: an 8.86 mm head at 42 mm with snap clips in the floor and a 3.85 mm magnet from
+     beneath turns and stops at 7.8, but 7.8 does not turn and stops at 7.6, and the page
+     named 7.8 and then refused it. Each pass holds it lower, to a tenth or a gap's end: of
+     3,124 heads pasted over 781 random designs on the page, 1,286 were held once and 33
+     twice, none more, and four passes are allowed. The shank's turn goes by the head's,
+     and the magnet pocket it runs through caps it (mountLimits' throughMagnet), so it is
+     read last, on the head as held: under an 8.3 mm head held to 7.9 at 41.86 mm with a
+     jigsaw, loose, a 7.8 mm hole measured on the 8.3 would be turned and refused. Read
+     before them only, a 5 mm hole stood under a 5.1 mm magnet typed in after it, refused
+     only at the next keystroke. */
   if (state.screws && mountNow) {
     const typed = parseFloat($('screwHeadD').value.trim());
-    mountNow = mountLimits(isFinite(typed) ? { ...state, screwHeadD: typed } : state,
-                           mountLayout, mountNow.cuts);
+    let on = isFinite(typed) ? typed : state.screwHeadD;
     fieldErrors.delete('screwHeadD'); noRoom.delete('screwHeadD');
-    state.screwHeadD = readNumber('screwHeadD');
-    if (state.screwHeadD !== typed) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
+    for (let pass = 0; ; pass++) {
+      mountNow = mountLimits({ ...state, screwHeadD: on }, mountLayout, mountNow.cuts);
+      // a head held already that its own limits take keeps the reason it was held for
+      if (pass && on <= mountNow.screwHeadD && !mountNow.gaps.screwHeadD.some(([a, b]) => on > a && on < b)) break;
+      state.screwHeadD = readNumber('screwHeadD', pass ? on : undefined);
+      if (state.screwHeadD === on || pass === 3) break;
+      on = state.screwHeadD;
+    }
+    if (state.screwHeadD !== on) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
     fieldErrors.delete('screwHoleD'); noRoom.delete('screwHoleD');
     state.screwHoleD = readNumber('screwHoleD');
   }
