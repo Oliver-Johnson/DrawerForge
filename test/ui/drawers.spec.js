@@ -1400,6 +1400,57 @@ for (const tool of ['plates', 'bins']) {
   });
 }
 
+/* And three hand-overs on, where the page Forward comes to arrived by a note holding the
+   refusals of the pages before it: the note gives each its base. Counted from the first's,
+   the size was that page's change again after it was saved and set back. The other pages
+   on the way are reloaded to catch up, and the one of the first page's tool onto the
+   drawer as it has that half now, so it is the fourth that tells. */
+for (const tool of ['plates', 'bins']) {
+  test(`Forward three hand-overs on from a ${tool} page has the refused size set back on Back since`,
+    async ({ page }) => {
+      test.setTimeout(120000);
+      const there = tool === 'plates' ? 'bins' : 'plates';
+      const ready = (t) => (t === 'bins' ? binsReady : platesReady);
+      const full = (on) => page.evaluate((x) => sessionStorage.setItem('full', x ? '1' : '0'), on);
+      await page.addInitScript(fullStorage);
+      const errors = await kitchenOn(page, tool);
+      await refuseSize(page);
+      for (const t of [there, tool, there]) {
+        await page.click(t === 'bins' ? '#navBins' : '#navPlates');
+        await ready(t)(page);
+        await expect(page.locator('#drawerName'), 'its save refused').toHaveText('not saving · Kitchen');
+        await settle(page);
+      }
+      for (const t of [tool, there, tool]) {
+        await page.goBack();
+        await ready(t)(page);
+      }
+      await full(false);
+      await changeOwn(page, tool);
+      await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+        { message: 'the size saved here', timeout: 20000 }).toBe('410');
+      await H.setField(page, 'drawerW', '400');
+      await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+        { message: 'and set back', timeout: 20000 }).toBe('400');
+      await settle(page);
+
+      await full(true);
+      for (const t of [there, tool, there]) {
+        await page.goForward();
+        await expect.poll(() => page.inputValue('#drawerW').catch(() => ''),
+          { message: `Forward to ${t}, the size set back`, timeout: 20000 }).toBe('400');
+        await ready(t)(page);
+        await settle(page);
+      }
+      await full(false);
+      await changeOwn(page, there);
+      const [, v, key] = ownChange(there);
+      await expect.poll(() => stored(page).then((s) => s.Kitchen),
+        { message: 'the next change keeps it', timeout: 20000 }).toMatchObject({ w: '400', [key]: v });
+      expect(errors).toEqual([]);
+    });
+}
+
 /* A page holding a size the drawer refused, saved as another drawer, where a change is
    refused and then saved. Back to the page that made the size, still Kitchen's, keeps the
    size: it went into the other drawer, never Kitchen. The refusal in the other drawer
@@ -1487,48 +1538,97 @@ test('after more hand-overs than a page keeps ids for, a refused size is saved, 
 /* The refusals' ids are only what the page makes, however a record or the tab's note has
    them. A mark whose ids are not, landed in the tab's note as they are, is a refused size
    still to save, and so after the page's own refused save, reloaded again, with none of
-   those ids, a long one among them, in its mark since. So is one whose bases are not lists,
-   with far more ids landed than the tab keeps. No error, and with room the size is saved,
-   and the tab keeps the last 128 landed. */
-test('a refused size outlives refusal ids and bases that are not what the page writes', async ({ page }) => {
-  await page.addInitScript(fullStorage);
-  const errors = await kitchenOn(page, 'plates');
-  await refuseSize(page);
-  const reloaded = async (why) => {
+   those ids, a long one among them, in its mark since. So is one whose bases are not lists
+   and not one to an id, with far more ids landed than the tab keeps. No error, and with
+   room the size is saved, and the tab keeps the last 128 landed. A base for each id is
+   taken as it is: only the page's own code writes the address's mark. */
+test('a refused size outlives refusal ids that are not what the page writes, and bases not one to an id',
+  async ({ page }) => {
+    await page.addInitScript(fullStorage);
+    const errors = await kitchenOn(page, 'plates');
+    await refuseSize(page);
+    const reloaded = async (why) => {
+      await page.reload();
+      await platesReady(page);
+      await settle(page);
+      expect(await page.inputValue('#drawerW'), why).toBe('410');
+      await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+    };
+    const spoil = (bad) => page.evaluate((bad) => {
+      const st = history.state.drawerforge;
+      const K = 'drawerforge:drawers:tab';
+      const n = JSON.parse(sessionStorage.getItem(K) || '{}');
+      if (bad === 'ids') {
+        const rids = ['Zz', '__proto__', 5, null, 'z'.repeat(1000000)];
+        history.replaceState({ drawerforge: { ...st, rids, bases: 'x' } }, '');
+        n.landed = ['Zz', '__proto__', '5', 'null'];
+      } else {
+        history.replaceState({ drawerforge: { ...st, bases: [{}, 'x', [[1, 2]]] } }, '');
+        n.landed = Array.from({ length: 100000 }, (_, i) => 'z' + i);
+      }
+      sessionStorage.setItem(K, JSON.stringify(n));
+    }, bad);
+    await spoil('ids');
+    await reloaded('ids that are not');
+    await reloaded('and again, after its own save refused');
+    expect(await page.evaluate(() => JSON.stringify(history.state).length), 'its mark').toBeLessThan(10000);
+    await spoil('bases');
+    await reloaded('bases that are not');
+    await page.evaluate(() => sessionStorage.setItem('full', '0'));
+    await changeOwn(page, 'plates');
+    await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+      { message: 'saved, with room', timeout: 20000 }).toBe('410');
+    const landed = await page.evaluate(() => JSON.parse(sessionStorage.getItem('drawerforge:drawers:tab')).landed);
+    expect(landed, 'the last 128 landed').toHaveLength(128);
+    expect(errors).toEqual([]);
+  });
+
+/* A page holding a refused size from a mark with no ids, as one from before refusals had
+   them, and a tab on the other page saves a depth. Reloaded, its catch-up cannot leave the note for its
+   reload, so it stays put. Its first id counts from its own base, as the page does: made
+   with the base caught up, a reload after took the page's depth from before for its own
+   change, and saved it over the other tab's. */
+test('a page whose catch-up cannot leave its note keeps another tab\'s depth once reloaded',
+  async ({ page, context }) => {
+    await page.addInitScript(fullStorage);
+    await page.addInitScript(() => {   // and the tab's note refused, while the tab says so
+      const write = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (k, v) {
+        if (this === window.sessionStorage && k === 'drawerforge:drawers:tab' &&
+            sessionStorage.getItem('noteFull') === '1') throw new DOMException('full', 'QuotaExceededError');
+        return write.apply(this, arguments);
+      };
+    });
+    const errors = await kitchenOn(page, 'plates');
+    await refuseSize(page);
+    await page.evaluate(() => {
+      const st = { ...history.state.drawerforge };
+      delete st.rids;
+      delete st.bases;
+      history.replaceState({ drawerforge: st }, '');
+    });
+    await inOtherTab(context, 'bins', errors, (other) => H.setField(other, 'drawerD', '520'));
+    await page.evaluate(() => sessionStorage.setItem('noteFull', '1'));
     await page.reload();
     await platesReady(page);
     await settle(page);
-    expect(await page.inputValue('#drawerW'), why).toBe('410');
+    expect(await page.inputValue('#drawerD'), 'stayed put').toBe('380');
+    await changeOwn(page, 'plates');
     await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
-  };
-  const spoil = (bad) => page.evaluate((bad) => {
-    const st = history.state.drawerforge;
-    const K = 'drawerforge:drawers:tab';
-    const n = JSON.parse(sessionStorage.getItem(K) || '{}');
-    if (bad === 'ids') {
-      const rids = ['Zz', '__proto__', 5, null, 'z'.repeat(1000000)];
-      history.replaceState({ drawerforge: { ...st, rids, bases: 'x' } }, '');
-      n.landed = ['Zz', '__proto__', '5', 'null'];
-    } else {
-      history.replaceState({ drawerforge: { ...st, bases: [{}, 'x', [[1, 2]]] } }, '');
-      n.landed = Array.from({ length: 100000 }, (_, i) => 'z' + i);
-    }
-    sessionStorage.setItem(K, JSON.stringify(n));
-  }, bad);
-  await spoil('ids');
-  await reloaded('ids that are not');
-  await reloaded('and again, after its own save refused');
-  expect(await page.evaluate(() => JSON.stringify(history.state).length), 'its mark').toBeLessThan(10000);
-  await spoil('bases');
-  await reloaded('bases that are not');
-  await page.evaluate(() => sessionStorage.setItem('full', '0'));
-  await changeOwn(page, 'plates');
-  await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
-    { message: 'saved, with room', timeout: 20000 }).toBe('410');
-  const landed = await page.evaluate(() => JSON.parse(sessionStorage.getItem('drawerforge:drawers:tab')).landed);
-  expect(landed, 'the last 128 landed').toHaveLength(128);
-  expect(errors).toEqual([]);
-});
+    await settle(page);
+
+    await page.evaluate(() => sessionStorage.setItem('noteFull', '0'));
+    await page.reload();
+    await expect.poll(() => page.inputValue('#drawerD').catch(() => ''),
+      { message: 'reloaded, the other tab\'s depth', timeout: 20000 }).toBe('520');
+    await platesReady(page);
+    expect(await page.inputValue('#drawerW'), 'and the size refused here').toBe('410');
+    await page.evaluate(() => sessionStorage.setItem('full', '0'));
+    await changeOwn(page, 'plates', ownChange2('plates'));
+    await expect.poll(() => stored(page).then((s) => s.Kitchen),
+      { message: 'saved with room', timeout: 20000 }).toMatchObject({ w: '410', d: '520' });
+    expect(errors).toEqual([]);
+  });
 
 /* Back from the back-forward cache, for real: the page does not load again, and only its
    pageshow sees the return. The browser the tests are given has the cache turned off, and
