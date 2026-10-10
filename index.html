@@ -5699,7 +5699,8 @@ function buildPiece(cfg, layout, piece, onStatus) {
     // through the top: mountLimits refuses one rather than this growing past it
     const bossH = bossHeight(cfg);
     const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
-    /* A boss's top, fanned again where its pocket comes out open after every try (#91).
+    /* A boss's top or underside, fanned again where its pocket comes out open there after
+       every try (#91).
        extrudePoly fans a convex cap from one corner of its outline (the ear clip takes
        the ear at its first point every time), and for half the bosses that is the cell's
        corner, with a spoke to each point of the rounded inner corner. A screw's shank or a
@@ -5715,18 +5716,28 @@ function buildPiece(cfg, layout, piece, onStatus) {
        the pocket cut again on it, and that is kept if it comes out closed with nothing
        turned over, sharing no more edges with the shells built beside it than the first
        cut. A boss that comes out closed is built as before, fanned from its corner, and
-       so is every boss of a design that builds closed. `cut` cuts the new prism as the
-       first was cut. */
-    const refanTop = (solid, outline, z, cutter, sites, cut) => {
-      const corners = cornersAt(z, cutter);
-      const c = fanCentre(outline, sites.flatMap((bs) =>
-        corners.map(([u, v]) => [bs.ccx + bs.sx*off + u, bs.ccy + bs.sy*off + v])));
+       so is every boss of a design that builds closed. The underside is a cap fanned the
+       same way, and a 4.9 mm magnet from beneath at 43.9 mm, its cap there, opened on it
+       as the one from above did on the top: each cap the boss is open on, at its height
+       (openAt), is fanned again, both at once where both are. `cut` cuts the new prism as
+       the first was cut. */
+    const refanCaps = (solid, outline, h, cutter, sites, cut) => {
+      const zs = [h, 0].filter((z) => openAt(solid, z));
+      if (!zs.length) return solid;
       const ccw = polyArea2D(outline) < 0 ? outline.slice().reverse() : outline;
-      const prism = extrudePoly(outline, 0, z).filter((p) => p.plane.n[2] < 0.5);   // all but the top
-      ccw.forEach((p, i) => {
-        const q = ccw[(i + 1) % ccw.length], tri = makePoly([[c[0], c[1], z], [p[0], p[1], z], [q[0], q[1], z]]);
-        if (tri) prism.push(tri);
-      });
+      const prism = extrudePoly(outline, 0, h).filter((p) =>   // all but the caps fanned again
+        !(p.plane.n[2] > 0.5 && zs.includes(h)) && !(p.plane.n[2] < -0.5 && zs.includes(0)));
+      for (const z of zs) {
+        const corners = cornersAt(z, cutter);
+        const c = fanCentre(outline, sites.flatMap((bs) =>
+          corners.map(([u, v]) => [bs.ccx + bs.sx*off + u, bs.ccy + bs.sy*off + v])));
+        ccw.forEach((p, i) => {
+          const q = ccw[(i + 1) % ccw.length];
+          const tri = makePoly(z === h ? [[c[0], c[1], z], [p[0], p[1], z], [q[0], q[1], z]]
+                                       : [[c[0], c[1], z], [q[0], q[1], z], [p[0], p[1], z]]);
+          if (tri) prism.push(tri);
+        });
+      }
       let again;
       try { again = cut(prism); } catch (e) { return solid; }   // the first cut stands
       if (!again || again.open || again.turned) return solid;
@@ -5831,8 +5842,8 @@ function buildPiece(cfg, layout, piece, onStatus) {
           const pocket = movePolys(bossFastener, ccx + sx*off, ccy + sy*off);
           const first = csgSubtract(boss, pocket);
           boss = first.open ? cutAgain(boss, pocket, first) : first;
-          if (boss.open)   // its top fanned again (refanTop)
-            boss = refanTop(boss, world, bossH, bossFastener, [all[n]], (prism) => {
+          if (boss.open)   // a cap it is open on fanned again (refanCaps)
+            boss = refanCaps(boss, world, bossH, bossFastener, [all[n]], (prism) => {
               const again = csgSubtract(prism, pocket);
               return again.open ? cutAgain(prism, pocket, again) : again;
             });
