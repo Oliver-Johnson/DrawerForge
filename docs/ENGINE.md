@@ -453,9 +453,10 @@ roofs, a joint's cuts and housings), level with none. Over the boss the rim is t
 socket's wall, and is not cut: a hole that opens on the boss's top, a magnet from above
 or a screw's shank, is held `MOUNT_SEAM` clear of it by `mountLimits` (`rim`), as a solid
 floor's is held to its socket floor. That takes 2.5 mm off the cap of a magnet from above
-and of a screw's hole at 34.5 mm (6.3 to 3.8, 6.5 to 4) and 2.4 at 38 (9.7 to 7.3); from
-40 mm the boss is the tighter cap. A magnet from beneath and a screw's head lose nothing,
-and a pocket the rim does not reach is built as it was, byte for byte.
+at 34.5 mm (6.3 to 3.8) and 2.4 off a screw's hole (6.2 to 3.8), and 2.4 off the magnet's
+at 38 (9.7 to 7.3); from 40 mm the boss is the tighter cap. A magnet from beneath and a
+screw's head lose nothing, and a pocket the rim does not reach is built as it was, byte
+for byte.
 
 `connector: 'puzzle'` used to be listed here as the first kind, and it is **no longer
 open anywhere**. It is worth reading how, because it needed two unrelated fixes and the
@@ -764,6 +765,79 @@ currently installed):
   thick walls, scoops, shelves and notes, holes, removable plates and half sizes, it
   came to 0.998 to 1.001, the lowest those whose shelf has a note raised on it, whose
   letters it leaves out.
+- **A mounting pocket's size is the size across its flats.** Every bore is a polygon, 14
+  sides for a magnet and a counterbore and 12 for a shank, and one with its corners on
+  the size asked is narrower than that across its flats: the default 6 mm counterbore was
+  5.85 mm, the 3 mm shank 2.90, a 10 mm magnet's pocket 9.94 even with its 0.1 mm press
+  fit at the corners. So every bore stands its corners 1/cos(π/n) of the radius out and
+  its flats on it, and the magnet keeps its 0.1 at the corners where that is further, up
+  to 7.77 mm. A screw gets no allowance on top: its head drops into the counterbore,
+  which the field already sizes with room round it. `MOUNT_BORE` says each bore's sides
+  and corner radius, and the largest size whose corners fit a room; `fastenerCutter` cuts
+  what it says, and `mountLimits` measures each bore as that polygon (`boreReach`) and
+  reads its sizes back from it, so the shape is decided in one place. A counterbore is
+  cut only over a shank it clears, its flats outside the shank's corners: the hole over
+  cos(π/12), and 0.01 mm more. Narrower, the 14 flats cross the 12 corners and the two
+  cuts' walls weave round the hole, and here and there a cell leaked by the hundred (#73:
+  2.03 mm over 2 with the corners on the sizes, 2.046 over 2 and 1.034 over 1 with the
+  flats). Such a head is cut as none, as one no wider than the hole always was. A
+  counterbore whose corners come within 0.05 mm of the magnet pocket's is cut at the
+  pocket's (`MOUNT_BORE.head.cut`), and where it reaches the pocket the two are cut as
+  one prism: both are 14-gons on the same rays, and a hair apart, where one stopped
+  inside the other, they left a ring that thin. Standing its flats on the size put the
+  default 6 mm head's corners 0.022 mm inside the 6 mm magnet's, and 3 mm deep under the
+  6 × 2 magnet from beneath it left 6 edges open a cell at 42 mm, the test tile among
+  them; main's head, its corners on the size, stood 0.1 off and built closed. A head in
+  the band is cut up to 0.1 mm wider or narrower across its flats than typed, and
+  `mountLimits` reads it back as cut (`head.fitsCut`). Out of the band a corner of the
+  counterbore can still stand on the plane of one of the pocket's flats, or a corner of
+  the pocket on one of the counterbore's, and the strip the BSP splits off along it came
+  out folded: the head at its 13.6 mm cap at 42 mm, 1.5 deep under the default 6 × 2
+  magnet from above, folded the default plate 160, 120, 128 and 96 times a piece, folds
+  as the audits count them, two faces with area back to back in the mesh. Where a
+  corner of either comes within 0.01 mm of a plane of the other, the counterbore is
+  turned half a facet, π/14, about its axis (`MOUNT_BORE.head.turn`), which puts its
+  corners midway between the pocket's, each 0.18 mm or more off the other's flats under
+  a magnet of 3 mm or more; its flats stand where they did, so the head fits as typed,
+  and the shank's turn and `mountLimits` go by it turned. So the limits are measured on
+  the bore as cut, turned where it is turned, and a head that turns can be given
+  another cap, and other sizes refused beside a joint's cut, than one that does not: of
+  1,034 designs drawn with a head near a size that turns, the turn moved the limits of
+  302, the head's cap by up to 0.4 mm up or 0.3 down. Measured both ways with the tighter
+  kept, the limits would hold still but come down for every head (0.1 to 0.3 mm on 28 of
+  140 page designs at five pitches). Turned less, the corners stayed near each other's:
+  π/252, with the same 0.01 mm, moved the limits less (102 of the 1,034, a tenth at
+  most), but left a 13.582 mm head 0.251 deep under a 6 × 3 magnet from above open by 12
+  edges a cell at 42 mm, and three more designs open or with shells touching, that π/14
+  builds closed. Its counterbore's roof also split, where a socket's sloped facet crossed
+  it 0.04 mm from the pocket's corners, into triangles with no area: the fold test
+  rightly leaves them out, but single precision in the STL gives each a direction, and
+  read back the default plate's STL showed 147 folds where its mesh had none. π/126
+  opened a design that π/14 builds closed. The shank is turned π/84 about
+  its axis where one of the counterbore's corners, or one of the magnet pocket's, would
+  otherwise stand within 0.01 mm of a flat's plane carried on past the shank
+  (`MOUNT_BORE.hole.turn`, which goes by the counterbore as cut, and by the pocket's
+  corners alone where no counterbore is cut: a 5 mm magnet from beneath that holds a
+  5.12 mm head whole over 4.18 mm left 12 edges open at 42 mm unturned, and the same
+  shank under the magnet from above with no counterbore 30): the BSP splits a magnet
+  pocket's floor or roof
+  along that whole plane, the weld pulled the corner onto the split, and the plate came
+  out open by the dozen round every site (#74: 136 edges a piece for 1.0353 mm under
+  1.0873 with a magnet from above at 42 mm, on main; and 26 a piece at 41.24 mm for a 3 mm
+  shank under a 7.3 mm magnet from above, whose corner stood 0.4 microns off a flat). The
+  two pockets' corners stand on the same rays, so where π/84 would bring one within 0.01
+  mm of a flat, the shank takes the step of the 24 across those 30/7° that keeps both
+  furthest off. A shank has to clear the magnet pocket it runs through as it would a
+  counterbore, and `mountLimits` refuses a wider one, which the field says
+  (`throughMagnet`): the pocket's flats cross the shank's corners, the walls weave, and
+  no turn kept them closed (5 mm under a 5.1 mm magnet and a 5.4 head at 42 mm left 47
+  edges turned for the magnet's corners). On every shank taken, turned, no corner of
+  either comes within 0.003 mm of a flat, and none within 0.0039 but under a magnet on a
+  shank under 1.2 mm; a shank no corner came near is cut as before. The page reads
+  the shank again after the head and the magnet, since its turn and that cap go by both.
+  `MOUNT_BORE.screw` says whether a design's counterbore is cut, how far out its corners
+  stand, and how far it and its shank are turned, for the cutter and for `mountLimits`,
+  which measures that counterbore and that shank turned.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the
@@ -807,7 +881,16 @@ currently installed):
   designs with a solid floor, the first three tries left 6 open and all of them leave
   4, none worse. A try that throws (the turned cutters there reach `healCsgSeams`'
   T-junction pass limit) is passed over and the first cut stands, where it used to fail
-  the whole build. The socket floor is a fan too, from the cell's centre, and a pocket
+  the whole build. With screws, a cell whose pockets come out closed but with a face the
+  repair left turned over (`.turned`) is cut again the same ways, and kept on the first
+  try that is closed with nothing turned over: turned half a facet off the magnet pocket,
+  two of a counterbore's flats can stand square to the cell's x edges, and a 3.89 mm head
+  1 deep over a 1.01 mm shank under a 3 × 2 magnet from above folded 3 times a cell at
+  45.16 mm with a dovetail and at 44 mm on one cell, where main builds both closed; the
+  turned cutters close it. Over 2,366 designs with screws drawn round the counterbore's
+  turn, 49 were cut again for it, 4 that folded build closed, none came out worse, and
+  building took 1.5% longer. Without screws nothing is cut again for it, so those designs
+  keep main's bytes. The socket floor is a fan too, from the cell's centre, and a pocket
   from above or a screw's shank stands on it: an 11.1 mm magnet from above at 48.55 mm has
   a pocket corner 4.7 microns from one of its spokes, by `fanCentre`'s measure, and loses
   the sliver there, six open edges in every cell that no try closed. How near is not what
@@ -948,19 +1031,39 @@ currently installed):
   the cell's side where it crosses it, and that side stands on the same plane as the
   neighbour's, so a split that lands on a corner of the neighbour's region is that
   corner's edge in both shells (a 21.7 mm magnet from beneath at 55 mm, 0.03 microns off;
-  a 22.2 mm screw shank at 56.5 mm, on main too). With pockets on the piece, every cell
-  and margin is checked against the shells built beside it (`settle`), and the pockets of
-  one or the other are cut again moved 1.7 microns, turned a 28th of a turn, or both. The
-  cut kept is the one that shares the fewest edges with every shell beside it: keeping one
-  that touched fewer shells, as `settle` first did, left a cell built later sharing an edge
-  nothing cleared (10.1 to 11.1 mm magnets at 47.91 to 50.05 mm, clean on main). And once
-  the cells are built, if the shells `settle` cut again have more bad edges with those
-  beside them than they started with, or more open or turned over, they all go back to
-  their first cut. That check sees only those shells and their neighbours as the cells
-  left them: the dovetail and puzzle tabs are made after it, and the top-insert pass cuts
-  its housings out of shells after it, so neither is judged by it. Two cups put in
-  from above from each side of a piece one cell deep meet face to face at 14.44 mm (twice a
-  cup's reach), and there they are built as one solid with `csgUnion`.
+  a screw shank 22.2 mm across its corners at 56.5 mm, on main too). With pockets on the
+  piece, every cell and margin is checked against the shells built beside it (`settle`),
+  and the pockets of one or the other are cut again moved 1.7 microns, turned a 28th of a
+  turn, or both. The cut kept is the one that shares the fewest edges with every shell
+  beside it: keeping one that touched fewer shells, as `settle` first did, left a cell
+  built later sharing an edge nothing cleared (10.1 to 11.1 mm magnets at 47.91 to
+  50.05 mm, clean on main). And once the cells are built, if the shells `settle` cut
+  again have more bad edges with those beside them than they started with, or more open
+  or turned over, they all go back to their first cut. That check sees only those shells
+  and their neighbours as the cells left them: the dovetail and puzzle tabs are made
+  after it, and the top-insert pass cuts its housings out of shells after it, so neither
+  is judged by it. Two cups put in from above from each side of a piece one cell deep
+  meet face to face at 14.44 mm (twice a cup's reach), and there they are built as one
+  solid with `csgUnion`.
+- **None of the fit clearance's ceilings that waited on a sweep can go up but the
+  bowtie's, and the puzzle's runs on to 20.7 mm.** `connClrCeiling` caps the field for
+  each joint, and five of its ceilings were set by open edges one step past them that
+  `cutAgain` closes. Swept again on 2 × 2 and 1-cell pieces, every 0.01 mm of pitch over
+  each ceiling's band, every 0.05 of the field past it and every 0.01 near a leak: the
+  dovetail's step past its 0.3 is open still at one pitch (0.35 at 42.35 mm), and the
+  puzzle key in the floor's past its 0.8 leaks at another (0.85 at 29.74). The puzzle and
+  the puzzle key under 20 mm leak within two steps of their 0.3 (0.38 at 18.54 mm, 0.37 at
+  18.07). The puzzle key's and the puzzle's are no longer holes: the joint's cut lands on
+  the edge of the `BLOAT` band two cells overlap in, along a line that climbs with the
+  field, and the two shells share that edge, as the dovetail's do from 0.39. The puzzle's
+  line runs on past 20 mm, 0.05 higher every 0.16 mm (0.85 at 20.05, 0.9 at 20.21, 1 at
+  20.53, 1.05 at 20.69), so its 0.3 holds on to 20.7, where the plain 1 mm has its step to
+  spare. A ceiling goes up a step only where the field builds clean to the step after it,
+  so all four stay. The bowtie in the floor under 20 mm leaked nowhere up to 1.05, at
+  every 0.01 mm from 13.5 to 20 and loose and tight at every 0.1, and takes the plain
+  1 mm. `test/plate-audit.js` builds each leak, which has to stay one and be refused, and
+  the bowtie's step to spare and the step under the puzzle's line at 20.05 mm, which have
+  to build closed.
 - **A face that is nothing but a straight line has no middle.** A weld that closes a
   T-junction can leave three corners on one line. Fanned from its average, the spokes land
   a fraction of a micron from a corner and read, to `checkManifold`'s thousandths, as the
@@ -979,5 +1082,6 @@ currently installed):
   counterbore's ceiling 2 microns from an edge of its own. Every piece with a seam on its
   left failed to build, for heads from 7.3 mm to the cap; 2.339 and 2.341 mm built. The
   second run is kept only if it comes out closed: a jigsaw plate at 41.24 mm with magnets
-  from above settles open after the merge, and fails to build as it did before rather
-  than going out with holes.
+  from above and main's bores (a 7.504 mm counterbore and a 3 mm shank, corners on the
+  sizes) settles open after the merge, and fails to build as it did before rather than
+  going out with holes.

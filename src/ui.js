@@ -109,8 +109,12 @@ const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'n
    reaches a boss's pocket (#75). Nor where the bosses are buried in the floor a
    joint needs (cornerBosses): a key put in from above, in the walls, needs none, so
    taking the hint would stand them up again, and the cup in their pockets. Only a floor
-   asked for (bottomPad) keeps them buried whatever the joint. */
+   asked for (bottomPad) keeps them buried whatever the joint. A screw hole the magnet
+   pocket stops is stopped whatever the pitch, so that is all it says. */
 const mountWhy = (opens, field) => {
+  if (field === 'screwHoleD' && mount().throughMagnet)
+    return `— it runs through the ${state.magnetD} mm magnet's pocket, and has to stay inside the pocket's sides ` +
+      'to leave a ledge round it that holds the magnet';
   const joint = mount().joint[field];
   const cuts = cutsNamed();
   return `${atPitch()} — mounting holes sit ` +
@@ -180,20 +184,27 @@ const LIMITS = {
     label: 'Screw head depth', when: () => state.screws, why: bossDepth },
   // each joint's ceiling is its own, so none is held to another's reason; see clrWhy
   connClr: { min: RANGES.connClr.min, max: () => connClrCeiling(state).max, label: 'Fit clearance',
-    when: () => state.connector !== 'none', why: () => clrWhy(connClrCeiling(state).by) },
+    when: () => state.connector !== 'none', why: () => clrWhy(connClrCeiling(state)) },
 };
 /* What sets the clearance's ceiling, in words: core.js connClrCeiling decides it and says
    which reason applies. A ceiling that moves with the pitch names the pitch, as the mount
-   sizes do, because that is the number to change; 'slip' is the plain 1 mm and keeps the
-   millimetres advice. */
-const CLR_JOINT = { puzzle: 'puzzle tab', bowtie: 'bowtie key', puzzlekey: 'puzzle key' };
-const clrWhy = (by) => ({
-  dovetail: '— any looser and a dovetail pocket breaks through into the socket beside it',
+   sizes do, because that is the number to change, and the pitch its band runs up to,
+   which for the puzzle is its own; 'slip' is the plain 1 mm and keeps the millimetres
+   advice. The puzzle and the puzzle key said they opened holes in the plate, as they did
+   until a joint's cut was taken again when it came out open (cutAgain in core.js); past
+   each ceiling now two cells' shells share an edge at some pitches, which is not
+   watertight either but is no hole. The dovetail said its pocket broke through into the
+   socket beside it, which it does from 0.25, under its ceiling. */
+const CLR_JOINT = { puzzle: 'puzzle tab', puzzlekey: 'puzzle key' };
+const clrWhy = ({ by, below }) => ({
+  dovetail: '— any looser and a dovetail pocket leaves the plate not watertight at some ' +
+    'pitches',
   snaptop: '— any looser and the housing of a snap clip dropped in from above runs up to ' +
     'the seam and on into the next piece',
-  pitch: `${atPitch()} — on cells under ${RANGES.connClr.smallPitch} mm a ` +
-    `looser ${CLR_JOINT[state.connector]} opens holes in the plate`,
-  joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess opens holes in the plate`,
+  pitch: `${atPitch()} — on cells under ${below} mm a ` +
+    `looser ${CLR_JOINT[state.connector]} leaves the plate not watertight`,
+  joint: `— any looser and a ${CLR_JOINT[state.connector]}'s recess leaves the plate not ` +
+    'watertight at some pitches',
 })[by] || '';
 /* id -> the message that goes under it. Rebuilt from scratch on every read, so a field
    that has come good stops complaining without anything having to remember it once did. */
@@ -233,10 +244,11 @@ const halfCellMm = () => Math.ceil(state.pitch / 2 * 100 - 1e-6) / 100;
 const LENGTH_IDS = ['drawerW', 'drawerD', 'mLeft', 'mRight', 'mFront', 'mBack'];
 let unit = 'mm';   // what the length fields are showing; the saved choice is applied at boot
 
-function readNumber(id) {
+// `held`, a size read in place of the field's: the screw head as readControls holds it
+function readNumber(id, held) {
   const lim = LIMITS[id];
   const len = LENGTH_IDS.includes(id);
-  const v = len ? FIELDS.lengthOf($(id), unit) : parseFloat($(id).value.trim());
+  const v = held !== undefined ? held : len ? FIELDS.lengthOf($(id), unit) : parseFloat($(id).value.trim());
   if (!lim) return isFinite(v) ? v : 0;
   /* Out of play, a field keeps its fixed range but not the one the rest of the design
      sets, and does not complain: magnets off at a 30 mm pitch should not quietly shrink
@@ -325,6 +337,12 @@ function showFieldErrors() {
   }
 }
 
+/* A head wider than the hole that does not clear its corners is cut as no counterbore
+   (MOUNT_BORE.head.cuts, #73); and the size one is cut from, to the hundredth above. */
+const headCutAsNone = () => state.screwHeadD > state.screwHoleD &&
+  !MOUNT_BORE.head.cuts(state.screwHeadD, state.screwHoleD);
+const headClearsFrom = (hole) => Math.ceil(MOUNT_BORE.head.over(hole) * 100 - 1e-9) / 100;
+
 function readControls() {
   fieldErrors.clear(); noRoom.clear();
   /* The switches before the numbers: which ranges apply, and how wide they are, depend
@@ -377,6 +395,58 @@ function readControls() {
     if (id === 'magnetD' && mountNow) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
     state[id] = readNumber(id);
   }
+  /* And the head and the shank once more, on the sizes just read. How far the counterbore is
+     turned goes by the head and the magnet (MOUNT_BORE.screw), and it is measured turned, so
+     the head's own size moves its cap and gaps: read against the head before it, a 14.05 mm
+     head pasted over a 6 at 46.45 mm with a jigsaw and a 6.2 mm magnet from beneath took the
+     6's 14.1 and built, where its own turn stops it at 14, and 14.1 over a 14 was held to
+     the 14's cap at every read after. So the head is measured as typed, and one held to its
+     cap or a gap's end is another head, measured again and held again on its own until it
+     holds: an 8.86 mm head at 42 mm with snap clips in the floor and a 3.85 mm magnet from
+     beneath turns and stops at 7.8, but 7.8 does not turn and stops at 7.6, and the page
+     named 7.8 and then refused it. Each pass holds it lower, to a tenth or a gap's end: of
+     3,124 heads pasted over 781 random designs on the page, 1,286 were held once and 33
+     twice, none more, and four passes are allowed. The shank's turn goes by the head's,
+     and the magnet pocket it runs through caps it (mountLimits' throughMagnet), so it is
+     read last, on the head as held: under an 8.3 mm head held to 7.9 at 41.86 mm with a
+     jigsaw, loose, a 7.8 mm hole measured on the 8.3 would be turned and refused. Read
+     before them only, a 5 mm hole stood under a 5.1 mm magnet typed in after it, refused
+     only at the next keystroke.
+     The hole is read after the head, and its read can move it: to the ledge the magnet pocket
+     leaves it, or to the cap the head as held leaves it. A head's cap goes by the hole it is
+     measured on, since a head only a hair wider than its hole is cut as no counterbore and
+     is not turned (MOUNT_BORE.screw): a 7.97 mm head over a 7.71 mm hole at 42 mm with a
+     jigsaw and an 8.1 mm magnet from beneath takes up to 8.1, but a 6.35 mm magnet pasted in
+     held the hole to 6.1, where the head is cut and turned and stops at 7.9, and the head
+     stayed at 7.97, with Checks naming the hole alone. So a hole the read has moved is
+     another hole to read the head on: the head is read again from what was typed, measured
+     on the hole as held, and the hole again on that head, until the hole stays where it was.
+     That settles on a head taken by its own limits measured on the hole it ends on, and a
+     hole taken by its own limits measured on that head, which a second read leaves as they
+     are. Of 43,536 heads, magnets and holes pasted near their caps over random screw designs
+     on the page, 16,006 took a second round, none a third, and four are allowed, as four
+     passes are for the head. */
+  if (state.screws && mountNow) {
+    const typed = parseFloat($('screwHeadD').value.trim());
+    const asTyped = isFinite(typed) ? typed : state.screwHeadD;
+    for (let round = 0; ; round++) {
+      let on = asTyped;
+      fieldErrors.delete('screwHeadD'); noRoom.delete('screwHeadD');
+      for (let pass = 0; ; pass++) {
+        mountNow = mountLimits({ ...state, screwHeadD: on }, mountLayout, mountNow.cuts);
+        // a head held already that its own limits take keeps the reason it was held for
+        if (pass && on <= mountNow.screwHeadD && !mountNow.gaps.screwHeadD.some(([a, b]) => on > a && on < b)) break;
+        state.screwHeadD = readNumber('screwHeadD', pass ? on : undefined);
+        if (state.screwHeadD === on || pass === 3) break;
+        on = state.screwHeadD;
+      }
+      if (state.screwHeadD !== on) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
+      fieldErrors.delete('screwHoleD'); noRoom.delete('screwHoleD');
+      const measuredOn = state.screwHoleD;
+      state.screwHoleD = readNumber('screwHoleD');
+      if (state.screwHoleD === measuredOn || round === 3) break;
+    }
+  }
   // and Checks says what is wrong in the panel's order, not the order it was read in
   for (const m of [fieldErrors, noRoom]) {
     const read = new Map(m);
@@ -395,6 +465,24 @@ function readControls() {
   if (halfOpt && halfOpt.textContent !== halfText) halfOpt.textContent = halfText;
   $('magRow').style.display = state.magnets ? '' : 'none';
   $('screwRow').style.display = state.screws ? '' : 'none';
+  /* A head wider than the hole that does not clear its corners is cut as none (#73); the
+     README said so, and nothing at the field did. Not while either size is refused: the
+     red line under the fields says what to do first. And the size one is cut from only
+     where the field takes it, past any sizes it refuses: a bowtie in the floor at 42 mm
+     holds the head to 7.6 mm, and over a 7.5 mm hole one is cut only from 7.78. */
+  const noBore = state.screws && headCutAsNone() &&
+    !['screwHoleD', 'screwHeadD'].some((id) => fieldErrors.has(id) || noRoom.has(id));
+  $('screwHeadHint').hidden = !noBore;
+  if (noBore) {
+    const from = headClearsFrom(state.screwHoleD), m = mount();
+    let at = from;
+    // a gap's ends are taken, as readNumber takes them
+    for (const [a, b] of m.gaps.screwHeadD) if (at > a + 1e-9 && at < b - 1e-9) at = b;
+    $('screwHeadHint').textContent = `A ${state.screwHeadD} mm head does not clear ` +
+      `the corners of a ${state.screwHoleD} mm hole, so no counterbore is cut. ` +
+      (at <= m.screwHeadD + 1e-9 ? `One is from ${at} mm.`
+        : `None fits here: one is from ${from} mm, and the head stops at ${m.screwHeadD} mm.`);
+  }
   $('connHintDove').style.display = state.connector === 'dovetail' ? '' : 'none';
   $('connHintPuzzle').style.display = state.connector === 'puzzle' ? '' : 'none';
   // Bowtie and puzzle key shared one hint, so picking between them meant reading the
@@ -541,9 +629,9 @@ function warningsList() {
      under the cut map. Drawn as an error but not flagged `err`, which would stop the next
      build as well, and the next build, on any change, is what clears it. It says Download
      is off, not that nothing can be downloaded: the pieces built before it keep their own
-     STL buttons in the piece table. And it promises no size that gets past it: the 41.24 mm
-     jigsaw plate in plate-audit.js fails with a 7.504 mm head and builds with holes at
-     7.502 mm, on main as well. */
+     STL buttons in the piece table. And it promises no size that gets past it: a size a
+     hundredth off one that fails can build with holes, as the 41.24 mm jigsaw plate in
+     plate-audit.js did at 7.502 mm on main, beside a 7.504 mm head that failed. */
   if (buildFailed)
     out.push({ failed: true, t: `Piece ${buildFailed} could not be built, so the build stopped ` +
       'there and Download is off. That is a fault in this tool, not in the design; moving a cut ' +
@@ -1844,7 +1932,13 @@ function readmeText() {
   lines.push(`Split: ${splitName()} | Pieces: ${layout.pieces.length} in ${plural(rows, 'row band')}`);
   lines.push(`Connectors: ${state.connector}` + (state.connector === 'dovetail' ? ` (clearance ${state.tab.clr} mm/side)` : ''));
   if (state.magnets) lines.push(`Magnets: ${state.magnetD} x ${state.magnetH} mm, from ${state.magnetSide}`);
-  if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ${state.screwHeadD} mm counterbore`);
+  /* A head that does not clear the hole's corners is cut as none (MOUNT_BORE in core.js),
+     and one no wider than the hole always was; the README says so, and for a head that
+     was meant as a counterbore, the size that would be one. */
+  if (state.screws) lines.push(`Screws: ${state.screwHoleD} mm holes, ` +
+    (MOUNT_BORE.head.cuts(state.screwHeadD, state.screwHoleD) ? `${state.screwHeadD} mm counterbore`
+      : 'no counterbore' + (headCutAsNone()
+        ? ` (a head clears a ${state.screwHoleD} mm hole from ${headClearsFrom(state.screwHoleD)} mm)` : '')));
   /* The figure the dialog quotes, said the way it says it, with the price it was worked
      out at: the README is read away from the page. The ZIP is only made once every piece
      exists, so there is always a total to give. */
