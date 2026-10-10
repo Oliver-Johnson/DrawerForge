@@ -3397,10 +3397,11 @@ function buildPiece(cfg, layout, piece, onStatus) {
      0.2 mm and the floor closes. Only the socket floor's list, which only an open cell's
      refan reads (buildPiece), so every cell that came out closed is built as before.
      The bottom face has the same list for the same refan (footCorners, #92), and keeps
-     wallsAt's for its first fan, which every cell that comes out closed is built with. */
-  const cornersAt = (z) => {
+     wallsAt's for its first fan, which every cell that comes out closed is built with.
+     `cutter` is another cutter's, a corner boss's (#91). */
+  const cornersAt = (z, cutter = cellFastener) => {
     const ends = new Map();   // a wall end, to the directions of the walls that end there
-    for (const p of cellFastener || []) {
+    for (const p of cutter || []) {
       const zs = p.verts.map((v) => v[2]);
       if (!(Math.min(...zs) < z && Math.max(...zs) > z) || Math.abs(p.plane.n[2]) > 1e-9) continue;
       const d = [-p.plane.n[1], p.plane.n[0]];   // along the wall
@@ -4304,6 +4305,45 @@ function buildPiece(cfg, layout, piece, onStatus) {
     // through the top: mountLimits refuses one rather than this growing past it
     const bossH = bossHeight(cfg);
     const bossFastener = fastenerCutter(cfg, bossH - cfg.magnetH, bossH + 0.5, bossH + 0.5);
+    /* A boss's top, fanned again where its pocket comes out open after every try (#91).
+       extrudePoly fans a convex cap from one corner of its outline (the ear clip takes
+       the ear at its first point every time), and for half the bosses that is the cell's
+       corner, with a spoke to each point of the rounded inner corner. A screw's shank or a
+       pocket from above opens on the top, and where a spoke passes a few microns from a
+       corner of its walls, the two walls meeting there cross the spoke a couple of
+       thousandths apart, the weld takes the crossings for one point, and the sliver of
+       top between them and the corner goes: 1.3 microns from a 2 mm shank's corner at
+       34.32 mm, 5.3 from a corner of a 4 or 6 mm magnet's pocket from above at 34.73 and
+       38.95 mm. cutAgain's tries closed one boss of the two and left the other with 3 open
+       edges, a cell, with Download on. The cap is convex, so it can be fanned from any
+       point inside it: it is fanned again from the one fanCentre picks clear of the
+       corners of the cutter's walls where they stand at the boss's top (cornersAt), and
+       the pocket cut again on it, and that is kept if it comes out closed with nothing
+       turned over, sharing no more edges with the shells built beside it than the first
+       cut. A boss that comes out closed is built as before, fanned from its corner, and
+       so is every boss of a design that builds closed. `cut` cuts the new prism as the
+       first was cut. */
+    const refanTop = (solid, outline, z, cutter, sites, cut) => {
+      const corners = cornersAt(z, cutter);
+      const c = fanCentre(outline, sites.flatMap((bs) =>
+        corners.map(([u, v]) => [bs.ccx + bs.sx*off + u, bs.ccy + bs.sy*off + v])));
+      const ccw = polyArea2D(outline) < 0 ? outline.slice().reverse() : outline;
+      const prism = extrudePoly(outline, 0, z).filter((p) => p.plane.n[2] < 0.5);   // all but the top
+      ccw.forEach((p, i) => {
+        const q = ccw[(i + 1) % ccw.length], tri = makePoly([[c[0], c[1], z], [p[0], p[1], z], [q[0], q[1], z]]);
+        if (tri) prism.push(tri);
+      });
+      let again;
+      try { again = cut(prism); } catch (e) { return solid; }   // the first cut stands
+      if (!again || again.open || again.turned) return solid;
+      const box = flatBox(solid), near = [];
+      for (const s of shells) {
+        const b = flatBox(s);
+        if (b[0] <= box[2] + 1e-3 && box[0] <= b[2] + 1e-3 && b[1] <= box[3] + 1e-3 && box[1] <= b[3] + 1e-3)
+          near.push({ box: b, polys: s });
+      }
+      return sharedAll(again, box, near) <= sharedAll(solid, box, near) ? again : solid;
+    };
     /* The joint's cuts from beneath are taken out of the bosses as well, after their
        pockets: the same solids the cells are cut with. A wall key's recess, an H-clip's
        and a dovetail's notch sit where four cells meet, which is where four bosses meet,
@@ -4397,6 +4437,11 @@ function buildPiece(cfg, layout, piece, onStatus) {
           const pocket = movePolys(bossFastener, ccx + sx*off, ccy + sy*off);
           const first = csgSubtract(boss, pocket);
           boss = first.open ? cutAgain(boss, pocket, first) : first;
+          if (boss.open)   // its top fanned again (refanTop)
+            boss = refanTop(boss, world, bossH, bossFastener, [all[n]], (prism) => {
+              const again = csgSubtract(prism, pocket);
+              return again.open ? cutAgain(prism, pocket, again) : again;
+            });
         }
         shells.push(boss);
         continue;

@@ -928,6 +928,22 @@ currently installed):
   570 of 571; the 3.909 mm head's 12 open edges are on the magnet pocket's roof, 2 mm up,
   not on the bottom face, so it is not refanned. A design with a cell refanned takes
   about 11% longer to build.
+  A corner boss's top is a cap as well, and is refanned the same way (#91). `extrudePoly`
+  fans a convex cap from one corner of its outline (the ear clip takes the ear at its
+  first point every time), which for half the bosses is the cell's corner. A spoke from
+  there passed 1.3 microns from a corner of a 2 mm shank opening on the top at 34.32 mm,
+  and 5.3 from a corner of a magnet's pocket from above at 34.73 and 38.95 mm, and the
+  sliver went: 3 open edges a cell that none of `cutAgain`'s tries closed. The cap is
+  convex, so any point inside it will do: a boss still open after those tries has its top
+  fanned again from the point `fanCentre` picks clear of the corners of its cutter's
+  walls at the top (`refanTop`), the pocket cut again, and the result kept on the same
+  terms as the bottom face's. A boss that comes out closed keeps the fan from its corner.
+  Only the bosses no joint reaches are refanned: over 3,824 designs with each joint that
+  reaches the bosses, two pieces from 34 to 46.65 mm every 0.05, with screws, a magnet
+  from beneath and screws, or a magnet from above, each at its cap, none of the 6,884
+  bosses a joint's cut reaches came out open, so such a boss is built as it was. Of the
+  47,416 others, 15 were open, five designs at 43.9 mm with a 4.9 mm magnet from above
+  (its cap there), and each is closed by its refan.
 - **A pocket that reaches a joint's cut goes bad where the two ceilings are level.** A
   key's recess, an H-clip's and a tab's notch are all cut up from under the plate, as a
   magnet pocket from beneath and a counterbore are. Run into one, the pocket comes out
