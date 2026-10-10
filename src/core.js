@@ -3806,7 +3806,10 @@ function buildPiece(cfg, layout, piece, onStatus) {
            one clearance for each: 0.349 and 0.35 at the defaults, 0.608 and 0.609 tight,
            0.843 and 0.844 with a 1 mm rim cutoff, and 0.102, 0.103 and 0.279 to 0.281
            with 0.1. Moved 1.7 microns, the face is crossed somewhere else. A cell that
-           touches nothing, or that the tries above clear, is built as before. */
+           touches nothing, or that the tries above clear, is built as before. One with
+           mounting pockets that still touched here was sometimes cleared later, by settle
+           cutting its pockets again; this clears it first, so such a plate comes out with
+           other bytes than before, and as closed. */
         if (touching.length && beside.some((c) => touchesBuilt(region, own, c)))
           for (const [dx, dy] of [[NUDGE, NUDGE], [-NUDGE, NUDGE]]) {
             const alt = (solid, cut) => csgSubtract(solid, movePolys(cut, dx, dy));
