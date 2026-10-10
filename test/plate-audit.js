@@ -2301,14 +2301,14 @@ console.log('\nthe other limits, built at their ends:');
      flats, left 12 edges open a cell, where unturned it left 6 and main none. The plates
      of several cells are here so that one cell cannot pass for them. Turned π/252, a
      13.582 head 0.251 deep under a 6 x 3 magnet from above left 12 edges open a cell, 48
-     over 2 x 2. The last five are where a corner comes between 0.005 and 0.01 mm of a
-     plane, and the turn is taken from 0.01 now (head.turn and hole.turn). Main builds each
-     closed. The 38.97 mm cell, a corner 0.006 mm off a plane, folded 3 times unturned with
-     the turn from 0.005; on the tile π/252 left a counterbore's corner 0.00502 mm off a
-     shank's flat, the shank unturned, and 15 edges open; and π/252 left the other three
-     open by 3 and 12 edges and two shells touching along 8, split elsewhere by its
-     planes, from 0.01 as well.
-     Each is a size the page takes, and has to build closed, with no folds. */
+     over 2 x 2. The last five were found among designs drawn near the bound a turn is
+     taken from, 0.01 mm now (head.turn and hole.turn), and main builds each closed. The
+     38.97 mm cell, a corner 0.006 mm off a plane, folded 3 times unturned with the bound
+     at 0.005; on the tile π/252 left a counterbore's corner 0.00502 mm off a shank's flat,
+     the shank unturned, and 15 edges open; and the other three, turned at either bound,
+     π/252 left open by 3 and 12 edges and with two shells touching along 8, split by its
+     planes away from the corners. Each is a size the page takes, and has to build
+     closed, with no folds. */
   for (const [nm, o, tile] of [
     ['13.6 head, 6 x 2 above, 42, 1.5 deep', { magnetSide: 'top', screwHeadD: 13.6, screwHeadDepth: 1.5 }],
     ['13.6 head, 6 x 2 above, 42, 1 deep', { magnetSide: 'top', screwHeadD: 13.6, screwHeadDepth: 1 }],
