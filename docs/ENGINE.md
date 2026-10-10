@@ -556,9 +556,10 @@ at its ceiling (2.0 mm for a wall key's recess) where a plane of the boss's pock
 the boss's at the same height, so the two share the vertical edges at the arc's points from
 the bed up: two pieces with a wall bowtie, puzzle key or snap clip, or an H-clip, from
 beneath. In the review's sweeps 69 of the 3,469 designs the clip changed have more of
-them, 517 in all, none open: 60 the third way (1 to 22 each, every one with a joint from
-beneath), 7 the first (9 or 10 each, a corner of its own of 0.09 or 0.19 mm) and 2 the
-second (1 each). None of them is cheap to keep off soundly: a point in the middle of a
+them, 517 in all, none open: 60 the third way (1 to 22 each in the sweeps, every one with a
+joint from beneath; a two-piece 2 x 2 with a wall bowtie at 40 mm has 26 more than main),
+7 the first (9 or 10 each, a corner of its own of 0.09 or 0.19 mm) and 2 the second (1
+each). None of them is cheap to keep off soundly: a point in the middle of a
 side under `SHORT` opened edges (above), moving the chord's point off its middle only
 moves which margins it lands on, and the third would need the boss to stand off the
 cell's walls along the chords, a change to how the outline and the boss share points.
