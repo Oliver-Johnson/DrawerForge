@@ -2346,47 +2346,54 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * folded the default plate 160, 120, 128 and 96 times a piece 1.5 deep and a cell 14
  * times 1 deep, and 2 times from beneath 3 deep; the head at its cap folded the same way
  * at 40, 43, 44 and 46 mm, each with the one magnet that puts its corner there. Main, its
- * corners on the size, has the same at 13.95 mm. So where a corner of either comes
- * within 0.005 mm of a plane of the other, the counterbore is turned half a facet, π/14,
- * about its axis (head.turn): its corners stand midway between the pocket's, each
- * 0.18 mm or more off the other's flats under a magnet of 3 mm or more, and the shank's
- * turn and mountLimits go by it turned. Its flats stand as far from the axis as before,
- * so the head fits as typed and the caps stay where they were. Turned less, the corners
- * stay near each other: π/252 left them 0.007 mm off the flats and built a cell closed,
- * but the counterbore's roof is fanned from its axis to its corners, and those rays
- * passed 0.04 mm from the pocket's corners. Where the BSP carried a socket's sloped
- * facet across there, the roof split into slivers 0.01 mm long with no width, which
- * single precision in the STL turned into folds: 48, 36, 36 and 27 on the default
- * plate's four pieces, at sites away from the origin, and none on one cell, where fewer
- * planes split the roof. π/126 left 2 edges open under a 6.47 x 2 magnet with the
- * 14.6 mm head at its cap at 43 mm, π/56 and π/28 folded a 4.844 head in a 6 x 3 pocket
- * from beneath at 42 mm, and π/84 opened 5 of the 600 designs below and 14 of the 900
- * after them; π/14 builds them all closed, as it does the 13.582 head 0.251 deep under a
- * 6 x 3 magnet from above at 42 mm that π/252 left with 12 edges open a cell. On 600
- * designs drawn at random with a head within 0.012 mm of a size that puts a corner of
- * either on a plane of the other (34 to 56 mm; 2 x 2 in one piece, 3 x 2 in two, 3 x 3
- * in four, two pieces with dovetails or jigsaws, 2 x 2 on corner bosses; magnets of 3 to
- * 13 mm, either way up), of the 354 taken 138 were open, folded or had a face turned
- * over before, counting the folds in the STL and leaving out the edges where corner
- * bosses meet, and 7 now, where π/252 left 10 and main 23 of its 356. Two that built
- * closed before do not now, and main builds them closed: an 8.798 head 0.592 deep under
- * a 7.037 x 2.5 magnet from above at 42 mm, where a sloped plane meets a flat of the
- * counterbore half a micron under its roof and each cell has an edge shared four ways
- * and two folds, and 7.958 under a 6.35 x 2 magnet from above at 50.38 mm, 11 folds in
- * the STL. On 900 more drawn the same way on one cell, the test tile, 2 x 2, corner
- * bosses and two pieces, of the 544 taken 183 before and 10 now, where π/252 left 22 and
- * main 22 of its 549; two are new, folds in the STL only, 6 on a 38.41 mm dovetail under
- * an 8.704 x 3 magnet from beneath and 1 on a 42 mm test tile under a 12.954 x 1.5
- * magnet, where π/252 opened 8. With the head at its cap, every 1 mm of pitch from 34 to
- * 56, 1, 1.5 and 2.5 deep, 2 x 2 in one piece and 3 x 2 in two, under each magnet to the
- * hundredth that puts a corner of the counterbore on a flat's plane, of the 108 taken
- * from above 36 were open or folded before and none now (π/252 left 1, main 14), and of
- * the 186 from beneath 53 before and 4 now, a fold or two each in the STL at 38 mm
- * 2.5 deep that π/252 and main build closed (π/252 left 3 others, main 16). On one cell,
- * every 0.5 mm of pitch, of the 216 taken from above 40 before and none now (π/252 none,
- * main 27), and of the 360 from beneath 67 before and 2 now, 2 folds in the STL at
- * 37.5 mm under a 7.36 x 2 magnet 1 and 1.5 deep that π/252 and main build closed (π/252
- * left 3, main 24).
+ * corners on the size, has the same at 13.95 mm. Each of these is a fold as the audits
+ * count one (test/orientation.js): two faces with area back to back in the mesh. So
+ * where a corner of either comes within 0.01 mm of a plane of the other, the counterbore
+ * is turned half a facet, π/14, about its axis (head.turn): its corners stand midway
+ * between the pocket's, each 0.18 mm or more off the other's flats under a magnet of
+ * 3 mm or more, and the shank's turn and mountLimits go by it turned. Its flats stand as
+ * far from the axis as before, so the head fits as typed. The limits are measured on
+ * the bore as cut, turned where it is turned, so a head that turns can be given another
+ * cap, and other sizes refused beside a joint's cut, than a head that does not: of 1,034
+ * designs drawn with a head near a size that turns, the turn moved the limits of 302,
+ * the head's cap by up to 0.4 mm up or 0.3 down, each size held to the bore it cuts.
+ * Measured both ways and the tighter kept, the limits would not move with the
+ * head typed, but they would come down for every head: of 140 page designs at five
+ * pitches, 28 lose 0.1 to 0.3 mm of the head's cap that way (8.1 to 7.9 on a 2 x 2 at
+ * 42 mm with a jigsaw) and 12 dovetails gain a gap.
+ *
+ * Turned less, the corners stay near each other. π/252, with the turn taken from 0.01 mm
+ * as here, moved the limits of 102 of those 1,034 designs, by a tenth at most, but left
+ * open designs that π/14 builds closed: a 13.582 head 0.251 deep under a 6 x 3 magnet
+ * from above at 42 mm, 12 edges a cell; 2.69 over 1.41, 2 deep under a 6 x 1.5 magnet
+ * from beneath at 42 mm, tight, 3; 5.65 over 2.43, 3 deep under a 4.44 x 3 one, 12; and
+ * 13.26 over 1.06, 3 deep under a 5.85 x 1.5 one on 84 x 42, two shells touching along
+ * 8 edges. Its counterbore's roof, fanned from the axis to the corners, passed 0.04 mm
+ * from the pocket's corners, and where the BSP carried a socket's sloped facet across
+ * there the roof split into triangles with no area. The fold test leaves out a face
+ * with no area, as it should, but written to the STL in single precision such a
+ * triangle takes a direction, and read back the default plate's four pieces showed 48,
+ * 36, 36 and 27 folds. π/126 left 2 edges open and a face turned over under a 6.47 x 2
+ * magnet with the 14.6 mm head at its cap at 43 mm. On 600 designs drawn at random with
+ * a head within 0.012 mm of a size that puts a corner of either on a plane of the other
+ * (34 to 56 mm; 2 x 2 in one piece, 3 x 2 in two, 3 x 3 in four, two pieces with
+ * dovetails or jigsaws, 2 x 2 on corner bosses; magnets of 3 to 13 mm, either way up),
+ * of the 354 taken 48 were open, folded or had a face turned over unturned, leaving out
+ * the edges where corner bosses meet, and 2 now, where π/252 left 1 and main 5 of its
+ * 356. One leaks on every one of them; the other, which π/252 and main build closed, is
+ * an 8.798 head 0.592 deep under a 7.037 x 2.5 magnet from above at 42 mm, where a
+ * sloped plane meets a flat of the counterbore half a micron under its roof and each
+ * cell has an edge shared four ways and two folds. On 900 more drawn the same way on one
+ * cell, the test tile, 2 x 2, corner bosses and two pieces, each held to what the page
+ * takes, 56 of 498 were bad unturned and none of 496 now, where π/252 left 2 (the 13.582
+ * head among them) and main 2 of its 504. With the head
+ * at its cap, every 1 mm of pitch from 34 to 56, 1, 1.5 and 2.5 deep, 2 x 2 in one piece
+ * and 3 x 2 in two, under each magnet to the hundredth that puts a corner of the
+ * counterbore on a flat's plane, 18 of the 108 taken from above and 8 of the 186 from
+ * beneath were bad unturned, and none now or at π/252 (main 6 and 2); on one cell, every
+ * 0.5 mm of pitch, 28 of 216 and 14 of 360, and none now or at π/252 (main 21 and 8). In
+ * the STL read back, 15 of those designs show a fold here, 30 at π/252 and 114 on main,
+ * and here and at π/252 every one the mesh does not have is a triangle with no area.
  *
  * The shank is turned a little about its axis (`turn`, #74) where a corner of the
  * counterbore or of the magnet pocket would stand on one of its flats carried on past
@@ -2402,13 +2409,13 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * of head to shank. A corner meets a flat's plane at an odd multiple of 15/7° off the
  * flat's normal; turned π/84, 15/7°, it meets them at the even ones, so a size that put a
  * corner on a flat puts it midway between two. The turn is taken where a corner comes
- * nearer than 0.005 mm unturned and the turn leaves it further off, and a shank no corner
+ * nearer than 0.01 mm unturned and the turn leaves it further off, and a shank no corner
  * came near is cut as it was. The magnet pocket's corners stand on the same rays as the
  * counterbore's (or midway between them, where it is turned), and π/84 could bring one of
  * those onto a flat instead: 4.85 mm under
  * 7.246 with a 6 mm magnet from above left 35 edges in the socket floor at 49.02 mm, and
  * 5.773 under 12.053 25 at 55 mm, where the flats unturned miss them by 0.07 and 0.04. So
- * where π/84 leaves a corner of either nearer than 0.005 mm, the turn is the one of 24
+ * where π/84 leaves a corner of either nearer than 0.01 mm, the turn is the one of 24
  * steps across those 30/7° that keeps them furthest off. And a magnet's corner calls for
  * a turn as a counterbore's does, since a shank no counterbore corner comes near can have
  * a magnet's corner on a flat all the same: at 41.24 mm a 3 mm shank under a 7.3 mm
@@ -2435,12 +2442,18 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * and none within 0.0039 but under a magnet on a shank under 1.2 mm (magnets of 3 to 13
  * mm, shanks of 1 to 6.5, heads up to 2.4 times the shank, every 0.001 mm round the sizes
  * that put a corner on a flat, and 6.7 million sizes drawn at random round them); under
- * a bare pocket none comes within 0.005 (the same magnets every 0.01 mm, shanks every
+ * a bare pocket none comes within 0.017 (the same magnets every 0.01 mm, shanks every
  * 0.0005 mm within 0.012 of each size that puts a corner on a flat), and under a
- * counterbore turned off the pocket none within 0.003 (360,213 shanks drawn at random
+ * counterbore turned off the pocket none within 0.003 (900,452 shanks drawn at random
  * near a corner of either, under counterbores near the pocket's flats). The
  * nearest, 0.0033 mm at 1.0197 under 1.0748 with a 3.72 mm magnet, and nine more under
- * 0.0038 build closed at 42 and 49.02 mm, the magnet either way up. Half a facet, π/12,
+ * 0.0038 build closed at 42 and 49.02 mm, the magnet either way up. The turns were taken
+ * from 0.005 mm, and the sweeps below were measured so, until a 38.97 mm cell, a
+ * counterbore's corner 0.006 mm off a plane of the pocket's, folded 3 times unturned, and
+ * π/252 left a test tile open round a corner 0.00502 mm off a shank's flat. On 600 random
+ * designs whose turns 0.01 changes (one cell, the test tile, 2 x 2, corner bosses, two
+ * pieces), of the 511 the page takes one is open at either bound, by 6 edges where 0.005
+ * and main leave 3, and main leaves 4 open. Half a facet, π/12,
  * clears the corners as well, but it squares two flats to the cell's edges, and at 37.67
  * mm those folded the socket floor beside the pocket. Measured on 3,846 one-cell plates
  * with a magnet from above, 37.67 to 55 mm, shanks 1 to 5 mm and heads up to 1.15 times
@@ -2489,7 +2502,7 @@ const MOUNT_BORE = {
           snap: 0.05,
           /* how far to turn a counterbore cut headR out at its corners about its axis,
              beside a magnet pocket magnetR out at its corners: half a facet, π/14, where a
-             corner of either would stand within 0.005 mm of the plane of one of the other's
+             corner of either would stand within 0.01 mm of the plane of one of the other's
              flats, which puts the counterbore's corners midway between the pocket's, and not
              at all where they are cut as one prism (see above) */
           turn: (headR, magnetR) => {
@@ -2505,7 +2518,7 @@ const MOUNT_BORE = {
               return g;
             };
             const c0 = clear(0);
-            return c0 < 0.005 && clear(Math.PI / n) > c0 ? Math.PI / n : 0;
+            return c0 < 0.01 && clear(Math.PI / n) > c0 ? Math.PI / n : 0;
           } },
   hole: { sides: 12, r: (d) => d/2 / Math.cos(Math.PI/12),
           fits: (room) => 2 * room * Math.cos(Math.PI / 12),
@@ -2524,9 +2537,9 @@ const MOUNT_BORE = {
                 g = Math.min(g, Math.abs(R * Math.cos(2*Math.PI*k/head.sides + p - (2*m + 1)*Math.PI/hole.sides - t) - d/2));
               return g;
             };
-            if (clear(0) >= 0.005) return 0;
+            if (clear(0) >= 0.01) return 0;
             let best = Math.PI / 84, most = clear(best);
-            if (most < 0.005) for (let j = 1; j < 24; j++) {
+            if (most < 0.01) for (let j = 1; j < 24; j++) {
               const t = (Math.PI / 42) * j / 24, g = clear(t);
               if (g > most + 1e-9) { most = g; best = t; }
             }
@@ -4411,11 +4424,12 @@ function mountLimits(cfg, layout, known) {
      corners stand out past it, and a magnet's 0.1 mm over its radius where that is
      further. The shank and the counterbore are turned where the cutter turns them, and
      measured so: their turns go by the sizes asked, the head's and the magnet's as well
-     as the shank's, so it is the bores of this design that are measured. A counterbore
-     within MOUNT_BORE.head.snap
-     of the magnet pocket's corners is cut at the pocket's, up to 0.05 mm further out or
-     in, so its sizes are read back through that (head.fitsCut), which goes by the room
-     alone: the cap does not move with the head typed. */
+     as the shank's, so it is the bores of this design that are measured, and a head that
+     turns can be given another cap, and other sizes refused beside a joint's cut, than a
+     head that does not (MOUNT_BORE). A counterbore within MOUNT_BORE.head.snap of the
+     magnet pocket's corners is cut at the pocket's, up to 0.05 mm further out or in, so
+     its sizes are read back through that (head.fitsCut), which goes by the room alone:
+     the band does not move the cap with the head typed. */
   const magnetR = cfg.magnets ? MOUNT_BORE.magnet.r(cfg.magnetD) : 0;
   const BORE = { magnetD: MOUNT_BORE.magnet, screwHoleD: MOUNT_BORE.hole,
                  screwHeadD: { sides: MOUNT_BORE.head.sides, fits: (room) => MOUNT_BORE.head.fitsCut(room, magnetR) } };
