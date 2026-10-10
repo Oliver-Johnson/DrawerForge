@@ -290,6 +290,31 @@ test.describe('ranges on the geometry fields', () => {
     expect(errors).toEqual([]);
   });
 
+  /* A head held to its cap is held again on its own limits until it holds, and the page
+     names that size. At 42 mm with snap clips in the floor and a 3.85 mm magnet from
+     beneath, an 8.86 mm head turns and stops at 7.8, but 7.8 does not turn and stops at 7.6:
+     the page said 7.8, and then refused 7.8 for 7.6. */
+  test('a screw head held to its cap is named where it holds', async ({ page }) => {
+    const at = '#pi=42&w=84&d=84&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=54&bd=400&cn=snap&km=floor&ki=bottom' +
+               '&mg=1&md=3.85&mh=3&ms=bottom&sc=1&sh=2.64&se=2.5';
+    const errors = await openAt(page, `${at}&sd=8.86`);
+    const max = () => page.evaluate(() => document.getElementById('screwHeadD').max);
+    const refused = /Screw head Ø must be 7\.6 mm or less at a 42 mm pitch — .* a hole has to stay out of the recesses the snap clips fit into/;
+    expect(await text(page, 'errScrew')).toMatch(refused);
+    expect(await text(page, 'warnings'), 'the checks under the map say the same thing').toMatch(refused);
+    expect(await max()).toBe('7.6');
+    expect(await page.evaluate(() => state.screwHeadD)).toBe(7.6);
+    expect(await exportOff(page)).toBe(true);
+    await H.setField(page, 'screwHeadD', '7.8');
+    expect(await text(page, 'errScrew')).toMatch(refused);
+    await H.setField(page, 'screwHeadD', '7.6');
+    await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
+                               null, { timeout: 30000 });
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
+
   /* #70: corner pockets over a floor. A bowtie housed in the floor stood its 2.8 mm floor
      round the 2.6 mm bosses and sealed their pockets in it, with Download on, and an extra
      floor did the same. Such a plate is built as a solid floor builds it now, and Checks

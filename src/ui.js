@@ -244,10 +244,11 @@ const halfCellMm = () => Math.ceil(state.pitch / 2 * 100 - 1e-6) / 100;
 const LENGTH_IDS = ['drawerW', 'drawerD', 'mLeft', 'mRight', 'mFront', 'mBack'];
 let unit = 'mm';   // what the length fields are showing; the saved choice is applied at boot
 
-function readNumber(id) {
+// `held`, a size read in place of the field's: the screw head as readControls holds it
+function readNumber(id, held) {
   const lim = LIMITS[id];
   const len = LENGTH_IDS.includes(id);
-  const v = len ? FIELDS.lengthOf($(id), unit) : parseFloat($(id).value.trim());
+  const v = held !== undefined ? held : len ? FIELDS.lengthOf($(id), unit) : parseFloat($(id).value.trim());
   if (!lim) return isFinite(v) ? v : 0;
   /* Out of play, a field keeps its fixed range but not the one the rest of the design
      sets, and does not complain: magnets off at a 30 mm pitch should not quietly shrink
@@ -399,20 +400,31 @@ function readControls() {
      the head's own size moves its cap and gaps: read against the head before it, a 14.05 mm
      head pasted over a 6 at 46.45 mm with a jigsaw and a 6.2 mm magnet from beneath took the
      6's 14.1 and built, where its own turn stops it at 14, and 14.1 over a 14 was held to
-     the 14's cap at every read after. So the head is measured as typed. The shank's turn
-     goes by the head's, and the magnet pocket it runs through caps it (mountLimits'
-     throughMagnet), so it is read last, on the head as read, measured again where that is
-     not the head typed: one held to its cap or a gap's end. Under an 8.3 mm head held to 7.9
-     at 41.86 mm with a jigsaw, loose, a 7.8 mm hole measured on the 8.3 would be turned and
-     refused. Read before them only, a 5 mm hole stood under a 5.1 mm magnet typed in after
-     it, refused only at the next keystroke. */
+     the 14's cap at every read after. So the head is measured as typed, and one held to its
+     cap or a gap's end is another head, measured again and held again on its own until it
+     holds: an 8.86 mm head at 42 mm with snap clips in the floor and a 3.85 mm magnet from
+     beneath turns and stops at 7.8, but 7.8 does not turn and stops at 7.6, and the page
+     named 7.8 and then refused it. Each pass holds it lower, to a tenth or a gap's end: of
+     3,124 heads pasted over 781 random designs on the page, 1,286 were held once and 33
+     twice, none more, and four passes are allowed. The shank's turn goes by the head's,
+     and the magnet pocket it runs through caps it (mountLimits' throughMagnet), so it is
+     read last, on the head as held: under an 8.3 mm head held to 7.9 at 41.86 mm with a
+     jigsaw, loose, a 7.8 mm hole measured on the 8.3 would be turned and refused. Read
+     before them only, a 5 mm hole stood under a 5.1 mm magnet typed in after it, refused
+     only at the next keystroke. */
   if (state.screws && mountNow) {
     const typed = parseFloat($('screwHeadD').value.trim());
-    mountNow = mountLimits(isFinite(typed) ? { ...state, screwHeadD: typed } : state,
-                           mountLayout, mountNow.cuts);
+    let on = isFinite(typed) ? typed : state.screwHeadD;
     fieldErrors.delete('screwHeadD'); noRoom.delete('screwHeadD');
-    state.screwHeadD = readNumber('screwHeadD');
-    if (state.screwHeadD !== typed) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
+    for (let pass = 0; ; pass++) {
+      mountNow = mountLimits({ ...state, screwHeadD: on }, mountLayout, mountNow.cuts);
+      // a head held already that its own limits take keeps the reason it was held for
+      if (pass && on <= mountNow.screwHeadD && !mountNow.gaps.screwHeadD.some(([a, b]) => on > a && on < b)) break;
+      state.screwHeadD = readNumber('screwHeadD', pass ? on : undefined);
+      if (state.screwHeadD === on || pass === 3) break;
+      on = state.screwHeadD;
+    }
+    if (state.screwHeadD !== on) mountNow = mountLimits(state, mountLayout, mountNow.cuts);
     fieldErrors.delete('screwHoleD'); noRoom.delete('screwHoleD');
     state.screwHoleD = readNumber('screwHoleD');
   }
