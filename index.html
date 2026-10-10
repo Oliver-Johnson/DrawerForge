@@ -2683,6 +2683,105 @@ function clipToRect(pts, x0, y0, x1, y1) {
   return clean.length >= 3 ? clean : null;
 }
 
+/* Sutherland–Hodgman against a convex polygon wound counter-clockwise, as the plate's
+   outline is: the shape cut to what is inside it, with a new point where one of its sides
+   crosses one of the polygon's. A shape that is all inside comes back as it is, the same
+   array, so a caller can tell that nothing was cut; null where nothing of it is. */
+function clipToConvex(pts, poly) {
+  const EPS = 1e-9;
+  const side = (a, b, p) => (b[0]-a[0]) * (p[1]-a[1]) - (b[1]-a[1]) * (p[0]-a[0]);
+  let out = pts;
+  for (let k = 0; k < poly.length; k++) {
+    const a = poly[k], b = poly[(k + 1) % poly.length];
+    if (out.every((p) => side(a, b, p) >= -EPS)) continue;
+    const inp = out; out = [];
+    for (let i = 0; i < inp.length; i++) {
+      const cur = inp[i], prev = inp[(i + inp.length - 1) % inp.length];
+      const sc = side(a, b, cur), sp = side(a, b, prev);
+      const cut = () => [prev[0] + (cur[0]-prev[0]) * sp / (sp - sc), prev[1] + (cur[1]-prev[1]) * sp / (sp - sc)];
+      if (sc >= -EPS) { if (sp < -EPS) out.push(cut()); out.push(cur); }
+      else if (sp >= -EPS) out.push(cut());
+    }
+    // a point on the line is in, so a side that ends on it crosses it where it ends
+    out = out.filter((p, i) => {
+      const q = out[(i + out.length - 1) % out.length];
+      return Math.abs(p[0] - q[0]) > 1e-7 || Math.abs(p[1] - q[1]) > 1e-7;
+    });
+    if (out.length < 3) return null;
+  }
+  return out;
+}
+
+/* A corner boss's outline cut to the plate's, for the bosses at its rounded corners
+   (buildPiece, #86). A shape that is inside the outline comes back as the same array, so
+   a boss that never stood out past a corner is the boss it was, byte for byte. So does
+   one that stands out by under FLUSH, 0.01 mm, five welds (VTOL, 2 microns) and a tenth of
+   the thinnest layer a slicer cuts: clipped, its new points would stand a few microns from
+   the cell's own, and the weld takes two such points for one or for two as it comes. A
+   plate at 34 mm with screws and margins of 1.17 mm, where the corner stands out 0.0022,
+   had 3 open edges that the base lacked, from a boss with a point every 2.4 microns round
+   the arc's point at 45 degrees.
+ *
+ * Clipped to the outline, the boss's outer corner takes the outline's own chords, as many
+ * sides round the corner as the plate has there, with the chords' ends: the points of the
+ * arc that lie inside the boss. The corner cell's wall stands on those same points. A
+ * chord of the plate is a side of the boss, and the boss's bottom edge along it is the
+ * wall's, at the bed, so it is used four times (37 more edges a plate at 42 mm, with no
+ * margin). So a side of the clipped boss that runs along a chord has a point put in the
+ * middle of it. It is the same solid, and its edges are not the wall's. That is a part of
+ * a chord as well as a whole one: where a margin's region ends on the cell's edge, it
+ * shares the piece of the chord between that edge and the next point of the arc (2 more
+ * edges a plate at 36 mm, radius 2, margins of 0.55 and 0.52 mm, 0.049 mm long). Not a
+ * side under SHORT, 0.03 mm: its middle would stand a few welds (VTOL, 2 microns) from its
+ * ends, and a corner that stands out by a hair leaves two of them beside the arc's point
+ * (0.01 mm each at margins of 1.1682 mm, where the weld read 6 to 8 open edges).
+ *
+ * And the clipped shape starts where earTriangulate wants it to. That takes the ear at the
+ * first point again and again, so it fans every triangle of a convex shape from its last
+ * point. When the corner stands out by a hair, the clip leaves a side a few hundredths of
+ * a millimetre long beside it (0.023 mm at margins of 1.71 and 0.72 mm, where it stands out
+ * 0.010), and a fan from the far end of the boss's side that meets it makes a triangle
+ * 12.5 mm long and 0.012 wide. A plane of a pocket's cut crosses that triangle's long edge
+ * and the side 2.4 microns apart at a point 2 mm along, the weld keeps two, and the wall
+ * takes one point and the cap the other: 3 open edges. That happened to 5 of the 142
+ * corners that stood out 0.005 to 0.02 mm in a scan of margins at 42 mm, and snapping the
+ * clip's points to their neighbours only moved which. So the shape is wound counter-
+ * clockwise, as earTriangulate takes it, and ends at its point farthest from the new
+ * ones, which is the apex: the triangles the new points make are across the shape from
+ * it, and none of them has a long edge along a side. */
+function clipToPlate(pts, outline) {
+  const clipped = clipToConvex(pts, outline);
+  if (!clipped || clipped === pts) return pts;
+  const FLUSH = 0.01, SHORT = 0.03;
+  const gap = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  // how far the shape stands out: along the normal of the chord it is farthest past
+  const beyond = Math.max(...outline.map((a, k) => {
+    const b = outline[(k + 1) % outline.length];
+    return Math.max(...pts.map((p) => -((b[0]-a[0]) * (p[1]-a[1]) - (b[1]-a[1]) * (p[0]-a[0])) / gap(a, b)));
+  }));
+  if (beyond < FLUSH) return pts;
+  const along = (a, b, p) => Math.abs((b[0]-a[0]) * (p[1]-a[1]) - (b[1]-a[1]) * (p[0]-a[0])) < 1e-7 * gap(a, b);
+  // the outline's chords: the sides that run along neither x nor y
+  const chords = [];
+  outline.forEach((a, k) => {
+    const b = outline[(k + 1) % outline.length];
+    if (Math.abs(a[0] - b[0]) > 1e-9 && Math.abs(a[1] - b[1]) > 1e-9) chords.push([a, b]);
+  });
+  const halved = [];
+  clipped.forEach((p, k) => {
+    const q = clipped[(k + 1) % clipped.length];
+    halved.push(p);
+    if (gap(p, q) >= SHORT && chords.some(([a, b]) => along(a, b, p) && along(a, b, q)))
+      halved.push([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]);
+  });
+  const ccw = polyArea2D(halved) > 0 ? halved : halved.reverse();
+  const fresh = ccw.filter((p) => !pts.some((q) => gap(p, q) < 1e-9));
+  const mid = [fresh.reduce((t, p) => t + p[0], 0) / fresh.length, fresh.reduce((t, p) => t + p[1], 0) / fresh.length];
+  let far = 0;
+  ccw.forEach((p, i) => { if (gap(p, mid) > gap(ccw[far], mid)) far = i; });
+  return ccw.slice(far + 1).concat(ccw.slice(0, far + 1));
+}
+
 // ---------- layout ----------
 /* The biggest grid the page will build in one go, a 1.26 m square at the spec pitch. It
    lives here because computeLayout has to honour it too (see the 'plates' split); the
@@ -5726,6 +5825,18 @@ function buildPiece(cfg, layout, piece, onStatus) {
       arc.push([bossW - rIn + rIn*Math.cos(a), bossW - rIn + rIn*Math.sin(a)]);
     }
     const onEdge = (x, lim) => Math.abs(x) < 1e-6 || Math.abs(x - lim) < 1e-6;
+    /* A boss at a rounded corner of the plate follows the corner's arc (#86). Its outer
+       corner is the cell's, square, and the plate is rounded there, so with no margin or a
+       small one the corner stood out past the arc: a square tab as tall as the boss, up to
+       2.6 mm, r(√2 − 1) out at an outer radius r, 1.66 mm at the default 4 and 0.95 mm with
+       margins of 0.5 mm. It stays inside once both margins pass 1.17 mm, or once the other
+       reaches 4 mm when one is 0, and a boss that does is not touched: its bytes are the
+       ones it had, as are a boss's that stands out by under a hundredth of a millimetre.
+       The rest are cut to the outline, however a joint has shaped them (clipToPlate). No
+       housing reaches a boss at a rounded corner of the plate, since a joint's cuts sit
+       where four cells meet, so the bosses a housing reaches are cut too only to be sure
+       of it. */
+    const inPlate = (pts) => clipToPlate(pts, outline);
     for (let n = 0; n < all.length; n++) {
       if (root(n) !== n) continue;
       const { ccx, ccy, sx, sy, cxr, cyr } = all[n];
@@ -5740,7 +5851,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
           pts.push([bossW - rIn + rIn*Math.cos(a), bossW - rIn + rIn*Math.sin(a)]);
         }
         pts.push([0, bossW]);
-        const world = pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v]);
+        const world = inPlate(pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v]));
         let boss = extrudePoly(world, 0, bossH);
         /* A boss's pocket is a lottery of its own, so it is cut again (cutAgain) when it
            comes out open. Default screws in one-cell pieces left 3 to 6 open edges on a
@@ -5772,12 +5883,12 @@ function buildPiece(cfg, layout, piece, onStatus) {
         const run = [[lo, -bossW], ...arc.slice().reverse().map(([p, q]) => [p, -q]),
                      [bossW, -(bossW - rIn)], [bossW, bossW - rIn], ...arc, [lo, bossW]];
         const pts = pair === 'v' ? run : run.map(([p, q]) => [q, p]);
-        solids.push({ outline: pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v]), sites: members });
+        solids.push({ outline: inPlate(pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v])), sites: members });
       } else {
         for (const bs of members) {
           const a0 = onEdge(bs.cxr, W) ? BLOAT : 0, b0 = onEdge(bs.cyr, D) ? BLOAT : 0;
           const pts = [[a0, b0], [bossW, b0], [bossW, bossW - rIn], ...arc, [a0, bossW]];
-          solids.push({ outline: pts.map(([u, v]) => [bs.cxr - bs.sx*u, bs.cyr - bs.sy*v]), sites: [bs] });
+          solids.push({ outline: inPlate(pts.map(([u, v]) => [bs.cxr - bs.sx*u, bs.cyr - bs.sy*v])), sites: [bs] });
         }
       }
       /* The pockets are cut again when they come out open, as a whole boss's are (above),
