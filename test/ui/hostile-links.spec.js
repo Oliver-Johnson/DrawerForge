@@ -1158,3 +1158,35 @@ for (const tool of ['plates', 'bins']) {
     expect(errors).toEqual([]);
   });
 }
+
+/* Not once Put back is pressed after it, before the fresh page arrives: Put back leaves last,
+   and that page, shown again from the cache, would save over the layout just put back. */
+for (const tool of ['plates', 'bins']) {
+  test(`a ${tool} page left by Start fresh, then Put back, and shown again from the cache does not save`,
+    async ({ page }) => {
+      const errors = watch(page);
+      const url = tool === 'bins' ? binsUrl() : platesUrl();
+      const key = tool === 'bins' ? BINS : PLATES;
+      await arrive(page, url);
+      await H.setField(page, 'drawerW', '451');
+      await saved(page);
+      await arrive(page, url + '#w=333&d=444&v=2');   // a link, which sets that layout aside
+      await expect(page.locator('#putBack')).toBeVisible();
+      await page.route((u) => u.href === url, async (route) => {
+        await new Promise((r) => setTimeout(r, 5000));
+        await route.continue().catch(() => {});
+      });
+      await page.evaluate(() => {
+        document.getElementById('startFresh').click();
+        document.getElementById('putBack').click();
+        window.stop();                               // neither page arrives
+        dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+      });
+      const put = await stored(page, key);
+      expect(put, 'the layout put back').toMatch(/(^|&)w=451(&|$)/);
+      await H.setField(page, 'drawerW', '377');
+      await settle(page);
+      expect(await stored(page, key), 'still the layout put back').toBe(put);
+      expect(errors).toEqual([]);
+    });
+}

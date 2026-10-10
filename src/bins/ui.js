@@ -5325,7 +5325,7 @@ function cleanNote(n) {
  * stops that being your problem.
  */
 let hashSaveT = 0, hashReady = false;
-// saves were on when Start fresh left the page (see startFresh)
+// saves were on when Start fresh left the page, and nothing has left it since (see startFresh)
 let freshLeft = false;
 /* Kept on this browser, so the work survives arriving without a link.
  *
@@ -5362,11 +5362,12 @@ const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
   forgetPasted();
-  freshLeft = hashReady;
+  const saving = hashReady;
   /* Left as Put back leaves, by leaveFor: the page runs on until the bare one arrives, and
      a change that landed in between was saved after the clearing, and came back with the
      note that it had been restored. */
   leaveFor(location.origin + location.pathname);   // drop the hash and reload clean
+  freshLeft = saving;   // after leaveFor, which clears it
 }
 /* Wired here, before the boot below reads any link: a link that throws there must not
    also take away the button that gets you out of it, or stop the next link working. What
@@ -5374,9 +5375,10 @@ function startFresh() {
 $('startFresh').addEventListener('click', startFresh);
 /* Left by Start fresh and shown again from the back-forward cache, as Back from the fresh
    page can be in some browsers: the page is yours again, and saves as it did before, as it
-   does loaded. Not after Put back or Try anyway, which leave by leaveFor too: loaded, that
-   page is a link again and sets your layout aside first, and from the cache its first save
-   would go over the layout just put back. */
+   does loaded. Not after Put back or Try anyway, which leave by leaveFor too, even pressed
+   after Start fresh before the page has gone: loaded, that page is a link again and sets
+   your layout aside first, and from the cache its first save would go over the layout just
+   put back. */
 addEventListener('pageshow', (e) => { if (e.persisted && freshLeft) { hashReady = true; freshLeft = false; } });
 /* A hash this page did not write means someone navigated to a link — pasted a share URL
    into the address bar, or picked a bookmark — and changing only the fragment is a
@@ -5446,7 +5448,7 @@ function linkKeys(h, link) {
   return [...SHARED_KEYS].filter((k) => k in q && p[k] === q[k]);
 }
 function leaveFor(url) {
-  hashReady = false; clearTimeout(hashSaveT);   // no save of this page's may land after
+  hashReady = false; freshLeft = false; clearTimeout(hashSaveT);   // no save of this page's may land after
   location.href = url;
 }
 /* Swapped rather than copied over: what is here now goes aside in its place, so putting
