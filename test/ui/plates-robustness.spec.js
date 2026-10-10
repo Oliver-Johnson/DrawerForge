@@ -130,6 +130,13 @@ test.describe('ranges on the geometry fields', () => {
       /Magnet Ø of 11\.93 mm is refused at a 41\.49 mm pitch — .* Use 11\.89 mm or less, 11\.92 mm, or 11\.95 mm or more\./],
     ['#pi=31&cl=0&mg=1&md=1', 'errMagnet',
       /Magnet Ø of 1 mm is refused at a 31 mm pitch — .* Use 1\.01 mm, or 1\.04 mm or more\./],
+    /* #75: a bowtie key in the walls put in from above stands in a cup of its own, and with
+       corner bosses there is no floor between that cup and the bosses' pockets. With the
+       default 6 mm magnet at 36.13 mm the cup's floor stood in the pocket beside each key,
+       watertight and with Download on, where the magnet could not seat. */
+    ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie&km=wall&ki=top' +
+      '&bm=bosses&mg=1', 'errMagnet',
+      /Magnet Ø must be 5 mm or less at a 36\.13 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a hole has to stay out of the housings the bowtie keys drop into from above; put in from beneath, the bowtie keys leave more room\./],
     /* #70: the joint is cut from the corner bosses now, so a boss's pocket can reach it as
        a cell's can. A bowtie key in the walls at 36.13 mm took a 7.9 mm magnet, and with
        the recess cut from the bosses it would have built 19 open edges a piece. */
@@ -216,6 +223,31 @@ test.describe('ranges on the geometry fields', () => {
     await openAt(page, at.replace('&bm=bosses', '&bm=bosses&bp=1'));
     expect(await text(page, 'errMagnet')).toMatch(refusal);
     expect(await text(page, 'errMagnet')).toMatch(hint);
+    expect(errors).toEqual([]);
+  });
+  /* #75: a magnet's range stops where the cup of a key put in from above starts. At 5 mm
+     the plate builds with Download on, 5.1 is refused and names the keys, and the same
+     keys put in from beneath take their recess's 6.1 again. */
+  test('a corner boss\'s pocket is held out of the cup a key drops into from above', async ({ page }) => {
+    const at = '#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie' +
+               '&km=wall&ki=top&bm=bosses&mg=1';
+    const errors = await openAt(page, `${at}&md=5`);
+    const max = () => page.evaluate(() => document.getElementById('magnetD').max);
+    expect(await max()).toBe('5');
+    expect(await shown(page, 'errMagnet')).toBe(false);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    await H.setField(page, 'magnetD', '5.1');
+    expect(await text(page, 'errMagnet'))
+      .toMatch(/Magnet Ø must be 5 mm or less .* the housings the bowtie keys drop into from above; put in from beneath, the bowtie keys leave more room\./);
+    expect(await text(page, 'pieceTail')).toMatch(/not building/);
+    expect(await exportOff(page)).toBe(true);
+    await page.selectOption('#keyInsert', 'bottom');
+    await page.waitForFunction(() => /ready/.test(document.getElementById('pieceTail').textContent),
+                               null, { timeout: 30000 });
+    expect(await max()).toBe('6.1');
+    expect(await shown(page, 'errMagnet')).toBe(false);
+    expect(await exportOff(page)).toBe(false);
     expect(errors).toEqual([]);
   });
   test('corner pockets under an extra floor are cut into it, and Checks says so', async ({ page }) => {

@@ -3116,7 +3116,10 @@ function topPocketCup(type, edge, e, s, prm, clr, zf, zTop) {
  * one question is two too many, and the third is always the one nobody updates.
  *
  * Returns the operations for one site: `cut` — ONE closed cutter solid to subtract — and
- * `add`, closed shells to stand in the cavity it leaves.
+ * `add`, closed shells to stand in the cavity it leaves. A housing put in from above also
+ * says where it stands, for mountLimits to keep the mounting pockets out of it (#75):
+ * `footprint`, the outline everything it cuts or builds stays inside, and `bottom`, the
+ * underside of the floor it builds under the key, the lowest it reaches.
  *
  * The top-inserted housings used to return a third thing: convex prisms for
  * clipConvexPrismTop, which peeled the material above a z-plane off whatever it was
@@ -3138,7 +3141,7 @@ function topPocketCup(type, edge, e, s, prm, clr, zf, zTop) {
 function keySiteOps(kind, shape, prm, clr, edge, e, s, H) {
   if (kind === 'snaptop') {
     const p = snapTopPrm(clr);
-    const { env } = snapTopParts(edge, e, s, p, H);
+    const { env, boxes } = snapTopParts(edge, e, s, p, H);
     const g2 = (edge === '+x' || edge === '+y') ? -1 : 1;
     const ss2 = s + 0.0017;
     const rect = (edge === '+x' || edge === '-x')
@@ -3146,8 +3149,13 @@ function keySiteOps(kind, shape, prm, clr, edge, e, s, H) {
          [e + g2*env[1], ss2 + env[3]], [e + g2*env[0], ss2 + env[3]]]
       : [[ss2 + env[2], e + g2*env[0]], [ss2 + env[3], e + g2*env[0]],
          [ss2 + env[3], e + g2*env[1]], [ss2 + env[2], e + g2*env[1]]];
+    // the slot's rectangle out to the walls round it, open to the seam as the cut is
+    const t = Math.max(...boxes.map((b) => b[3])), d = Math.max(...boxes.map((b) => b[1]));
+    const footprint = [[env[0], -t], [d, -t], [d, t], [env[0], t]].map(([u, v]) =>
+      edge === '+x' || edge === '-x' ? [e + g2*u, ss2 + v] : [ss2 + v, e + g2*u]);
     return { cut: extrudePoly(rect, env[4], H + 0.5),
-             add: snapTopPocket(edge, e, s, p, H) };
+             add: snapTopPocket(edge, e, s, p, H),
+             footprint, bottom: Math.min(...boxes.map((b) => b[4])) };
   }
   if (kind === 'cup') {
     const zf = Math.max(1.2, H - 2.25), zTop = H - 0.85;
@@ -3157,7 +3165,8 @@ function keySiteOps(kind, shape, prm, clr, edge, e, s, H) {
        decomposition, so the cavity is parallel to the wall it houses everywhere instead
        of squaring off across the dogbone's taper. */
     return { cut: extrudePoly(keyHalf(shape, edge, e, s, prm, clr + 0.55), zf - 0.55, H + 0.5),
-             add: topPocketCup(shape, edge, e, s, prm, clr, zf, zTop) };
+             add: topPocketCup(shape, edge, e, s, prm, clr, zf, zTop),
+             footprint: keyHalf(shape, edge, e, s, prm, clr + 0.6), bottom: zf - 0.6 };
   }
   /* Bottom-inserted recess. The depth is prm.depth capped clear of the plate top, which
      is what every configuration was already cutting: 2.3 for the H-clip, 2.0 for both
@@ -3895,10 +3904,25 @@ function mountLimits(cfg, layout, known) {
      notch a dovetail or puzzle tab fits into (tabNotch). Each starts under the plate, as
      a magnet pocket from beneath, a counterbore and a shank do, so any of those that
      reaches one in plan has broken into it. A magnet from above meets it unless the
-     pocket's floor stands at least MOUNT_SKIN over the cut's ceiling. The housings a key
-     is dropped into from above (keySiteOps' 'cup' and 'snaptop') start 1.3 mm or more
-     over the socket floor: a pocket from above stops under them, and a shank, which
-     stays on the socket floor, is in the socket's open air up there.
+     pocket's floor stands at least MOUNT_SKIN over the cut's ceiling.
+
+     The housing a key is put into from above (keySiteOps' 'cup' and 'snaptop') is a
+     cavity cut and a cup built in it: a floor 0.6 mm thick under the key, its underside
+     1.4 mm over the socket floor (1.3 for a snap clip), and walls from there up, at a
+     corner where four cells meet. Over a solid floor nothing reaches it: a pocket from
+     above stops under it, and a shank, which stays on the socket floor, is in the
+     socket's open air up there. A corner boss stands on the bed, though, with its
+     pocket's mouth at the bed or at the boss's top (bossHeight, at most 2.6 mm), and the
+     housing is made after the pockets are cut, so it stood in any it reached (#75): a
+     wall bowtie at 36.13 mm left 1.3 mm³ of it in the four 6 mm magnet pockets beside
+     the seam, in the top 0.6 mm of each, and 1.6 mm³ in 9.3 mm ones at 39.46 mm, and a
+     7.9 mm magnet 1.45 mm deep, level with the cavity's floor, left 13 edges open a
+     piece, all with Download on. So it counts as a cut that stands from its underside
+     up ('housing'), as wide as all it cuts or builds: a pocket from beneath clears it by
+     stopping MOUNT_LEVEL under that, and a pocket from above and a shank, which go in
+     through it, meet any they reach. Keys in the wall reach a boss's pocket up to
+     40 mm, the H-clip up to 38.5 and a snap clip in the wall up to 35; nothing over a
+     solid floor, and nothing else.
 
      Measured off the solids buildPiece cuts, at the sites it cuts pockets at: whole cells
      only, so a housing beside a half cell or a margin is measured from the whole cell on
@@ -3975,8 +3999,11 @@ function mountLimits(cfg, layout, known) {
     const shapeOf = (edge) => {
       if (shapes[edge]) return shapes[edge];
       const at = { edge, e: 0, s: 0 };
-      const solid = plan.kind === 'recess'
-        ? keySiteOps(plan.kind, plan.shape, plan.prm, plan.clr, edge, 0, 0, H).cut
+      // a housing a key is put into from above, from its underside up through the plate
+      const housing = plan.kind === 'cup' || plan.kind === 'snaptop'
+        ? keySiteOps(plan.kind, plan.shape, plan.prm, plan.clr, edge, 0, 0, H) : null;
+      const solid = housing ? extrudePoly(housing.footprint, housing.bottom, H + 0.5)
+        : plan.kind === 'recess' ? keySiteOps(plan.kind, plan.shape, plan.prm, plan.clr, edge, 0, 0, H).cut
         : tabNotch(cfg, at, pad);
       const segs = [], bb = [Infinity, Infinity, -Infinity, -Infinity];
       let ceiling = -Infinity;
@@ -3990,12 +4017,13 @@ function mountLimits(cfg, layout, known) {
         const a = p.verts[0], b = p.verts.find((v) => Math.hypot(v[0] - a[0], v[1] - a[1]) > 1e-9);
         if (b) segs.push([a, b]);
       }
-      const part = plan.kind === 'recess' ? keyHalf(plan.shape, edge, 0, 0, plan.prm, 0)
+      const part = plan.kind === 'recess' || housing ? keyHalf(plan.shape, edge, 0, 0, plan.prm, 0)
         : cfg.connector === 'puzzle' ? puzzleShape(OPP[edge], 0, 0, cfg.puzzle, 0, false)
         : tabFootprint(OPP[edge], 0, 0, cfg.tab.wr, cfg.tab.wt, cfg.tab.dp, 0.8);
       // the ceiling to the micron: a notch's is 2.2 + 0.2, 2.4000000000000004 as summed
       const roof = Math.round(ceiling * 1e6) / 1e6;
-      return (shapes[edge] = { segs, bb, ceiling: roof, part: ring(part) });
+      const bottom = housing ? Math.round(housing.bottom * 1e6) / 1e6 : undefined;
+      return (shapes[edge] = { segs, bb, ceiling: roof, bottom, part: ring(part) });
     };
     // how far a point is from the footprint, less than none inside it
     const from = (segs, x, y) => {
@@ -4010,11 +4038,12 @@ function mountLimits(cfg, layout, known) {
     };
     for (const piece of layout.pieces) {
       const conn = pieceConnectors(cfg, layout, piece);
-      // the cuts buildPiece makes in this piece: notches for tabs, recesses for keys
-      const cuts = [...conn.notches, ...conn.pnotches, ...(plan.kind !== 'recess' ? []
-        : conn.keyed.filter((bo) => !(plan.junction && offJunction(bo, cfg.pitch, piece))))];
+      // the cuts buildPiece makes in this piece: notches for tabs, recesses for keys, and
+      // the housings of keys put in from above
+      const cuts = [...conn.notches, ...conn.pnotches,
+        ...conn.keyed.filter((bo) => !(plan.junction && offJunction(bo, cfg.pitch, piece)))];
       for (const bo of cuts) {
-        const { segs, bb, ceiling, part } = shapeOf(bo.edge);
+        const { segs, bb, ceiling, bottom, part } = shapeOf(bo.edge);
         const across = bo.edge === '+x' || bo.edge === '-x';
         const ox = across ? bo.e : bo.s, oy = across ? bo.s : bo.e;
         // the whole cells with a site in reach of it (a half cell has none; see buildPiece)
@@ -4034,7 +4063,7 @@ function mountLimits(cfg, layout, known) {
             const bore = (n) => room > 0 ? boreReach(n, segs, x, y) : room;
             sites.push({ room, body: from(part, x, y), bore: { 12: bore(12), 14: bore(14) } });
           }
-        if (sites.length) jointCuts.push({ top: ceiling, sites });
+        if (sites.length) jointCuts.push({ top: ceiling, bottom, sites });
       }
     }
   }
@@ -4079,13 +4108,20 @@ function mountLimits(cfg, layout, known) {
     for (const c of jointCuts) {
       /* a pocket from above clears a cut whose ceiling it leaves a layer of floor over; in
          a corner boss its floor is the pocket's depth under the boss's top */
-      if (above && !(c.top + MOUNT_SKIN > (bosses ? bossHeight(cfg) : pad) - cfg.magnetH + 1e-6)) continue;
+      if (above && c.bottom === undefined &&
+          !(c.top + MOUNT_SKIN > (bosses ? bossHeight(cfg) : pad) - cfg.magnetH + 1e-6)) continue;
+      /* a housing a key is put into from above stands from its underside (`bottom`) up: a
+         pocket from beneath clears it by stopping MOUNT_LEVEL under that, to the micron as
+         level is below. One from above takes its magnet in through it, and a shank goes up
+         through it, so each meets one it reaches. */
+      if (c.bottom !== undefined && !above &&
+          Math.round((c.bottom - ceiling) * 1e6) / 1e6 >= MOUNT_LEVEL) continue;
       /* Level within MOUNT_LEVEL, measured to the micron, so a pocket that far above the
          notch's ceiling and one that far below it are taken alike: 2.35 and 2.45 mm deep
          against a notch 2.4 mm high, which both build clean. Unrounded, 2.45 counted as
          level, and with the ceiling alone rounded 2.35 would. */
       const level = Math.round(Math.abs(ceiling - c.top) * 1e6) / 1e6 < MOUNT_LEVEL;
-      const stop = above ? 'floor' : !notch ? 'cut' : level ? 'level' : 'part';
+      const stop = c.bottom !== undefined ? 'housing' : above ? 'floor' : !notch ? 'cut' : level ? 'level' : 'part';
       for (const s of c.sites) {
         const short = fits(s.bore[sides] - seam);
         const size = stop === 'part' ? 2 * s.body : short;
@@ -5149,6 +5185,33 @@ function buildPiece(cfg, layout, piece, onStatus) {
                 !others.some((d) => touchesBuilt(again, c.box, d))) { shells[c.i] = again; c.alt = alt; break; }
           }
         }
+        /* And if it touches still, the joint is cut again with its cutters moved a NUDGE
+           along one diagonal and then the other, as cutAgain moves them, and the first
+           that is closed, has nothing turned over and shares no edge is kept.
+           TOUCH_TRIES only reorder the cut, and a split that comes from a plane of the
+           cell's own can land in the same place every time. Puzzle tabs at a 0.35 mm fit
+           clearance, four pieces meeting, left one edge used four times in two of them at
+           every pitch from 31.6 to 52.2 mm (#72): the plane of a socket wall's facet at a
+           cell's corner, carried across the cell by the BSP, crossed the notch lobe's face
+           beside its pole 0.3 microns from where the side of the region across the
+           junction crosses it, and the two shells shared the edge there. The lobe moves
+           with the clearance and the facet with the rim cutoff and the tolerance, so it is
+           one clearance for each: 0.349 and 0.35 at the defaults, 0.608 and 0.609 tight,
+           0.843 and 0.844 with a 1 mm rim cutoff, and 0.102, 0.103 and 0.279 to 0.281
+           with 0.1. Moved 1.7 microns, the face is crossed somewhere else. A cell that
+           touches nothing, or that the tries above clear, is built as before. One with
+           mounting pockets that still touched here was sometimes cleared later, by settle
+           cutting its pockets again; this clears it first, so such a plate comes out with
+           other bytes than before, and as closed. */
+        if (touching.length && beside.some((c) => touchesBuilt(region, own, c)))
+          for (const [dx, dy] of [[NUDGE, NUDGE], [-NUDGE, NUDGE]]) {
+            const alt = (solid, cut) => csgSubtract(solid, movePolys(cut, dx, dy));
+            let again;
+            try { again = cutCell(alt); } catch (e) { continue; }
+            if (again && !worse(again, region) && !beside.some((c) => touchesBuilt(again, own, c))) {
+              region = again; cell.alt = alt; break;
+            }
+          }
         cell.joint = cutCell;
         jointCells.push(cell);
       }
@@ -7842,9 +7905,10 @@ const cutsNamed = () => `${['dovetail', 'puzzle'].includes(state.connector) ? 'n
 /* Why `field` stops where it does. A joint's cut stops it in one of the ways mountLimits'
    `joint` names: a pocket from beneath as deep as a dovetail's notch, a magnet or screw
    that would reach the tab in one, a pocket any wider coming too near the notch's edge,
+   a hole that would meet the housing of a key put in from above ('housing'),
    or any other hole breaking into the cut. The hint about keys put in from above is not
    given with corner pockets: there is no solid floor under them, and such a key's cup
-   stands into a boss's pocket (#75). Nor where the bosses are buried in the floor a
+   reaches a boss's pocket (#75). Nor where the bosses are buried in the floor a
    joint needs (cornerBosses): a key put in from above, in the walls, needs none, so
    taking the hint would stand them up again, and the cup in their pockets. Only a floor
    asked for (bottomPad) keeps them buried whatever the joint. */
@@ -7858,6 +7922,11 @@ const mountWhy = (opens, field) => {
       : joint === 'part' ? `${{ magnetD: 'a magnet', screwHeadD: 'a screw head', screwHoleD: 'a screw' }[field]} ` +
         `has to stay clear of the ${CONNECTOR_NAMES[state.connector]} in the notches beside it`
       : joint === 'near' ? `a pocket any wider would come too near the edge of the ${cuts} to cut cleanly`
+      /* put in from beneath, a key's or an H-clip's recess leaves more room wherever its cup
+         stops a size (all 1,508 such caps in the #75 sweep); a snap clip's reaches further */
+      : joint === 'housing' ? `a hole has to stay out of the housings the ${CONNECTOR_NAMES[state.connector]} ` +
+        'drop into from above' + (state.connector === 'snap' ? ''
+          : `; put in from beneath, the ${CONNECTOR_NAMES[state.connector]} leave more room`)
       : joint ? `a hole has to stay out of the ${cuts}`
       : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
       : cornerBosses(state) ? 'a pocket has to stay inside its corner boss'
