@@ -428,7 +428,8 @@ function readControls() {
   if (noBore) {
     const from = headClearsFrom(state.screwHoleD), m = mount();
     let at = from;
-    for (const [a, b] of m.gaps.screwHeadD) if (at >= a - 1e-9 && at <= b + 1e-9) at = Math.round(b * 100 + 1) / 100;
+    // a gap's ends are taken, as readNumber takes them
+    for (const [a, b] of m.gaps.screwHeadD) if (at > a + 1e-9 && at < b - 1e-9) at = b;
     $('screwHeadHint').textContent = `A ${state.screwHeadD} mm head does not clear ` +
       `the corners of a ${state.screwHoleD} mm hole, so no counterbore is cut. ` +
       (at <= m.screwHeadD + 1e-9 ? `One is from ${at} mm.`
