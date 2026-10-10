@@ -2239,6 +2239,47 @@ console.log('\nthe other limits, built at their ends:');
     console.log(`  ${nm.padEnd(30)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
     if (!taken || r.bad || folds) bad++;
   }
+  /* A bare magnet pocket, with no counterbore cut, whose corner stands on a flat of the
+     shank carried on past it. The BSP splits the pocket's roof or floor along that plane
+     as it does round a counterbore (#74), and the plate leaks. From beneath, where the
+     pocket holds the counterbore whole: a 4.18 mm shank under a 5 mm magnet and a 5.12 mm
+     head, a corner 0.002 mm off a flat, left 12 edges open at 42 mm, 24 with a 5 x 3
+     magnet over two cells, and 51 under a 5.08 head at 41.14 mm; 1.96 under 4.16 with a
+     4 x 1.5 magnet folded 12 times; and 6.689 under an 8.068 head in an 8.11 x 3 magnet's
+     pocket left 12 at 52.26 mm. From above, under heads too narrow to cut a counterbore:
+     4.18 under a 5 x 2 magnet left 30, 3.296 under a 6 x 3 one 16, and 7.268 under a
+     7.734 x 2.5 one 84 over a 2 x 2 piece. The first four came with the counterbore cut
+     at the pocket's corners, which the pocket from beneath then holds whole and which so
+     no longer turned the shank; the other four leaked before it as well. The shank is
+     turned for the pocket's corners alone now (MOUNT_BORE.screw), and main, whose bores
+     stand elsewhere, builds every one of them closed. Each is a size the page takes, and
+     has to build closed, with no folds. */
+  for (const [nm, o] of [
+    ['4.18 under 5.12, 5 x 2 below, 42', { bedW: 52, magnetD: 5, screwHoleD: 4.18, screwHeadD: 5.12 }],
+    ['4.18 under 5.12, 5 x 3 below, 84 x 42', { drawerW: 84, tolerance: 'tight', magnetD: 5, magnetH: 3,
+      screwHoleD: 4.18, screwHeadD: 5.12, screwHeadDepth: 3 }],
+    ['4.18 under 5.08, 5 x 2 below, 41.14', { pitch: 41.14, drawerW: 82.28, drawerD: 82.28, magnetD: 5,
+      screwHoleD: 4.18, screwHeadD: 5.08 }],
+    ['1.96 under 4.16, 4 x 1.5 below, 42', { drawerW: 84, drawerD: 84, magnetD: 4, magnetH: 1.5,
+      screwHoleD: 1.96, screwHeadD: 4.16, screwHeadDepth: 1 }],
+    ['6.689 under 8.068, 8.11 x 3 below', { pitch: 52.26, drawerW: 52.26, drawerD: 52.26, tolerance: 'loose',
+      magnetD: 8.11, magnetH: 3, screwHoleD: 6.689, screwHeadD: 8.068, screwHeadDepth: 2.747 }],
+    ['4.18 bare, 5 x 2 above, 42', { magnetD: 5, magnetSide: 'top', screwHoleD: 4.18, screwHeadD: 4.19,
+      screwHeadDepth: 1 }],
+    ['3.296 bare, 6 x 3 above, 42', { tolerance: 'tight', magnetD: 6, magnetH: 3, magnetSide: 'top',
+      screwHoleD: 3.296, screwHeadD: 3.335, screwHeadDepth: 2.026 }],
+    ['7.268 bare, 7.734 x 2.5 above, 2 x 2', { drawerW: 84, drawerD: 84, magnetD: 7.734, magnetH: 2.5,
+      magnetSide: 'top', screwHoleD: 7.268, screwHeadD: 7.365, screwHeadDepth: 2.66 }],
+  ]) {
+    const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, screws: true, ...o };
+    const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
+    const taken = ['magnetD', 'screwHoleD', 'screwHeadD'].every((f) => cfg[f] <= lim[f] + 1e-9 &&
+      !lim.gaps[f].some(([a, b]) => cfg[f] > a + 1e-9 && cfg[f] < b - 1e-9));
+    const r = buildAll(at);
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    console.log(`  ${nm.padEnd(38)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (!taken || r.bad || folds) bad++;
+  }
   /* A pocket against a joint's cut in the floor (#64). A bowtie housed in the floor at
      42 mm, with magnets from beneath, built 12 bad edges at 7.9 mm and 19 at 10 with
      Download on: the pocket reached the key's recess, and with both ceilings 2 mm up the

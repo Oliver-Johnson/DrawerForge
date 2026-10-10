@@ -766,11 +766,14 @@ currently installed):
   6 × 2 magnet from beneath it left 6 edges open a cell at 42 mm, the test tile among
   them; main's head, its corners on the size, stood 0.1 off and built closed. A head in
   the band is cut up to 0.1 mm wider or narrower across its flats than typed, and
-  `mountLimits` reads it back as cut (`head.fitsCut`). Where a counterbore is cut, and
-  only there, the shank is turned π/84 about its axis where one of the counterbore's
-  corners, or one of the magnet pocket's, would otherwise stand within 0.005 mm of a
-  flat's plane carried on past the shank (`MOUNT_BORE.hole.turn`, which goes by the
-  counterbore as cut): the BSP splits a magnet pocket's floor or roof
+  `mountLimits` reads it back as cut (`head.fitsCut`). The shank is turned π/84 about
+  its axis where one of the counterbore's corners, or one of the magnet pocket's, would
+  otherwise stand within 0.005 mm of a flat's plane carried on past the shank
+  (`MOUNT_BORE.hole.turn`, which goes by the counterbore as cut, and by the pocket's
+  corners alone where no counterbore is cut: a 5 mm magnet from beneath that holds a
+  5.12 mm head whole over 4.18 mm left 12 edges open at 42 mm unturned, and the same
+  shank under the magnet from above with no counterbore 30): the BSP splits a magnet
+  pocket's floor or roof
   along that whole plane, the weld pulled the corner onto the split, and the plate came
   out open by the dozen round every site (#74: 136 edges a piece for 1.0353 mm under
   1.0873 with a magnet from above at 42 mm, on main; and 26 a piece at 41.24 mm for a 3 mm
