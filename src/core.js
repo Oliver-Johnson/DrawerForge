@@ -966,32 +966,33 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * plate's four pieces, at sites away from the origin, and none on one cell, where fewer
  * planes split the roof. π/126 left 2 edges open under a 6.47 x 2 magnet with the
  * 14.6 mm head at its cap at 43 mm, π/56 and π/28 folded a 4.844 head in a 6 x 3 pocket
- * from beneath at 42 mm, and π/84 opened 4 of the designs below; π/14 builds them all
- * closed, as it does the 13.582 head 0.251 deep under a 6 x 3 magnet from above at 42 mm
- * that π/252 left with 12 edges open a cell. On 600 designs drawn at random with a head
- * within 0.012 mm of a size that puts a corner of either on a plane of the other (34 to
- * 56 mm; 2 x 2 in one piece, 3 x 2 in two, 3 x 3 in four, two pieces with dovetails or
- * jigsaws, 2 x 2 on corner bosses; magnets of 3 to 13 mm, either way up), of the 354
- * taken 138 were open, folded or had a face turned over before, counting the folds in
- * the STL and leaving out the edges where corner bosses meet, and 7 now, where π/252
- * left 10 and main 23 of its 356. Two that built closed before do not now, and main
- * builds them closed: an 8.798 head 0.592 deep under a 7.037 x 2.5 magnet from above at
- * 42 mm, where a sloped plane meets a flat of the counterbore half a micron under its
- * roof and each cell has an edge shared four ways and two folds, and 7.958 under a
- * 6.35 x 2 magnet from above at 50.38 mm, 11 folds in the STL. On 900 more drawn the
- * same way on one cell, the test tile, 2 x 2, corner bosses and two pieces, of the 544
- * taken 183 before and 10 now, where π/252 left 22 and main 22 of its 549; two are new,
- * folds in the STL only, 6 on a 38.41 mm dovetail under an 8.704 x 3 magnet from beneath
- * and 1 on a 42 mm test tile under a 12.954 x 1.5 magnet, where π/252 opened 8. With the
- * head at its cap, every 1 mm of pitch from 34 to 56, 1, 1.5 and 2.5 deep, 2 x 2 in one
- * piece and 3 x 2 in two, under each magnet to the hundredth that puts a corner of the
- * counterbore on a flat's plane, of the 108 taken from above 36 were open or folded
- * before and none now (π/252 left 1, main 14), and of the 186 from beneath 53 before and
- * 4 now, a fold or two each in the STL at 38 mm 2.5 deep that π/252 and main build
- * closed (π/252 left 3 others, main 16). On one cell, every 0.5 mm of pitch, of the 216
- * taken from above 40 before and none now (π/252 none, main 27), and of the 360 from
- * beneath 67 before and 2 now, 2 folds in the STL at 37.5 mm under a 7.36 x 2 magnet 1
- * and 1.5 deep that π/252 and main build closed (π/252 left 3, main 24).
+ * from beneath at 42 mm, and π/84 opened 5 of the 600 designs below and 14 of the 900
+ * after them; π/14 builds them all closed, as it does the 13.582 head 0.251 deep under a
+ * 6 x 3 magnet from above at 42 mm that π/252 left with 12 edges open a cell. On 600
+ * designs drawn at random with a head within 0.012 mm of a size that puts a corner of
+ * either on a plane of the other (34 to 56 mm; 2 x 2 in one piece, 3 x 2 in two, 3 x 3
+ * in four, two pieces with dovetails or jigsaws, 2 x 2 on corner bosses; magnets of 3 to
+ * 13 mm, either way up), of the 354 taken 138 were open, folded or had a face turned
+ * over before, counting the folds in the STL and leaving out the edges where corner
+ * bosses meet, and 7 now, where π/252 left 10 and main 23 of its 356. Two that built
+ * closed before do not now, and main builds them closed: an 8.798 head 0.592 deep under
+ * a 7.037 x 2.5 magnet from above at 42 mm, where a sloped plane meets a flat of the
+ * counterbore half a micron under its roof and each cell has an edge shared four ways
+ * and two folds, and 7.958 under a 6.35 x 2 magnet from above at 50.38 mm, 11 folds in
+ * the STL. On 900 more drawn the same way on one cell, the test tile, 2 x 2, corner
+ * bosses and two pieces, of the 544 taken 183 before and 10 now, where π/252 left 22 and
+ * main 22 of its 549; two are new, folds in the STL only, 6 on a 38.41 mm dovetail under
+ * an 8.704 x 3 magnet from beneath and 1 on a 42 mm test tile under a 12.954 x 1.5
+ * magnet, where π/252 opened 8. With the head at its cap, every 1 mm of pitch from 34 to
+ * 56, 1, 1.5 and 2.5 deep, 2 x 2 in one piece and 3 x 2 in two, under each magnet to the
+ * hundredth that puts a corner of the counterbore on a flat's plane, of the 108 taken
+ * from above 36 were open or folded before and none now (π/252 left 1, main 14), and of
+ * the 186 from beneath 53 before and 4 now, a fold or two each in the STL at 38 mm
+ * 2.5 deep that π/252 and main build closed (π/252 left 3 others, main 16). On one cell,
+ * every 0.5 mm of pitch, of the 216 taken from above 40 before and none now (π/252 none,
+ * main 27), and of the 360 from beneath 67 before and 2 now, 2 folds in the STL at
+ * 37.5 mm under a 7.36 x 2 magnet 1 and 1.5 deep that π/252 and main build closed (π/252
+ * left 3, main 24).
  *
  * The shank is turned a little about its axis (`turn`, #74) where a corner of the
  * counterbore or of the magnet pocket would stand on one of its flats carried on past
