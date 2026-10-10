@@ -5704,7 +5704,11 @@ function buildPiece(cfg, layout, piece, onStatus) {
 
            With screws, a cell that comes out closed but with a face the repair left turned
            over (healCsgSeams' `turned`) is cut again the same ways too, and the first try
-           that is closed with nothing turned over is kept. Turned half a facet off the
+           that is closed with nothing turned over is kept. The trigger is healCsgSeams' own
+           `turned` count on the cut as it was built, not test/orientation.js on the final
+           mesh, so it goes by the cut and not by what the audit would see of the plate, and
+           it changes the bytes of every design it fires on (54 of 3,053 screw designs in
+           the review's sweep). Turned half a facet off the
            magnet pocket (MOUNT_BORE.head.turn), two of a counterbore's flats can stand
            square to the cell's x edges, and the BSP split one into a strip 3.3 microns
            wide that came out folded back: a 3.89 mm head 1 deep over a 1.01 mm shank under
