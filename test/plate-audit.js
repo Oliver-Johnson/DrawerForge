@@ -2457,6 +2457,27 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
                   `; ${leakText(r)}${good ? '' : `   FAIL${refused === why ? '' : why ? `: has to be refused for the ${why}` : ': has to be taken'}`}`);
       if (!good) bad++;
     }
+    /* And where the cup meets a pocket the plate can come out open, which the room above
+       does not see: an H-clip from above at 34 mm took a 4 mm magnet from above with 4
+       edges open in A1, where the cavity meets the pocket's wall, and a wall bowtie at
+       36.13 mm a 7.9 mm magnet 1.45 mm deep, level with the cavity's floor, with 13 open
+       a piece, both with Download on. The H-clip's pocket has no less room than with no
+       joint, since the rim's corner stands where the cup does (#83), and it is refused
+       all the same. Each has to be refused for the housing, and built at the size the
+       field takes with no edge open. */
+    for (const [name, over, d] of [
+      ['H-clip at 34 mm, 4 mm magnet above', { ...P(34), connector: 'hclip', magnets: true, magnetSide: 'top' }, 4],
+      ['wall bowtie at 36.13 mm, 7.9 x 1.45', { ...P(36.13), magnets: true, magnetH: 1.45 }, 7.9]]) {
+      const asked = designCfg({ ...over, magnetD: d });
+      const lims = G.mountLimits(asked, G.computeLayout(asked));
+      const refused = d > lims.magnetD + 1e-9 && lims.joint.magnetD;
+      const size = Math.min(d, lims.magnetD);
+      const r = buildAll({ ...over, magnetD: size });
+      const good = refused === 'housing' && !r.open;
+      console.log(`  ${name.padEnd(38)} ${refused ? `refused (${refused}), built at ${size}` : 'TAKEN'}; ${leakText(r)}` +
+                  `${good ? '' : `   FAIL${refused === 'housing' ? '' : ': has to be refused for the housing'}`}`);
+      if (!good) bad++;
+    }
   }
 }
 

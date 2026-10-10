@@ -2513,17 +2513,19 @@ function mountLimits(cfg, layout, known) {
      reaches one in plan has broken into it. A magnet from above meets it unless the
      pocket's floor stands at least MOUNT_SKIN over the cut's ceiling.
 
-     The housing a key is put into from above (keySiteOps' 'cup' and 'snaptop') is built,
-     not cut: a floor 0.6 mm thick under the key, its underside 1.4 mm over the socket
-     floor (1.3 for a snap clip), and walls from there up, at a corner where four cells
-     meet. Over a solid floor nothing reaches it: a pocket from above stops under it, and
-     a shank, which stays on the socket floor, is in the socket's open air up there. A
-     corner boss stands on the bed, though, with its pocket's mouth at the bed or 2.6 mm
-     up, and the housing is built after the pockets are cut, so it stood in any it reached
-     (#75): a wall bowtie at 36.13 mm left 1.3 mm³ of it in the four 6 mm magnet pockets
-     beside the seam, in the top 0.6 mm of each, and 1.6 mm³ in 9.3 mm ones at 39.46 mm,
-     with Download on. So it counts as a cut that stands from its underside up
-     ('housing'), as wide as all it cuts or builds: a pocket from beneath clears it by
+     The housing a key is put into from above (keySiteOps' 'cup' and 'snaptop') is a
+     cavity cut and a cup built in it: a floor 0.6 mm thick under the key, its underside
+     1.4 mm over the socket floor (1.3 for a snap clip), and walls from there up, at a
+     corner where four cells meet. Over a solid floor nothing reaches it: a pocket from
+     above stops under it, and a shank, which stays on the socket floor, is in the
+     socket's open air up there. A corner boss stands on the bed, though, with its
+     pocket's mouth at the bed or at the boss's top (bossHeight, at most 2.6 mm), and the
+     housing is made after the pockets are cut, so it stood in any it reached (#75): a
+     wall bowtie at 36.13 mm left 1.3 mm³ of it in the four 6 mm magnet pockets beside
+     the seam, in the top 0.6 mm of each, and 1.6 mm³ in 9.3 mm ones at 39.46 mm, and a
+     7.9 mm magnet 1.45 mm deep, level with the cavity's floor, left 13 edges open a
+     piece, all with Download on. So it counts as a cut that stands from its underside
+     up ('housing'), as wide as all it cuts or builds: a pocket from beneath clears it by
      stopping MOUNT_LEVEL under that, and a pocket from above and a shank, which go in
      through it, meet any they reach. Keys in the wall reach a boss's pocket up to
      40 mm, the H-clip up to 38.5 and a snap clip in the wall up to 35; nothing over a
