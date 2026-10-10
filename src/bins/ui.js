@@ -5362,7 +5362,7 @@ const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
   forgetPasted();
-  const saving = hashReady;
+  const saving = hashReady || freshLeft;   // pressed again before the page goes: as the first press found it
   /* Left as Put back leaves, by leaveFor: the page runs on until the bare one arrives, and
      a change that landed in between was saved after the clearing, and came back with the
      note that it had been restored. */

@@ -335,10 +335,17 @@ const DRAWERS = (function () {
        on, by a hand-over or as it went into the back-forward cache (`sealed` till then).
        With one id for the whole chain, a save that went through on an earlier page counted
        a later page's change as landed too, though it had never been saved: Forward to that
-       page lost a depth refused there. */
+       page lost a depth refused there.
+       Each id has the base its own changes are counted from (`bases`): the page's shared keys
+       as it last sealed (`sealedAt`), arriving, saving or coming back from the cache. Counted
+       from the first page's base, a size that page's refusal held stayed a change of the
+       later page's after it was saved and set back since, and Forward to the later page
+       wrote it over the one set back. */
     let rids = [];
+    let bases = new Map();
+    let sealedAt = null;
     let sealed = true;
-    const drop = () => { rids = []; sealed = true; };
+    const drop = () => { rids = []; bases = new Map(); sealed = true; };
     /* This tool's mark in the drawer at the page's last save into it that went through,
        or as it arrived: the page's half is that save or newer. Newer when the browser
        refused the saves since (storage full), and then the address is the one copy of the
@@ -369,16 +376,18 @@ const DRAWERS = (function () {
        record: that it does, and the page's base `b`, its shared keys as it last saved them
        or arrived with them, which its changes are counted from (see attach). With the ids
        of the refusals it holds (see rids), so that once they land, its records can be told
-       apart from one still to save (see land). Nothing for any other page, whose base is
-       the design it hands on. */
+       apart from one still to save (see land), and each one's base (`bs`, the page's own
+       but for a catch-up's). Nothing for any other page, whose base is the design it hands
+       on. */
     const newRid = () => Math.random().toString(36).slice(2, 10) || 'r';
-    const carry = (on, b) => {
+    const carry = (on, b, bs = bases) => {
       if (!(on && b)) return {};
-      if (!rids.length) rids = [newRid()];
-      return { refused: true, base: [...b], rids: rids.slice() };
+      if (!rids.length) { rids = [newRid()]; bases = new Map([[rids[0], b]]); }
+      return { refused: true, base: [...b], rids: rids.slice(), bases: rids.map((id) => [...(bs.get(id) || b)]) };
     };
     // ids as a record or the tab's note has them, what carry makes and no more
-    const ridsIn = (v) => strings(v).filter((id) => /^[a-z0-9]{1,16}$/.test(id));
+    const RID = /^[a-z0-9]{1,16}$/;
+    const ridsIn = (v) => strings(v).filter((id) => RID.test(id));
     const landedIds = () => ridsIn(readNote('sessionStorage', TAB).landed);
     /* A save that went through while the page held refusals: their changes are in the
        drawer now, or were changed again before they got there, and either way every record
@@ -398,18 +407,46 @@ const DRAWERS = (function () {
       }
       drop();
     }
-    // whether every one of `ids` has landed, so a record holding them has nothing left to save
-    const allLanded = (ids) => {
-      const done = landedIds();
-      return ids.length > 0 && ids.every((id) => done.includes(id));
+    /* How many of `ids`, oldest first, have landed: all up to the last one that has. The
+       page that held it held those before it too, with their changes, so its save that went
+       through saved them, or a change since replaced them. A page that keeps only the last
+       of a long chain's ids (see hold) lands them so, and Back to one holding the first
+       found it still to save. */
+    const landedTo = (ids) => {
+      const done = new Set(landedIds());
+      let n = ids.length;
+      while (n > 0 && !done.has(ids[n - 1])) n -= 1;
+      return n;
     };
-    /* The base a note, mark or record carries (see carry), or null for one that carries
-       none, or whose refusals have all landed since. */
+    // a base as a record has it, the shared keys and no more
+    const baseIn = (b) => new Map((Array.isArray(b) ? b : []).filter((p) => Array.isArray(p) &&
+      p.length === 2 && typeof p[0] === 'string' && typeof p[1] === 'string' && SHARED.has(p[0])));
+    /* What a note, mark or record carries (see carry): its refusals still to land, oldest
+       first, as [id, base], and the base the page's changes are counted from, the first
+       one's. Null for one that carries none, or whose refusals have all landed since. */
     function carried(r) {
       if (!isPlain(r) || r.refused !== true || !Array.isArray(r.base)) return null;
-      if (allLanded(ridsIn(r.rids))) return null;
-      return new Map(r.base.filter((p) => Array.isArray(p) && p.length === 2 && typeof p[0] === 'string' &&
-        typeof p[1] === 'string' && SHARED.has(p[0])));
+      const all = baseIn(r.base);
+      const ids = Array.isArray(r.rids) ? r.rids : [];
+      // a record from before each id had a base: all of them have the record's
+      const bs = Array.isArray(r.bases) && r.bases.length === ids.length ? r.bases : null;
+      const held = [];
+      for (let i = Math.max(0, ids.length - 64); i < ids.length; i += 1) {   // more than a page keeps
+        if (typeof ids[i] === 'string' && RID.test(ids[i])) held.push([ids[i], bs ? baseIn(bs[i]) : all]);
+      }
+      const n = landedTo(held.map(([id]) => id));
+      if (held.length && n === held.length) return null;
+      const rest = held.slice(n);
+      return { base: rest.length ? rest[0][1] : all, held: rest };
+    }
+    /* The refusals `held` ([id, base], oldest first) as the page's own: the last 32, the
+       first of them counted from the page's base, which is the first one's, so the changes
+       of those let go are still counted. */
+    function hold(held) {
+      const kept = held.slice(-32);
+      if (kept.length < held.length) kept[0] = [kept[0][0], base];
+      rids = kept.map(([id]) => id);
+      bases = new Map(kept);
     }
     /* The note for the next page to load in this tab: the drawer ('' for none), and the
        fingerprint of the design that page will arrive with. `link` lists the drawer, bed
@@ -425,7 +462,8 @@ const DRAWERS = (function () {
       n.next = { id, fp: fingerprint(h), caughtUp: !!caughtUp,
                  link: (more && more.link) || [], open: !!(more && more.open),
                  marks: (more && more.marks) || {},
-                 ...(more && more.refused ? { refused: true, base: more.base, rids: more.rids } : {}) };
+                 ...(more && more.refused ? { refused: true, base: more.base, rids: more.rids, bases: more.bases }
+                   : {}) };
       return writeNote('sessionStorage', TAB, n);
     }
     /* With it, the record of the address this tool's last save left (see wrote), which is
@@ -540,18 +578,21 @@ const DRAWERS = (function () {
       const pairs = parsePairs(h) || [];
       const merged = encodePairs(pairs.map(([k, v]) => [k, moved.includes(k) ? stored.get(k) : v])
         .concat(moved.filter((k) => !pairs.some((p) => p[0] === k)).map((k) => [k, stored.get(k)])));
-      const caught = new Map([...base, ...moved.map((k) => [k, stored.get(k)])]);
+      // a base with the keys caught up as the drawer has them: the page's, and each refusal's
+      const catching = (b) => new Map([...b, ...moved.map((k) => [k, stored.get(k)])]);
+      const caught = catching(base);
+      const caughtEach = new Map([...bases].map(([id, b]) => [id, catching(b)]));
       /* The page has the drawer's settings already: they are its base now, with nothing to
          reload, and its address's mark says so. Left with the base before, a reload after
          another tab set the size back took the page's size for its own change still to
          save, and wrote it over the one set back. */
       if (merged === h) {
-        base = caught;
+        base = caught; bases = caughtEach;
         const m = refused() && markOf(h);
         if (m) markHere(h, m.link, m.note);
         return false;
       }
-      const more = { open: true, marks: marksFor(ours), ...carry(refused(), caught) };
+      const more = { open: true, marks: marksFor(ours), ...carry(refused(), caught, caughtEach) };
       // without the note the reloaded page could not tell it is this drawer, so stay put
       if (!handOver(d.id, merged, true, more)) return false;
       go(merged);
@@ -753,7 +794,7 @@ const DRAWERS = (function () {
         return;
       }
       attached = d.id; armed = ''; renaming = '';
-      base = sharedOf(h); failing = false; refusedIn = false; drop();
+      base = sharedOf(h); sealedAt = base; failing = false; refusedIn = false; drop();
       ours = d.marks[o.tool];
       theirs = undefined;   // the other tool has no mark in a new drawer
       savedInto(d.id);
@@ -928,18 +969,24 @@ const DRAWERS = (function () {
     addEventListener('pageshow', (e) => {
       if (!e.persisted || !attached) return;
       const d = find(loadAll(), attached);
-      if (!d) return;
+      if (!d) { paintBar(); return; }   // deleted since: the bar says so
       const h = o.design();
       /* Refusals that have all landed since, from a later page: this one is as any page come
          back. All but a change to its own half, which the later page did not save: refused
          with the size, it is still this page's alone, and the bar still says so until a save
-         goes through. */
-      if (refused() && allLanded(rids)) {
+         goes through. Some of them landed: its changes are counted from the first still to
+         land. */
+      const n = refused() ? landedTo(rids) : 0;
+      if (n && n === rids.length) {
         refusedIn = false; drop(); base = sharedOf(h);
         if (encodePairs(halfPairs(h)) === encodePairs(halfPairs(d.hash))) failing = false;
         paintBar();
+      } else if (n) {
+        hold(rids.slice(n).map((id) => [id, bases.get(id) || base]));
+        base = bases.get(rids[0]);
       }
       sealed = true;   // its records so far went into the cache with it
+      sealedAt = sharedOf(h);
       if (movedOn(d, h, ours)) reopen(d);   // a later page saved into it
       else catchUp(h, d);
     });
@@ -1058,7 +1105,7 @@ const DRAWERS = (function () {
           }
           if (d) {
             attached = d.id;
-            base = sharedOf(arrivedWith);
+            base = sharedOf(arrivedWith); sealedAt = base;
             // the record the design came with: the note, this tab's own mark, or a raced reload's
             const from = noted ? next : mine && mine.id === d.id ? mine
               : gone && gone.id === d.id ? gone : null;
@@ -1084,7 +1131,7 @@ const DRAWERS = (function () {
                a size that page had kept from before another tab moved it on was taken for
                the change, and its next save wrote it over that tab's. */
             const kept = carried(from);
-            if (kept) { refusedIn = true; base = kept; rids = ridsIn(from.rids).slice(-32); }
+            if (kept) { refusedIn = true; base = kept.base; hold(kept.held); }
             /* A hand-over, onto a drawer this tool has saved into. One carrying a link's
                settings too: restore keeps the settings the other page sets, which are the
                link's, and this tool's half was saved into the drawer with them. */
@@ -1101,7 +1148,7 @@ const DRAWERS = (function () {
               d.marks[o.tool] = fp;
               if (saveAll(s)) {
                 if (refused()) land();
-                ours = fp; base = sharedOf(arrivedWith); refusedIn = false;
+                ours = fp; base = sharedOf(arrivedWith); sealedAt = base; refusedIn = false;
               }
               savedInto(d.id);
             }
@@ -1137,10 +1184,15 @@ const DRAWERS = (function () {
         const ok = saveAll(s);
         if (ok) {
           if (refused()) land();
-          base = sharedOf(h); ours = d.marks[o.tool]; refusedIn = false;
+          base = sharedOf(h); sealedAt = base; ours = d.marks[o.tool]; refusedIn = false;
         } else if (sealed) {
-          // a refusal of this page's own, apart from any it arrived with (see rids)
-          rids = rids.concat(newRid()); sealed = false;
+          /* A refusal of this page's own, apart from any it arrived with (see rids), counted
+             from the page as it last sealed. The first the page holds counts from its base,
+             which can be older: a change it arrived with, from a record with no ids, is
+             still to save. */
+          const at = rids.length ? sealedAt || base : base;
+          hold(rids.map((id) => [id, bases.get(id) || base]).concat([[newRid(), at]]));
+          sealed = false;
         }
         savedInto(d.id);
         /* Refused, the drawer still holds the save before, and the address has the page's

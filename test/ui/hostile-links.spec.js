@@ -1134,9 +1134,12 @@ for (const tool of ['plates', 'bins']) {
    back-forward cache can show it again on Back. Shown again, it is a page of yours, and its
    changes save, as they did before Start fresh and as they do when it is loaded again.
    Chromium does not keep it, so here the page is stopped before the fresh one arrives and
-   shown again as the cache would. Both pages are covered. */
-for (const tool of ['plates', 'bins']) {
-  test(`a ${tool} page left by Start fresh and shown again from the cache saves again`, async ({ page }) => {
+   shown again as the cache would. Both pages are covered, and so is Start fresh pressed twice
+   before the page goes. The second press found saves already stopped by the first, and the
+   page shown again from the cache did not save. */
+for (const tool of ['plates', 'bins']) for (const presses of [1, 2]) {
+  test(`a ${tool} page left by Start fresh${presses === 2 ? ', pressed twice,' : ''} and shown again from ` +
+    'the cache saves again', async ({ page }) => {
     const errors = watch(page);
     const url = tool === 'bins' ? binsUrl() : platesUrl();
     await arrive(page, url);
@@ -1147,11 +1150,11 @@ for (const tool of ['plates', 'bins']) {
       await new Promise((r) => setTimeout(r, 5000));
       await route.continue().catch(() => {});
     });
-    await page.evaluate(() => {
-      document.getElementById('startFresh').click();
+    await page.evaluate((presses) => {
+      for (let i = 0; i < presses; i += 1) document.getElementById('startFresh').click();
       window.stop();                               // the fresh page never arrives
       dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
-    });
+    }, presses);
     await H.setField(page, 'drawerW', '377');
     await saved(page);
     expect(await stored(page, tool === 'bins' ? BINS : PLATES)).toMatch(/(^|&)w=377(&|$)/);

@@ -1359,6 +1359,47 @@ for (const tool of ['plates', 'bins']) {
   });
 }
 
+/* And the size, saved on Back and then set back there, is not a change of the later page's.
+   That page's own save as it arrived was refused too, so it holds a refusal of its own,
+   still to save, with the size in what it arrived with. Counted from the first page's base,
+   the size stayed its change, and Forward to it wrote the size back over the one set back. */
+for (const tool of ['plates', 'bins']) {
+  test(`Forward to the page a ${tool} page handed its refused size to has the size set back on Back ` +
+    'since', async ({ page }) => {
+    const there = tool === 'plates' ? 'bins' : 'plates';
+    const ready = (t) => (t === 'bins' ? binsReady : platesReady);
+    await page.addInitScript(fullStorage);
+    const errors = await kitchenOn(page, tool);
+    await refuseSize(page);
+    await page.click(there === 'bins' ? '#navBins' : '#navPlates');
+    await ready(there)(page);
+    expect(await page.inputValue('#drawerW'), 'handed over').toBe('410');
+    await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+    await settle(page);   // its save as it arrives, refused
+
+    await page.goBack();
+    await ready(tool)(page);
+    await page.evaluate(() => sessionStorage.setItem('full', '0'));
+    await changeOwn(page, tool);
+    await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+      { message: 'the size saved here', timeout: 20000 }).toBe('410');
+    await H.setField(page, 'drawerW', '400');
+    await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+      { message: 'and set back', timeout: 20000 }).toBe('400');
+    await settle(page);
+
+    await page.goForward();
+    await expect.poll(() => page.inputValue('#drawerW').catch(() => ''),
+      { message: 'Forward, the size set back', timeout: 20000 }).toBe('400');
+    await ready(there)(page);
+    await changeOwn(page, there);
+    const [, v, key] = ownChange(there);
+    await expect.poll(() => stored(page).then((s) => s.Kitchen),
+      { message: 'the next change keeps it', timeout: 20000 }).toMatchObject({ w: '400', [key]: v });
+    expect(errors).toEqual([]);
+  });
+}
+
 /* A page holding a size the drawer refused, saved as another drawer, where a change is
    refused and then saved. Back to the page that made the size, still Kitchen's, keeps the
    size: it went into the other drawer, never Kitchen. The refusal in the other drawer
@@ -1401,6 +1442,94 @@ for (const tool of ['plates', 'bins']) {
     });
 }
 
+/* A long run of hand-overs with the storage full, each page's save as it arrives refused, so
+   each holds a refusal of its own: more than the 32 ids a page keeps. The last page still
+   counts the first page's size as a change, and saves it with room. Set back there, Back to
+   the page before it, which holds the first id, has the size set back: the page that saved
+   held the ids after it, with its change. Counted from the first id it kept, the last page
+   took the size for none of its own, and with the first id still to land, Back to the page
+   before wrote the size over the one set back. */
+test('after more hand-overs than a page keeps ids for, a refused size is saved, and stays set back',
+  async ({ page }) => {
+    test.setTimeout(300000);
+    await page.addInitScript(fullStorage);
+    const errors = await kitchenOn(page, 'plates');
+    await refuseSize(page);
+    let tool = 'plates';
+    for (let i = 0; i < 33; i += 1) {
+      tool = tool === 'plates' ? 'bins' : 'plates';
+      await page.click(tool === 'bins' ? '#navBins' : '#navPlates');
+      await (tool === 'bins' ? binsReady : platesReady)(page);
+      await expect(page.locator('#drawerName'), 'its save refused').toHaveText('not saving · Kitchen');
+    }
+    expect(await page.inputValue('#drawerW')).toBe('410');
+    await page.evaluate(() => sessionStorage.setItem('full', '0'));
+    await changeOwn(page, tool);
+    await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+      { message: 'the size saved, with room', timeout: 20000 }).toBe('410');
+    await H.setField(page, 'drawerW', '400');
+    await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+      { message: 'and set back', timeout: 20000 }).toBe('400');
+    await settle(page);
+
+    const before = tool === 'plates' ? 'bins' : 'plates';
+    await page.goBack();
+    await expect.poll(() => page.inputValue('#drawerW').catch(() => ''),
+      { message: 'Back, the size set back', timeout: 20000 }).toBe('400');
+    await (before === 'bins' ? binsReady : platesReady)(page);
+    await changeOwn(page, before);
+    const [, v, key] = ownChange(before);
+    await expect.poll(() => stored(page).then((s) => s.Kitchen),
+      { message: 'the next change keeps it', timeout: 20000 }).toMatchObject({ w: '400', [key]: v });
+    expect(errors).toEqual([]);
+  });
+
+/* The refusals' ids are only what the page makes, however a record or the tab's note has
+   them. A mark whose ids are not, landed in the tab's note as they are, is a refused size
+   still to save, and so after the page's own refused save, reloaded again, with none of
+   those ids, a long one among them, in its mark since. So is one whose bases are not lists,
+   with far more ids landed than the tab keeps. No error, and with room the size is saved,
+   and the tab keeps the last 128 landed. */
+test('a refused size outlives refusal ids and bases that are not what the page writes', async ({ page }) => {
+  await page.addInitScript(fullStorage);
+  const errors = await kitchenOn(page, 'plates');
+  await refuseSize(page);
+  const reloaded = async (why) => {
+    await page.reload();
+    await platesReady(page);
+    await settle(page);
+    expect(await page.inputValue('#drawerW'), why).toBe('410');
+    await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+  };
+  const spoil = (bad) => page.evaluate((bad) => {
+    const st = history.state.drawerforge;
+    const K = 'drawerforge:drawers:tab';
+    const n = JSON.parse(sessionStorage.getItem(K) || '{}');
+    if (bad === 'ids') {
+      const rids = ['Zz', '__proto__', 5, null, 'z'.repeat(1000000)];
+      history.replaceState({ drawerforge: { ...st, rids, bases: 'x' } }, '');
+      n.landed = ['Zz', '__proto__', '5', 'null'];
+    } else {
+      history.replaceState({ drawerforge: { ...st, bases: [{}, 'x', [[1, 2]]] } }, '');
+      n.landed = Array.from({ length: 100000 }, (_, i) => 'z' + i);
+    }
+    sessionStorage.setItem(K, JSON.stringify(n));
+  }, bad);
+  await spoil('ids');
+  await reloaded('ids that are not');
+  await reloaded('and again, after its own save refused');
+  expect(await page.evaluate(() => JSON.stringify(history.state).length), 'its mark').toBeLessThan(10000);
+  await spoil('bases');
+  await reloaded('bases that are not');
+  await page.evaluate(() => sessionStorage.setItem('full', '0'));
+  await changeOwn(page, 'plates');
+  await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+    { message: 'saved, with room', timeout: 20000 }).toBe('410');
+  const landed = await page.evaluate(() => JSON.parse(sessionStorage.getItem('drawerforge:drawers:tab')).landed);
+  expect(landed, 'the last 128 landed').toHaveLength(128);
+  expect(errors).toEqual([]);
+});
+
 /* Back from the back-forward cache, for real: the page does not load again, and only its
    pageshow sees the return. The browser the tests are given has the cache turned off, and
    the headless shell it runs keeps nothing in it, so these launch the full Chromium build
@@ -1422,11 +1551,11 @@ async function withCache(playwright, launchOptions, run) {
     await browser.close();
   }
 }
-// Back, from the cache: by the page's own history, since a return from it fires no load to wait for
-async function backFromCache(page) {
+// Back from the cache, or Forward: by the page's own history, as a return from it fires no load
+async function backFromCache(page, forward) {
   const count = () => page.evaluate(() => Number(sessionStorage.getItem('cached') || 0)).catch(() => -1);
   const was = await count();
-  await page.evaluate(() => history.back());
+  await page.evaluate((f) => (f ? history.forward() : history.back()), !!forward);
   await expect.poll(count, { message: 'shown again from the cache', timeout: 20000 }).toBe(was + 1);
 }
 
@@ -1500,6 +1629,69 @@ for (const tool of ['plates', 'bins']) {
         { message: 'saved with the next change', timeout: 20000 })
         .toMatchObject({ w: '410', d: '420', [key]: v });
       await expect(page.locator('#drawerName')).toHaveText('Kitchen');
+      expect(errors).toEqual([]);
+    });
+  });
+}
+
+/* A refusal made after the page came back from the cache is another, with an id of its own,
+   counted from the page as it came back: its records so far went on with the hand-over, and
+   the other page holds them. Under the id that page held, its save counted this page's later
+   size as saved, and Back to it caught up with that page's. And with the first id landed,
+   counted from that one's base, the size had moved on since, and was caught up the same. */
+for (const tool of ['plates', 'bins']) {
+  test(`Back from the cache to a ${tool} page keeps a size refused after the cache gave it back, ` +
+    'once the other page saves the one before', async ({ playwright, launchOptions }) => {
+    await withCache(playwright, launchOptions, async (page) => {
+      const there = tool === 'plates' ? 'bins' : 'plates';
+      await page.addInitScript(fullStorage);
+      const errors = await kitchenOn(page, tool);
+      await refuseSize(page);
+      await page.click(there === 'bins' ? '#navBins' : '#navPlates');
+      await (there === 'bins' ? binsReady : platesReady)(page);
+      await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+      await settle(page);
+
+      await backFromCache(page);
+      await H.setField(page, 'drawerW', '420');
+      await expect(page.locator('#drawerName')).toHaveText('not saving · Kitchen');
+      await settle(page);
+      await backFromCache(page, true);
+      await page.evaluate(() => sessionStorage.setItem('full', '0'));
+      await changeOwn(page, there);
+      await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+        { message: 'the size saved there', timeout: 20000 }).toBe('410');
+      await settle(page);
+
+      await backFromCache(page);
+      await settle(page);
+      expect(await page.inputValue('#drawerW'), 'the size refused here').toBe('420');
+      await changeOwn(page, tool);
+      await expect.poll(() => stored(page).then((s) => s.Kitchen.w),
+        { message: 'saved with the next change', timeout: 20000 }).toBe('420');
+      expect(errors).toEqual([]);
+    });
+  });
+}
+
+/* And from the cache after its drawer was deleted on the other page: it is not saved, and
+   the bar says so, as it does loaded. It still named the drawer. */
+for (const tool of ['plates', 'bins']) {
+  test(`Back from the cache to a ${tool} page whose drawer was deleted on the other page says it is ` +
+    'not saved', async ({ playwright, launchOptions }) => {
+    await withCache(playwright, launchOptions, async (page) => {
+      const there = tool === 'plates' ? 'bins' : 'plates';
+      const errors = await kitchenOn(page, tool);
+      await page.click(there === 'bins' ? '#navBins' : '#navPlates');
+      await (there === 'bins' ? binsReady : platesReady)(page);
+      await openDialog(page);
+      await page.getByRole('button', { name: 'Delete Kitchen', exact: true }).click();
+      await page.getByRole('button', { name: 'Really delete? Kitchen', exact: true }).click();
+      await closeDialog(page);
+      await expect(page.locator('#drawerName')).toHaveText('not saved');
+
+      await backFromCache(page);
+      await expect(page.locator('#drawerName')).toHaveText('not saved');
       expect(errors).toEqual([]);
     });
   });
