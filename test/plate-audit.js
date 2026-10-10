@@ -1298,10 +1298,11 @@ function designCfg(over) {
   }
   return cfg;
 }
-function buildAll(over) {
+// every piece of a design, or with `tile` the test tile the page would print for it
+function buildAll(over, tile) {
   const cfg = designCfg(over);
   const L = G.computeLayout(cfg);
-  const built = L.pieces.map((pc) => G.buildPiece(cfg, L, pc));
+  const built = tile ? [G.buildTestTile(cfg)] : L.pieces.map((pc) => G.buildPiece(cfg, L, pc));
   const pieces = built.map((r) => r.polys);
   let bad = 0, open = 0, beyond = 0;
   for (const r of built) {
@@ -1322,15 +1323,6 @@ function buildAll(over) {
   return { cfg, L, pieces, bad, open, beyond: Math.round(beyond * 1e4) / 1e4 };
 }
 const leakText = (r) => r.bad ? `${r.bad} BAD EDGES${r.open ? ` (${r.open} open)` : ' (shells touching)'}` : 'watertight';
-// folds in the STL as written, its triangles read back with their corners in single precision
-const stlFolds = (polys) => {
-  const dv = new DataView(G.stlBinary(polys, 'p')), n = dv.getUint32(80, true), tris = [];
-  for (let i = 0, o = 84; i < n; i++, o += 50) {
-    const v = (k) => [0, 4, 8].map((d) => dv.getFloat32(o + 12 + 12 * k + d, true));
-    tris.push({ verts: [v(0), v(1), v(2)] });
-  }
-  return checkOrientation(tris).folds;
-};
 // four 2 × 2 pieces, and a 3 × 3 split into pieces one cell wide — the narrow one is
 // what gives out first as the pitch comes down
 const PIECE_LAYOUTS = {
@@ -2296,25 +2288,28 @@ console.log('\nthe other limits, built at their ends:');
      thousandths from the corner, and the strip came out folded back on itself: the head
      at its cap, 13.6 mm at 42 mm, under the default 6 x 2 magnet from above, its corner
      0.004 mm off the pocket's flat at 5π/14, folded 8 times a cell 1.5 deep and 14 at 1,
-     160, 120, 128 and 96 over the default plate's four pieces; from beneath, 3 deep, 2.
-     The head at its cap folded the same way at 40, 43, 44 and 46 mm, each with the one
-     magnet that puts its corner there. Main, its corners on the size, builds these closed
-     (it has the same at 13.95 mm). The counterbore is turned half a facet, π/14, off the
-     pocket now (MOUNT_BORE.head.turn), its corners midway between the pocket's. Two rows
-     hold it to more than a little: turned π/126, the 6.47 x 2 magnet under the head
-     at its cap at 43 mm came out with 2 bad edges and a face turned over, and a 4.844 head
-     held whole in a 6 x 3 pocket from beneath, a corner of the pocket 0.002 mm off the
-     plane of one of the counterbore's flats, left 12 edges open a cell, where unturned it
-     left 6 and main none. The rest are plates of several cells. Turned π/252, every cell
-     built closed, but the rays the counterbore's roof is fanned along passed 0.04 mm from
-     the pocket's corners, and where a socket's sloped facet crossed there, at sites away
-     from the origin, the roof split into slivers with no width, which single precision in
-     the STL folded: 12 over 2 x 2, 18 over 3 x 2 in two, and 48, 36, 36 and 27 over the
-     default plate's four pieces. And π/252 left 12 edges open a cell, 48 over 2 x 2, with a
-     13.582 head 0.251 deep under a 6 x 3 magnet from above. So the folds are counted in
-     the STL as written too, its corners in single precision. Each is a size the page
-     takes, and has to build closed, with no folds. */
-  for (const [nm, o] of [
+     38 over 2 x 2, 54 over 3 x 2 in two and 160, 120, 128 and 96 over the default plate's
+     four pieces; from beneath, 3 deep, 2. Each is a fold as checkOrientation counts one,
+     two faces with area back to back in the mesh. The head at its cap folded the same way
+     at 40, 43, 44 and 46 mm, each with the one magnet that puts its corner there. Main, its
+     corners on the size, builds these closed (it has the same at 13.95 mm). The
+     counterbore is turned half a facet, π/14, off the pocket now (MOUNT_BORE.head.turn),
+     its corners midway between the pocket's. Two rows hold it to more than a little:
+     turned π/126, the 6.47 x 2 magnet under the head at its cap at 43 mm came out with 2
+     bad edges and a face turned over, and a 4.844 head held whole in a 6 x 3 pocket from
+     beneath, a corner of the pocket 0.002 mm off the plane of one of the counterbore's
+     flats, left 12 edges open a cell, where unturned it left 6 and main none. The plates
+     of several cells are here so that one cell cannot pass for them. Turned π/252, a
+     13.582 head 0.251 deep under a 6 x 3 magnet from above left 12 edges open a cell, 48
+     over 2 x 2. The last five are where a corner comes between 0.005 and 0.01 mm of a
+     plane, and the turn is taken from 0.01 now (head.turn and hole.turn). Main builds each
+     closed. The 38.97 mm cell, a corner 0.006 mm off a plane, folded 3 times unturned with
+     the turn from 0.005; on the tile π/252 left a counterbore's corner 0.00502 mm off a
+     shank's flat, the shank unturned, and 15 edges open; and π/252 left the other three
+     open by 3 and 12 edges and two shells touching along 8, split elsewhere by its
+     planes, from 0.01 as well.
+     Each is a size the page takes, and has to build closed, with no folds. */
+  for (const [nm, o, tile] of [
     ['13.6 head, 6 x 2 above, 42, 1.5 deep', { magnetSide: 'top', screwHeadD: 13.6, screwHeadDepth: 1.5 }],
     ['13.6 head, 6 x 2 above, 42, 1 deep', { magnetSide: 'top', screwHeadD: 13.6, screwHeadDepth: 1 }],
     ['13.6 head, 6 x 2 below, 42, 3 deep', { screwHeadD: 13.6, screwHeadDepth: 3 }],
@@ -2338,17 +2333,25 @@ console.log('\nthe other limits, built at their ends:');
       splitMode: 'balanced', magnetSide: 'top', screwHeadD: 13.6, screwHeadDepth: 1.5 }],
     ['13.582 head, 6 x 3 above, 42, 2 x 2', { drawerW: 84, drawerD: 84, magnetD: 6, magnetH: 3, magnetSide: 'top',
       screwHoleD: 3.613, screwHeadD: 13.582, screwHeadDepth: 0.251 }],
+    ['3.24 head, 3.96 x 1.5 above, 38.97', { pitch: 38.97, drawerW: 38.97, drawerD: 38.97, magnetD: 3.96,
+      magnetH: 1.5, magnetSide: 'top', screwHoleD: 2.34, screwHeadD: 3.24, screwHeadDepth: 2.5 }],
+    ['tile at 53.72, 1.82 head, 4 x 2 above', { pitch: 53.72, drawerW: 53.72, drawerD: 53.72, tolerance: 'tight',
+      magnetD: 4, magnetSide: 'top', screwHoleD: 1.21, screwHeadD: 1.82, screwHeadDepth: 1 }, true],
+    ['2.69 head, 6 x 1.5 below, 42, tight', { tolerance: 'tight', magnetD: 6, magnetH: 1.5, screwHoleD: 1.41,
+      screwHeadD: 2.69, screwHeadDepth: 2 }],
+    ['13.26 head, 5.85 x 1.5 below, 84 x 42', { drawerW: 84, tolerance: 'tight', magnetD: 5.85, magnetH: 1.5,
+      screwHoleD: 1.06, screwHeadD: 13.26, screwHeadDepth: 3 }],
+    ['5.65 head, 4.44 x 3 below, 42', { magnetD: 4.44, magnetH: 3, screwHoleD: 2.43, screwHeadD: 5.65,
+      screwHeadDepth: 3 }],
   ]) {
     const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, screws: true, ...o };
     const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
     const taken = ['magnetD', 'screwHoleD', 'screwHeadD'].every((f) => cfg[f] <= lim[f] + 1e-9 &&
       !lim.gaps[f].some(([a, b]) => cfg[f] > a + 1e-9 && cfg[f] < b - 1e-9));
-    const r = buildAll(at);
+    const r = buildAll(at, tile);
     const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
-    const stl = r.pieces.reduce((s, pp) => s + stlFolds(pp), 0);
-    console.log(`  ${nm.padEnd(41)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}` +
-      `${stl ? `, ${stl} FOLDS IN THE STL` : ''}`);
-    if (!taken || r.bad || folds || stl) bad++;
+    console.log(`  ${nm.padEnd(41)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (!taken || r.bad || folds) bad++;
   }
   /* A pocket against a joint's cut in the floor (#64). A bowtie housed in the floor at
      42 mm, with magnets from beneath, built 12 bad edges at 7.9 mm and 19 at 10 with

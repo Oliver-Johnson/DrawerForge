@@ -793,19 +793,29 @@ currently installed):
   counterbore can still stand on the plane of one of the pocket's flats, or a corner of
   the pocket on one of the counterbore's, and the strip the BSP splits off along it came
   out folded: the head at its 13.6 mm cap at 42 mm, 1.5 deep under the default 6 × 2
-  magnet from above, folded the default plate 160, 120, 128 and 96 times a piece. Where
-  a corner of either comes within 0.005 mm of a plane of the other, the counterbore is
+  magnet from above, folded the default plate 160, 120, 128 and 96 times a piece, folds
+  as the audits count them, two faces with area back to back in the mesh. Where a
+  corner of either comes within 0.01 mm of a plane of the other, the counterbore is
   turned half a facet, π/14, about its axis (`MOUNT_BORE.head.turn`), which puts its
   corners midway between the pocket's, each 0.18 mm or more off the other's flats under
   a magnet of 3 mm or more; its flats stand where they did, so the head fits as typed,
-  and the shank's turn and `mountLimits` go by it turned. Turned less, the corners stayed near each other's: at
-  π/252 the rays the counterbore's roof is fanned along passed 0.04 mm from the
-  pocket's corners, and where a socket's sloped facet crossed there the roof split into
-  slivers with no width, which single precision in the STL folded, 147 times over the
-  default plate's four pieces though one cell built clean. π/126, π/84, π/56 and π/28
-  each opened designs that π/14 builds closed. The shank is turned π/84 about
+  and the shank's turn and `mountLimits` go by it turned. So the limits are measured on
+  the bore as cut, turned where it is turned, and a head that turns can be given
+  another cap, and other sizes refused beside a joint's cut, than one that does not: of
+  1,034 designs drawn with a head near a size that turns, the turn moved the limits of
+  302, the head's cap by up to 0.4 mm up or 0.3 down. Measured both ways with the tighter
+  kept, the limits would hold still but come down for every head (0.1 to 0.3 mm on 28 of
+  140 page designs at five pitches). Turned less, the corners stayed near each other's:
+  π/252, with the same 0.01 mm, moved the limits less (102 of the 1,034, a tenth at
+  most), but left a 13.582 mm head 0.251 deep under a 6 × 3 magnet from above open by 12
+  edges a cell at 42 mm, and three more designs open or with shells touching, that π/14
+  builds closed. Its counterbore's roof also split, where a socket's sloped facet crossed
+  it 0.04 mm from the pocket's corners, into triangles with no area: the fold test
+  rightly leaves them out, but single precision in the STL gives each a direction, and
+  read back the default plate's STL showed 147 folds where its mesh had none. π/126
+  opened a design that π/14 builds closed. The shank is turned π/84 about
   its axis where one of the counterbore's corners, or one of the magnet pocket's, would
-  otherwise stand within 0.005 mm of a flat's plane carried on past the shank
+  otherwise stand within 0.01 mm of a flat's plane carried on past the shank
   (`MOUNT_BORE.hole.turn`, which goes by the counterbore as cut, and by the pocket's
   corners alone where no counterbore is cut: a 5 mm magnet from beneath that holds a
   5.12 mm head whole over 4.18 mm left 12 edges open at 42 mm unturned, and the same
@@ -815,7 +825,7 @@ currently installed):
   out open by the dozen round every site (#74: 136 edges a piece for 1.0353 mm under
   1.0873 with a magnet from above at 42 mm, on main; and 26 a piece at 41.24 mm for a 3 mm
   shank under a 7.3 mm magnet from above, whose corner stood 0.4 microns off a flat). The
-  two pockets' corners stand on the same rays, so where π/84 would bring one within 0.005
+  two pockets' corners stand on the same rays, so where π/84 would bring one within 0.01
   mm of a flat, the shank takes the step of the 24 across those 30/7° that keeps both
   furthest off. A shank has to clear the magnet pocket it runs through as it would a
   counterbore, and `mountLimits` refuses a wider one, which the field says
