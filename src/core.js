@@ -2635,6 +2635,7 @@ function directCellRegion(clipped, prof, cx, cy, H, pad, arcSegs, half, avoid, f
      * side, which is a lottery rather than a property. A fan from an interior point has
      * no chords: every edge either lies on the outline or runs to one fixed point. */
     const cc = fanCentre(oc, avoid);
+    polys.footAt = cc;   // where the bottom cap was fanned from, so a refan can tell it moved
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
       const p = makePoly([[cc[0], cc[1], 0], [oc[j][0], oc[j][1], 0], [oc[i][0], oc[i][1], 0]]);
@@ -3394,7 +3395,9 @@ function buildPiece(cfg, layout, piece, onStatus) {
      shipped with six open edges. A corner is where two walls that are not in line meet;
      a split point is where one wall was cut in two. From the corners alone the fan moves
      0.2 mm and the floor closes. Only the socket floor's list, which only an open cell's
-     refan reads (buildPiece), so every cell that came out closed is built as before. */
+     refan reads (buildPiece), so every cell that came out closed is built as before.
+     The bottom face has the same list for the same refan (footCorners, #92), and keeps
+     wallsAt's for its first fan, which every cell that comes out closed is built with. */
   const cornersAt = (z) => {
     const ends = new Map();   // a wall end, to the directions of the walls that end there
     for (const p of cellFastener || []) {
@@ -3416,7 +3419,7 @@ function buildPiece(cfg, layout, piece, onStatus) {
     return [...ends.values()].filter(({ dirs }) =>
       dirs.some((a) => dirs.some((b) => Math.abs(a[0]*b[1] - a[1]*b[0]) > 1e-6))).map((e) => e.at);
   };
-  const fastenerFoot = wallsAt(0), fastenerTop = pad > 0.01 ? cornersAt(pad) : [];
+  const fastenerFoot = wallsAt(0), footCorners = cornersAt(0), fastenerTop = pad > 0.01 ? cornersAt(pad) : [];
 
   // ---- connectors ----
   const conn = pieceConnectors(cfg, layout, piece);
@@ -4036,12 +4039,17 @@ function buildPiece(cfg, layout, piece, onStatus) {
       // the mounting cutters' walls, and with more room, of the joint's
       const avoid = halfX || halfY ? [] : [-1, 1].flatMap((sx) => [-1, 1].flatMap((sy) =>
         fastenerFoot.map(([u, v]) => [cx + sx*cfg.holeOffset + u, cy + sy*cfg.holeOffset + v])));
+      // the same with the mounting cutters' corners alone, for a cell that comes out open on
+      // the bottom face (below)
+      const footAvoid = halfX || halfY ? [] : [-1, 1].flatMap((sx) => [-1, 1].flatMap((sy) =>
+        footCorners.map(([u, v]) => [cx + sx*cfg.holeOffset + u, cy + sy*cfg.holeOffset + v])));
       for (const p of [...cuts.notch, ...cuts.key, ...cuts.puzzle])
         p.verts.forEach((a, i) => {
           const b = p.verts[(i + 1) % p.verts.length];
           if ((a[2] < 0) === (b[2] < 0)) return;
           const t = a[2] / (a[2] - b[2]);
-          avoid.push([a[0] + t*(b[0] - a[0]), a[1] + t*(b[1] - a[1]), FAN_JOINT]);
+          const at = [a[0] + t*(b[0] - a[0]), a[1] + t*(b[1] - a[1]), FAN_JOINT];
+          avoid.push(at); footAvoid.push(at);
         });
       // and the socket floor's, of the mounting cutters' corners there
       const floorAvoid = halfX || halfY ? [] : [-1, 1].flatMap((sx) => [-1, 1].flatMap((sy) =>
@@ -4177,6 +4185,35 @@ function buildPiece(cfg, layout, piece, onStatus) {
         if (base.floorMoved)
           try { again = cutCell(null); } catch (e) { /* the first cut stands */ }
         if (again && again.open < region.open && !worse(again, region)) region = again;
+        else base = first;
+      }
+      /* Still open on the bottom face, with pockets standing on it (#92): the bottom cap
+         fanned again clear of the mounting cutters' corners alone, and every cut taken
+         again on it. The first fan keeps clear of every point of their walls where they
+         stand on the face (wallsAt), and where two bores were unioned that is their split
+         points as well as their corners. A counterbore or a shank nearly as wide as the
+         magnet pocket it opens into is split all round: a 6 x 2 magnet from beneath over a
+         3 mm hole with a 4 mm head 3 deep, at 42 mm, has 140 such points in a cell where its
+         corners are 56. Every point fanCentre tries had a spoke within FAN_CLEAR of one of
+         them, so the fan stayed at the cell's middle, with a spoke 5 microns from a corner
+         of a magnet pocket, and the sliver of the face between them went: 9 open edges, 6 to
+         12 across the sizes that did it, with Download on. From the corners alone the fan
+         moves 0.1 mm and the cell closes, as the socket floor's does above (cornersAt).
+         Kept only if it comes out closed with nothing turned over, sharing no more edges
+         with the shells built beside it than the first cut; otherwise the first cut
+         stands. Only a cell open at the bottom face's height whose fan moves is cut again,
+         so a cell that comes out closed is fanned as before, and every design that builds
+         closed builds the same bytes. */
+      if (region.open && cuts.fastener.length && openAt(region, 0)) {
+        const first = base;
+        base = directCellRegion(clipped, prof, cx, cy, H, pad, cfg.arcSegs || 6,
+                                undefined, footAvoid, first.floorMoved ? floorAvoid : undefined);
+        let again = null;
+        if (base.footAt[0] !== first.footAt[0] || base.footAt[1] !== first.footAt[1])
+          try { again = cutCell(null); } catch (e) { /* the first cut stands */ }
+        const near = again && !again.open && !again.turned ? builtBeside(own) : [];
+        if (again && !again.open && !again.turned && sharedAll(again, own, near) <= sharedAll(region, own, near))
+          region = again;
         else base = first;
       }
       if (cuts.notch.length || cuts.key.length || cuts.puzzle.length) {

@@ -906,6 +906,28 @@ currently installed):
   a 2.4 mm shank under a 4.8 mm head at 44.08 mm, loose, had a point within `FAN_CLEAR`
   of every centre `fanCentre` tried. The fan stayed put and the cell shipped six edges
   open. From the corners alone it moves 0.2 mm and the floor closes.
+  The bottom face is refanned the same way (#92). Its first fan keeps clear of every
+  point where the mounting cutters' walls stand on it, split points included, and where
+  a counterbore or a shank nearly as wide as the magnet pocket it opens into was unioned
+  with it, those are 140 points a cell against 56 corners: no point `fanCentre` tried
+  was clear of all of them, the fan stayed at the cell's middle with a spoke 5 microns
+  from a corner of a pocket, and 6 to 12 edges a cell were open at 42 mm. The first fan
+  from the corners alone closes them too, but it moves the fan of designs that build
+  closed as well (283 of 1,210 drawn round those sizes), and every one of those would
+  come out other bytes. So what a refan does is fan one face again from another point,
+  clear of the corners of the cutters' walls where they stand on it, and take every cut
+  again on it: the face is the same flat face, the solid is the same, and only the
+  triangles the cutters' planes cross differ. It is taken only on a cell still open after
+  its tries, with an open edge at that face's height, and only where the new fan point
+  is not the old; and the new cut is kept only if it comes out closed with nothing turned
+  over, sharing no more edges with the shells built beside it (the socket floor's keeps
+  one that is less open and no worse). A cell that comes out closed is built as before,
+  so a design that builds closed keeps its bytes. In the 4.16 × 2 family (shanks 2.1 to
+  2.58 mm under a 4.34 mm head, from beneath at 42 mm) all 98 shanks that were open
+  close, and of 2,851 heads under a 6 × 2 magnet from beneath with a 3 mm hole 3 deep,
+  570 of 571; the 3.909 mm head's 12 open edges are on the magnet pocket's roof, 2 mm up,
+  not on the bottom face, so it is not refanned. A design with a cell refanned takes
+  about 11% longer to build.
 - **A pocket that reaches a joint's cut goes bad where the two ceilings are level.** A
   key's recess, an H-clip's and a tab's notch are all cut up from under the plate, as a
   magnet pocket from beneath and a counterbore are. Run into one, the pocket comes out
