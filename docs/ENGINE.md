@@ -766,7 +766,17 @@ currently installed):
   6 × 2 magnet from beneath it left 6 edges open a cell at 42 mm, the test tile among
   them; main's head, its corners on the size, stood 0.1 off and built closed. A head in
   the band is cut up to 0.1 mm wider or narrower across its flats than typed, and
-  `mountLimits` reads it back as cut (`head.fitsCut`). The shank is turned π/84 about
+  `mountLimits` reads it back as cut (`head.fitsCut`). Out of the band a corner of the
+  counterbore can still stand on the plane of one of the pocket's flats, or a corner of
+  the pocket on one of the counterbore's, and the strip the BSP splits off along it came
+  out folded: the head at its 13.6 mm cap at 42 mm, 1.5 deep under the default 6 × 2
+  magnet from above, folded the default plate 160, 120, 128 and 96 times a piece. Where
+  a corner of either comes within 0.005 mm of a plane of the other, the counterbore is
+  turned π/252 about its axis (`MOUNT_BORE.head.turn`), which leaves every corner of
+  each 0.007 mm or more off the other's flats; its flats stand where they did, so the
+  head fits as typed, and the shank's turn and `mountLimits` go by it turned. Turned
+  further, the counterbore's planes met other things: π/84 and π/126 each opened
+  designs that π/252 builds closed. The shank is turned π/84 about
   its axis where one of the counterbore's corners, or one of the magnet pocket's, would
   otherwise stand within 0.005 mm of a flat's plane carried on past the shank
   (`MOUNT_BORE.hole.turn`, which goes by the counterbore as cut, and by the pocket's
@@ -789,8 +799,8 @@ currently installed):
   shank under 1.2 mm; a shank no corner came near is cut as before. The page reads
   the shank again after the head and the magnet, since its turn and that cap go by both.
   `MOUNT_BORE.screw` says whether a design's counterbore is cut, how far out its corners
-  stand and how far its shank is turned, for the cutter and for `mountLimits`, which
-  measures that counterbore and that shank turned.
+  stand, and how far it and its shank are turned, for the cutter and for `mountLimits`,
+  which measures that counterbore and that shank turned.
 - **The socket's corner clearance is not uniform.** Known, documented, deliberately not
   fixed — see [socket-clearance.md](socket-clearance.md).
 - **The plate's outer corner radius has a ceiling, and it is the socket's.** Both the

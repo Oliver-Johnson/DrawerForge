@@ -942,6 +942,37 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * no counterbore at all. Main leaves 7 of its 225 bad. The band changes no design whose
  * counterbore is not in it.
  *
+ * Out of the band a corner of the counterbore can still stand on the plane of one of the
+ * magnet pocket's flats, or a corner of the pocket on one of the counterbore's: on the
+ * same rays, a corner of one stands an odd multiple of π/14 off the normal of a flat of
+ * the other, and at some sizes that puts it on the flat's plane. The BSP carries the
+ * plane across the other bore and splits a strip a few thousandths wide off it, which
+ * came out folded back on itself, or open. The head at its cap at 42 mm, 13.6 mm, under
+ * the default 6 x 2 magnet from above, a corner 0.004 mm off a flat's plane at 5π/14,
+ * folded the default plate 160, 120, 128 and 96 times a piece 1.5 deep and a cell 14
+ * times 1 deep, and 2 times from beneath 3 deep; the head at its cap folded the same way
+ * at 40, 43, 44 and 46 mm, each with the one magnet that puts its corner there. Main, its
+ * corners on the size, has the same at 13.95 mm. So where a corner of either comes
+ * within 0.005 mm of a plane of the other, the counterbore is turned π/252 about its axis
+ * (head.turn), which leaves every corner of each 0.007 mm or more off the other's flats,
+ * and the shank's turn and mountLimits go by it turned. Its flats stand as far from the
+ * axis as before, so the head fits as typed and the caps stay where they were. Turned
+ * further the corners stand further off, but the turned counterbore's planes meet other
+ * things: π/84 opened two, a 3 x 1 magnet from above over a 2.5 mm head at 42 mm, and
+ * π/126 folded a 6.47 x 2 magnet from above under the 14.6 mm head at its cap at 43 mm
+ * and doubled the 6 open edges of a 4.844 mm head in a 6 x 3 pocket from beneath at
+ * 42 mm, all of which π/252 builds closed. π/252 opens one that π/126 closes: a 13.582
+ * head 0.251 deep under a 6 x 3 magnet from above at 42 mm, 12 open edges a cell. On 900
+ * designs drawn at random with a head within 0.012 mm of a size that puts a corner of
+ * either on a plane of the other (34 to 56 mm; one cell, the test tile, 2 x 2, corner
+ * bosses, two pieces with dovetails or jigsaws; magnets of 3 to 13 mm, either way up),
+ * of the 498 taken 56 were open, folded or had a face turned over before, 16 open with
+ * 384 edges, and 2 now: that one, and a cell at 39.72 mm with a face turned over as
+ * before; main leaves 2. With the head at its cap, every 0.5 mm of pitch from 34 to 56,
+ * 1, 1.5 and 2.5 deep, under each magnet to the hundredth that puts a corner of the
+ * counterbore on a flat's plane, of the 216 taken from above 5 were open or folded
+ * before and none now (main leaves 1), and of the 432 from beneath 4 before and none now.
+ *
  * The shank is turned a little about its axis (`turn`, #74) where a corner of the
  * counterbore or of the magnet pocket would stand on one of its flats carried on past
  * the shank, and where no counterbore is cut, the pocket's corners alone turn it.
@@ -958,7 +989,8 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * corner on a flat puts it midway between two. The turn is taken where a corner comes
  * nearer than 0.005 mm unturned and the turn leaves it further off, and a shank no corner
  * came near is cut as it was. The magnet pocket's corners stand on the same rays as the
- * counterbore's, and π/84 could bring one of those onto a flat instead: 4.85 mm under
+ * counterbore's (or π/252 off them, where it is turned), and π/84 could bring one of
+ * those onto a flat instead: 4.85 mm under
  * 7.246 with a 6 mm magnet from above left 35 edges in the socket floor at 49.02 mm, and
  * 5.773 under 12.053 25 at 55 mm, where the flats unturned miss them by 0.07 and 0.04. So
  * where π/84 leaves a corner of either nearer than 0.005 mm, the turn is the one of 24
@@ -989,7 +1021,9 @@ function cylinder(cx, cy, r, z0, z1, seg) {
  * mm, shanks of 1 to 6.5, heads up to 2.4 times the shank, every 0.001 mm round the sizes
  * that put a corner on a flat, and 6.7 million sizes drawn at random round them); under
  * a bare pocket none comes within 0.005 (the same magnets every 0.01 mm, shanks every
- * 0.0005 mm within 0.012 of each size that puts a corner on a flat). The
+ * 0.0005 mm within 0.012 of each size that puts a corner on a flat), and under a
+ * counterbore turned off the pocket none within 0.003 (360,535 shanks drawn at random
+ * near a corner of either, under counterbores near the pocket's flats). The
  * nearest, 0.0033 mm at 1.0197 under 1.0748 with a 3.72 mm magnet, and nine more under
  * 0.0038 build closed at 42 and 49.02 mm, the magnet either way up. Half a facet, π/12,
  * clears the corners as well, but it squares two flats to the cell's edges, and at 37.67
@@ -1037,20 +1071,41 @@ const MOUNT_BORE = {
             if (!magnetR || room >= magnetR + s || room < magnetR - s) return head.fits(room);
             return head.fits(room >= magnetR ? magnetR + s : magnetR - s) - 1e-6;
           },
-          snap: 0.05 },
+          snap: 0.05,
+          /* how far to turn a counterbore cut headR out at its corners about its axis,
+             beside a magnet pocket magnetR out at its corners: π/252 where a corner of either
+             would stand within 0.005 mm of the plane of one of the other's flats, and not at
+             all where they are cut as one prism (see above) */
+          turn: (headR, magnetR) => {
+            if (!headR || !magnetR || headR === magnetR) return 0;
+            const n = MOUNT_BORE.head.sides, h = Math.cos(Math.PI / n);
+            const clear = (t) => {   // the nearest a corner of either comes to one of the other's flats' planes
+              let g = Infinity;
+              for (let k = 0; k < n; k++) for (let j = 0; j < n; j++) {
+                const head = 2*Math.PI*k/n + t, magnet = 2*Math.PI*j/n;   // a corner of each
+                g = Math.min(g, Math.abs(headR * Math.cos(head - magnet - Math.PI/n) - magnetR * h),
+                             Math.abs(magnetR * Math.cos(magnet - head - Math.PI/n) - headR * h));
+              }
+              return g;
+            };
+            const c0 = clear(0);
+            return c0 < 0.005 && clear(Math.PI / 252) > c0 ? Math.PI / 252 : 0;
+          } },
   hole: { sides: 12, r: (d) => d/2 / Math.cos(Math.PI/12),
           fits: (room) => 2 * room * Math.cos(Math.PI / 12),
           // how far to turn the shank under a counterbore cut headR out at its corners
-          // (head.cut) or none (0), in a magnet pocket magnetR out at its corners or none
-          // (see above)
-          turn: (d, headR, magnetR) => {
-            // the magnet pocket's corners stand on the same rays as the counterbore's
-            const { head, hole } = MOUNT_BORE, rs = [headR, magnetR].filter((r) => r > 0);
+          // (head.cut) and turned headTurn (head.turn), or none (0), in a magnet pocket
+          // magnetR out at its corners or none (see above)
+          turn: (d, headR, magnetR, headTurn = 0) => {
+            // the magnet pocket's corners stand on the same rays as the counterbore's, but
+            // for a counterbore turned off them
+            const { head, hole } = MOUNT_BORE;
+            const rs = [[headR, headTurn], [magnetR, 0]].filter(([r]) => r > 0);
             if (!rs.length) return 0;
             const clear = (t) => {   // the nearest a corner comes to one of the flats' planes
               let g = Infinity;
-              for (const R of rs) for (let k = 0; k < head.sides; k++) for (let m = 0; m < hole.sides; m++)
-                g = Math.min(g, Math.abs(R * Math.cos(2*Math.PI*k/head.sides - (2*m + 1)*Math.PI/hole.sides - t) - d/2));
+              for (const [R, p] of rs) for (let k = 0; k < head.sides; k++) for (let m = 0; m < hole.sides; m++)
+                g = Math.min(g, Math.abs(R * Math.cos(2*Math.PI*k/head.sides + p - (2*m + 1)*Math.PI/hole.sides - t) - d/2));
               return g;
             };
             if (clear(0) >= 0.005) return 0;
@@ -1061,9 +1116,10 @@ const MOUNT_BORE = {
             }
             return most > clear(0) ? best : 0;
           } },
-  /* What fastenerCutter cuts for a design's screw, as { counterbore, headR, turn }:
-     whether the counterbore is cut, how far out its corners stand (head.cut), and how far
-     the shank is turned, for the counterbore's corners and the magnet pocket's, or the
+  /* What fastenerCutter cuts for a design's screw, as { counterbore, headR, headTurn,
+     turn }: whether the counterbore is cut, how far out its corners stand (head.cut) and
+     how far it is turned off the magnet pocket's flats (head.turn), and how far the
+     shank is turned, for the counterbore's corners and the magnet pocket's, or the
      pocket's alone where no counterbore is cut. Here so that mountLimits measures the
      same counterbore and shank the cutter cuts.
      A counterbore the magnet pocket from beneath holds whole is that pocket already: both
@@ -1076,7 +1132,9 @@ const MOUNT_BORE = {
     const inMagnet = cfg.magnets && cfg.magnetSide !== 'top' &&
       headR <= magnetR && cfg.screwHeadDepth <= cfg.magnetH;
     const counterbore = head.cuts(cfg.screwHeadD, cfg.screwHoleD) && !inMagnet;
-    return { counterbore, headR, turn: hole.turn(cfg.screwHoleD, counterbore ? headR : 0, magnetR) };
+    const headTurn = counterbore ? head.turn(headR, magnetR) : 0;
+    return { counterbore, headR, headTurn,
+             turn: hole.turn(cfg.screwHoleD, counterbore ? headR : 0, magnetR, headTurn) };
   },
 };
 
@@ -1104,7 +1162,13 @@ function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
   // each bore as MOUNT_BORE shapes it
   const { magnet, head, hole } = MOUNT_BORE;
   const magnetR = magnet.r(cfg.magnetD);
-  const { counterbore, headR, turn: t } = cfg.screws ? MOUNT_BORE.screw(cfg) : { counterbore: false };
+  const { counterbore, headR, headTurn, turn: t } = cfg.screws ? MOUNT_BORE.screw(cfg) : { counterbore: false };
+  // a bore turned t about its axis
+  const turned = (polys, t) => {
+    if (!t) return polys;
+    const c = Math.cos(t), s = Math.sin(t), turn = (v) => [v[0]*c - v[1]*s, v[0]*s + v[1]*c, v[2]];
+    return polys.map((p) => ({ verts: p.verts.map(turn), plane: { n: turn(p.plane.n), w: p.plane.w } }));
+  };
   const above = cfg.magnetSide === 'top';
   // a counterbore cut at the magnet pocket's corners (MOUNT_BORE.head.cut) that reaches the
   // pocket is one prism with it, from the underside to the top of whichever ends higher:
@@ -1116,15 +1180,13 @@ function fastenerCutter(cfg, magZ0, magZ1, shankTop) {
       : cylinder(0, 0, magnetR, -0.5, cfg.magnetH, magnet.sides));
   if (cfg.screws) {
     // the counterbore, unless the magnet pocket from beneath is that already (MOUNT_BORE.screw)
-    // or it is cut as one with the pocket
+    // or it is cut as one with the pocket; turned where a corner of it or of the pocket
+    // would stand on one of the other's flats (MOUNT_BORE.head.turn)
     if (counterbore && !one)
-      add(cylinder(0, 0, headR, -0.5, cfg.screwHeadDepth, head.sides));
+      add(turned(cylinder(0, 0, headR, -0.5, cfg.screwHeadDepth, head.sides), headTurn));
     // the shank, turned where a corner of the counterbore or the magnet pocket would stand
     // on one of its flats (#74)
-    const shank = cylinder(0, 0, hole.r(cfg.screwHoleD), -0.5, shankTop, hole.sides);
-    const c = Math.cos(t), s = Math.sin(t), turn = (v) => [v[0]*c - v[1]*s, v[0]*s + v[1]*c, v[2]];
-    add(t ? shank.map((p) => ({ verts: p.verts.map(turn), plane: { n: turn(p.plane.n), w: p.plane.w } }))
-          : shank);
+    add(turned(cylinder(0, 0, hole.r(cfg.screwHoleD), -0.5, shankTop, hole.sides), t));
   }
   return cut;
 }
@@ -2910,16 +2972,17 @@ function mountLimits(cfg, layout, known) {
   /* The bores as fastenerCutter cuts them (MOUNT_BORE): how many sides, and the largest
      size whose corners stay inside a radius. Each stands its flats on its size, so its
      corners stand out past it, and a magnet's 0.1 mm over its radius where that is
-     further. The shank is turned where the cutter turns it, and measured so: its turn
-     goes by the sizes asked, the head's and the magnet's as well as its own, so it is
-     the shank of this design that is measured. A counterbore within MOUNT_BORE.head.snap
+     further. The shank and the counterbore are turned where the cutter turns them, and
+     measured so: their turns go by the sizes asked, the head's and the magnet's as well
+     as the shank's, so it is the bores of this design that are measured. A counterbore
+     within MOUNT_BORE.head.snap
      of the magnet pocket's corners is cut at the pocket's, up to 0.05 mm further out or
      in, so its sizes are read back through that (head.fitsCut), which goes by the room
      alone: the cap does not move with the head typed. */
   const magnetR = cfg.magnets ? MOUNT_BORE.magnet.r(cfg.magnetD) : 0;
   const BORE = { magnetD: MOUNT_BORE.magnet, screwHoleD: MOUNT_BORE.hole,
                  screwHeadD: { sides: MOUNT_BORE.head.sides, fits: (room) => MOUNT_BORE.head.fitsCut(room, magnetR) } };
-  const shankTurn = cfg.screws ? MOUNT_BORE.screw(cfg).turn : 0;
+  const { turn: shankTurn, headTurn } = cfg.screws ? MOUNT_BORE.screw(cfg) : { turn: 0, headTurn: 0 };
   // the room the cell, the floor or a boss leaves, and the hole beside
   const own = { magnetD: fit(cfg.magnetSide === 'top' ? top : under), screwHoleD: fit(top), screwHeadD: fit(under) };
   /* A shank runs up the magnet pocket's axis, and has to clear it as it would a
@@ -2956,17 +3019,17 @@ function mountLimits(cfg, layout, known) {
      into, but not stop just short of. */
   const jointFor = (f) => {
     const { sides, fits } = BORE[f];
-    /* the room a bore has, measured again for a turned shank (MOUNT_BORE.screw), and
-       kept on the site by its turn: the page asks again on the same cuts (`known`) once
-       the head and the magnet are read, and measuring every site again was nearly all
-       that asking again cost */
-    const turn = f === 'screwHoleD' ? shankTurn : 0;
+    /* the room a bore has, measured again for a turned shank or counterbore
+       (MOUNT_BORE.screw), and kept on the site by its sides and turn: the page asks again
+       on the same cuts (`known`) once the head and the magnet are read, and measuring
+       every site again was nearly all that asking again cost */
+    const turn = f === 'screwHoleD' ? shankTurn : f === 'screwHeadD' ? headTurn : 0;
     const reach = (c, s) => {
       if (!turn) return s.bore[sides];
       if (!(s.room > 0)) return s.room;
-      const kept = s.turned || (s.turned = new Map());
-      if (!kept.has(turn)) kept.set(turn, boreReach(sides, c.segs, s.x, s.y, turn));
-      return kept.get(turn);
+      const kept = s.turned || (s.turned = new Map()), key = `${sides} ${turn}`;
+      if (!kept.has(key)) kept.set(key, boreReach(sides, c.segs, s.x, s.y, turn));
+      return kept.get(key);
     };
     const above = f === 'magnetD' && cfg.magnetSide === 'top';
     // how high a pocket from beneath goes; a shank goes through
