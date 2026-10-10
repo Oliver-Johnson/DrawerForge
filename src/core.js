@@ -2789,13 +2789,13 @@ function mountLimits(cfg, layout, known) {
     screwHeadD: sizes.screwHeadD,
     // in the solid floor the pad grows to suit, so only a boss caps the depth
     depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
+    // which the socket's rim over a corner boss stops (#83)
+    rim: { magnetD: bosses && cfg.magnetSide === 'top' && own.magnetD === onRim && !joint.magnetD,
+           screwHoleD: bosses && own.screwHoleD === onRim && !joint.screwHoleD },
     // which of the sizes the cut beside it stops, rather than the floor, cell or boss
     beside: { magnetD: own.magnetD === beside && !joint.magnetD,
               screwHoleD: own.screwHoleD === beside && !joint.screwHoleD,
               screwHeadD: own.screwHeadD === beside && !joint.screwHeadD },
-    // which the socket's rim over a corner boss stops (#83)
-    rim: { magnetD: bosses && cfg.magnetSide === 'top' && own.magnetD === onRim && !joint.magnetD,
-           screwHoleD: bosses && own.screwHoleD === onRim && !joint.screwHoleD },
     // and which a joint's cut stops, before any of those, and how (jointFor)
     joint,
     // sizes under the largest refused all the same, as [from, to] with both ends taken
