@@ -5325,6 +5325,8 @@ function cleanNote(n) {
  * stops that being your problem.
  */
 let hashSaveT = 0, hashReady = false;
+// saves were on when Start fresh left the page, and nothing has left it since (see startFresh)
+let freshLeft = false;
 /* Kept on this browser, so the work survives arriving without a link.
  *
  * The address bar already carries the design and a refresh already restores it. What it
@@ -5345,6 +5347,8 @@ let hashSaveT = 0, hashReady = false;
  * when it has done one and offers a way back.
  */
 const SAVE_KEY = 'drawerforge:bins:v1';
+// this tab's record of a save a pasted link set aside (see pastedFrom), declared here for Start fresh
+const PASTED_KEY = SAVE_KEY + ':pasted';
 const saveLocal = (h) => {
   try { localStorage.setItem(SAVE_KEY, h); }
   catch (err) { /* private mode, or the quota is full — losing the save is not worth
@@ -5357,11 +5361,25 @@ const readLocal = () => { try { return localStorage.getItem(SAVE_KEY) || ''; } c
 const isLayoutHash = (h) => /(^|&)[^&=]+=/.test(h);
 function startFresh() {
   try { localStorage.removeItem(SAVE_KEY); } catch (err) { /* nothing to clear */ }
-  location.href = location.origin + location.pathname;   // drop the hash and reload clean
+  forgetPasted();
+  const saving = hashReady || freshLeft;   // pressed again before the page goes: as the first press found it
+  /* Left as Put back leaves, by leaveFor: the page runs on until the bare one arrives, and
+     a change that landed in between was saved after the clearing, and came back with the
+     note that it had been restored. */
+  leaveFor(location.origin + location.pathname);   // drop the hash and reload clean
+  freshLeft = saving;   // after leaveFor, which clears it
 }
 /* Wired here, before the boot below reads any link: a link that throws there must not
-   also take away the button that gets you out of it, or stop the next link working. */
+   also take away the button that gets you out of it, or stop the next link working. What
+   leaveFor stops, hashReady and hashSaveT, is declared above, so it works from here too. */
 $('startFresh').addEventListener('click', startFresh);
+/* Left by Start fresh and shown again from the back-forward cache, as Back from the fresh
+   page can be in some browsers: the page is yours again, and saves as it did before, as it
+   does loaded. Not after Put back or Try anyway, which leave by leaveFor too, even pressed
+   after Start fresh before the page has gone: loaded, that page is a link again and sets
+   your layout aside first, and from the cache its first save would go over the layout just
+   put back. */
+addEventListener('pageshow', (e) => { if (e.persisted && freshLeft) { hashReady = true; freshLeft = false; } });
 /* A hash this page did not write means someone navigated to a link — pasted a share URL
    into the address bar, or picked a bookmark — and changing only the fragment is a
    same-document navigation, so nothing re-reads it and the drawer on screen stays put.
@@ -5430,7 +5448,7 @@ function linkKeys(h, link) {
   return [...SHARED_KEYS].filter((k) => k in q && p[k] === q[k]);
 }
 function leaveFor(url) {
-  hashReady = false; clearTimeout(hashSaveT);   // no save of this page's may land after
+  hashReady = false; freshLeft = false; clearTimeout(hashSaveT);   // no save of this page's may land after
   location.href = url;
 }
 /* Swapped rather than copied over: what is here now goes aside in its place, so putting
@@ -5446,6 +5464,7 @@ function putBack() {
   }
   saveLocal(prev);
   writeKey(LINKED_KEY, prevLinked);
+  forgetPasted();
   leaveFor(location.href.split('#')[0]);   // a bare visit restores it, and says so
 }
 function tryAnyway() {
@@ -5507,10 +5526,44 @@ function saveNow() {
        drawer the address is at: marked before it, a reload took the save before for its
        own, and after another tab put the drawer back to that one, the reload wrote this
        page's later change back over it. */
-    try { history.replaceState(drawers.stamp(h, linkedNow && bootDesc !== null), '', '#' + h); }
-    catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
-                     worth an exception that stops the rest of the page working */ }
+    if (!pastedOver()) {
+      try { history.replaceState(drawers.stamp(h, linkedNow && bootDesc !== null), '', '#' + h); }
+      catch (err) { /* some browsers refuse replaceState on file:// — a lost URL is not
+                       worth an exception that stops the rest of the page working */ }
+      ownHash = location.hash;
+    } else {
+      try { sessionStorage.setItem(PASTED_KEY, JSON.stringify({ save: DRAWERS.fingerprint(h),
+        at: DRAWERS.fingerprint(ownHash) })); }
+      catch (err) { /* not kept, Back offers nothing: no worse than before */ }
+    }
   }
+}
+/* The address as this page last left it: as it arrived, then as each save wrote it. One
+   that differs, with a layout in it, is a link gone to over this page, pasted or picked
+   from the bookmarks, whose hashchange (above) has not run yet: a page busy drawing comes
+   to a save that was waiting first. That save is still made, so the layout the link
+   replaces holds the change and is set aside with it, but the address is the link's.
+   Written back over, the hashchange found this page's design there and reloaded that,
+   and the link was gone. */
+let ownHash = null;
+const pastedOver = () => ownHash !== null && location.hash !== ownHash &&
+  isLayoutHash((location.hash || '').replace(/^#/, ''));
+/* That save, and the address it left as it was, by fingerprint, for this tab: the layout
+   the link sets aside is the save, and it is later than the address, which never had the
+   change. Back to the address offers it, and only it (see `later` below). */
+const pastedFrom = (prev) => {
+  try {
+    const r = JSON.parse(sessionStorage.getItem(PASTED_KEY) || 'null');
+    return !!r && !!prev && r.save === DRAWERS.fingerprint(prev) &&
+      r.at === DRAWERS.fingerprint(location.hash);
+  } catch (err) { return false; }
+};
+/* Start fresh and Put back each leave that save behind, and the record goes with them.
+   Kept past Start fresh, Back to a page at the same address offered the save as the later
+   layout, though Start fresh came after it. Start fresh works from before the boot reads a
+   link, so PASTED_KEY is declared with SAVE_KEY, above it. */
+function forgetPasted() {
+  try { sessionStorage.removeItem(PASTED_KEY); } catch (err) { /* nothing kept to forget */ }
 }
 /* A reload takes the address as it stands when it starts, and the page runs on until the
    new one arrives. A save still waiting would land in that gap and record in the saved
@@ -5920,17 +5973,30 @@ let arrivedWith = '';    // the design string this page was opened with
      layout was set aside and offered a Put back that brought nothing back. */
   let keptAside = false;
   if (aside) {
+    const asideLinked = linkKeys(saved, linked).length ? linked : '';
     writeKey(PREV_KEY, saved);
     keptAside = readKey(PREV_KEY) === saved;
-    if (keptAside) writeKey(PREV_LINKED_KEY, linkKeys(saved, linked).length ? linked : '');
+    if (keptAside) writeKey(PREV_LINKED_KEY, asideLinked);
+    /* With the record of whether it is a link's refused, the one left from the layout set
+       aside before would answer for it. That goes, and put back, this one is yours: still
+       better than not setting it aside (unkept), which keeps it only until the first
+       change made on the link. */
+    if (keptAside && readKey(PREV_LINKED_KEY) !== asideLinked) writeKey(PREV_LINKED_KEY, '');
     /* Not kept, it is not written over either (unkept), unless a hand-over of your own
        brings on anything the other page sets: then the save holds the drawer, bed or the
        other page's settings from before, and a bare visit took those back to the other
        page. One still carrying someone's link is that link, and your layout is kept. */
-    else unkept = !handOver || handOver.link.length > 0 || drawers.onlyMine(saved, src);
+    if (!keptAside) unkept = !handOver || handOver.link.length > 0 || drawers.onlyMine(saved, src);
   }
+  /* Back to your own earlier page over a link's layout, untouched, sets nothing aside: what
+     the link replaced is aside already. That can be later than the page Back brings: a change
+     whose save came due as the link was pasted is aside, and in no earlier address (see
+     pastedOver). So that layout is offered, if it is the one aside and this is the address it
+     came from, and no other: one aside for any other reason can be older than this page, and
+     Put back went further back, not on. */
+  const later = back && savedLinked && pastedFrom(readKey(PREV_KEY)) ? readKey(PREV_KEY) : '';
   const canPutBack = (replaces && !kept && (keptAside || (savedLinked && !!readKey(PREV_KEY)))) ||
-    (back && keptAside);
+    (back && (keptAside || (!!later && !sameDesign(later, src))));
   if (stalled) {
     showSetAside('This layout did not finish loading last time, so the page has started ' +
       'from its defaults rather than try it again.', canPutBack, true);
@@ -5971,6 +6037,7 @@ if (pendingNotes) {
 }
 readControls();
 hashReady = true;                         // loadFromHash has had its say; ours may start
+ownHash = location.hash;
 initThree();
 initMap();
 drawLayerTabs();
