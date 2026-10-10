@@ -136,7 +136,7 @@ test.describe('ranges on the geometry fields', () => {
        watertight and with Download on, where the magnet could not seat. */
     ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=bowtie&km=wall&ki=top' +
       '&bm=bosses&mg=1', 'errMagnet',
-      /Magnet Ø must be 5 mm or less at a 36\.13 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a hole has to stay out of the housings the bowtie keys drop into from above\./],
+      /Magnet Ø must be 5 mm or less at a 36\.13 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a hole has to stay out of the housings the bowtie keys drop into from above; put in from beneath, the bowtie keys leave more room\./],
     /* #70: the joint is cut from the corner bosses now, so a boss's pocket can reach it as
        a cell's can. A bowtie key in the walls at 36.13 mm took a 7.9 mm magnet, and with
        the recess cut from the bosses it would have built 19 open edges a piece. */
@@ -239,7 +239,7 @@ test.describe('ranges on the geometry fields', () => {
     expect(await exportOff(page)).toBe(false);
     await H.setField(page, 'magnetD', '5.1');
     expect(await text(page, 'errMagnet'))
-      .toMatch(/Magnet Ø must be 5 mm or less .* the housings the bowtie keys drop into from above\./);
+      .toMatch(/Magnet Ø must be 5 mm or less .* the housings the bowtie keys drop into from above; put in from beneath, the bowtie keys leave more room\./);
     expect(await text(page, 'pieceTail')).toMatch(/not building/);
     expect(await exportOff(page)).toBe(true);
     await page.selectOption('#keyInsert', 'bottom');

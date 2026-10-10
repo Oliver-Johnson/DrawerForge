@@ -118,8 +118,11 @@ const mountWhy = (opens, field) => {
       : joint === 'part' ? `${{ magnetD: 'a magnet', screwHeadD: 'a screw head', screwHoleD: 'a screw' }[field]} ` +
         `has to stay clear of the ${CONNECTOR_NAMES[state.connector]} in the notches beside it`
       : joint === 'near' ? `a pocket any wider would come too near the edge of the ${cuts} to cut cleanly`
+      /* put in from beneath, a key's or an H-clip's recess leaves more room wherever its cup
+         stops a size (all 1,508 such caps in the #75 sweep); a snap clip's reaches further */
       : joint === 'housing' ? `a hole has to stay out of the housings the ${CONNECTOR_NAMES[state.connector]} ` +
-        'drop into from above'
+        'drop into from above' + (state.connector === 'snap' ? ''
+          : `; put in from beneath, the ${CONNECTOR_NAMES[state.connector]} leave more room`)
       : joint ? `a hole has to stay out of the ${cuts}`
       : mount().beside[field] ? 'a cell\'s four holes have to stay clear of each other'
       : cornerBosses(state) ? 'a pocket has to stay inside its corner boss'
