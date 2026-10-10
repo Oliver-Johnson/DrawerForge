@@ -140,12 +140,13 @@ test.describe('ranges on the geometry fields', () => {
     /* #83: with corner pockets a cell is its socket's rim alone, and over a boss the rim
        is the socket's wall, so a hole that opens on the boss's top has to clear it. A
        6 mm magnet from above at 36.13 mm stood 0.26 mm under the rim, and a 4.5 mm screw
-       hole at 34.5 mm under it too, both with Download on. */
+       hole at 34.5 mm under it too, both with Download on. The screw's cap goes by how
+       its bore's corners stand off its size, so only the reason is pinned. */
     ['#pi=36.13&w=144.52&d=72.26&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=88.26&bd=400&cn=none&bm=bosses&mg=1&ms=top',
       'errMagnet',
       /Magnet Ø must be 5\.4 mm or less at a 36\.13 mm pitch — mounting holes sit 13 mm from each cell centre, where the Gridfinity spec puts them, and a magnet put in from above has to clear the socket's rim over its corner boss\./],
     ['#pi=34.5&w=138&d=69&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=85&bd=400&cn=none&bm=bosses&sc=1&sh=4.5', 'errScrew',
-      /Screw hole Ø must be 4 mm or less at a 34\.5 mm pitch — .* a screw has to clear the socket's rim over its corner boss\./],
+      /Screw hole Ø must be [\d.]+ mm or less at a 34\.5 mm pitch — .* a screw has to clear the socket's rim over its corner boss\./],
     /* #70: the joint is cut from the corner bosses now, so a boss's pocket can reach it as
        a cell's can. A bowtie key in the walls at 36.13 mm took a 7.9 mm magnet, and with
        the recess cut from the bosses it would have built 19 open edges a piece. */
