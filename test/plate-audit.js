@@ -2815,6 +2815,100 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
   }
 }
 
+/* A corner boss stays inside a rounded corner of the plate (#86).
+ *
+ * A corner boss is a quarter square from its cell's corner, and the plate rounds the
+ * corners it owns. The cell's corner is the plate's only with no margin, but a boss was
+ * never cut to the arc, so with no margin or a small one its square corner stood out past
+ * it, a tab as tall as the boss, up to 2.6 mm: r(√2 − 1) out at an outer radius r with no
+ * margin (1.66 mm at the default 4, 0.83 at 2, 1.99 at 4.8, at every pitch) and 0.95 mm
+ * with margins of 0.5. It stays inside once both margins pass 1.17 mm, or once the other
+ * reaches 4 mm when one is none. Nothing above could see it: a square tab on a rounded
+ * corner is as closed and faces outwards as well as a rounded one, and the rows that build
+ * corner bosses with no margin and a rounded corner quarantine their edges by name.
+ *
+ * So it is measured off the mesh, as how far past the arc the farthest vertex of a piece
+ * stands in the square of each corner the plate rounds (0 or less is inside). That has to
+ * be nothing on the page that showed it and with margins of 0.5 mm, and the default
+ * drawer's 6 and 1 mm are a control. The clip to the arc must not cost the plate an edge
+ * either: a boss that follows the arc stands on the same points the corner cell's wall
+ * does, and the plate may not have more edges used four times than it has with square
+ * corners (clipToPlate). One row is the exception to "nothing past the outline": margins of
+ * 1.17 mm, where the corner stands out 0.0022 mm and clipToPlate leaves it, since the
+ * clip's points would stand 2.4 microns apart and the weld took them for one or two as it
+ * came (3 open edges at 34 mm with screws); that row allows 0.01 mm and no open edge.
+ * Last, the measure has to read what it was written to find: the old boss, a square tab on
+ * the corner, laid on the plate. */
+console.log('\na corner boss stays inside a rounded plate corner:');
+{
+  const rcOf = (cfg) => Math.min(cfg.outerRadius, ((cfg.topCutoff + cfg.socketRadius) * Math.SQRT2 -
+                                                  cfg.socketRadius - 0.2) / (Math.SQRT2 - 1));
+  /* The farthest any vertex stands past the outline at a corner the plate rounds, and how many corners there were.
+     The outline's arc is NARC = 10 chords, which sag inside the circle by up to rc (1 − cos 4.5°), 0.012 mm at
+     4: a vertex is past it by how far it stands beyond the chord that covers its angle round the arc's centre. */
+  const NARC = 10;
+  const past = (cfg, L, extra) => {
+    const rc = rcOf(cfg), step = 90 / NARC;
+    let worst = 0, corners = 0;
+    for (const pc of L.pieces) {
+      const r = G.buildPiece(cfg, L, pc);
+      const owns = { ll: pc.cellX0 === 0 && pc.cellY0 === 0,
+                     lr: pc.cellX0 + pc.nx === L.nx && pc.cellY0 === 0,
+                     ur: pc.cellX0 + pc.nx === L.nx && pc.cellY0 + pc.ny === L.ny,
+                     ul: pc.cellX0 === 0 && pc.cellY0 + pc.ny === L.ny };
+      const corner = { ll: [0, 0], lr: [r.W, 0], ur: [r.W, r.D], ul: [0, r.D] };
+      const inward = { ll: [1, 1], lr: [-1, 1], ur: [-1, -1], ul: [1, -1] };
+      for (const k of ['ll', 'lr', 'ur', 'ul']) {
+        if (!owns[k] || rc <= 0.01) continue;
+        corners++;
+        const [cx, cy] = corner[k], [sx, sy] = inward[k], ox = cx + sx*rc, oy = cy + sy*rc;
+        for (const p of extra && k === 'll' ? r.polys.concat(extra) : r.polys)
+          for (const v of p.verts) {
+            if ((v[0] - cx) * sx > rc + 1e-9 || (v[1] - cy) * sy > rc + 1e-9) continue;
+            const a = -sx * (v[0] - ox), b = -sy * (v[1] - oy);    // across the quadrant the arc covers
+            const phi = Math.max(0, Math.atan2(b, a) * 180 / Math.PI), k = Math.min(NARC - 1, Math.floor(phi / step));
+            worst = Math.max(worst, Math.hypot(a, b) * Math.cos((phi - (k + 0.5) * step) * Math.PI / 180) -
+                                    rc * Math.cos(step / 2 * Math.PI / 180));
+          }
+      }
+    }
+    return { worst, corners };
+  };
+  const ROWS = [
+    ['the page: 84 x 84 mm at 42, no margin, magnets', { pitch: 42, drawerW: 84, drawerD: 84, bedW: 256, bedD: 256,
+      connector: 'none', baseMode: 'bosses', magnets: true }],
+    ['0.5 mm margins, a 4.8 mm corner, 3 x 2 in two pieces at 36, dovetails, magnets and screws',
+     { pitch: 36, drawerW: 109, drawerD: 73, mLeft: 0.5, mRight: 0.5, mFront: 0.5, mBack: 0.5, bedW: 76, bedD: 400,
+       connector: 'dovetail', baseMode: 'bosses', magnets: true, screws: true, outerRadius: 4.8 }],
+    ['no margin at 34.5, screws, whose pockets run in under the rim',
+     { pitch: 34.5, drawerW: 69, drawerD: 69, bedW: 256, bedD: 256, connector: 'none', baseMode: 'bosses', screws: true }],
+    ['the default drawer\'s margins, 6 and 1 mm, magnets (control)', { pitch: 42, drawerW: 96, drawerD: 86, mLeft: 6, mRight: 6,
+      mFront: 1, mBack: 1, bedW: 256, bedD: 256, connector: 'none', baseMode: 'bosses', magnets: true }],
+    // the corner stands out 0.0022 mm, under the 0.01 clipToPlate leaves: clipped, it had 3 open edges here
+    ['margins of 1.17 mm at 34 mm, screws, the corner a hair out (left as it is)',
+     { pitch: 34, drawerW: 70.34, drawerD: 70.34, mLeft: 1.17, mRight: 1.17, mFront: 1.17, mBack: 1.17, bedW: 256, bedD: 256,
+       connector: 'none', baseMode: 'bosses', screws: true }, 0.01],
+  ];
+  for (const [name, over, slack = 1e-6] of ROWS) {
+    const r = buildAll(over);
+    const flat = buildAll({ ...over, outerRadius: 0 });
+    const m = past(r.cfg, r.L);
+    const good = m.worst < slack && m.corners >= 4 && r.bad <= flat.bad && !r.open;
+    console.log(`  ${name}: ${m.corners} rounded corners, the farthest vertex ${m.worst < 1e-6 ? 'inside' : m.worst.toFixed(4) + ' mm past'} the outline; ` +
+                `${r.bad} bad edges against ${flat.bad} with square corners, ${r.open} open${good ? '' : '   FAIL'}`);
+    if (!good) bad++;
+  }
+  // the old boss: a square tab on the corner, 3 mm a side and 2.6 tall, laid on the page's plate
+  const pg = buildAll(ROWS[0][1]);
+  const old = past(pg.cfg, pg.L, G.extrudePoly([[0, 0], [3, 0], [3, 3], [0, 3]], 0, 2.6));
+  // the tab's corner is the diagonal's point of the arc, a vertex of the chords: r(√2 − 1) from it, along a chord's normal
+  const want = rcOf(pg.cfg) * (Math.SQRT2 - 1) * Math.cos(Math.PI / (4 * NARC));
+  const live = Math.abs(old.worst - want) < 1e-3;
+  console.log(`  the measure on the old boss, a square tab laid on the corner: ${old.worst.toFixed(3)} mm past the outline of a ${rcOf(pg.cfg)} mm corner, ` +
+              `r(√2 − 1) cos 4.5° = ${want.toFixed(3)}${live ? '' : '   THE MEASURE DOES NOT SEE IT'}`);
+  if (!live) bad++;
+}
+
 /* The fit clearance at its ceiling, for every joint and every pitch band.
  *
  * connClrCeiling's answer depends on the joint, which way its key goes in and the pitch,
