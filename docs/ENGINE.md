@@ -881,7 +881,16 @@ currently installed):
   designs with a solid floor, the first three tries left 6 open and all of them leave
   4, none worse. A try that throws (the turned cutters there reach `healCsgSeams`'
   T-junction pass limit) is passed over and the first cut stands, where it used to fail
-  the whole build. The socket floor is a fan too, from the cell's centre, and a pocket
+  the whole build. With screws, a cell whose pockets come out closed but with a face the
+  repair left turned over (`.turned`) is cut again the same ways, and kept on the first
+  try that is closed with nothing turned over: turned half a facet off the magnet pocket,
+  two of a counterbore's flats can stand square to the cell's x edges, and a 3.89 mm head
+  1 deep over a 1.01 mm shank under a 3 × 2 magnet from above folded 3 times a cell at
+  45.16 mm with a dovetail and at 44 mm on one cell, where main builds both closed; the
+  turned cutters close it. Over 2,366 designs with screws drawn round the counterbore's
+  turn, 49 were cut again for it, 4 that folded build closed, none came out worse, and
+  building took 1.5% longer. Without screws nothing is cut again for it, so those designs
+  keep main's bytes. The socket floor is a fan too, from the cell's centre, and a pocket
   from above or a screw's shank stands on it: an 11.1 mm magnet from above at 48.55 mm has
   a pocket corner 4.7 microns from one of its spokes, by `fanCentre`'s measure, and loses
   the sliver there, six open edges in every cell that no try closed. How near is not what

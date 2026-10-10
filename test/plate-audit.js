@@ -2307,8 +2307,12 @@ console.log('\nthe other limits, built at their ends:');
      at 0.005; on the tile π/252 left a counterbore's corner 0.00502 mm off a shank's flat,
      the shank unturned, and 15 edges open; and the other three, turned at either bound,
      π/252 left open by 3 and 12 edges and with two shells touching along 8, split by its
-     planes away from the corners. Each is a size the page takes, and has to build
-     closed, with no folds. */
+     planes away from the corners. The last two are a counterbore turned half a facet
+     whose two flats stand square to the cell's x edges: the BSP split one into a strip
+     3.3 microns wide that came out folded, 3 times a cell at 45.16 mm with a dovetail and
+     at 44 mm on one cell, where main builds both closed, until a cell whose pockets come
+     out with a face turned over was cut again (the fastener cut in buildPiece). Each is a
+     size the page takes, and has to build closed, with no folds. */
   for (const [nm, o, tile] of [
     ['13.6 head, 6 x 2 above, 42, 1.5 deep', { magnetSide: 'top', screwHeadD: 13.6, screwHeadDepth: 1.5 }],
     ['13.6 head, 6 x 2 above, 42, 1 deep', { magnetSide: 'top', screwHeadD: 13.6, screwHeadDepth: 1 }],
@@ -2343,6 +2347,10 @@ console.log('\nthe other limits, built at their ends:');
       screwHoleD: 1.06, screwHeadD: 13.26, screwHeadDepth: 3 }],
     ['5.65 head, 4.44 x 3 below, 42', { magnetD: 4.44, magnetH: 3, screwHoleD: 2.43, screwHeadD: 5.65,
       screwHeadDepth: 3 }],
+    ['3.89 head, 3 x 2 above, 45.16, dovetail', { pitch: 45.16, drawerW: 90.32, drawerD: 45.16, bedW: 57.16,
+      connector: 'dovetail', magnetD: 3, magnetSide: 'top', screwHoleD: 1.01, screwHeadD: 3.89, screwHeadDepth: 1 }],
+    ['3.89 head, 3 x 2 above, 44', { pitch: 44, drawerW: 44, drawerD: 44, magnetD: 3, magnetSide: 'top',
+      screwHoleD: 1.01, screwHeadD: 3.89, screwHeadDepth: 1 }],
   ]) {
     const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, screws: true, ...o };
     const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
