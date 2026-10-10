@@ -4746,7 +4746,7 @@ function mountLimits(cfg, layout, known) {
     depth: bosses ? r10(BOSS_H - MOUNT_SKIN) : Infinity,
     // which the socket's rim over a corner boss stops (#83)
     rim: { magnetD: bosses && cfg.magnetSide === 'top' && own.magnetD === onRim && !joint.magnetD,
-           screwHoleD: bosses && own.screwHoleD === onRim && !joint.screwHoleD },
+           screwHoleD: bosses && own.screwHoleD === onRim && !joint.screwHoleD && !byMagnet },
     // which of the sizes the cut beside it stops, rather than the floor, cell or boss
     beside: { magnetD: own.magnetD === beside && !joint.magnetD,
               screwHoleD: own.screwHoleD === beside && !joint.screwHoleD && !byMagnet,
