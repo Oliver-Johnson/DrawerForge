@@ -453,9 +453,10 @@ roofs, a joint's cuts and housings), level with none. Over the boss the rim is t
 socket's wall, and is not cut: a hole that opens on the boss's top, a magnet from above
 or a screw's shank, is held `MOUNT_SEAM` clear of it by `mountLimits` (`rim`), as a solid
 floor's is held to its socket floor. That takes 2.5 mm off the cap of a magnet from above
-and of a screw's hole at 34.5 mm (6.3 to 3.8, 6.5 to 4) and 2.4 at 38 (9.7 to 7.3); from
-40 mm the boss is the tighter cap. A magnet from beneath and a screw's head lose nothing,
-and a pocket the rim does not reach is built as it was, byte for byte.
+at 34.5 mm (6.3 to 3.8) and 2.4 off a screw's hole (6.2 to 3.8), and 2.4 off the magnet's
+at 38 (9.7 to 7.3); from 40 mm the boss is the tighter cap. A magnet from beneath and a
+screw's head lose nothing, and a pocket the rim does not reach is built as it was, byte
+for byte.
 
 `connector: 'puzzle'` used to be listed here as the first kind, and it is **no longer
 open anywhere**. It is worth reading how, because it needed two unrelated fixes and the
