@@ -224,6 +224,72 @@ test.describe('ranges on the geometry fields', () => {
     expect(errors).toEqual([]);
   });
 
+  // one input event and no change, as a paste is
+  const paste = (page, id, value) => page.evaluate(({ id, value }) => {
+    const e = document.getElementById(id);
+    e.value = value;
+    e.dispatchEvent(new Event('input', { bubbles: true }));
+  }, { id, value });
+  const settled = (page) => page.waitForFunction((re) => new RegExp(re).test(
+    document.getElementById('pieceTail').textContent), SETTLED.source, { timeout: 30000 });
+
+  /* #81: a counterbore that turns off the magnet pocket's flats is measured turned, so the
+     head's cap goes by the head typed, and the head is read again on its own (readControls).
+     At 46.45 mm with a jigsaw and a 6.2 mm magnet from beneath, a 14.05 mm head turns and
+     stops at 14, where the 6 before it goes to 14.1. Pasted in, it was read against the 6's
+     cap and built with Download on; and 14.1 pasted over a 14, which turns, was held to the
+     14's cap and refused, at every read after as well. */
+  test('a screw head is held to its own cap, not the one of the head before it', async ({ page }) => {
+    const errors = await openAt(page, '#pi=46.45&w=92.9&d=92.9&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=58.45&bd=256' +
+                                      '&cn=puzzle&mg=1&md=6.2&mh=2.4&ms=bottom&sc=1&sd=6');
+    const max = () => page.evaluate(() => document.getElementById('screwHeadD').max);
+    const refused = /Screw head Ø must be 14 mm or less at a 46\.45 mm pitch — .* a hole has to stay out of the notches the puzzle tabs fit into\./;
+    expect(await max()).toBe('14.1');
+    expect(await exportOff(page)).toBe(false);
+    await paste(page, 'screwHeadD', '14.05');
+    await page.waitForTimeout(250);
+    expect(await max()).toBe('14');
+    expect(await text(page, 'errScrew')).toMatch(refused);
+    expect(await text(page, 'warnings'), 'the checks under the map say the same thing').toMatch(refused);
+    expect(await text(page, 'pieceTail')).toMatch(/not building/);
+    expect(await exportOff(page)).toBe(true);
+    await H.setField(page, 'screwHeadD', '14');
+    await settled(page);
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await exportOff(page)).toBe(false);
+    await paste(page, 'screwHeadD', '14.1');
+    await page.waitForTimeout(250);
+    await settled(page);
+    expect(await max()).toBe('14.1');
+    expect(await shown(page, 'errScrew')).toBe(false);
+    expect(await text(page, 'warnings')).not.toMatch(/Screw head Ø/);
+    expect(await page.evaluate(() => state.screwHeadD)).toBe(14.1);
+    expect(await text(page, 'pieceTail')).toMatch(/ready/);
+    expect(await exportOff(page)).toBe(false);
+    expect(errors).toEqual([]);
+  });
+
+  /* And the shank after it, measured on the head as held. At 41.86 mm with a jigsaw, loose,
+     a 7.8 mm hole is turned a little under an 8.3 mm head's corners (MOUNT_BORE.hole.turn),
+     which stops it at 7.7, and not at all under the 7.9 mm the head is held to, which takes
+     it. Pasted at 8.3, the head is refused and the hole is not. */
+  test('a screw hole is measured under the head as held, not as typed', async ({ page }) => {
+    const errors = await openAt(page, '#pi=41.86&w=83.72&d=83.72&mm=custom&ml=0&mr=0&mf=0&mb=0&bw=53.86&bd=256' +
+                                      '&cn=puzzle&to=loose&sc=1&sh=7.8&sd=6');
+    const max = () => page.evaluate(() => document.getElementById('screwHoleD').max);
+    expect(await max()).toBe('7.8');
+    expect(await exportOff(page)).toBe(false);
+    await paste(page, 'screwHeadD', '8.3');
+    await page.waitForTimeout(250);
+    expect(await text(page, 'errScrew')).toMatch(/Screw head Ø must be 7\.9 mm or less at a 41\.86 mm pitch/);
+    expect(await text(page, 'errScrew')).not.toMatch(/Screw hole Ø/);
+    expect(await text(page, 'warnings')).not.toMatch(/Screw hole Ø/);
+    expect(await max()).toBe('7.8');
+    expect(await page.evaluate(() => [state.screwHeadD, state.screwHoleD])).toEqual([7.9, 7.8]);
+    expect(await exportOff(page)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
   /* #70: corner pockets over a floor. A bowtie housed in the floor stood its 2.8 mm floor
      round the 2.6 mm bosses and sealed their pockets in it, with Download on, and an extra
      floor did the same. Such a plate is built as a solid floor builds it now, and Checks
