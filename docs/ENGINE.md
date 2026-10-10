@@ -772,11 +772,15 @@ currently installed):
   out folded: the head at its 13.6 mm cap at 42 mm, 1.5 deep under the default 6 × 2
   magnet from above, folded the default plate 160, 120, 128 and 96 times a piece. Where
   a corner of either comes within 0.005 mm of a plane of the other, the counterbore is
-  turned π/252 about its axis (`MOUNT_BORE.head.turn`), which leaves every corner of
-  each 0.007 mm or more off the other's flats; its flats stand where they did, so the
-  head fits as typed, and the shank's turn and `mountLimits` go by it turned. Turned
-  further, the counterbore's planes met other things: π/84 and π/126 each opened
-  designs that π/252 builds closed. The shank is turned π/84 about
+  turned half a facet, π/14, about its axis (`MOUNT_BORE.head.turn`), which puts its
+  corners midway between the pocket's, each 0.18 mm or more off the other's flats; its
+  flats stand where they did, so the head fits as typed, and the shank's turn and
+  `mountLimits` go by it turned. Turned less, the corners stayed near each other's: at
+  π/252 the rays the counterbore's roof is fanned along passed 0.04 mm from the
+  pocket's corners, and where a socket's sloped facet crossed there the roof split into
+  slivers with no width, which single precision in the STL folded, 147 times over the
+  default plate's four pieces though one cell built clean. π/126, π/84, π/56 and π/28
+  each opened designs that π/14 builds closed. The shank is turned π/84 about
   its axis where one of the counterbore's corners, or one of the magnet pocket's, would
   otherwise stand within 0.005 mm of a flat's plane carried on past the shank
   (`MOUNT_BORE.hole.turn`, which goes by the counterbore as cut, and by the pocket's
