@@ -2743,8 +2743,8 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
      to be refused and built at the cap. The same spoke meets a corner at other pitches, and
      corner pockets still leave 3 open edges a cell at three of them with a 2 mm hole: 34.32
      mm, with screws alone or under a 6 mm magnet from beneath; 34.73 mm, under a 4 mm magnet
-     from above; and with a 3 mm hole 38.95 mm, under a 6 mm magnet from above. They are what
-     is left of #80, open, and are not pinned here. */
+     from above; and with a 3 mm hole 38.95 mm, under a 6 mm magnet from above. They were what
+     was left of #80, open on main; the rows for them (#91) come after the next one. */
   for (const [name, head, why] of [
     ['#80: 34.04 mm, 2 mm hole, 5.8 head', 5.8, false],
     ['#80: 34.04 mm, 2 mm hole, 5.81 head', 5.81, true],
