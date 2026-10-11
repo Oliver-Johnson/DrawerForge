@@ -1496,13 +1496,21 @@ function sectionArea(polys, z, dy) {
  * magnet's pocket stood 0.4 microns off the plane of a flat of the shank. The shank is
  * turned for that now (MOUNT_BORE.hole.turn), so both rows build whole here, and so does
  * the third, a 7.4 mm head, which main builds whole as well. Of those heads only 7.31 mm
- * still leaks, its corners 0.001 mm inside the magnet's (#77). The fourth cuts main's
+ * leaked, its corners 0.001 mm inside the magnet's (#77), until a counterbore that near is
+ * cut as the pocket (MOUNT_BORE.head.snap); its row is below. The fourth cuts main's
  * bores, the head and shank whose polygons are main's 7.504 and 3 mm ones, 7.504 cos(π/14)
  * and 3 cos(π/12). That head's corners stand 0.002 mm outside the magnet's, inside the band
  * where the counterbore is cut as the magnet's pocket (MOUNT_BORE.head.snap), so it builds
  * whole now. The fifth cuts the same head apart from the pocket, as before the band: it runs
  * out of passes as on main and throws, so the second run's guard is still tested (without
- * the guard it builds both pieces with 55 bad edges). */
+ * the guard it builds both pieces with 55 bad edges). The magnet 2 and 2.2 mm deep and the
+ * 7.498, 7.502 and 7.31 mm heads are #77's third case, the same link with the 7.3 mm
+ * magnet's pocket and the counterbore's standing a few thousandths of a millimetre apart:
+ * the issue counted 71 to 82 bad edges for the magnet 2 or 2.2 mm deep and 26 to 57 for the
+ * heads at 7.498 and 7.502, with Download on, and the 7.31 mm head left 12 open edges and
+ * two folds a piece before the counterbore was cut as the pocket. Main builds the first
+ * four with 52 to 142 bad edges over the two pieces (and the 7.31 mm head closed); all
+ * five build whole here. */
 console.log('\na counterbore whose ceiling three cut lines cross at one point (#76):');
 {
   const PLATE = { pitch: 39.07, drawerW: 170, drawerD: 90, bedW: 100, bedD: 400, marginMode: 'auto',
@@ -1538,6 +1546,11 @@ console.log('\na counterbore whose ceiling three cut lines cross at one point (#
   for (const [label, over] of [['41.24 mm jigsaw: 55 bad edges a piece', {}],
                                ['2.264 mm magnet: folded twice', { magnetH: 2.264 }],
                                ['7.4 mm head', { screwHeadD: 7.4 }],
+                               ['magnet 2 mm deep', { magnetH: 2 }],
+                               ['magnet 2.2 mm deep', { magnetH: 2.2 }],
+                               ['7.498 mm head', { screwHeadD: 7.498 }],
+                               ['7.502 mm head', { screwHeadD: 7.502 }],
+                               ['7.31 mm head', { screwHeadD: 7.31 }],
                                ["main's bores", { screwHeadD: 7.504 * Math.cos(Math.PI / 14),
                                                   screwHoleD: 3 * Math.cos(Math.PI / 12) }],
                                ["main's bores, cut apart", { screwHeadD: 7.504 * Math.cos(Math.PI / 14),
@@ -2193,13 +2206,22 @@ console.log('\nthe other limits, built at their ends:');
      edges turned for the magnet's corners; 3.0177 under 6.557 with a 3 mm magnet at
      43.43 mm, two pieces with a dovetail, left 58 turned for the shank's corners on the
      pocket's flats as well; and 5.8561 under 12.053 with a 6 mm magnet at 55 mm left 116
-     unturned (#77). Each is refused, by the magnet's pocket, and builds closed at the
-     widest shank taken. */
+     unturned (#77). And #77's first case, a magnet from above no wider than the shank
+     under it: a 2.2 mm magnet over a 2.4 mm shank at 35.93 mm, loose, left bad edges on
+     main (6 open on one cell) with Download on, and the bores here leak at 2.27 to 2.35
+     (6 to 19 open) with the magnet's pocket narrower than the shank's corners. The
+     magnet's ledge caps the shank at 2.2, so the 2.4 mm shank and a 2.3 that leaks 12
+     built anyway are refused. Each is refused, by the magnet's pocket, and builds closed at
+     the widest shank taken. */
   for (const [nm, o] of [
     ['5 under 5.4, 5.1 mm magnet', { screwHoleD: 5, screwHeadD: 5.4, magnetD: 5.1 }],
     ['3.0177 under 6.557, 43.43', { pitch: 43.43, drawerW: 86.86, drawerD: 43.43, bedW: 55.43, bedD: 400,
       connector: 'dovetail', screwHoleD: 3.0177, screwHeadD: 6.557, screwHeadDepth: 1.5, magnetD: 3, magnetH: 1.5 }],
     ['5.8561 under 12.053, 55', { pitch: 55, drawerW: 55, drawerD: 55, screwHoleD: 5.8561, screwHeadD: 12.053 }],
+    ['2.4 under a 2.2 mm magnet, 35.93', { pitch: 35.93, drawerW: 35.93, drawerD: 35.93, tolerance: 'loose',
+      magnetD: 2.2, screwHoleD: 2.4 }],
+    ['2.3 under a 2.2 mm magnet, 35.93', { pitch: 35.93, drawerW: 35.93, drawerD: 35.93, tolerance: 'loose',
+      magnetD: 2.2, screwHoleD: 2.3 }],
   ]) {
     const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, magnetSide: 'top',
                  screws: true, ...o };
@@ -2221,8 +2243,15 @@ console.log('\nthe other limits, built at their ends:');
      now, one prism with it (MOUNT_BORE.head.cut). The shank's turn goes by the counterbore
      as cut: turned for the 6.02 mm head's corners while it was cut at the magnet's, 3.66
      under it left 9. And unioned rather than one prism, the two split their shared walls
-     at the pocket's roof, and the jigsaw at 41.76 mm folded twice there. Each is a size
-     the page takes, and has to build closed, with no folds. */
+     at the pocket's roof, and the jigsaw at 41.76 mm folded twice there. #77's second
+     case is the same pair of walls: a 6.04 mm head 3 deep under the 6 x 2 magnet at 42
+     mm left 6 edges open, and 6.048 folded 5 faces, before the band; with it off
+     (MOUNT_BORE.head.snap set to 0) both leave 12 open here. And a 10.54 mm head over a
+     10.28 mm magnet at 40 mm, tight, which the issue counted at 435 edges on main, leaves
+     69 and 126 open on main over a 2 x 2 piece with the counterbore 2 and 3 deep. The
+     flats stand on the sizes here, which puts those two bores 0.2 mm apart, so the last
+     two rows build closed with or without the band, and fail on main. Each is a size the
+     page takes, and has to build closed, with no folds. */
   for (const [nm, o] of [
     ['3 under 6, 3 deep, 42', { screwHeadDepth: 3 }],
     ['4.24 under 6.39, above, 44.46', { pitch: 44.46, drawerW: 88.92, drawerD: 44.46, bedW: 56.46, connector: 'dovetail',
@@ -2230,6 +2259,12 @@ console.log('\nthe other limits, built at their ends:');
     ['3.66 under 6.02, 3 deep, 42', { screwHoleD: 3.66, screwHeadD: 6.02, screwHeadDepth: 3 }],
     ['41.76 mm jigsaw, 3.742 deep', { pitch: 41.76, drawerW: 83.52, drawerD: 41.76, bedW: 53.76, connector: 'puzzle',
       screwHoleD: 3.32, screwHeadD: 5.973, screwHeadDepth: 3.742 }],
+    ['6.04 under the 6 x 2 magnet, 3 deep', { screwHeadD: 6.04, screwHeadDepth: 3 }],
+    ['6.048 under the 6 x 2 magnet, 3 deep', { screwHeadD: 6.048, screwHeadDepth: 3 }],
+    ['10.54 over 10.28 x 2, 3 deep, 40', { pitch: 40, drawerW: 80, drawerD: 80, tolerance: 'tight', magnetD: 10.28,
+      screwHeadD: 10.54, screwHeadDepth: 3 }],
+    ['10.54 over 10.28 x 2, 2 deep, 40', { pitch: 40, drawerW: 80, drawerD: 80, tolerance: 'tight', magnetD: 10.28,
+      screwHeadD: 10.54, screwHeadDepth: 2 }],
   ]) {
     const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, screws: true, ...o };
     const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
@@ -2572,34 +2607,34 @@ console.log('\nthe other limits, built at their ends:');
    that leaves in a housing, 3.4 microns thick, is not a fill. Every pocket has to be empty
    from its mouth to its floor. And the edges two bosses share where they meet, used four
    times (quarantined above), may not be more than the same plate has with no joint. */
+// along a vertical line, the faces above a height, each counted by which way it faces,
+// add up to how many shells that height is inside
+function columns(polys) {
+  const cells = new Map(), key = (i, j) => i * 100003 + j;
+  for (const t of G.polysToTriangles(polys)) {
+    const xs = t.map((v) => v[0]), ys = t.map((v) => v[1]);
+    for (let i = Math.floor(Math.min(...xs)); i <= Math.floor(Math.max(...xs)); i++)
+      for (let j = Math.floor(Math.min(...ys)); j <= Math.floor(Math.max(...ys)); j++) {
+        if (!cells.has(key(i, j))) cells.set(key(i, j), []);
+        cells.get(key(i, j)).push(t);
+      }
+  }
+  return (x, y) => {
+    const cross = [];
+    for (const [a, b, c] of cells.get(key(Math.floor(x), Math.floor(y))) || []) {
+      const n = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      if (Math.abs(n) < 1e-12) continue;
+      const d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+      const l1 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / d;
+      const l2 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / d;
+      if (l1 < 0 || l2 < 0 || l1 + l2 > 1) continue;
+      cross.push([l1 * a[2] + l2 * b[2] + (1 - l1 - l2) * c[2], Math.sign(n)]);
+    }
+    return (z) => cross.reduce((w, [zc, s]) => zc > z ? w + s : w, 0);
+  };
+}
 console.log('\ncorner bosses beside a joint cut from beneath:');
 {
-  // along a vertical line, the faces above a height, each counted by which way it faces,
-  // add up to how many shells that height is inside
-  const columns = (polys) => {
-    const cells = new Map(), key = (i, j) => i * 100003 + j;
-    for (const t of G.polysToTriangles(polys)) {
-      const xs = t.map((v) => v[0]), ys = t.map((v) => v[1]);
-      for (let i = Math.floor(Math.min(...xs)); i <= Math.floor(Math.max(...xs)); i++)
-        for (let j = Math.floor(Math.min(...ys)); j <= Math.floor(Math.max(...ys)); j++) {
-          if (!cells.has(key(i, j))) cells.set(key(i, j), []);
-          cells.get(key(i, j)).push(t);
-        }
-    }
-    return (x, y) => {
-      const cross = [];
-      for (const [a, b, c] of cells.get(key(Math.floor(x), Math.floor(y))) || []) {
-        const n = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-        if (Math.abs(n) < 1e-12) continue;
-        const d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
-        const l1 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / d;
-        const l2 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / d;
-        if (l1 < 0 || l2 < 0 || l1 + l2 > 1) continue;
-        cross.push([l1 * a[2] + l2 * b[2] + (1 - l1 - l2) * c[2], Math.sign(n)]);
-      }
-      return (z) => cross.reduce((w, [zc, s]) => zc > z ? w + s : w, 0);
-    };
-  };
   const h = 0.3, dz = 0.1;
   const zs = Array.from({ length: 40 }, (_, k) => (k + 0.5) * dz);
   const at = { pitch: 42, drawerW: 168, drawerD: 84, bedW: 100, bedD: 400 };
@@ -2693,6 +2728,38 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
     console.log(`  ${name.padEnd(36)} ${r.L.pieces.length} piece${r.L.pieces.length > 1 ? 's' : ''}; ${leakText(r)}` +
                 `${r.open ? '   FAIL' : ''}`);
     if (r.open) bad++;
+  }
+  /* And the boss's own cut, where a 2 mm hole runs through it (#80). Corner pockets with
+     screws and a 2 mm hole at a 34.04 mm pitch, two 2 x 2 pieces and no joint, left 24 open
+     edges a piece on main, all on the rim of the shank at the boss's top (2.6 mm), with
+     Download on; 34 and 34.08 mm and a 3 mm hole were closed. A boss's top is a fan from its
+     corner, and its spoke to the fifth vertex of the rounded corner (51.3 degrees) passed
+     4.5 microns from the shank's corner at 90 degrees from the site, 5.02 mm in from the
+     cell's edges, where the sliver between them was lost. The link's own default 6 mm head
+     is over the cap here now, since the counterbore is 6 across its flats and the cap is
+     5.8, so the field refuses it, and the design is asked at the cap (the same plate, built
+     closed: its shank has its flats on the 2 mm, so its corner stands 1.035 mm out and not
+     1 mm, off that spoke), at the first size past the cap, and as linked, each of which has
+     to be refused and built at the cap. The same spoke meets a corner at other pitches, and
+     corner pockets still leave 3 open edges a cell at three of them with a 2 mm hole: 34.32
+     mm, with screws alone or under a 6 mm magnet from beneath; 34.73 mm, under a 4 mm magnet
+     from above; and with a 3 mm hole 38.95 mm, under a 6 mm magnet from above. They are what
+     is left of #80, open, and are not pinned here. */
+  for (const [name, head, why] of [
+    ['#80: 34.04 mm, 2 mm hole, 5.8 head', 5.8, false],
+    ['#80: 34.04 mm, 2 mm hole, 5.81 head', 5.81, true],
+    ['#80: 34.04 mm, 2 mm hole, 6 head', 6, true]]) {
+    const p = 34.04, at = { pitch: p, drawerW: 4 * p, drawerD: 2 * p, bedW: 84, bedD: 400, baseMode: 'bosses',
+                            connector: 'none', screws: true, screwHoleD: 2 };
+    const asked = designCfg({ ...at, screwHeadD: head });
+    const lims = G.mountLimits(asked, G.computeLayout(asked));
+    const refused = head > lims.screwHeadD + 1e-9;
+    const r = buildAll({ ...at, screwHeadD: Math.min(head, lims.screwHeadD) });
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    const good = refused === why && !r.open && !folds;
+    console.log(`  ${name.padEnd(36)} ${refused ? `refused (cap ${lims.screwHeadD}), built at it` : 'taken'}; ${r.L.pieces.length} pieces; ` +
+                `${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}${good ? '' : `   FAIL${refused === why ? '' : why ? ': has to be refused' : ': has to be taken'}`}`);
+    if (!good) bad++;
   }
   /* And a boss's cut moved one NUDGE could stand where the cell's stands, when one or the
      other was taken again (cutAgain): a wall puzzle key at 36.13 mm with screws and a margin
@@ -2913,6 +2980,213 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
       if (!good) bad++;
     }
   }
+}
+
+/* A corner boss stays inside a rounded corner of the plate (#86).
+ *
+ * A corner boss is a quarter square from its cell's corner, and the plate rounds the
+ * corners it owns. The cell's corner is the plate's only with no margin, but a boss was
+ * never cut to the arc, so with no margin or a small one its square corner stood out past
+ * it, a tab as tall as the boss, up to 2.6 mm: r(√2 − 1) out at an outer radius r with no
+ * margin (1.66 mm at the default 4, 0.83 at 2, 1.99 at 4.8, at every pitch) and 0.95 mm
+ * with margins of 0.5. It stays inside once both margins pass 1.17 mm, or once the other
+ * reaches 4 mm when one is none. Nothing above could see it: a square tab on a rounded
+ * corner is as closed and faces outwards as well as a rounded one, and the rows that build
+ * corner bosses with no margin and a rounded corner quarantine their edges by name.
+ *
+ * So it is measured off the mesh, as how far past the arc the farthest vertex of a piece
+ * stands in the square of each corner the plate rounds (0 or less is inside). That has to
+ * be nothing on the page that showed it and with margins of 0.5 mm, and the default
+ * drawer's 6 and 1 mm are a control. The clip to the arc must not cost the plate an edge
+ * either: a boss that follows the arc stands on the same points the corner cell's wall
+ * does, and the plate may not have more edges used four times than it has with square
+ * corners (clipToPlate), but for the kind named below. One row is the exception to
+ * "nothing past the outline": margins of 1.17 mm, where the corner stands out 0.0022 mm
+ * and clipToPlate leaves it, since the clip's points would stand 2.4 microns apart and the
+ * weld took them for one or two as it came (3 open edges at 34 mm with screws); that row
+ * allows 0.01 mm and no open edge, as does one beside it with a corner 0.0008 mm out.
+ *
+ * And the cut boss has to be no worse than the square one, which neither count shows. Cut,
+ * a boss's pocket can break through the arc: at 30 mm with a 4.88 mm corner and a 1.8 mm
+ * magnet the plate had a window in its outer wall, 1.2 mm along the arc and up to 2 mm
+ * tall, that the square tab had covered, with every edge round it closed. So every row
+ * reads the wall as well, points just inside the arc that no shell holds with none outside
+ * them either, and may have none; and may have no open edge and no fold, since a cut boss's
+ * pocket is a lottery of its own: the defaults with screws at 36.42 mm, and three plates
+ * with a 2 mm corner at 29.5 to 33 mm, had 3 open edges where the square boss built closed,
+ * and two whose pocket stood at the arc had 6 folds. buildPiece takes the cut boss only
+ * where its bores stand MOUNT_WALL inside the arc and it comes out closed with nothing
+ * turned over, and builds the square one otherwise. The rows marked so must still have
+ * the square boss (the farthest vertex out by 0.01 mm or more); the four with the lottery
+ * are cut, their pockets cut again turned a 28th of a turn.
+ *
+ * One kind of bad edge is named here and pinned, rather than held to square corners:
+ * edges a cut boss shares with the shell beside it, the corner cell's wall or a margin's
+ * region, where both stand on the same points of the arc. Both shells are closed and their
+ * faces there lie in one plane and face the same way, so each such edge is used four times
+ * and none once. It comes three ways: a side along a chord under SHORT, which clipToPlate
+ * leaves whole, so its bottom edge is the wall's (every chord, under a corner of about
+ * 0.19 mm); a half chord whose middle point lands on a margin region's side, which shares
+ * it; and the vertical edges at the arc's points from the bed up, where a joint's cut from
+ * beneath (a wall key's recess, 2 mm, or an H-clip's) splits the cell's walls and a plane
+ * of the boss's pocket the boss's at the same height. In the sweeps for the review of #90,
+ * 69 of the 3,469 designs the clip changed had more of them, never open: 60 the last way,
+ * 7 the first and 2 the second. A row of that kind may have more bad edges than square
+ * corners, by no more than it has on file, and none open; one with none more is to be
+ * unpinned.
+ *
+ * Last, each measure has to read what it was written to find: the old boss, a square tab
+ * on the corner, laid on the plate; and a skeleton plate's outer wall, which is open below
+ * 2.5 mm by design (skeletonCellRegion). */
+console.log('\na corner boss stays inside a rounded plate corner:');
+{
+  const NARC = 10;
+  // every corner these rows round has the plate's radius: none has one of its own or a half cell
+  const rcOf = (cfg) => Math.min(cfg.outerRadius, ((cfg.topCutoff + cfg.socketRadius) * Math.SQRT2 -
+                                                  cfg.socketRadius - 0.2) / (Math.SQRT2 - 1));
+  // the corners of the plate each piece of a design rounds: the corner, and the way into the plate
+  const rounded = (r) => r.L.pieces.map((pc) => {
+    const W = pc.mL + pc.nx * r.cfg.pitch + pc.mR, D = pc.mF + pc.ny * r.cfg.pitch + pc.mB;
+    const atL = pc.cellX0 === 0, atR = pc.cellX0 + pc.nx === r.L.nx;
+    const atF = pc.cellY0 === 0, atB = pc.cellY0 + pc.ny === r.L.ny;
+    if (rcOf(r.cfg) <= 0.01) return [];
+    return [[atL && atF, 0, 0, 1, 1], [atR && atF, W, 0, -1, 1], [atR && atB, W, D, -1, -1], [atL && atB, 0, D, 1, -1]]
+      .filter(([owns]) => owns).map(([, cx, cy, sx, sy]) => ({ cx, cy, sx, sy }));
+  });
+  /* The farthest any vertex stands past the outline at a corner the plate rounds, and how many corners there were.
+     The outline's arc is NARC = 10 chords, which sag inside the circle by up to rc (1 − cos 4.5°), 0.012 mm at
+     4: a vertex is past it by how far it stands beyond the chord that covers its angle round the arc's centre.
+     `extra` is laid on the first piece's corner at the origin. */
+  const past = (r, extra) => {
+    const rc = rcOf(r.cfg), step = 90 / NARC;
+    let worst = 0, corners = 0;
+    rounded(r).forEach((cs, i) => {
+      for (const { cx, cy, sx, sy } of cs) {
+        corners++;
+        const ox = cx + sx*rc, oy = cy + sy*rc;
+        for (const p of extra && i === 0 && cx === 0 && cy === 0 ? r.pieces[i].concat(extra) : r.pieces[i])
+          for (const v of p.verts) {
+            if ((v[0] - cx) * sx > rc + 1e-9 || (v[1] - cy) * sy > rc + 1e-9) continue;
+            const a = -sx * (v[0] - ox), b = -sy * (v[1] - oy);    // across the quadrant the arc covers
+            const phi = Math.max(0, Math.atan2(b, a) * 180 / Math.PI), k = Math.min(NARC - 1, Math.floor(phi / step));
+            worst = Math.max(worst, Math.hypot(a, b) * Math.cos((phi - (k + 0.5) * step) * Math.PI / 180) -
+                                    rc * Math.cos(step / 2 * Math.PI / 180));
+          }
+      }
+    });
+    return { worst, corners };
+  };
+  /* A window in the plate's outer wall at a rounded corner: a point 0.01 mm inside a chord of the arc, at
+     every tenth of each chord and every 0.1 mm up, that no shell holds, with no shell within 3 mm outside it
+     either (columns, above). The square boss stood outside the arc and covered whatever was behind it. */
+  const windows = (r) => {
+    const rc = rcOf(r.cfg);
+    let n = 0;
+    rounded(r).forEach((cs, i) => {
+      if (!cs.length) return;
+      const A = columns(r.pieces[i]);
+      let top = 0;
+      for (const p of r.pieces[i]) for (const v of p.verts) top = Math.max(top, v[2]);
+      for (const { cx, cy, sx, sy } of cs) {
+        // the arc's points as buildPiece lays them, round the quadrant that faces the corner
+        const ox = cx + sx*rc, oy = cy + sy*rc, a0 = Math.atan2(-sy, -sx) - Math.PI / 4;
+        const at = (k) => [ox + rc * Math.cos(a0 + k * Math.PI / 2 / NARC), oy + rc * Math.sin(a0 + k * Math.PI / 2 / NARC)];
+        for (let k = 0; k < NARC; k++) {
+          const a = at(k), b = at(k + 1), mx = (a[0] + b[0]) / 2 - ox, my = (a[1] + b[1]) / 2 - oy;
+          const nx = -mx / Math.hypot(mx, my), ny = -my / Math.hypot(mx, my);   // into the plate
+          for (let f = 0.05; f < 1; f += 0.1) {
+            const px = a[0] + f * (b[0] - a[0]), py = a[1] + f * (b[1] - a[1]);
+            const inside = A(px + 0.01 * nx, py + 0.01 * ny);
+            let outside = null;
+            for (let z = 0.05; z < top; z += 0.1) {
+              if (inside(z) >= 1) continue;
+              outside = outside || Array.from({ length: 30 }, (_, s) => A(px - (0.02 + 0.1 * s) * nx, py - (0.02 + 0.1 * s) * ny));
+              if (!outside.some((col) => col(z) >= 1)) n++;
+            }
+          }
+        }
+      }
+    });
+    return n;
+  };
+  const page = { pitch: 42, drawerW: 84, drawerD: 84, bedW: 256, bedD: 256, connector: 'none', baseMode: 'bosses' };
+  const ROWS = [
+    ['the page: 84 x 84 mm at 42, no margin, magnets', { ...page, magnets: true }],
+    ['0.5 mm margins, a 4.8 mm corner, 3 x 2 in two pieces at 36, dovetails, magnets and screws',
+     { pitch: 36, drawerW: 109, drawerD: 73, mLeft: 0.5, mRight: 0.5, mFront: 0.5, mBack: 0.5, bedW: 76, bedD: 400,
+       connector: 'dovetail', baseMode: 'bosses', magnets: true, screws: true, outerRadius: 4.8 }],
+    ['no margin at 34.5, screws, whose pockets run in under the rim',
+     { ...page, pitch: 34.5, drawerW: 69, drawerD: 69, screws: true }],
+    ['the default drawer\'s margins, 6 and 1 mm, magnets (control)',
+     { ...page, drawerW: 96, drawerD: 86, mLeft: 6, mRight: 6, mFront: 1, mBack: 1, magnets: true }],
+    // the corner stands out 0.0022 mm, under the 0.01 clipToPlate leaves: clipped, it had 3 open edges here
+    ['margins of 1.17 mm at 34 mm, screws, the corner a hair out (left as it is)',
+     { ...page, pitch: 34, drawerW: 70.34, drawerD: 70.34, mLeft: 1.17, mRight: 1.17, mFront: 1.17, mBack: 1.17, screws: true },
+     { slack: 0.01 }],
+    // cut, with its pocket cut again turned a 28th of a turn: cut first, the boss had 3 open edges on its underside
+    ['the defaults with screws at 36.42 mm, margins of 0, 0.433, 1 and 0, tight',
+     { ...page, pitch: 36.42, drawerW: 73.273, drawerD: 73.84, mRight: 0.433, mFront: 1, tolerance: 'tight',
+       screws: true, screwHoleD: 3, screwHeadD: 5.3 }],
+    // and its back right corner 0.0008 mm out, which clipToPlate leaves
+    ['a 2 mm corner at 30 mm, a 1.8 mm magnet, margins of 1, 0, 0 and 1.99',
+     { ...page, pitch: 30, drawerW: 61, drawerD: 61.99, mLeft: 1, mBack: 1.99, outerRadius: 2, magnets: true, magnetD: 1.8 },
+     { slack: 0.01 }],
+    ['a 2 mm corner at 33 mm, cutoff 1, a 1.1 mm screw under a 3.5 mm head, margins of 1, 0, 0.575 and 1, tight',
+     { ...page, pitch: 33, drawerW: 67, drawerD: 67.575, mLeft: 1, mFront: 0.575, mBack: 1, outerRadius: 2, topCutoff: 1,
+       tolerance: 'tight', screws: true, screwHoleD: 1.1, screwHeadD: 3.5 }],
+    ['a 2 mm corner at 29.5 mm, a 1.2 mm magnet, margins of 1, 0.963, 1 and 0, loose',
+     { ...page, pitch: 29.5, drawerW: 60.963, drawerD: 60, mLeft: 1, mRight: 0.963, mFront: 1, outerRadius: 2,
+       tolerance: 'loose', magnets: true, magnetD: 1.2 }],
+    // left square: the pocket comes nearer the arc than MOUNT_WALL (clipped, a window, or folds beside one)
+    ['a 4.88 mm corner at 30 mm, a 1.8 mm magnet, no margin (left square: the pocket reaches the arc)',
+     { ...page, pitch: 30, drawerW: 60, drawerD: 60, outerRadius: 4.88, magnets: true, magnetD: 1.8 }, { square: true }],
+    ['a 4.88 mm corner at 29.5 mm, margins of 0.2 mm, a 1.3 mm magnet (left square)',
+     { ...page, pitch: 29.5, drawerW: 59.4, drawerD: 59.4, mLeft: 0.2, mRight: 0.2, mFront: 0.2, mBack: 0.2,
+       outerRadius: 4.88, magnets: true, magnetD: 1.3 }, { square: true }],
+    ['the largest corner at 33 mm, cutoff 1, a 4.8 mm magnet, no margin (left square)',
+     { ...page, pitch: 33, drawerW: 66, drawerD: 66, outerRadius: 1000, topCutoff: 1, magnets: true, magnetD: 4.8 },
+     { square: true }],
+    // the kind named above, each way it comes, at what it has on file
+    ['a 0.09 mm corner at 40.76 mm, a 0.8 mm margin, magnets and screws (every chord under SHORT)',
+     { ...page, pitch: 40.76, drawerW: 82.318, drawerD: 81.52, mLeft: 0.798, outerRadius: 0.09, magnets: true, screws: true,
+       magnetD: 8, screwHoleD: 5.8, screwHeadD: 6.3 }, { known: 20 }],
+    ['a 2 mm corner at 36 mm, margins of 0.2 and 0.3, magnets and screws (a half chord on a margin\'s side)',
+     { ...page, pitch: 36, drawerW: 72.2, drawerD: 72.3, mLeft: 0.2, mBack: 0.3, outerRadius: 2, magnets: true, screws: true,
+       magnetD: 5 }, { known: 2 }],
+    ['two pieces at 40 mm, a wall bowtie from beneath, a 4.88 mm corner, 6 x 2 mm magnets (split at 2 mm)',
+     { ...page, pitch: 40, drawerW: 80, drawerD: 80, bedW: 45, bedD: 400, connector: 'bowtie', keyMount: 'wall',
+       keyInsert: 'bottom', outerRadius: 4.88, magnets: true, magnetD: 6, magnetH: 2 }, { known: 24 }],
+  ];
+  const KIND = 'a cut boss and the shell beside it on the same points of the arc, edges used four times';
+  for (const [name, over, how = {}] of ROWS) {
+    const r = buildAll(over), flat = buildAll({ ...over, outerRadius: 0 });
+    const m = past(r), win = windows(r);
+    const turned = r.pieces.map(checkOrientation).filter((o) => !o.ok);
+    const more = r.bad - flat.bad;
+    const shape = how.square ? m.worst >= 0.01 : m.worst < (how.slack || 1e-6);
+    const edges = how.known ? more > 0 && more <= how.known : more <= 0;
+    const good = shape && m.corners >= 4 && !r.open && !turned.length && !win && edges;
+    const note = !how.known ? '' : more <= 0 ? '  NOW CLEAN: unpin it' : more > how.known
+      ? `  WORSE than the ${how.known} more on file for: ${KIND}` : `  known: ${KIND}`;
+    console.log(`  ${name}: ${m.corners} rounded corners, the farthest vertex ${m.worst < 1e-6 ? 'inside' : m.worst.toFixed(4) + ' mm past'} the outline; ` +
+                `${r.bad} bad edges against ${flat.bad} with square corners, ${r.open} open` +
+                `${turned.length ? ', ' + orientationNote(turned[0]) : ''}, ${win} points of wall open${note}${good ? '' : '   FAIL'}`);
+    if (!good) bad++;
+  }
+  // the old boss: a square tab on the corner, 3 mm a side and 2.6 tall, laid on the page's plate
+  const pg = buildAll(ROWS[0][1]);
+  const old = past(pg, G.extrudePoly([[0, 0], [3, 0], [3, 3], [0, 3]], 0, 2.6));
+  // the tab's corner is the diagonal's point of the arc, a vertex of the chords: r(√2 − 1) from it, along a chord's normal
+  const want = rcOf(pg.cfg) * (Math.SQRT2 - 1) * Math.cos(Math.PI / (4 * NARC));
+  const live = Math.abs(old.worst - want) < 1e-3;
+  console.log(`  the measure on the old boss, a square tab laid on the corner: ${old.worst.toFixed(3)} mm past the outline of a ${rcOf(pg.cfg)} mm corner, ` +
+              `r(√2 − 1) cos 4.5° = ${want.toFixed(3)}${live ? '' : '   THE MEASURE DOES NOT SEE IT'}`);
+  if (!live) bad++;
+  // and the wall's: a skeleton plate leaves its outer wall open under the socket's straight walls on purpose
+  const sk = windows(buildAll({ ...page, baseMode: 'solid', plateStyle: 'skeleton' }));
+  console.log(`  the wall's measure on a skeleton plate, open below 2.5 mm by design: ${sk} points of wall open` +
+              (sk ? '' : '   THE MEASURE DOES NOT SEE IT'));
+  if (!sk) bad++;
 }
 
 /* The fit clearance at its ceiling, for every joint and every pitch band.

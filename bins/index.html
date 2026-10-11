@@ -2895,6 +2895,105 @@ function clipToRect(pts, x0, y0, x1, y1) {
   return clean.length >= 3 ? clean : null;
 }
 
+/* Sutherland–Hodgman against a convex polygon wound counter-clockwise, as the plate's
+   outline is: the shape cut to what is inside it, with a new point where one of its sides
+   crosses one of the polygon's. A shape that is all inside comes back as it is, the same
+   array, so a caller can tell that nothing was cut; null where nothing of it is. */
+function clipToConvex(pts, poly) {
+  const EPS = 1e-9;
+  const side = (a, b, p) => (b[0]-a[0]) * (p[1]-a[1]) - (b[1]-a[1]) * (p[0]-a[0]);
+  let out = pts;
+  for (let k = 0; k < poly.length; k++) {
+    const a = poly[k], b = poly[(k + 1) % poly.length];
+    if (out.every((p) => side(a, b, p) >= -EPS)) continue;
+    const inp = out; out = [];
+    for (let i = 0; i < inp.length; i++) {
+      const cur = inp[i], prev = inp[(i + inp.length - 1) % inp.length];
+      const sc = side(a, b, cur), sp = side(a, b, prev);
+      const cut = () => [prev[0] + (cur[0]-prev[0]) * sp / (sp - sc), prev[1] + (cur[1]-prev[1]) * sp / (sp - sc)];
+      if (sc >= -EPS) { if (sp < -EPS) out.push(cut()); out.push(cur); }
+      else if (sp >= -EPS) out.push(cut());
+    }
+    // a point on the line is in, so a side that ends on it crosses it where it ends
+    out = out.filter((p, i) => {
+      const q = out[(i + out.length - 1) % out.length];
+      return Math.abs(p[0] - q[0]) > 1e-7 || Math.abs(p[1] - q[1]) > 1e-7;
+    });
+    if (out.length < 3) return null;
+  }
+  return out;
+}
+
+/* A corner boss's outline cut to the plate's, for the bosses at its rounded corners
+   (buildPiece, #86). A shape that is inside the outline comes back as the same array, so
+   a boss that never stood out past a corner is the boss it was, byte for byte. So does
+   one that stands out by under FLUSH, 0.01 mm, five welds (VTOL, 2 microns) and a tenth of
+   the thinnest layer a slicer cuts: clipped, its new points would stand a few microns from
+   the cell's own, and the weld takes two such points for one or for two as it comes. A
+   plate at 34 mm with screws and margins of 1.17 mm, where the corner stands out 0.0022,
+   had 3 open edges that the base lacked, from a boss with a point every 2.4 microns round
+   the arc's point at 45 degrees.
+ *
+ * Clipped to the outline, the boss's outer corner takes the outline's own chords, as many
+ * sides round the corner as the plate has there, with the chords' ends: the points of the
+ * arc that lie inside the boss. The corner cell's wall stands on those same points. A
+ * chord of the plate is a side of the boss, and the boss's bottom edge along it is the
+ * wall's, at the bed, so it is used four times (37 more edges a plate at 42 mm, with no
+ * margin). So a side of the clipped boss that runs along a chord has a point put in the
+ * middle of it. It is the same solid, and its edges are not the wall's. That is a part of
+ * a chord as well as a whole one: where a margin's region ends on the cell's edge, it
+ * shares the piece of the chord between that edge and the next point of the arc (2 more
+ * edges a plate at 36 mm, radius 2, margins of 0.55 and 0.52 mm, 0.049 mm long). Not a
+ * side under SHORT, 0.03 mm: its middle would stand a few welds (VTOL, 2 microns) from its
+ * ends, and a corner that stands out by a hair leaves two of them beside the arc's point
+ * (0.01 mm each at margins of 1.1682 mm, where the weld read 6 to 8 open edges).
+ *
+ * And the clipped shape starts where earTriangulate wants it to. That takes the ear at the
+ * first point again and again, so it fans every triangle of a convex shape from its last
+ * point. When the corner stands out by a hair, the clip leaves a side a few hundredths of
+ * a millimetre long beside it (0.023 mm at margins of 1.71 and 0.72 mm, where it stands out
+ * 0.010), and a fan from the far end of the boss's side that meets it makes a triangle
+ * 12.5 mm long and 0.012 wide. A plane of a pocket's cut crosses that triangle's long edge
+ * and the side 2.4 microns apart at a point 2 mm along, the weld keeps two, and the wall
+ * takes one point and the cap the other: 3 open edges. That happened to 5 of the 142
+ * corners that stood out 0.005 to 0.02 mm in a scan of margins at 42 mm, and snapping the
+ * clip's points to their neighbours only moved which. So the shape is wound counter-
+ * clockwise, as earTriangulate takes it, and ends at its point farthest from the new
+ * ones, which is the apex: the triangles the new points make are across the shape from
+ * it, and none of them has a long edge along a side. */
+function clipToPlate(pts, outline) {
+  const clipped = clipToConvex(pts, outline);
+  if (!clipped || clipped === pts) return pts;
+  const FLUSH = 0.01, SHORT = 0.03;
+  const gap = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  // how far the shape stands out: along the normal of the chord it is farthest past
+  const beyond = Math.max(...outline.map((a, k) => {
+    const b = outline[(k + 1) % outline.length];
+    return Math.max(...pts.map((p) => -((b[0]-a[0]) * (p[1]-a[1]) - (b[1]-a[1]) * (p[0]-a[0])) / gap(a, b)));
+  }));
+  if (beyond < FLUSH) return pts;
+  const along = (a, b, p) => Math.abs((b[0]-a[0]) * (p[1]-a[1]) - (b[1]-a[1]) * (p[0]-a[0])) < 1e-7 * gap(a, b);
+  // the outline's chords: the sides that run along neither x nor y
+  const chords = [];
+  outline.forEach((a, k) => {
+    const b = outline[(k + 1) % outline.length];
+    if (Math.abs(a[0] - b[0]) > 1e-9 && Math.abs(a[1] - b[1]) > 1e-9) chords.push([a, b]);
+  });
+  const halved = [];
+  clipped.forEach((p, k) => {
+    const q = clipped[(k + 1) % clipped.length];
+    halved.push(p);
+    if (gap(p, q) >= SHORT && chords.some(([a, b]) => along(a, b, p) && along(a, b, q)))
+      halved.push([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]);
+  });
+  const ccw = polyArea2D(halved) > 0 ? halved : halved.reverse();
+  const fresh = ccw.filter((p) => !pts.some((q) => gap(p, q) < 1e-9));
+  const mid = [fresh.reduce((t, p) => t + p[0], 0) / fresh.length, fresh.reduce((t, p) => t + p[1], 0) / fresh.length];
+  let far = 0;
+  ccw.forEach((p, i) => { if (gap(p, mid) > gap(ccw[far], mid)) far = i; });
+  return ccw.slice(far + 1).concat(ccw.slice(0, far + 1));
+}
+
 // ---------- layout ----------
 /* The biggest grid the page will build in one go, a 1.26 m square at the spec pitch. It
    lives here because computeLayout has to honour it too (see the 'plates' split); the
@@ -4969,15 +5068,16 @@ function buildPiece(cfg, layout, piece, onStatus) {
   // one cutter for every mounting site on the piece, built once and moved into place
   const cellFastener = ((cfg.magnets || cfg.screws) && solidBase)
     ? fastenerCutter(cfg, pad - cfg.magnetH, pad + 0.02, H + 0.5) : null;
-  // the same cutter turned a 28th of a turn, half a facet of its 14-sided bores, for a
-  // cell whose pockets come out open the first time (see the fastener cut below); built
-  // the first time one does
-  let turned = null;
-  const turnedFastener = () => turned || (turned = cellFastener.map((p) => {
+  // a cutter turned a 28th of a turn about its axis, half a facet of its 14-sided bores
+  const turn28 = (cut) => cut.map((p) => {
     const ca = Math.cos(Math.PI/14), sa = Math.sin(Math.PI/14);
     const turn = (v) => [v[0]*ca - v[1]*sa, v[0]*sa + v[1]*ca, v[2]];
     return { verts: p.verts.map(turn), plane: { n: turn(p.plane.n), w: p.plane.w } };
-  }));
+  });
+  // the cells' cutter turned so, for a cell whose pockets come out open the first time
+  // (see the fastener cut below); built the first time one does
+  let turned = null;
+  const turnedFastener = () => turned || (turned = turn28(cellFastener));
   // the corners of its walls where they stand on the bottom face, and on the socket floor
   // (a magnet pocket from above, a screw's shank), about its axis (fanCentre)
   const wallsAt = (z) => {
@@ -5081,10 +5181,13 @@ function buildPiece(cfg, layout, piece, onStatus) {
   const atL = piece.cellX0 === 0, atR = piece.cellX0 + piece.nx === layout.nx;
   const atF = piece.cellY0 === 0, atB = piece.cellY0 + piece.ny === layout.ny;
   const round = { ll: atL && atF, lr: atR && atF, ur: atR && atB, ul: atL && atB };
+  // each corner rounded, its point, its arc's centre and radius: for the corner bosses (#86)
+  const arcs = [];
   function corner(cx, cy, a0, doRound, key) {
     const rc = rOf(key);
     if (!doRound || rc <= 0.01) return [[cx, cy]];
     const ccx = cx + (cx < 1 ? rc : -rc), ccy = cy + (cy < 1 ? rc : -rc);
+    arcs.push({ cx, cy, ox: ccx, oy: ccy, r: rc });
     const out = [];
     for (let k = 0; k <= NARC; k++) {
       const a = (a0 + 90*k/NARC) * Math.PI/180;
@@ -6026,6 +6129,81 @@ function buildPiece(cfg, layout, piece, onStatus) {
       arc.push([bossW - rIn + rIn*Math.cos(a), bossW - rIn + rIn*Math.sin(a)]);
     }
     const onEdge = (x, lim) => Math.abs(x) < 1e-6 || Math.abs(x - lim) < 1e-6;
+    /* A boss at a rounded corner of the plate follows the corner's arc (#86). Its outer
+       corner is the cell's, square, and the plate is rounded there, so with no margin or a
+       small one the corner stood out past the arc: a square tab as tall as the boss, up to
+       2.6 mm, r(√2 − 1) out at an outer radius r, 1.66 mm at the default 4 and 0.95 mm with
+       margins of 0.5 mm. It stays inside once both margins pass 1.17 mm, or once the other
+       reaches 4 mm when one is 0, and a boss that does is not touched: its bytes are the
+       ones it had, as are a boss's that stands out by under a hundredth of a millimetre.
+       The rest are cut to the outline, however a joint has shaped them (clipToPlate). No
+       housing reaches a boss at a rounded corner of the plate, since a joint's cuts sit
+       where four cells meet, so the bosses a housing reaches are cut too only to be sure
+       of it.
+     *
+       Cut only where the cut boss is no worse than the square one, and otherwise the boss
+       is the square one, built as it always was. Two things can make it worse.
+     *
+       A pocket that the arc comes near. The pockets sit holeOffset from the cell's centre
+       whatever the pitch, 2 mm in from the cell's edges at 30 mm, and mountLimits holds a
+       pocket MOUNT_WALL inside its cell's edges, which the square boss stands on. The arc
+       cuts across the cell's corner, and below about 34 mm (26 mm and twice the radius)
+       it passes nearer the site than the edges do: a 1.8 mm magnet at 30 mm, no margin,
+       a 4.88 mm corner, broke through it, a window in the plate's outer wall 1.2 mm along
+       the arc and up to 2 mm tall that the square tab had covered, with the mesh closed
+       round it so that no edge count saw it; and where the pocket's wall came within
+       microns of the arc's chords its cut came out with faces turned over (6 folds a
+       plate at 29.5 mm with 0.2 mm margins and at 33 mm with a 6.9 mm corner). So a boss
+       is cut only where each of its bores, as wide as its widest corner, stays MOUNT_WALL
+       inside the arc as well, the circle the chords are drawn on, the wall mountLimits
+       leaves every pocket on the plate; and a joint's cut reaching it MOUNT_WALL clear of
+       the corner's square.
+     *
+       And a cut that comes out worse. The cut boss's cap is fanned another way than the
+       square one's, across a dozen more points round the arc, and its pocket's planes
+       cross those spokes a few microns from where something else does: the same lottery
+       as any pocket's (cutAgain), drawn again. At the defaults with screws, 36.42 mm,
+       margins of 0, 0.433, 1 and 0, the boss at the plate's corner came out with 3 open
+       edges on its underside, and cutAgain's tries left them all; so did three plates at
+       29.5 to 33 mm with a 2 mm corner, where the square boss had built closed. So the cut
+       boss is taken only if it comes out closed with nothing turned over: cut again as
+       cutAgain takes it when it is either, then with its cutter turned a 28th of a turn
+       (as the cells' are, pocketTries), which closed all four, and if neither comes out
+       right, or one throws, the boss is the square one, as it always was. A boss is its
+       own closed shell, so a boss that is closed with nothing turned over leaves its piece
+       no more open and no more folded than the square one did: shells that each close can
+       only share an edge an even number of times. They do share edges (the corner cell's
+       wall stands on the same points of the arc), used four times; see ENGINE.md. */
+    // how far a point stands inside the nearest rounded corner's arc, as a circle
+    const fromArc = (x, y) => {
+      let d = Infinity;
+      for (const { cx, cy, ox, oy, r } of arcs) {
+        const ux = Math.sign(cx - ox), uy = Math.sign(cy - oy), dx = x - ox, dy = y - oy;
+        d = Math.min(d, dx*ux >= 0 && dy*uy >= 0 ? r - Math.hypot(dx, dy)
+          : Math.min(Math.hypot(dx - ux*r, dy), Math.hypot(dx, dy - uy*r)));   // past its ends
+      }
+      return d;
+    };
+    // the widest of a site's bores, out to its corners, built about the origin
+    const boreR = bossFastener ? Math.max(...bossFastener.flatMap((p) => p.verts.map((v) => Math.hypot(v[0], v[1])))) : 0;
+    const roomy = (sites, ks) =>
+      sites.every((bs) => fromArc(bs.ccx + bs.sx*off, bs.ccy + bs.sy*off) - boreR > MOUNT_WALL - 1e-6) &&
+      ks.every((k) => {
+        const [x0, y0, x1, y1] = cutBoxes[k], w = MOUNT_WALL;
+        return arcs.every(({ cx, cy, ox, oy }) => !meets([x0 - w, y0 - w, x1 + w, y1 + w],
+          [Math.min(cx, ox), Math.min(cy, oy), Math.max(cx, ox), Math.max(cy, oy)]));
+      });
+    // a boss built by `build` from its square outline, or from that cut to the plate's
+    const inPlate = (square, sites, build, ks = [], fastener = bossFastener) => {
+      const clipped = clipToPlate(square, outline);
+      if (clipped !== square && roomy(sites, ks))
+        for (const f of fastener ? [fastener, turn28(fastener)] : [null]) {
+          let boss;
+          try { boss = build(clipped, f, true); } catch (e) { continue; }
+          if (!boss.open && !boss.turned) return boss;
+        }
+      return build(square, fastener, false);
+    };
     for (let n = 0; n < all.length; n++) {
       if (root(n) !== n) continue;
       const { ccx, ccy, sx, sy, cxr, cyr } = all[n];
@@ -6040,27 +6218,30 @@ function buildPiece(cfg, layout, piece, onStatus) {
           pts.push([bossW - rIn + rIn*Math.cos(a), bossW - rIn + rIn*Math.sin(a)]);
         }
         pts.push([0, bossW]);
-        const world = pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v]);
-        let boss = extrudePoly(world, 0, bossH);
-        /* A boss's pocket is a lottery of its own, so it is cut again (cutAgain) when it
-           comes out open. Default screws in one-cell pieces left 3 to 6 open edges on a
-           boss's underside at 22 of the 901 pitches from 34 to 60 mm that take them, and a
-           9.1 mm magnet at 39.46 mm left 12 a piece; cut again, none of those leaks. Open
-           only: a pocket that comes out closed with a face turned over (13 more of those
-           pitches) has the fold unfoldFinished lays out again, and every one of those
-           pieces came out watertight and oriented, so it is kept as it was, as is every
-           pocket that comes out closed. */
-        if (bossFastener) {
-          const pocket = movePolys(bossFastener, ccx + sx*off, ccy + sy*off);
-          const first = csgSubtract(boss, pocket);
-          boss = first.open ? cutAgain(boss, pocket, first) : first;
-          if (boss.open)   // a cap it is open on fanned again (refanCaps)
-            boss = refanCaps(boss, world, bossH, bossFastener, [all[n]], (prism) => {
-              const again = csgSubtract(prism, pocket);
-              return again.open ? cutAgain(prism, pocket, again) : again;
-            });
-        }
-        shells.push(boss);
+        shells.push(inPlate(pts.map(([u, v]) => [cxr - sx*u, cyr - sy*v]), [all[n]], (world, fastener, clipped) => {
+          let boss = extrudePoly(world, 0, bossH);
+          /* A boss's pocket is a lottery of its own, so it is cut again (cutAgain) when it
+             comes out open. Default screws in one-cell pieces left 3 to 6 open edges on a
+             boss's underside at 22 of the 901 pitches from 34 to 60 mm that take them, and a
+             9.1 mm magnet at 39.46 mm left 12 a piece; cut again, none of those leaks. Open
+             only: a pocket that comes out closed with a face turned over (13 more of those
+             pitches) has the fold unfoldFinished lays out again, and every one of those
+             pieces came out watertight and oriented, so it is kept as it was, as is every
+             pocket that comes out closed. A boss cut to a rounded corner is taken only if it
+             comes out with nothing turned over either (inPlate), so it is cut again for that
+             too: it has no bytes of its own to keep. */
+          if (fastener) {
+            const pocket = movePolys(fastener, ccx + sx*off, ccy + sy*off);
+            const first = csgSubtract(boss, pocket);
+            boss = first.open || clipped && first.turned ? cutAgain(boss, pocket, first) : first;
+            if (boss.open)   // a cap it is open on fanned again (refanCaps)
+              boss = refanCaps(boss, world, bossH, fastener, [all[n]], (prism) => {
+                const again = csgSubtract(prism, pocket);
+                return again.open || clipped && again.turned ? cutAgain(prism, pocket, again) : again;
+              });
+          }
+          return boss;
+        }));
         continue;
       }
       /* In the boss's own frame u runs into the cell along x from its corner and v along
@@ -6114,43 +6295,44 @@ function buildPiece(cfg, layout, piece, onStatus) {
       const level = ks.filter((k) => Math.abs(cutTops[k] - bossH) < MOUNT_LEVEL);
       const top = level.length ? Math.max(...level.map((k) => cutTops[k])) + MOUNT_LEVEL : bossH;
       const fastener = top === bossH ? bossFastener : fastenerCutter(cfg, top - cfg.magnetH, top + 0.5, top + 0.5);
-      for (const { outline, sites } of solids) {
-        let boss = extrudePoly(outline, 0, top);
-        if (fastener) {
-          const pockets = [].concat(...sites.map((bs) =>
-            movePolys(fastener, bs.ccx + bs.sx*off, bs.ccy + bs.sy*off)));
-          boss = cutAgain(boss, pockets, csgSubtract(boss, pockets));
-        }
-        /* cutAgain's tries are not always enough here. A wall puzzle key at 36.92 mm with
-           screws (a 2 mm hole, a 7.1 x 0.8 head), four cells square, kept a cut with a
-           face turned over in the pair of bosses by the front edge's key, of A2 and of B2,
-           after every try: three folds on the bed a piece, about one build in 3,600 of
-           bosses a joint reaches. Moved two NUDGEs the other way along y it came out
-           clean. So a cut that every try leaves open or turned is taken again moved two
-           NUDGEs the other way along one axis, then the other, then both, and the first
-           that comes out closed with nothing turned over is kept; if none does, the first
-           stands. Two NUDGEs, not more: each stands as far from the cell's walls as the
-           first, and none nearer the pockets (see mountLimits). A cut that comes out right
-           is built exactly as before. */
-        const b = flatBox(boss);
-        const cutAt = (a, c) => ks.flatMap((k) =>
-          meets(cutBoxes[k], b) ? movePolys(fromBelow[k], -a*sx*NUDGE, -c*sy*NUDGE) : []);
-        const cut = cutAt(2, 2);
-        if (cut.length) {
-          const solid = boss;
-          boss = cutAgain(solid, cut, csgSubtract(solid, cut));
-          for (const [a, c] of [[2, -2], [-2, 2], [-2, -2]]) {
-            if (!boss.open && !boss.turned) break;
-            let again;
-            try {
-              const alt = cutAt(a, c);
-              again = cutAgain(solid, alt, csgSubtract(solid, alt));
-            } catch (e) { continue; }   // the first cut stands
-            if (!again.open && !again.turned) boss = again;
+      for (const { outline: square, sites } of solids)
+        shells.push(inPlate(square, sites, (outline, fastener) => {
+          let boss = extrudePoly(outline, 0, top);
+          if (fastener) {
+            const pockets = [].concat(...sites.map((bs) =>
+              movePolys(fastener, bs.ccx + bs.sx*off, bs.ccy + bs.sy*off)));
+            boss = cutAgain(boss, pockets, csgSubtract(boss, pockets));
           }
-        }
-        shells.push(boss);
-      }
+          /* cutAgain's tries are not always enough here. A wall puzzle key at 36.92 mm with
+             screws (a 2 mm hole, a 7.1 x 0.8 head), four cells square, kept a cut with a
+             face turned over in the pair of bosses by the front edge's key, of A2 and of B2,
+             after every try: three folds on the bed a piece, about one build in 3,600 of
+             bosses a joint reaches. Moved two NUDGEs the other way along y it came out
+             clean. So a cut that every try leaves open or turned is taken again moved two
+             NUDGEs the other way along one axis, then the other, then both, and the first
+             that comes out closed with nothing turned over is kept; if none does, the first
+             stands. Two NUDGEs, not more: each stands as far from the cell's walls as the
+             first, and none nearer the pockets (see mountLimits). A cut that comes out right
+             is built exactly as before. */
+          const b = flatBox(boss);
+          const cutAt = (a, c) => ks.flatMap((k) =>
+            meets(cutBoxes[k], b) ? movePolys(fromBelow[k], -a*sx*NUDGE, -c*sy*NUDGE) : []);
+          const cut = cutAt(2, 2);
+          if (cut.length) {
+            const solid = boss;
+            boss = cutAgain(solid, cut, csgSubtract(solid, cut));
+            for (const [a, c] of [[2, -2], [-2, 2], [-2, -2]]) {
+              if (!boss.open && !boss.turned) break;
+              let again;
+              try {
+                const alt = cutAt(a, c);
+                again = cutAgain(solid, alt, csgSubtract(solid, alt));
+              } catch (e) { continue; }   // the first cut stands
+              if (!again.open && !again.turned) boss = again;
+            }
+          }
+          return boss;
+        }, ks, fastener));
     }
     /* The socket's rim, cut away under a boss whose pocket it stands in (#83). With nothing
        under the sockets a cell is its rim alone, from the bed up: 2.85 mm in from the

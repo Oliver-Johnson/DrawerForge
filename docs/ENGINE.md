@@ -458,6 +458,121 @@ at 38 (9.7 to 7.3); from 40 mm the boss is the tighter cap. A magnet from beneat
 screw's head lose nothing, and a pocket the rim does not reach is built as it was, byte
 for byte.
 
+A boss meets a rounded corner of the plate by being cut to it (`clipToPlate`, #86). A boss
+is a quarter square from its cell's corner, built square whatever the plate does there,
+and the plate's outline rounds each corner it owns with `NARC` (10) chords. So with no
+margin, or a small one, the boss's corner stood out past the arc: a tab as tall as the
+boss, up to 2.6 mm, r(√2 − 1) out at an outer radius r (1.66 mm at the default 4, 0.83 at
+2, 1.99 at 4.8, at every pitch), 0.95 mm with margins of 0.5 mm. It stays inside once both
+margins pass 1.17 mm, or once one is none and the other reaches 4 mm, and a boss that does
+is not touched. The rest are clipped to the outline itself (Sutherland–Hodgman,
+`clipToConvex`) wherever that leaves the plate no worse than the square boss (below), so
+the boss's outer corner takes the outline's chords: as many sides round the corner as the
+plate has there, on the same points. A boss's pocket, its cut and a joint's housing are
+made from the clipped boss as they were from the square one. One
+that stands out by under `FLUSH`, 0.01 mm, is not clipped either: its new points would
+stand a few microns from the cell's own, under the weld's reach, and at margins of 1.17 mm
+(0.0022 out) a plate at 34 mm with screws had 3 open edges the base lacked.
+
+Three things about the clip are there because the plain one cost edges. The corner cell's
+wall stands on the same points as the clipped boss, so a chord of the plate that is a side
+of the boss is the wall's face for face, and its bottom edge at the bed is used four
+times: 37 more edges a plate at 42 mm with no margin (40 to 77). A side of the clipped
+boss that runs along a chord has a point put in the middle of it, the same solid with
+edges the wall does not share. That is true of a part of a chord as well as a whole one,
+where a margin's region ends on the cell's edge and shares the rest of the chord with the
+boss: 2 more edges at 36 mm, radius 2, margins of 0.55 and 0.52 mm (the side is 0.049 mm).
+Not of a side under 0.03 mm (`SHORT`), whose middle would stand a few welds from its ends:
+a corner that stands out by a hair leaves two such sides beside the arc's point, and a
+point in the middle of each left 6 to 8 open edges with magnets at margins of 1.1682 to
+1.1692 mm.
+
+The third is where the clipped boss's points start. `earTriangulate` fans a convex shape
+from its last point, and when the corner stands out by a hair (0.005 to 0.02 mm) the clip
+leaves a side a few hundredths of a millimetre long beside it. A fan from the far end of
+the side that meets it makes a triangle 12.5 mm long and a few microns wide. A plane of the
+pocket's cut crosses its long edge and the side 2.4 microns apart, the weld keeps two, and
+the wall takes one point and the cap the other: 3 open edges a piece, in 5 of the 142
+designs a scan of margins at 42 mm found in that band. Snapping the clip's points to their
+neighbours only moved which designs. So the clipped shape is wound counter-clockwise and
+ends at its point farthest from the new ones, the fan's apex, and none of the thin
+triangles has a long edge along a side.
+
+A boss is cut only where the cut one is no worse than the square one, and is otherwise the
+square one, built as it always was, tab and all. Two things made it worse (the review of
+#90). One is a bore the arc comes near. A cell's pockets sit `holeOffset` from its centre
+whatever the pitch, s = pitch/2 − 13 in from the cell's edges (2 mm at 30), and
+`mountLimits` holds every bore `MOUNT_WALL` (1 mm) inside those edges, which the square
+boss stands on. With no margin the arc passes r − (r − s)√2 from the site, nearer than the
+edges once s < r, below a pitch of 26 mm plus twice the radius: 1.17 mm at 30 mm with the
+default corner and 0.81 mm at 4.88. A 1.8 mm magnet there broke through, a window in the
+outer wall 1.2 mm along the arc and up to 2 mm tall that the tab had covered, with every
+edge round it closed, so no edge count saw it (the audit reads the wall for it now); and
+pockets that stood at the arc came out with faces turned over (6 folds at 29.5 mm with
+margins of 0.2 mm and a 1.3 mm magnet, and at 33 mm with the largest corner and a 4.8 mm
+magnet). So a boss is cut only where each of its bores, out to its widest corner, stands
+`MOUNT_WALL` inside the arc as well, measured to the circle the chords are drawn on (a
+site at the arc's centre keeps the wall it has to the cell's edges, though the chords sag
+0.006 mm inside the circle at a 2 mm corner), and where no joint's cut comes within
+`MOUNT_WALL` of the corner's square (none does, see below; the test stands guard). In the
+review's sweeps (7,649 designs, 5,952 built, 3,737 with a boss out by 0.01 mm or more) that
+kept the square boss on every corner of 268 and on some corners of 91 more, at pitches of
+29.5 to 37 mm with a corner of 3 mm or more, mostly with no margin and a bore at its cap,
+which keeps it below a pitch of 26 mm plus twice the radius; in 42 of them a bore would
+have broken through. The other way, refusing such sizes in `mountLimits`, would have
+taken magnets and screws off plates the page builds today (with no margin at 30 mm and
+the default corner a bore has 0.17 mm of room) to remove a tab the plate had always had.
+
+The other is the lottery. The cut boss's cap is fanned from its far corner to every point
+the arc puts on it, and a spoke 15 or 16 mm long can pass within a micron of a corner of
+the pocket's mouth, where the weld loses a sliver: 3 open edges at the bed or the top, at
+the defaults with screws at 36.42 mm and on three plates with a 2 mm corner from 29.5 to
+33 mm, where the square boss built closed, and none of `cutAgain`'s tries closed them. So
+the cut boss is cut again when it comes out turned over as well as open, then with its
+cutter turned a 28th of a turn, as a cell's pockets are, which closed those four; if it
+still comes out open or turned over, or a try throws, the boss is the square one. In the
+same sweeps 11,760 bosses were cut, 6 needed the turned cutter (3 open edges, or 2 to 4
+faces turned over, the first time) and none fell back; in 4,000 one-cell plates with four
+rounded corners each, 18 of 10,878, and none. A boss is a closed shell of its own, so one
+that comes out closed with nothing turned over leaves its piece no more open and no more
+folded than the square one: shells that each close can only add an even count to an edge
+they share. That is why the test is on the boss and not on the cell or the piece. It reads
+what `csgSubtract` already reports, so a boss that comes out right the first time costs
+nothing more, and one that is not cut costs nothing at all.
+
+What it leaves is one kind of bad edge, which the audit names and pins by its count: **a
+cut boss and the shell beside it on the same points of the arc, edges used four times**.
+The shell beside it is the corner cell's, its wall or the margin's region it carries. Both
+are closed and their faces at the edge lie in one plane and face the same way, so the edge
+is used four times and never once, and nothing folds; a slicer's outline of the layer is
+the same region either way. It comes three ways. A side along a chord under `SHORT`, left
+without a point in its middle (above), shares its bottom edge with the wall, and every
+chord is under it at a corner under about 0.19 mm (2r sin 4.5° < 0.03): 9 or 10 such
+edges a corner, 14 to 34 at 0.09 mm. The point put in the middle of a chord can land where
+the side of a margin's region, 0.1 mm past the margin into the cell, crosses that chord,
+and the half chord from the arc's point is then both shells' (36 mm, a 2 mm corner,
+margins of 0.2 and 0.3 mm: 2 more). And a joint's cut from beneath splits the cell's walls
+at its ceiling (2.0 mm for a wall key's recess) where a plane of the boss's pocket splits
+the boss's at the same height, so the two share the vertical edges at the arc's points from
+the bed up: two pieces with a wall bowtie, puzzle key or snap clip, or an H-clip, from
+beneath. In the review's sweeps 69 of the 3,469 designs the clip changed have more of
+them, 517 in all, none open: 60 the third way (1 to 22 each in the sweeps, every one with a
+joint from beneath; a two-piece 2 x 2 with a wall bowtie at 40 mm has 26 more than main),
+7 the first (9 or 10 each, a corner of its own of 0.09 or 0.19 mm) and 2 the second (1
+each). None of them is cheap to keep off soundly: a point in the middle of a
+side under `SHORT` opened edges (above), moving the chord's point off its middle only
+moves which margins it lands on, and the third would need the boss to stand off the
+cell's walls along the chords, a change to how the outline and the boss share points.
+None was made.
+
+The other way to keep a boss inside, stopping it a `BLOAT` short of the arc as it stops
+short of the piece's edge, was tried and left: the rim's box over it (#83) has to be
+clipped too, or the outer wall has a 0.05 mm slit where the box reaches it, and that clip
+drew open edges at pitches 30 to 34.5 mm in pieces whose pockets run in under the rim. No
+joint's housing reaches a boss at a rounded corner of a plate a page can ask for, since a
+housing is cut where four cells meet; the paired and housed bosses are clipped all the
+same, so that `clipToPlate` is the one place a boss meets the outline.
+
 `connector: 'puzzle'` used to be listed here as the first kind, and it is **no longer
 open anywhere**. It is worth reading how, because it needed two unrelated fixes and the
 lesson generalises: **an even count and an odd count on the same case are two separate
