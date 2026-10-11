@@ -513,8 +513,11 @@ margins of 0.2 mm and a 1.3 mm magnet, and at 33 mm with the largest corner and 
 magnet). So a boss is cut only where each of its bores, out to its widest corner, stands
 `MOUNT_WALL` inside the arc as well, measured to the circle the chords are drawn on (a
 site at the arc's centre keeps the wall it has to the cell's edges, though the chords sag
-0.006 mm inside the circle at a 2 mm corner), and where no joint's cut comes within
-`MOUNT_WALL` of the corner's square (none does, see below; the test stands guard). In the
+0.006 mm inside the circle at a 2 mm corner, 0.012 mm at the default 4 mm and 0.021 mm at
+the 6.93 mm the page allows at most, so a bore's corner can stand that much under
+`MOUNT_WALL` from the outline: no open edge, fold or window comes of it), and where no
+joint's cut comes within `MOUNT_WALL` of the corner's square (none does on any design the
+page takes, see below; the audit has no row asserting it). In the
 review's sweeps (7,649 designs, 5,952 built, 3,737 with a boss out by 0.01 mm or more) that
 kept the square boss on every corner of 268 and on some corners of 91 more, at pitches of
 29.5 to 37 mm with a corner of 3 mm or more, mostly with no margin and a bore at its cap,
