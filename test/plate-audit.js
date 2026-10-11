@@ -2316,6 +2316,42 @@ console.log('\nthe other limits, built at their ends:');
     console.log(`  ${nm.padEnd(38)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
     if (!taken || r.bad || folds) bad++;
   }
+  /* A bore nearly as wide as the magnet pocket it opens into, where the two stand on the
+     bottom face (#92). That face is a fan held clear of every point where the mounting
+     cutters' walls stand on it (fanCentre), and where a counterbore or a shank was unioned
+     with a pocket it nearly fills, the BSP split each wall along the other's planes all
+     round: 140 points in a cell where the corners are 56. No point fanCentre tries was
+     clear of all of them, so the fan stayed at the cell's middle, a spoke a few microns
+     from a corner of a pocket, and the sliver of the face between them went: 6 to 12 open
+     edges a cell at 42 mm with Download on, where the magnet alone builds closed. A 6 x 2
+     magnet from beneath over a 3 mm hole 3 deep at three heads; the 4.16 x 2 magnet over a
+     2.58 mm shank under a 4.34 mm head; a bare 2.98 mm shank under a 3 x 2 magnet from
+     above at 46 mm; and four of the round sizes the issue typed. A cell open at the bottom
+     face's height has that face fanned again clear of the corners alone now (buildPiece).
+     Each is a size the page takes, and has to build closed, with no folds. */
+  for (const [nm, o] of [
+    ['6 x 2 below, 3 under 4, 3 deep', { screwHeadD: 4, screwHeadDepth: 3 }],
+    ['6 x 2 below, 3 under 5.53, 3 deep', { screwHeadD: 5.53, screwHeadDepth: 3 }],
+    ['6 x 2 below, 3 under 5.93, 3 deep', { screwHeadD: 5.93, screwHeadDepth: 3 }],
+    ['4.16 x 2 below, 2.58 under 4.34', { magnetD: 4.16, screwHoleD: 2.58, screwHeadD: 4.34 }],
+    ['3 x 2 above, 2.98 bare, 46', { pitch: 46, drawerW: 46, drawerD: 46, magnetD: 3, magnetSide: 'top',
+      screwHoleD: 2.98, screwHeadD: 2.98 }],
+    ['4 x 1.5 above, 2.5 under 6.05, 1.5 deep', { magnetD: 4, magnetH: 1.5, magnetSide: 'top', screwHoleD: 2.5,
+      screwHeadD: 6.05, screwHeadDepth: 1.5 }],
+    ['6 x 1.5 below, 3.5 under 4.75', { magnetH: 1.5, screwHoleD: 3.5, screwHeadD: 4.75 }],
+    ['3 x 3 above, 2.5 under 4.25, 1 deep', { magnetD: 3, magnetH: 3, magnetSide: 'top', screwHoleD: 2.5,
+      screwHeadD: 4.25, screwHeadDepth: 1 }],
+    ['6 x 3 below, 2 under 4.9, 4 deep', { magnetH: 3, screwHoleD: 2, screwHeadD: 4.9, screwHeadDepth: 4 }],
+  ]) {
+    const at = { pitch: 42, drawerW: 42, drawerD: 42, connector: 'none', magnets: true, screws: true, ...o };
+    const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
+    const taken = ['magnetD', 'screwHoleD', 'screwHeadD'].every((f) => cfg[f] <= lim[f] + 1e-9 &&
+      !lim.gaps[f].some(([a, b]) => cfg[f] >= a - 1e-9 && cfg[f] <= b + 1e-9));
+    const r = buildAll(at);
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    console.log(`  ${nm.padEnd(38)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}`);
+    if (!taken || r.bad || folds) bad++;
+  }
   /* A counterbore's corner on the plane of one of the magnet pocket's flats. The two are
      14-gons on the same rays, so a corner of one stands an odd multiple of π/14 off a
      normal of the other's flats, and at some sizes that puts it on the flat's plane
@@ -2707,8 +2743,8 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
      to be refused and built at the cap. The same spoke meets a corner at other pitches, and
      corner pockets still leave 3 open edges a cell at three of them with a 2 mm hole: 34.32
      mm, with screws alone or under a 6 mm magnet from beneath; 34.73 mm, under a 4 mm magnet
-     from above; and with a 3 mm hole 38.95 mm, under a 6 mm magnet from above. They are what
-     is left of #80, open, and are not pinned here. */
+     from above; and with a 3 mm hole 38.95 mm, under a 6 mm magnet from above. They were what
+     was left of #80, open on main; the rows for them (#91) come after the next one. */
   for (const [name, head, why] of [
     ['#80: 34.04 mm, 2 mm hole, 5.8 head', 5.8, false],
     ['#80: 34.04 mm, 2 mm hole, 5.81 head', 5.81, true],
@@ -2735,6 +2771,46 @@ console.log('\ncorner bosses beside a joint cut from beneath:');
     const plain = buildAll({ ...at, connector: 'none' });
     const good = !r.open && r.bad <= plain.bad;
     console.log(`  ${'wall puzzle keys at 36.13 mm, screws'.padEnd(36)} ${leakText(r)}, ${plain.bad} with no joint${good ? '' : '   FAIL'}`);
+    if (!good) bad++;
+  }
+  /* A boss's top is fanned from a corner of its outline, the cell's corner for half of
+     them, and where a spoke passes a few microns from a corner of the walls that open on
+     the top, the sliver between goes (#91): a 2 mm shank at 34.32 mm, 1.3 microns, alone
+     or under a 6 mm magnet from beneath, a 4 mm magnet's pocket from above at 34.73 mm
+     and a 6 mm one's at 38.95, 5.3 microns, each with the head at the field's cap; and
+     with no screw, a 4.9 mm magnet from above at 43.9 mm, its cap there. Its underside is
+     fanned the same way, and the same magnet from beneath opened there. Every try of
+     cutAgain left one boss a cell open, 3 edges, and 6 to 15 over 2 x 2, with Download
+     on, until a boss still open after them had the cap it is open on fanned again clear
+     of those corners (refanCaps in buildPiece). Each has to be taken and build with
+     nothing open and no folds; the 2 x 2 pieces keep the edges their bosses share
+     (quarantined above). */
+  for (const [name, n, over] of [
+    ['34.32 mm, 2 mm hole', 1, { pitch: 34.32, screwHoleD: 2, screwHeadD: 6.1 }],
+    ['34.32 mm, 2 mm hole, 6 mm magnet below', 1, { pitch: 34.32, magnets: true, screwHoleD: 2, screwHeadD: 6.1 }],
+    ['34.73 mm, 2 mm hole, 4 mm magnet above', 1, { pitch: 34.73, magnets: true, magnetD: 4, magnetSide: 'top',
+      screwHoleD: 2, screwHeadD: 6.5 }],
+    ['38.95 mm, 3 mm hole, 6 mm magnet above', 1, { pitch: 38.95, magnets: true, magnetSide: 'top', screwHoleD: 3,
+      screwHeadD: 9.7 }],
+    ['43.9 mm, 4.9 mm magnet above, no screw', 1, { pitch: 43.9, magnets: true, magnetD: 4.9, magnetSide: 'top',
+      screws: false }],
+    ['43.9 mm, 4.9 mm magnet below, no screw', 1, { pitch: 43.9, magnets: true, magnetD: 4.9, screws: false }],
+    ['34.32 mm, 2 mm hole, 2 x 2', 2, { pitch: 34.32, screwHoleD: 2, screwHeadD: 6.1 }],
+    ['34.73 mm, 4 mm magnet above, 2 x 2', 2, { pitch: 34.73, magnets: true, magnetD: 4, magnetSide: 'top',
+      screwHoleD: 2, screwHeadD: 6.5 }],
+    ['38.95 mm, 6 mm magnet above, 2 x 2', 2, { pitch: 38.95, magnets: true, magnetSide: 'top', screwHoleD: 3,
+      screwHeadD: 9.7 }],
+    ['43.9 mm, 4.9 mm magnet below, 2 x 2', 2, { pitch: 43.9, magnets: true, magnetD: 4.9, screws: false }]]) {
+    const at = { drawerW: n * over.pitch, drawerD: n * over.pitch, bedW: 400, bedD: 400, baseMode: 'bosses',
+                 connector: 'none', screws: true, ...over };
+    const cfg = designCfg(at), lim = G.mountLimits(cfg, G.computeLayout(cfg));
+    const taken = (at.magnets ? ['magnetD'] : []).concat(at.screws ? ['screwHoleD', 'screwHeadD'] : []).every((f) =>
+      cfg[f] <= lim[f] + 1e-9 && !lim.gaps[f].some(([a, b]) => cfg[f] >= a - 1e-9 && cfg[f] <= b + 1e-9));
+    const r = buildAll(at);
+    const folds = r.pieces.reduce((s, pp) => s + checkOrientation(pp).folds, 0);
+    const good = taken && !r.open && !folds;
+    console.log(`  ${name.padEnd(40)} ${taken ? '' : 'REFUSED, '}${leakText(r)}${folds ? `, ${folds} FOLDS` : ''}` +
+                `${good ? '' : '   FAIL'}`);
     if (!good) bad++;
   }
   /* A boss is its pocket's depth and 0.8 (a magnet) or 1.0 (a screw head) tall, and one
