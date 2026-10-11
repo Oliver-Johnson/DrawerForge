@@ -513,8 +513,11 @@ margins of 0.2 mm and a 1.3 mm magnet, and at 33 mm with the largest corner and 
 magnet). So a boss is cut only where each of its bores, out to its widest corner, stands
 `MOUNT_WALL` inside the arc as well, measured to the circle the chords are drawn on (a
 site at the arc's centre keeps the wall it has to the cell's edges, though the chords sag
-0.006 mm inside the circle at a 2 mm corner), and where no joint's cut comes within
-`MOUNT_WALL` of the corner's square (none does, see below; the test stands guard). In the
+0.006 mm inside the circle at a 2 mm corner, 0.012 mm at the default 4 mm and 0.021 mm at
+the 6.93 mm the page allows at most, so a bore's corner can stand that much under
+`MOUNT_WALL` from the outline: no open edge, fold or window comes of it), and where no
+joint's cut comes within `MOUNT_WALL` of the corner's square (none does on any design the
+page takes, see below; the audit has no row asserting it). In the
 review's sweeps (7,649 designs, 5,952 built, 3,737 with a boss out by 0.01 mm or more) that
 kept the square boss on every corner of 268 and on some corners of 91 more, at pitches of
 29.5 to 37 mm with a corner of 3 mm or more, mostly with no margin and a bore at its cap,
@@ -1021,6 +1024,48 @@ currently installed):
   a 2.4 mm shank under a 4.8 mm head at 44.08 mm, loose, had a point within `FAN_CLEAR`
   of every centre `fanCentre` tried. The fan stayed put and the cell shipped six edges
   open. From the corners alone it moves 0.2 mm and the floor closes.
+  The bottom face is refanned the same way (#92). Its first fan keeps clear of every
+  point where the mounting cutters' walls stand on it, split points included, and where
+  a counterbore or a shank nearly as wide as the magnet pocket it opens into was unioned
+  with it, those are 140 points a cell against 56 corners: no point `fanCentre` tried
+  was clear of all of them, the fan stayed at the cell's middle with a spoke 5 microns
+  from a corner of a pocket, and 6 to 12 edges a cell were open at 42 mm. The first fan
+  from the corners alone closes them too, but it moves the fan of designs that build
+  closed as well (283 of 1,210 drawn round those sizes), and every one of those would
+  come out other bytes. So what a refan does is fan one face again from another point,
+  clear of the corners of the cutters' walls where they stand on it, and take every cut
+  again on it: the face is the same flat face, the solid is the same, and only the
+  triangles the cutters' planes cross differ. It is taken only on a cell still open after
+  its tries, with an open edge at that face's height, and only where the new fan point
+  is not the old; and the new cut is kept only if it comes out closed with nothing turned
+  over, sharing no more edges with the shells built beside it (the socket floor's keeps
+  one that is less open and no worse). A cell that comes out closed is built as before,
+  so a design that builds closed keeps its bytes. In the 4.16 × 2 family (shanks 2.1 to
+  2.58 mm under a 4.34 mm head, from beneath at 42 mm) all 98 shanks that were open
+  close, and of 2,851 heads under a 6 × 2 magnet from beneath with a 3 mm hole 3 deep,
+  570 of 571; the 3.909 mm head's 12 open edges are on the magnet pocket's roof, 2 mm up,
+  not on the bottom face, so it is not refanned. A design with a cell refanned takes
+  about 10% longer to build (689 such designs, 158 s in all on main, 175 s here).
+  A corner boss's top is a cap as well, and is refanned the same way (#91). `extrudePoly`
+  fans a convex cap from one corner of its outline (the ear clip takes the ear at its
+  first point every time), which for half the bosses is the cell's corner. A spoke from
+  there passed 1.3 microns from a corner of a 2 mm shank opening on the top at 34.32 mm,
+  and 5.3 from a corner of a magnet's pocket from above at 34.73 and 38.95 mm, and the
+  sliver went: 3 open edges a cell that none of `cutAgain`'s tries closed. The underside
+  is fanned the same way, and a 4.9 mm magnet from beneath at 43.9 mm opened there. The
+  cap is convex, so any point inside it will do: a boss still open after those tries,
+  with an open edge at its top's height or its underside's, has that cap (or both)
+  fanned again from the point `fanCentre` picks clear of the corners of its cutter's
+  walls at that height (`refanCaps`), the pocket cut again, and the result kept on the
+  same terms as the bottom face's. A boss that comes out closed keeps the fans from its
+  corner.
+  Only the bosses no joint reaches are refanned: over 3,824 designs with each joint that
+  reaches the bosses, two pieces from 34 to 46.65 mm every 0.05, with screws, a magnet
+  from beneath and screws, or a magnet from above, each at its cap, none of the 6,884
+  bosses a joint's cut reaches came out open, so such a boss is built as it was. Of the
+  47,416 others, 15 were open, five designs at 43.9 mm with a 4.9 mm magnet from above
+  (its cap there), and each is closed by its refan. A design with a boss refanned takes
+  about 8% longer to build (17 such designs, 2.3 s in all on main, 2.5 s here).
 - **A pocket that reaches a joint's cut goes bad where the two ceilings are level.** A
   key's recess, an H-clip's and a tab's notch are all cut up from under the plate, as a
   magnet pocket from beneath and a counterbore are. Run into one, the pocket comes out
